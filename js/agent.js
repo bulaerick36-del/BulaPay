@@ -3,7 +3,7 @@
 const agentModule = {
   currentClient: null,
 
-  init() {
+  async init() {
     this.tabCollect = document.getElementById('tab-agent-collect');
     this.tabRegister = document.getElementById('tab-agent-register');
     this.panelCollect = document.getElementById('panel-agent-collect');
@@ -42,7 +42,7 @@ const agentModule = {
     this.btnOpenLinkWa = document.getElementById('btn-open-link-wa');
 
     this.bindEvents();
-    this.updateAgentHeader();
+    await this.updateAgentHeader();
   },
 
   bindEvents() {
@@ -62,9 +62,9 @@ const agentModule = {
     this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
 
     // Registrar Cliente Nuevo
-    this.formRegisterClient.addEventListener('submit', (e) => {
+    this.formRegisterClient.addEventListener('submit', async (e) => {
       e.preventDefault();
-      this.registerNewClient();
+      await this.registerNewClient();
     });
 
     // Acciones del modal WhatsApp
@@ -81,7 +81,7 @@ const agentModule = {
     });
   },
 
-  updateAgentHeader() {
+  async updateAgentHeader() {
     const currentUser = window.BulaPayDB.getCurrentUser();
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
@@ -89,12 +89,12 @@ const agentModule = {
     if (currentUser && currentUser.role === 'Agente de Ruta') {
       if (agentNameElement) agentNameElement.textContent = `Cobrador: ${currentUser.name}`;
       
-      const routes = window.BulaPayDB.getRoutes();
-      const myRoute = routes.find(r => r.agentUsername === currentUser.username);
+      const routes = await window.BulaPayDB.getRoutes();
+      const myRoute = routes.find(r => r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username));
       
       if (agentRouteElement) {
         agentRouteElement.textContent = myRoute 
-          ? `Ruta: ${myRoute.name} | Capital: $${myRoute.capital.toLocaleString('es-CO')}` 
+          ? `Ruta: ${myRoute.name} | Capital: $${Number(myRoute.capital).toLocaleString('es-CO')}` 
           : 'Ruta no asignada';
       }
     } else {
@@ -118,22 +118,27 @@ const agentModule = {
     }
   },
 
-  searchClient() {
+  async searchClient() {
     const cedula = this.inputSearchCedula.value.trim();
     if (!cedula) {
       alert('⚠️ Por favor ingrese un número de Cédula.');
       return;
     }
 
-    const client = window.BulaPayDB.getClientByCedula(cedula);
-    if (!client) {
-      alert('❌ Cliente no registrado en el sistema BulaPay.');
-      this.searchResults.style.display = 'none';
-      this.searchPlaceholder.style.display = 'block';
-      return;
-    }
+    try {
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
+      if (!client) {
+        alert('❌ Cliente no registrado en el sistema BulaPay.');
+        this.searchResults.style.display = 'none';
+        this.searchPlaceholder.style.display = 'block';
+        return;
+      }
 
-    this.renderClientInfo(client);
+      this.renderClientInfo(client);
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al buscar cliente.');
+    }
   },
 
   renderClientInfo(client) {
@@ -147,8 +152,8 @@ const agentModule = {
     this.detailName.textContent = client.name;
     this.detailCedula.textContent = client.cedula;
     this.detailPhone.textContent = client.phone;
-    this.detailOutstanding.textContent = `$${client.outstanding.toLocaleString('es-CO')}`;
-    this.detailInstallment.textContent = `$${client.installmentAmount.toLocaleString('es-CO')}`;
+    this.detailOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
+    this.detailInstallment.textContent = `$${Number(client.installmentAmount).toLocaleString('es-CO')}`;
     
     // Semáforo de Riesgo
     this.riskHeader.className = 'traffic-light-header'; // Reset
@@ -166,17 +171,17 @@ const agentModule = {
 
     // Estado de Cartera texto explicativo
     let statusText = 'Al Día';
-    if (client.outstanding === 0) statusText = 'Crédito Cancelado';
+    if (Number(client.outstanding) === 0) statusText = 'Crédito Cancelado';
     else if (client.risk === 'Amarillo') statusText = 'Atrasado';
     else if (client.risk === 'Rojo') statusText = 'Mora Severa';
 
     this.detailStatus.textContent = statusText;
 
     // Rellenar campo de monto de abono por defecto
-    this.inputCollectAmount.value = Math.min(client.installmentAmount, client.outstanding);
+    this.inputCollectAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
   },
 
-  registerPayment() {
+  async registerPayment() {
     if (!this.currentClient) return;
 
     const amount = parseFloat(this.inputCollectAmount.value);
@@ -185,34 +190,40 @@ const agentModule = {
       return;
     }
 
-    if (amount > this.currentClient.outstanding) {
-      alert(`⚠️ El monto ingresado supera el saldo pendiente de $${this.currentClient.outstanding.toLocaleString('es-CO')}`);
+    if (amount > Number(this.currentClient.outstanding)) {
+      alert(`⚠️ El monto ingresado supera el saldo pendiente de $${Number(this.currentClient.outstanding).toLocaleString('es-CO')}`);
       return;
     }
 
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
-    const newPayment = {
-      clientCedula: this.currentClient.cedula,
-      installmentNumber: window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula).length + 1,
-      amount: amount,
-      date: new Date().toISOString().split('T')[0],
-      agentName: currentUser.name,
-      status: amount >= this.currentClient.installmentAmount ? 'Pagado' : 'Abonado'
-    };
+    try {
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const newPayment = {
+        clientCedula: this.currentClient.cedula,
+        installmentNumber: payments.length + 1,
+        amount: amount,
+        date: new Date().toISOString().split('T')[0],
+        agentName: currentUser.name,
+        status: amount >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado'
+      };
 
-    // Registrar en base de datos
-    window.BulaPayDB.addPayment(newPayment);
+      // Registrar en base de datos
+      const savedPayment = await window.BulaPayDB.addPayment(newPayment);
 
-    // Desplegar recibo digital premium
-    window.showBulaPayReceipt(newPayment, this.currentClient);
+      // Desplegar recibo digital premium
+      window.showBulaPayReceipt(savedPayment, this.currentClient);
 
-    // Re-buscar el cliente para actualizar pantalla
-    const updatedClient = window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
-    this.renderClientInfo(updatedClient);
+      // Re-buscar el cliente para actualizar pantalla
+      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      this.renderClientInfo(updatedClient);
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al registrar el pago.');
+    }
   },
 
-  registerNewClient() {
+  async registerNewClient() {
     const name = document.getElementById('new-client-name').value.trim();
     const cedula = document.getElementById('new-client-cedula').value.trim();
     const phone = document.getElementById('new-client-phone').value.trim();
@@ -222,40 +233,45 @@ const agentModule = {
     const debt = parseFloat(document.getElementById('new-client-debt').value);
     const installments = parseInt(document.getElementById('new-client-installments').value);
 
-    // Validar existencia
-    const existing = window.BulaPayDB.getClientByCedula(cedula);
-    if (existing) {
-      alert('❌ Ya existe un cliente registrado con esta Cédula.');
-      return;
+    try {
+      // Validar existencia
+      const existing = await window.BulaPayDB.getClientByCedula(cedula);
+      if (existing) {
+        alert('❌ Ya existe un cliente registrado con esta Cédula.');
+        return;
+      }
+
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      const routeId = currentUser && currentUser.routeId ? currentUser.routeId : 'route_1';
+
+      const newClient = {
+        cedula,
+        name,
+        phone,
+        email,
+        city,
+        zone,
+        risk: 'Verde', // Inicia excelente
+        totalDebt: debt,
+        outstanding: debt,
+        installmentsCount: installments,
+        installmentAmount: Math.round(debt / installments),
+        routeId
+      };
+
+      // Guardar
+      await window.BulaPayDB.saveClient(newClient);
+      this.currentClient = newClient;
+
+      // Resetear formulario
+      this.formRegisterClient.reset();
+
+      // Mostrar modal simulador WhatsApp
+      this.showWhatsAppMockup(newClient);
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al registrar el cliente.');
     }
-
-    const currentUser = window.BulaPayDB.getCurrentUser();
-    const routeId = currentUser && currentUser.routeId ? currentUser.routeId : 'route_1';
-
-    const newClient = {
-      cedula,
-      name,
-      phone,
-      email,
-      city,
-      zone,
-      risk: 'Verde', // Inicia excelente
-      totalDebt: debt,
-      outstanding: debt,
-      installmentsCount: installments,
-      installmentAmount: Math.round(debt / installments),
-      routeId
-    };
-
-    // Guardar
-    window.BulaPayDB.saveClient(newClient);
-    this.currentClient = newClient;
-
-    // Resetear formulario
-    this.formRegisterClient.reset();
-
-    // Mostrar modal simulador WhatsApp
-    this.showWhatsAppMockup(newClient);
   },
 
   showWhatsAppMockup(client) {

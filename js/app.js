@@ -66,7 +66,7 @@ const app = {
       this.renderView(route, param);
     },
 
-    renderView(route, param) {
+    async renderView(route, param) {
       // Ocultar todas las secciones
       const sections = document.querySelectorAll('.view-section');
       sections.forEach(s => s.classList.remove('active'));
@@ -95,7 +95,7 @@ const app = {
           this.navigate('auth');
           return;
         }
-        window.supervisorModule.init();
+        await window.supervisorModule.init();
       } 
       
       else if (route === 'agent') {
@@ -104,7 +104,7 @@ const app = {
           this.navigate('agent-login');
           return;
         }
-        window.agentModule.init();
+        await window.agentModule.init();
       } 
       
       else if (route === 'agent-login') {
@@ -112,16 +112,16 @@ const app = {
           this.navigate('agent');
           return;
         }
-        window.authModule.init();
+        await window.authModule.init();
       }
       
       else if (route === 'customer') {
         // El portal de cliente es de acceso público mediante el enlace único
-        window.customerModule.init(param);
+        await window.customerModule.init(param);
       } 
       
       else if (route === 'auth') {
-        window.authModule.init();
+        await window.authModule.init();
       }
 
       // Mostrar la sección correspondiente

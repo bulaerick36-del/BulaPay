@@ -5,7 +5,7 @@ const supervisorModule = {
   liveFeedInterval: null,
   activeKpiModal: null,
 
-  init() {
+  async init() {
     this.formCreateRoute = document.getElementById('form-create-route');
     this.routesTbody = document.getElementById('routes-tbody');
     this.welcomeMsg = document.getElementById('supervisor-welcome-msg');
@@ -17,9 +17,9 @@ const supervisorModule = {
     this.kpiRouteProgress = document.getElementById('kpi-route-progress');
 
     this.bindEvents();
-    this.renderDashboard();
+    await this.renderDashboard();
     this.startMapSimulation();
-    this.initMapRouteFilter();
+    await this.initMapRouteFilter();
     this.startLiveFeedSimulation();
     this.calculateRouteSuggestedQuota(); // Calcular inicial
   },
@@ -27,7 +27,7 @@ const supervisorModule = {
   bindEvents() {
     // Crear Nueva Ruta y Credenciales de Agente (Múltiples)
     if (this.formCreateRoute) {
-      this.formCreateRoute.addEventListener('submit', (e) => {
+      this.formCreateRoute.addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const routeName = document.getElementById('route-name').value.trim();
@@ -38,13 +38,13 @@ const supervisorModule = {
         const agentsData = [];
         let validationFailed = false;
 
-        agentGroups.forEach((group, index) => {
+        for (const group of agentGroups) {
           const nameInput = group.querySelector('.route-agent-name').value.trim();
           const usernameInput = group.querySelector('.route-agent-username').value.trim().toLowerCase();
           const passwordInput = group.querySelector('.route-agent-password').value;
 
           // Validar si el usuario ya existe
-          const existingUser = window.BulaPayDB.getUserByUsername(usernameInput);
+          const existingUser = await window.BulaPayDB.getUserByUsername(usernameInput);
           if (existingUser) {
             alert(`❌ El nombre de usuario "${usernameInput}" ya está registrado.`);
             validationFailed = true;
@@ -56,27 +56,14 @@ const supervisorModule = {
             username: usernameInput,
             password: passwordInput
           });
-        });
+        }
 
         if (validationFailed || agentsData.length === 0) return;
 
         const supervisorUser = window.BulaPayDB.getCurrentUser() || { username: 'admin' };
         const routeId = 'route_' + Date.now();
 
-        // 1. Registrar cada agente en la base de datos
-        agentsData.forEach(agent => {
-          const newAgent = {
-            username: agent.username,
-            password: agent.password,
-            name: agent.name,
-            role: 'Agente de Ruta',
-            supervisor: supervisorUser.username,
-            routeId: routeId
-          };
-          window.BulaPayDB.saveUser(newAgent);
-        });
-
-        // 2. Crear la Ruta Logística con la lista combinada
+        // 1. Crear la Ruta Logística PRIMERO (para que la FK en users sea válida)
         const combinedNames = agentsData.map(a => a.name).join(', ');
         const combinedUsernames = agentsData.map(a => a.username).join(', ');
 
@@ -90,35 +77,54 @@ const supervisorModule = {
           status: 'En Ruta',
           date: new Date().toISOString().split('T')[0]
         };
-        window.BulaPayDB.saveRoute(newRoute);
 
-        alert(`✅ Ruta "${routeName}" creada con éxito.\n👤 Se registraron ${agentsData.length} agentes asignados.`);
-        
-        // Resetear formulario y dejar solo un agente
-        this.formCreateRoute.reset();
-        document.getElementById('route-agents-list').innerHTML = `
-          <div class="agent-fields-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
-            <h5 style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.5rem;">Agente Principal</h5>
-            <div class="form-group" style="margin-bottom: 0.75rem;">
-              <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
-              <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-              <div class="form-group" style="margin-bottom: 0;">
-                <label style="font-size: 0.7rem;">Usuario (Login)</label>
-                <input type="text" class="route-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem;">
-              </div>
-              <div class="form-group" style="margin-bottom: 0;">
-                <label style="font-size: 0.7rem;">Contraseña</label>
-                <input type="password" class="route-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem;">
-              </div>
-            </div>
-          </div>
-        `;
+        try {
+          await window.BulaPayDB.saveRoute(newRoute);
 
-        this.calculateRouteSuggestedQuota();
-        this.renderDashboard();
-        this.initMapRouteFilter();
+          // 2. Registrar cada agente en la base de datos SEGUNDO
+          for (const agent of agentsData) {
+            const newAgent = {
+              username: agent.username,
+              password: agent.password,
+              name: agent.name,
+              role: 'Agente de Ruta',
+              supervisor: supervisorUser.username,
+              routeId: routeId
+            };
+            await window.BulaPayDB.saveUser(newAgent);
+          }
+
+          alert(`✅ Ruta "${routeName}" creada con éxito.\n👤 Se registraron ${agentsData.length} agentes asignados.`);
+          
+          // Resetear formulario y dejar solo un agente
+          this.formCreateRoute.reset();
+          document.getElementById('route-agents-list').innerHTML = `
+            <div class="agent-fields-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
+              <h5 style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.5rem;">Agente Principal</h5>
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
+                <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label style="font-size: 0.7rem;">Usuario (Login)</label>
+                  <input type="text" class="route-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label style="font-size: 0.7rem;">Contraseña</label>
+                  <input type="password" class="route-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem;">
+                </div>
+              </div>
+            </div>
+          `;
+
+          this.calculateRouteSuggestedQuota();
+          await this.renderDashboard();
+          await this.initMapRouteFilter();
+        } catch (err) {
+          console.error(err);
+          alert('❌ Error al crear la ruta o guardar los agentes.');
+        }
       });
     }
   },
@@ -188,7 +194,7 @@ const supervisorModule = {
   },
 
   // KPIs INTERACTIVOS (DRILL-DOWN MODALS)
-  openKpiModal(kpi) {
+  async openKpiModal(kpi) {
     this.activeKpiModal = kpi;
     const overlay = document.getElementById(`modal-kpi-${kpi}`);
     if (!overlay) return;
@@ -197,13 +203,13 @@ const supervisorModule = {
     
     // Poblar datos correspondientes
     if (kpi === 'agents') {
-      this.populateKpiAgentsModal();
+      await this.populateKpiAgentsModal();
     } else if (kpi === 'capital') {
-      this.populateKpiCapitalModal();
+      await this.populateKpiCapitalModal();
     } else if (kpi === 'collected') {
-      this.populateKpiCollectedModal();
+      await this.populateKpiCollectedModal();
     } else if (kpi === 'progress') {
-      this.populateKpiProgressModal();
+      await this.populateKpiProgressModal();
     }
   },
 
@@ -216,7 +222,7 @@ const supervisorModule = {
   },
 
   // 1. POPULATE MODAL: AGENTES ACTIVOS
-  populateKpiAgentsModal() {
+  async populateKpiAgentsModal() {
     const routeSelect = document.getElementById('modal-agents-route-filter');
     const listContainer = document.getElementById('modal-agents-list-container');
     const detailSection = document.getElementById('modal-agent-detail-section');
@@ -227,21 +233,22 @@ const supervisorModule = {
 
     // Rellenar select
     routeSelect.innerHTML = `<option value="Todos">Todas las Rutas</option>`;
-    const routes = window.BulaPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     routes.forEach(r => {
       routeSelect.innerHTML += `<option value="${r.id}">${r.name}</option>`;
     });
 
-    this.filterModalAgents();
+    await this.filterModalAgents();
   },
 
-  filterModalAgents() {
+  async filterModalAgents() {
     const routeSelect = document.getElementById('modal-agents-route-filter');
     const listContainer = document.getElementById('modal-agents-list-container');
     if (!routeSelect || !listContainer) return;
 
     const selectedRouteId = routeSelect.value;
-    let agents = window.BulaPayDB.getUsers().filter(u => u.role === 'Agente de Ruta');
+    const allUsers = await window.BulaPayDB.getUsers();
+    let agents = allUsers.filter(u => u.role === 'Agente de Ruta');
 
     if (selectedRouteId !== 'Todos') {
       agents = agents.filter(a => a.routeId === selectedRouteId);
@@ -253,8 +260,8 @@ const supervisorModule = {
       return;
     }
 
+    const routes = await window.BulaPayDB.getRoutes();
     agents.forEach(agent => {
-      const routes = window.BulaPayDB.getRoutes();
       const r = routes.find(rt => rt.id === agent.routeId) || { name: 'Sin ruta asignada' };
       
       const item = document.createElement('div');
@@ -290,7 +297,7 @@ const supervisorModule = {
     });
   },
 
-  showModalAgentDetail(username) {
+  async showModalAgentDetail(username) {
     const detailSection = document.getElementById('modal-agent-detail-section');
     const title = document.getElementById('modal-agent-detail-title');
     const clientsCountEl = document.getElementById('modal-agent-clients-count');
@@ -299,26 +306,28 @@ const supervisorModule = {
     
     if (!detailSection) return;
 
-    const agent = window.BulaPayDB.getUsers().find(u => u.username === username);
+    const allUsers = await window.BulaPayDB.getUsers();
+    const agent = allUsers.find(u => u.username === username);
     if (!agent) return;
 
     title.textContent = `Detalles de Operación: ${agent.name}`;
 
     // Obtener clientes asignados a la ruta del agente
-    const clients = window.BulaPayDB.getClients().filter(c => c.routeId === agent.routeId);
+    const allClients = await window.BulaPayDB.getClients();
+    const clients = allClients.filter(c => c.routeId === agent.routeId);
     clientsCountEl.textContent = `${clients.length} cliente(s)`;
 
     // Obtener capital y recaudo
-    const routes = window.BulaPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     const r = routes.find(rt => rt.id === agent.routeId);
     
     const capital = r ? r.capital : 0;
     const collected = r ? r.collected : 0;
 
-    routeCapitalEl.textContent = `$${capital.toLocaleString('es-CO')}`;
-    routeCollectedEl.textContent = `$${collected.toLocaleString('es-CO')}`;
+    routeCapitalEl.textContent = `$${Number(capital).toLocaleString('es-CO')}`;
+    routeCollectedEl.textContent = `$${Number(collected).toLocaleString('es-CO')}`;
 
-    // Calcular proporciones de la cartera (Simulación en base al riesgo de los clientes)
+    // Calcular proporciones de la cartera (Riesgo)
     let totalRisk = clients.length || 1;
     let greenCount = clients.filter(c => c.risk === 'Verde').length;
     let yellowCount = clients.filter(c => c.risk === 'Amarillo').length;
@@ -342,7 +351,6 @@ const supervisorModule = {
     const redEl = document.getElementById('chart-segment-red');
 
     if (greenEl && yellowEl && redEl) {
-      // SVG Circle de r=15.915 tiene circunferencia = 100
       greenEl.setAttribute('stroke-dasharray', `${pGreen} 100`);
       greenEl.setAttribute('stroke-dashoffset', '0');
 
@@ -357,7 +365,7 @@ const supervisorModule = {
   },
 
   // 2. POPULATE MODAL: CAPITAL ASIGNADO
-  populateKpiCapitalModal() {
+  async populateKpiCapitalModal() {
     const container = document.getElementById('modal-capital-routes-container');
     const detailSection = document.getElementById('modal-capital-detail-section');
     if (!container) return;
@@ -365,7 +373,7 @@ const supervisorModule = {
     if (detailSection) detailSection.style.display = 'none';
 
     container.innerHTML = '';
-    const routes = window.BulaPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
 
     routes.forEach(route => {
       const item = document.createElement('div');
@@ -385,7 +393,7 @@ const supervisorModule = {
           <div style="font-size: 0.75rem; color: var(--text-secondary);">Agente: ${route.agentName}</div>
         </div>
         <div style="text-align: right;">
-          <strong style="color: var(--accent); font-size: 0.95rem;">$${route.capital.toLocaleString('es-CO')}</strong>
+          <strong style="color: var(--accent); font-size: 0.95rem;">$${Number(route.capital).toLocaleString('es-CO')}</strong>
           <div style="font-size: 0.65rem; color: var(--text-muted);">Clic para analizar</div>
         </div>
       `;
@@ -404,7 +412,7 @@ const supervisorModule = {
     });
   },
 
-  showModalCapitalDetail(routeId) {
+  async showModalCapitalDetail(routeId) {
     const detailSection = document.getElementById('modal-capital-detail-section');
     const title = document.getElementById('modal-capital-detail-title');
     const deliveredEl = document.getElementById('modal-capital-delivered');
@@ -414,18 +422,20 @@ const supervisorModule = {
 
     if (!detailSection) return;
 
-    const route = window.BulaPayDB.getRoutes().find(r => r.id === routeId);
+    const routes = await window.BulaPayDB.getRoutes();
+    const route = routes.find(r => r.id === routeId);
     if (!route) return;
 
     title.textContent = `Análisis de Rendimiento: ${route.name}`;
-    deliveredEl.textContent = `$${route.capital.toLocaleString('es-CO')}`;
-    collectedEl.textContent = `$${route.collected.toLocaleString('es-CO')}`;
+    deliveredEl.textContent = `$${Number(route.capital).toLocaleString('es-CO')}`;
+    collectedEl.textContent = `$${Number(route.collected).toLocaleString('es-CO')}`;
     
-    const remaining = Math.max(0, route.capital - route.collected);
+    const remaining = Math.max(0, Number(route.capital) - Number(route.collected));
     remainingEl.textContent = `$${remaining.toLocaleString('es-CO')}`;
 
-    // Simular un índice de mora para fines visuales en base a clientes de esa ruta
-    const clients = window.BulaPayDB.getClients().filter(c => c.routeId === route.id);
+    // Simular un índice de mora en base a clientes de esa ruta
+    const allClients = await window.BulaPayDB.getClients();
+    const clients = allClients.filter(c => c.routeId === route.id);
     const redCount = clients.filter(c => c.risk === 'Rojo').length;
     const yellowCount = clients.filter(c => c.risk === 'Amarillo').length;
     
@@ -442,21 +452,21 @@ const supervisorModule = {
   },
 
   // 3. POPULATE MODAL: RECAUDO HOY (RANKING)
-  populateKpiCollectedModal() {
+  async populateKpiCollectedModal() {
     const container = document.getElementById('modal-collected-ranking-container');
     if (!container) return;
 
     container.innerHTML = '';
-    const routes = window.BulaPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
 
     // Ordenar de mayor a menor recaudo
-    const sortedRoutes = [...routes].sort((a, b) => b.collected - a.collected);
+    const sortedRoutes = [...routes].sort((a, b) => Number(b.collected) - Number(a.collected));
 
     // Encontrar recaudo máximo para normalizar barra al 100%
-    const maxCollected = sortedRoutes[0] ? sortedRoutes[0].collected : 1;
+    const maxCollected = sortedRoutes[0] ? Number(sortedRoutes[0].collected) : 1;
 
     sortedRoutes.forEach((route, index) => {
-      const percentage = maxCollected > 0 ? Math.round((route.collected / maxCollected) * 100) : 0;
+      const percentage = maxCollected > 0 ? Math.round((Number(route.collected) / maxCollected) * 100) : 0;
       const rank = index + 1;
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏃';
 
@@ -466,7 +476,7 @@ const supervisorModule = {
       wrapper.innerHTML = `
         <div class="ranking-bar-info">
           <span>${medal} <strong>#${rank} ${route.name}</strong> (${route.agentName})</span>
-          <span style="color: var(--color-verde); font-weight: 700;">$${route.collected.toLocaleString('es-CO')}</span>
+          <span style="color: var(--color-verde); font-weight: 700;">$${Number(route.collected).toLocaleString('es-CO')}</span>
         </div>
         <div class="ranking-bar-container">
           <div class="ranking-bar-fill" id="rank-bar-${route.id}"></div>
@@ -484,7 +494,7 @@ const supervisorModule = {
   },
 
   // 4. POPULATE MODAL: PROGRESO DE COBROS (AUDITORÍA CLIENTES MOROSOS)
-  populateKpiProgressModal() {
+  async populateKpiProgressModal() {
     const routeSelect = document.getElementById('modal-audit-route-filter');
     const clientsList = document.getElementById('modal-audit-clients-list');
     const ledgerContainer = document.getElementById('modal-audit-ledger-container');
@@ -494,15 +504,15 @@ const supervisorModule = {
     if (ledgerContainer) ledgerContainer.style.display = 'none';
 
     routeSelect.innerHTML = `<option value="Todos">Todas las Rutas</option>`;
-    const routes = window.BulaPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     routes.forEach(r => {
       routeSelect.innerHTML += `<option value="${r.id}">${r.name}</option>`;
     });
 
-    this.filterAuditClients();
+    await this.filterAuditClients();
   },
 
-  filterAuditClients() {
+  async filterAuditClients() {
     const routeSelect = document.getElementById('modal-audit-route-filter');
     const clientsList = document.getElementById('modal-audit-clients-list');
     if (!routeSelect || !clientsList) return;
@@ -510,7 +520,8 @@ const supervisorModule = {
     const selectedRouteId = routeSelect.value;
     
     // Obtener morosos (riesgo Amarillo o Rojo, o con saldo pendiente > 0)
-    let clients = window.BulaPayDB.getClients().filter(c => c.outstanding > 0 && (c.risk === 'Amarillo' || c.risk === 'Rojo'));
+    const allClients = await window.BulaPayDB.getClients();
+    let clients = allClients.filter(c => Number(c.outstanding) > 0 && (c.risk === 'Amarillo' || c.risk === 'Rojo'));
 
     if (selectedRouteId !== 'Todos') {
       clients = clients.filter(c => c.routeId === selectedRouteId);
@@ -541,7 +552,7 @@ const supervisorModule = {
       item.innerHTML = `
         <div>
           <strong style="color: white;">${client.name}</strong>
-          <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda: $${client.outstanding.toLocaleString('es-CO')}</div>
+          <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
         </div>
         <span style="font-size: 0.75rem; color: ${riskColor}; font-weight: 600;">${riskLabel}</span>
       `;
@@ -560,7 +571,7 @@ const supervisorModule = {
     });
   },
 
-  showAuditClientLedger(cedula) {
+  async showAuditClientLedger(cedula) {
     const ledgerContainer = document.getElementById('modal-audit-ledger-container');
     const nameEl = document.getElementById('modal-audit-client-name');
     const metaEl = document.getElementById('modal-audit-client-meta');
@@ -568,13 +579,13 @@ const supervisorModule = {
 
     if (!ledgerContainer || !gridEl) return;
 
-    const client = window.BulaPayDB.getClientByCedula(cedula);
+    const client = await window.BulaPayDB.getClientByCedula(cedula);
     if (!client) return;
 
     nameEl.textContent = client.name;
-    metaEl.textContent = `Cédula: ${client.cedula} | Saldo Pendiente: $${client.outstanding.toLocaleString('es-CO')} / $${client.totalDebt.toLocaleString('es-CO')}`;
+    metaEl.textContent = `Cédula: ${client.cedula} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
 
-    const payments = window.BulaPayDB.getPaymentsByClient(cedula);
+    const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
 
     gridEl.innerHTML = '';
     const totalSlots = client.installmentsCount;
@@ -593,14 +604,14 @@ const supervisorModule = {
         
         slotCard.innerHTML = `
           <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
-          <span class="slot-amount" style="font-size: 0.75rem;">$${payment.amount.toLocaleString('es-CO')}</span>
+          <span class="slot-amount" style="font-size: 0.75rem;">$${Number(payment.amount).toLocaleString('es-CO')}</span>
           <span class="slot-date" style="font-size: 0.5rem; display:block;">${payment.date}</span>
           <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isAbonado ? '🟡' : '🟢'}</div>
         `;
       } else {
         slotCard.innerHTML = `
           <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
-          <span class="slot-amount" style="color: var(--text-muted); font-size: 0.7rem;">$${client.installmentAmount.toLocaleString('es-CO')}</span>
+          <span class="slot-amount" style="color: var(--text-muted); font-size: 0.7rem;">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
           <span class="slot-empty-text" style="font-size: 0.55rem;">Atrasado</span>
         `;
         slotCard.style.borderColor = 'rgba(239, 68, 68, 0.2)';
@@ -614,12 +625,12 @@ const supervisorModule = {
   },
 
   // 5. INICIALIZAR FILTRO DE MAPA
-  initMapRouteFilter() {
+  async initMapRouteFilter() {
     const filter = document.getElementById('map-route-filter');
     if (!filter) return;
 
     filter.innerHTML = `<option value="Todos">Todas las Rutas</option>`;
-    const routes = window.BulaPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     routes.forEach(r => {
       filter.innerHTML += `<option value="${r.id}">${r.name}</option>`;
     });
@@ -640,8 +651,6 @@ const supervisorModule = {
     }
 
     // Coordenadas de los agentes para el centrado
-    // Agente 1 (Ruta 1): (150, 70)
-    // Agente 2 (Ruta 2): (200, 240)
     let targetX = 200;
     let targetY = 140;
     let scale = 1.8;
@@ -653,16 +662,11 @@ const supervisorModule = {
       targetX = 200;
       targetY = 240;
     } else {
-      // Rutas creadas dinámicamente: usar punto intermedio
       targetX = 250;
       targetY = 150;
       scale = 1.5;
     }
 
-    // Canvas del mapa es de 400x280.
-    // Centrar targetX, targetY:
-    // translateX = 200 - targetX * scale
-    // translateY = 140 - targetY * scale
     const transX = 200 - targetX * scale;
     const transY = 140 - targetY * scale;
 
@@ -707,67 +711,72 @@ const supervisorModule = {
       'Sistema BulaPay actualizó el estado de la ruta {route}.'
     ];
 
-    this.liveFeedInterval = setInterval(() => {
-      const routes = window.BulaPayDB.getRoutes();
-      const clients = window.BulaPayDB.getClients();
-      
-      if (routes.length === 0 || clients.length === 0) return;
+    this.liveFeedInterval = setInterval(async () => {
+      try {
+        const routes = await window.BulaPayDB.getRoutes();
+        const clients = await window.BulaPayDB.getClients();
+        
+        if (routes.length === 0 || clients.length === 0) return;
 
-      const randomRoute = routes[Math.floor(Math.random() * routes.length)];
-      const randomClient = clients[Math.floor(Math.random() * clients.length)];
-      const agentName = randomRoute.agentName.split(',')[0]; // Tomar el primer agente si hay múltiples
+        const randomRoute = routes[Math.floor(Math.random() * routes.length)];
+        const randomClient = clients[Math.floor(Math.random() * clients.length)];
+        const agentName = randomRoute.agentName.split(',')[0]; // Tomar el primer agente si hay múltiples
 
-      // Generar datos aleatorios
-      const amount = (Math.floor(Math.random() * 5) + 1) * 20000;
-      const sectors = ['Chapinero', 'Centro Histórico', 'Zona Financiera', 'El Poblado', 'Oriente'];
-      const sector = sectors[Math.floor(Math.random() * sectors.length)];
-      const signature = 'BulaPay-SIG-' + Math.floor(Math.random() * 90000 + 10000);
+        // Generar datos aleatorios
+        const amount = (Math.floor(Math.random() * 5) + 1) * 20000;
+        const sectors = ['Chapinero', 'Centro Histórico', 'Zona Financiera', 'El Poblado', 'Oriente'];
+        const sector = sectors[Math.floor(Math.random() * sectors.length)];
+        const signature = 'BulaPay-SIG-' + Math.floor(Math.random() * 90000 + 10000);
 
-      // Elegir plantilla aleatoria
-      let logText = logTemplates[Math.floor(Math.random() * logTemplates.length)];
-      logText = logText
-        .replace('{agent}', agentName)
-        .replace('{client}', randomClient.name)
-        .replace('{amount}', amount.toLocaleString('es-CO'))
-        .replace('{sector}', sector)
-        .replace('{signature}', signature)
-        .replace('{route}', randomRoute.name);
+        // Elegir plantilla aleatoria
+        let logText = logTemplates[Math.floor(Math.random() * logTemplates.length)];
+        logText = logText
+          .replace('{agent}', agentName)
+          .replace('{client}', randomClient.name)
+          .replace('{amount}', amount.toLocaleString('es-CO'))
+          .replace('{sector}', sector)
+          .replace('{signature}', signature)
+          .replace('{route}', randomRoute.name);
 
-      const logEl = document.createElement('div');
-      logEl.className = 'live-feed-log';
-      logEl.textContent = '📍 ' + logText;
-      
-      feedContent.appendChild(logEl);
-      
-      // Auto scroll al final del feed
-      feedContent.scrollTop = feedContent.scrollHeight;
+        const logEl = document.createElement('div');
+        logEl.className = 'live-feed-log';
+        logEl.textContent = '📍 ' + logText;
+        
+        feedContent.appendChild(logEl);
+        
+        // Auto scroll al final del feed
+        feedContent.scrollTop = feedContent.scrollHeight;
 
-      // Limitar a máximo 8 logs en pantalla para evitar saturación
-      if (feedContent.children.length > 8) {
-        feedContent.removeChild(feedContent.firstChild);
-      }
+        // Limitar a máximo 8 logs en pantalla para evitar saturación
+        if (feedContent.children.length > 8) {
+          feedContent.removeChild(feedContent.firstChild);
+        }
 
-      if (feedTime) {
-        const now = new Date();
-        feedTime.textContent = `Último evento: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+        if (feedTime) {
+          const now = new Date();
+          feedTime.textContent = `Último evento: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+        }
+      } catch (err) {
+        console.warn("Fallo en la simulación de logs dinámicos:", err);
       }
     }, 6000);
   },
 
   // RENDERIZAR DASHBOARD KPIs Y TABLA
-  renderDashboard() {
+  async renderDashboard() {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador Demo', username: 'admin' };
     if (this.welcomeMsg) {
       this.welcomeMsg.textContent = `Bienvenido, ${currentUser.name} | ${currentUser.company || 'BulaPay'}`;
     }
 
-    const routes = window.BulaPayDB.getRoutes();
-    const agents = window.BulaPayDB.getUsers().filter(u => u.role === 'Agente de Ruta');
+    const routes = await window.BulaPayDB.getRoutes();
+    const allUsers = await window.BulaPayDB.getUsers();
+    const agents = allUsers.filter(u => u.role === 'Agente de Ruta');
 
     // Calcular KPIs
     const totalAgentsCount = agents.length;
-    const totalCapital = routes.reduce((acc, curr) => acc + curr.capital, 0);
-    const totalCollected = routes.reduce((acc, curr) => acc + curr.collected, 0);
+    const totalCapital = routes.reduce((acc, curr) => acc + Number(curr.capital), 0);
+    const totalCollected = routes.reduce((acc, curr) => acc + Number(curr.collected), 0);
     
     let progressPercent = 0;
     if (totalCapital > 0) {
@@ -794,7 +803,7 @@ const supervisorModule = {
     }
 
     routes.forEach(route => {
-      const progress = route.capital > 0 ? Math.round((route.collected / route.capital) * 100) : 0;
+      const progress = Number(route.capital) > 0 ? Math.round((Number(route.collected) / Number(route.capital)) * 100) : 0;
       
       let statusClass = 'en-ruta';
       if (route.status === 'Completado') statusClass = 'completado';
@@ -804,8 +813,8 @@ const supervisorModule = {
       tr.innerHTML = `
         <td style="font-weight: 600; color: white;">${route.name}</td>
         <td>👤 ${route.agentName}</td>
-        <td>$${route.capital.toLocaleString('es-CO')}</td>
-        <td style="color: var(--accent); font-weight: 600;">$${route.collected.toLocaleString('es-CO')}</td>
+        <td>$${Number(route.capital).toLocaleString('es-CO')}</td>
+        <td style="color: var(--accent); font-weight: 600;">$${Number(route.collected).toLocaleString('es-CO')}</td>
         <td>
           <span class="status-badge ${statusClass}">${route.status}</span>
         </td>

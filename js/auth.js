@@ -24,11 +24,16 @@ const authModule = {
     // Botón Global de Reinicio de Simulación
     const btnResetDb = document.getElementById('btn-reset-db');
     if (btnResetDb) {
-      btnResetDb.addEventListener('click', () => {
+      btnResetDb.addEventListener('click', async () => {
         if (confirm('⚠️ ¿Está seguro de restablecer toda la base de datos? Se perderán todos los datos modificados y nuevos registros.')) {
-          window.BulaPayDB.reseed();
-          alert('🔄 Base de datos restablecida a los valores iniciales de fábrica.');
-          window.location.reload();
+          try {
+            await window.BulaPayDB.reseed();
+            alert('🔄 Base de datos restablecida a los valores iniciales de fábrica.');
+            window.location.reload();
+          } catch (err) {
+            console.error(err);
+            alert('❌ Error al restablecer la base de datos.');
+          }
         }
       });
     }
@@ -45,41 +50,51 @@ const authModule = {
     }
 
     // Submit Iniciar Sesión
-    this.formLogin.addEventListener('submit', (e) => {
+    this.formLogin.addEventListener('submit', async (e) => {
       e.preventDefault();
       const usernameInput = document.getElementById('login-username').value.trim();
       const passwordInput = document.getElementById('login-password').value;
 
-      const user = window.BulaPayDB.getUserByUsername(usernameInput);
+      try {
+        const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-      if (user && user.password === passwordInput) {
-        this.loginUser(user);
-      } else {
-        alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
+        if (user && user.password === passwordInput) {
+          this.loginUser(user);
+        } else {
+          alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('❌ Error al iniciar sesión.');
       }
     });
 
     // Submit Iniciar Sesión Agente
     if (this.formAgentLogin) {
-      this.formAgentLogin.addEventListener('submit', (e) => {
+      this.formAgentLogin.addEventListener('submit', async (e) => {
         e.preventDefault();
         const usernameInput = document.getElementById('agent-login-username').value.trim();
         const passwordInput = document.getElementById('agent-login-password').value;
 
-        const user = window.BulaPayDB.getUserByUsername(usernameInput);
+        try {
+          const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-        if (user && user.password === passwordInput && user.role === 'Agente de Ruta') {
-          this.loginUser(user);
-        } else if (user && user.password === passwordInput) {
-          alert('❌ Acceso denegado. Este portal es exclusivo para Agentes de Ruta.');
-        } else {
-          alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
+          if (user && user.password === passwordInput && user.role === 'Agente de Ruta') {
+            this.loginUser(user);
+          } else if (user && user.password === passwordInput) {
+            alert('❌ Acceso denegado. Este portal es exclusivo para Agentes de Ruta.');
+          } else {
+            alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('❌ Error al iniciar sesión del agente.');
         }
       });
     }
 
     // Submit Registrarse (Usuario Supervisor / Comercio)
-    this.formRegister.addEventListener('submit', (e) => {
+    this.formRegister.addEventListener('submit', async (e) => {
       e.preventDefault();
       const type = document.getElementById('register-type').value;
       const name = document.getElementById('register-name').value.trim();
@@ -94,29 +109,34 @@ const authModule = {
         return;
       }
 
-      // Validar si el usuario ya existe
-      const existingUser = window.BulaPayDB.getUserByUsername(username);
-      if (existingUser) {
-        alert('❌ Este nombre de usuario ya está registrado en BulaPay.');
-        return;
+      try {
+        // Validar si el usuario ya existe
+        const existingUser = await window.BulaPayDB.getUserByUsername(username);
+        if (existingUser) {
+          alert('❌ Este nombre de usuario ya está registrado en BulaPay.');
+          return;
+        }
+
+        const newUser = {
+          username,
+          password,
+          name,
+          role: type,
+          company: name,
+          documentType: docType,
+          documentNumber: docNum,
+          estado_suscripcion: 'activa_prueba',
+          id_metodo_pago: null
+        };
+
+        // Guardar en base de datos
+        await window.BulaPayDB.saveUser(newUser);
+        alert('🎉 Registro exitoso. ¡Bienvenido a BulaPay!');
+        this.loginUser(newUser);
+      } catch (err) {
+        console.error(err);
+        alert('❌ Error al registrar usuario.');
       }
-
-      const newUser = {
-        username,
-        password,
-        name,
-        role: type,
-        company: name,
-        documentType: docType,
-        documentNumber: docNum,
-        estado_suscripcion: 'activa_prueba',
-        id_metodo_pago: null
-      };
-
-      // Guardar en base de datos
-      window.BulaPayDB.saveUser(newUser);
-      alert('🎉 Registro exitoso. ¡Bienvenido a BulaPay!');
-      this.loginUser(newUser);
     });
 
     // Cerrar Sesión

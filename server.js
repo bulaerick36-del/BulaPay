@@ -18,6 +18,20 @@ const MIME_TYPES = {
 const server = http.createServer((req, res) => {
   console.log(`[BulaPay Server] ${req.method} ${req.url}`);
 
+  // Mock de la Serverless Function de Vercel en desarrollo local
+  if (req.url.split('?')[0] === '/api/config') {
+    res.writeHead(200, { 
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS'
+    });
+    res.end(JSON.stringify({
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://vxvyiklzyfmfbrgwqgxv.supabase.co',
+      supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_gXixzFlqN8TgbAwq6BsgWQ_LFfhnU4X'
+    }));
+    return;
+  }
+
   // Normalizar la URL de la solicitud
   let filePath = req.url === '/' || req.url === '' ? '/index.html' : req.url;
   
