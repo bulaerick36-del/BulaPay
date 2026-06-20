@@ -1,0 +1,18 @@
+{
+  "short_name": "BulaPay",
+  "name": "BulaPay - Gestión de Cartera y Rutas",
+  "description": "SaaS de gestión de cartera comercial, control de ventas a plazos y logística de rutas.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b132b",
+  "theme_color": "#00f5d4",
+  "orientation": "any",
+  "scope": "./",
+  "icons": [
+    {
+      "src": "assets/logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ]
+}

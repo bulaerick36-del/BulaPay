@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulaPay - Gestión de Cartera y Rutas</title>
+  
+  <!-- Configuración PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b132b">
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="apple-touch-icon" href="assets/logo.svg">
+
+  <!-- Estilos Globales -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Navegación Principal (SPA) -->
+  <header>
+    <div class="nav-container">
+      <a href="#" class="brand" id="brand-link">
+        <svg viewBox="0 0 512 512">
+          <!-- Logo de BulaPay importado del archivo SVG en línea -->
+          <rect width="100%" height="100%" rx="128" fill="none" />
+          <path d="M 96 280 C 96 140, 288 120, 288 220 C 288 280, 200 300, 160 270" 
+                fill="none" stroke="#4f46e5" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M 120 120 L 192 192 L 150 200 L 220 280 L 140 290" 
+                fill="none" stroke="#00f5d4" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>BulaPay</span>
+      </a>
+
+      <!-- Información del usuario logueado -->
+      <div class="user-nav-info" id="user-nav-info" style="display: none;">
+        <button class="btn btn-secondary" id="btn-reset-db" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; width: auto; margin-right: 0.5rem; border-color: rgba(245, 158, 11, 0.4); color: var(--color-amarillo);">🔄 Reiniciar BD</button>
+        <div class="user-profile-badge">
+          <span id="nav-user-name">Usuario</span>
+          <span class="role-tag" id="nav-user-role">Rol</span>
+        </div>
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+
+      <!-- Accesos Rápidos para Demostración (Simulador SPA) -->
+      <div id="demo-quick-links" style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="app.router.navigate('auth')">🔐 Demo Auth</button>
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="app.router.navigate('supervisor')">👔 Demo Supervisor</button>
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="app.router.navigate('agent-login')">📱 Demo Agente</button>
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="app.router.navigate('customer')">💳 Demo Cliente</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenido Principal (SPA Router Container) -->
+  <main id="main-content">
+
+    <!-- 1. MÓDULO DE AUTENTICACIÓN (LOGIN / REGISTRO) -->
+    <section id="view-auth" class="view-section">
+      <div class="auth-wrapper card">
+        <div class="auth-header">
+          <svg viewBox="0 0 512 512" style="width: 80px; height: 80px;">
+            <circle cx="256" cy="256" r="240" fill="none" stroke="#4f46e5" stroke-width="12" />
+            <path d="M 160 320 C 160 220, 352 200, 352 300 C 352 360, 264 380, 224 350" 
+                  fill="none" stroke="#4f46e5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M 180 180 L 252 252 L 210 260 L 280 340 L 200 350" 
+                  fill="none" stroke="#00f5d4" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <h2 class="title-gradient">Ingresar a BulaPay</h2>
+          <p style="color: var(--text-secondary); margin-bottom: 1rem;">Administración de Cartera y Logística de Rutas</p>
+        </div>
+
+        <!-- Pestañas Auth -->
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login">Iniciar Sesión</button>
+          <button class="auth-tab" id="tab-register">Registrarse</button>
+        </div>
+
+        <!-- Formulario Iniciar Sesión -->
+        <form id="form-login" class="auth-form">
+          <div class="form-group">
+            <label for="login-username">Usuario</label>
+            <input type="text" id="login-username" placeholder="Nombre de usuario o agente" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="login-password">Contraseña</label>
+            <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Acceder al Portal</button>
+        </form>
+
+        <!-- Formulario Registrarse (Supervisores / Comercios) -->
+        <form id="form-register" class="auth-form" style="display: none;">
+          <div class="form-group">
+            <label for="register-type">Tipo de Cuenta</label>
+            <select id="register-type" required>
+              <option value="Usuario Supervisor" selected>Usuario Supervisor (Empresa / Admin de Rutas)</option>
+              <option value="Comercio Independiente">Comercio Independiente (Tienda / Unipersonal)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="register-name">Nombre Completo / Razón Social</label>
+            <input type="text" id="register-name" placeholder="Ej. Carlos Mendoza o Almacén Central" required>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+            <div class="form-group">
+              <label for="register-doc-type">Tipo de Documento</label>
+              <select id="register-doc-type" required>
+                <option value="Cédula de Ciudadanía (CC)" selected>Cédula de Ciudadanía (CC)</option>
+                <option value="Cédula de Extranjería (CE)">Cédula de Extranjería (CE)</option>
+                <option value="NIT">NIT</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="register-doc-num">Número de Documento</label>
+              <input type="number" id="register-doc-num" placeholder="Ingresa el documento" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="register-username">Usuario Administrador</label>
+            <input type="text" id="register-username" placeholder="Elige tu nombre de usuario" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="register-password">Contraseña de Seguridad</label>
+            <input type="password" id="register-password" placeholder="Elige tu contraseña" required autocomplete="new-password">
+          </div>
+          <div class="form-group" style="display: flex; gap: 0.5rem; align-items: flex-start; margin-top: 1rem; margin-bottom: 1rem;">
+            <input type="checkbox" id="register-legal" required style="width: 16px; height: 16px; min-height: 16px; min-width: 16px; margin-top: 0.2rem; cursor: pointer; flex-shrink: 0;">
+            <label for="register-legal" style="font-size: 0.75rem; text-transform: none; line-height: 1.4; color: var(--text-secondary); cursor: pointer; user-select: none;">
+              Declaro bajo gravedad de juramento que los fondos gestionados son de origen lícito y asumo la responsabilidad exclusiva de las tasas aplicadas. Acepto los <a href="#" style="color: var(--accent); text-decoration: underline;" onclick="alert('Términos y Condiciones de BulaPay:\n\n1. Los fondos deben provenir de fuentes lícitas.\n2. BulaPay es una plataforma de software de gestión y logística.\n3. El usuario asume toda la responsabilidad por las tasas e interés pactados con sus clientes.'); return false;">Términos y Condiciones</a>.
+            </label>
+          </div>
+          <button type="submit" class="btn btn-accent">Crear Cuenta Corporativa</button>
+          
+          <div class="auth-note">
+            💡 <strong>Nota Importante:</strong> Los 'Agentes de Ruta/Cobradores' no pueden auto-registrarse. El Usuario Supervisor se encarga de crear sus perfiles y asignarles credenciales en la sección "Crear Ruta".
+          </div>
+        </form>
+
+        <div class="auth-footer">
+          <p id="auth-switch-text">¿No tienes cuenta? <a href="#" id="auth-link-register">Regístrate gratis</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1B. MÓDULO DE AUTENTICACIÓN PARA AGENTE (SOLO LOGIN) -->
+    <section id="view-agent-login" class="view-section">
+      <div class="auth-wrapper card">
+        <div class="auth-header">
+          <svg viewBox="0 0 512 512" style="width: 80px; height: 80px;">
+            <circle cx="256" cy="256" r="240" fill="none" stroke="#4f46e5" stroke-width="12" />
+            <path d="M 160 320 C 160 220, 352 200, 352 300 C 352 360, 264 380, 224 350" 
+                  fill="none" stroke="#4f46e5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M 180 180 L 252 252 L 210 260 L 280 340 L 200 350" 
+                  fill="none" stroke="#00f5d4" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <h2 class="title-gradient">Portal de Agentes</h2>
+          <p style="color: var(--text-secondary); margin-bottom: 1rem;">Inicio de Sesión Autorizado</p>
+        </div>
+
+        <!-- Formulario Iniciar Sesión Agente -->
+        <form id="form-agent-login" class="auth-form">
+          <div class="form-group">
+            <label for="agent-login-username">Usuario Asignado</label>
+            <input type="text" id="agent-login-username" placeholder="Ingresa tu usuario de agente" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="agent-login-password">Contraseña</label>
+            <input type="password" id="agent-login-password" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Acceder al Portal</button>
+        </form>
+
+        <div class="auth-note" style="margin-top: 1.5rem;">
+          💡 <strong>Nota de Seguridad:</strong> Los agentes no pueden registrarse por cuenta propia. Tus credenciales deben ser asignadas e impresas por tu Supervisor o Empresa asociada en BulaPay.
+        </div>
+      </div>
+    </section>
+
+
+    <!-- 2. PANEL DE CONTROL DEL USUARIO SUPERVISOR (DASHBOARD) -->
+    <section id="view-supervisor" class="view-section">
+      <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h1 class="title-gradient" style="margin-bottom: 0.25rem;">Gestión de Cartera</h1>
+          <p style="color: var(--text-secondary);" id="supervisor-welcome-msg">Bienvenido, Usuario Supervisor</p>
+        </div>
+      </div>
+
+      <!-- KPIs Dashboard -->
+      <div class="dashboard-grid">
+        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('agents')">
+          <div class="kpi-icon">📋</div>
+          <div class="kpi-info">
+            <h4>Agentes Activos</h4>
+            <p id="kpi-active-agents">0</p>
+          </div>
+        </div>
+        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('capital')">
+          <div class="kpi-icon">💰</div>
+          <div class="kpi-info">
+            <h4>Capital Asignado</h4>
+            <p id="kpi-total-capital">$0</p>
+          </div>
+        </div>
+        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('collected')">
+          <div class="kpi-icon">📈</div>
+          <div class="kpi-info">
+            <h4>Recaudado Hoy</h4>
+            <p id="kpi-total-collected">$0</p>
+          </div>
+        </div>
+        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('progress')">
+          <div class="kpi-icon">📊</div>
+          <div class="kpi-info">
+            <h4>Progreso de Cobros</h4>
+            <p id="kpi-route-progress">0%</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vista Principal: Rutas y Monitoreo (Fija y Única) -->
+      <div class="supervisor-tab-panel active" id="panel-sup-routes" style="display: block;">
+        <!-- Acciones de Supervisor -->
+        <div class="supervisor-actions">
+        
+          <!-- Crear Ruta Logística con Múltiples Agentes y Calculadora -->
+          <div class="card route-form-container">
+            <h3>Crear Nueva Ruta Logística</h3>
+            <form id="form-create-route">
+              <div class="form-group">
+                <label for="route-name">Nombre de la Ruta</label>
+                <input type="text" id="route-name" placeholder="Ej. Ruta Norte - Chapinero" required>
+              </div>
+              
+              <!-- Calculadora Automática de Cuotas -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                <div class="form-group">
+                  <label for="route-capital">Capital Base</label>
+                  <input type="number" id="route-capital" placeholder="Ej. 150000" required min="0" oninput="supervisorModule.calculateRouteSuggestedQuota()">
+                </div>
+                <div class="form-group">
+                  <label for="route-margin">Margen de Servicio (%)</label>
+                  <input type="number" id="route-margin" placeholder="Ej. 20" required min="0" value="20" oninput="supervisorModule.calculateRouteSuggestedQuota()">
+                </div>
+              </div>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                <div class="form-group">
+                  <label for="route-total-recollect">Total a Recaudar</label>
+                  <input type="text" id="route-total-recollect" placeholder="Calculado automáticamente" readonly style="background-color: rgba(255,255,255,0.02); color: var(--accent); font-weight: bold; border-color: rgba(0, 245, 212, 0.2);">
+                </div>
+                <div class="form-group">
+                  <label for="route-suggested-quota">Cuota Diaria (30 días)</label>
+                  <input type="text" id="route-suggested-quota" placeholder="Sugerido automáticamente" readonly style="background-color: rgba(255,255,255,0.02); color: var(--accent); font-weight: bold; border-color: rgba(0, 245, 212, 0.2);">
+                </div>
+              </div>
+
+              <!-- Registro Múltiple de Agentes -->
+              <h4 style="font-size: 0.85rem; color: var(--accent); margin: 1.5rem 0 0.5rem 0; text-transform: uppercase;">
+                Asignación de Agentes de Ruta
+              </h4>
+
+              <div id="route-agents-list" style="margin-bottom: 1rem;">
+                <div class="agent-fields-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
+                  <h5 style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.5rem;">Agente Principal</h5>
+                  <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
+                    <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label style="font-size: 0.7rem;">Usuario (Login)</label>
+                      <input type="text" class="route-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label style="font-size: 0.7rem;">Contraseña</label>
+                      <input type="password" class="route-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem;">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button type="button" class="btn btn-secondary" onclick="supervisorModule.addAgentFieldGroup()" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; width: auto; margin-bottom: 1.5rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); align-self: flex-start; display: block;">
+                ➕ Agregar otro agente
+              </button>
+
+              <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Crear Ruta y Agentes</button>
+            </form>
+          </div>
+
+          <!-- Consultar Ruta en Vivo con Filtro de Mapa y Feed de Progreso -->
+          <div class="card route-query-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+              <h3 style="margin-bottom: 0;">Consulta de Rutas en Tiempo Real</h3>
+              <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; width: auto;">
+                <label for="map-route-filter" style="margin-bottom: 0; font-size: 0.75rem; white-space: nowrap; color: var(--text-secondary);">Filtro:</label>
+                <select id="map-route-filter" onchange="supervisorModule.centerMapOnRoute()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; width: 160px; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px;">
+                  <option value="Todos">Todas las Rutas</option>
+                  <!-- Se llena dinámicamente -->
+                </select>
+              </div>
+            </div>
+            
+            <!-- Simulación de Mapa Logístico en SVG -->
+            <div class="map-canvas-container">
+              <div class="map-grid-overlay"></div>
+              <!-- Mapa interactivo simulado -->
+              <svg class="map-dynamic-svg" id="dynamic-map-svg">
+                <g id="map-transform-group" transform="translate(0, 0) scale(1)" style="transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);">
+                  <!-- Grid y Rutas Logísticas -->
+                  <path d="M 50 140 L 150 70 L 250 180 L 350 110 L 400 220" fill="none" stroke="rgba(79, 70, 229, 0.25)" stroke-width="4" stroke-dasharray="5,5" />
+                  <path d="M 80 220 L 120 180 L 200 240 L 320 190" fill="none" stroke="rgba(0, 245, 212, 0.25)" stroke-width="4" stroke-dasharray="5,5" />
+                  
+                  <!-- Nodos de Clientes -->
+                  <circle cx="50" cy="140" r="6" fill="#10b981" /> <!-- Cliente Verde -->
+                  <circle cx="150" cy="70" r="6" fill="#f59e0b" /> <!-- Cliente Amarillo -->
+                  <circle cx="250" cy="180" r="6" fill="#10b981" />
+                  <circle cx="350" cy="110" r="6" fill="#ef4444" /> <!-- Cliente Rojo -->
+                  <circle cx="80" cy="220" r="6" fill="#10b981" />
+                  <circle cx="200" cy="240" r="6" fill="#f59e0b" />
+                  <circle cx="320" cy="190" r="6" fill="#ef4444" />
+
+                  <!-- Central de Monitoreo -->
+                  <rect x="15" y="15" width="20" height="20" rx="4" fill="#4f46e5" />
+                  <circle cx="25" cy="25" r="4" fill="#00f5d4" />
+
+                  <!-- Agente 1 (Interactivo) -->
+                  <circle cx="150" cy="70" r="6" fill="#00f5d4" id="map-agent-1" />
+                  <circle cx="150" cy="70" r="12" fill="none" stroke="#00f5d4" stroke-width="2" class="agent-node-pulse" id="map-agent-1-pulse" />
+
+                  <!-- Agente 2 (Interactivo) -->
+                  <circle cx="200" cy="240" r="6" fill="#818cf8" id="map-agent-2" />
+                  <circle cx="200" cy="240" r="12" fill="none" stroke="#818cf8" stroke-width="2" class="agent-node-pulse" id="map-agent-2-pulse" />
+
+                  <!-- Etiquetas -->
+                  <text x="45" y="25" fill="#94a3b8" font-size="9" font-family="sans-serif">Central BulaPay</text>
+                  <text x="165" y="65" fill="#00f5d4" font-size="9" font-family="sans-serif" id="map-lbl-agent-1">Juan Pérez (En Ruta)</text>
+                  <text x="215" y="235" fill="#818cf8" font-size="9" font-family="sans-serif" id="map-lbl-agent-2">María López (Completado)</text>
+                </g>
+              </svg>
+              <div style="position: absolute; bottom: 8px; right: 8px; background-color: rgba(11,17,30,0.85); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid var(--border-color);">
+                🟢 En Vivo (Simulación)
+              </div>
+            </div>
+
+            <!-- Feed de Progreso en Vivo -->
+            <div class="live-feed-container" style="background-color: rgba(11, 17, 30, 0.45); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.35rem;">
+                  <span class="live-feed-pulse-dot" style="display: inline-block; width: 6px; height: 6px; background-color: var(--accent); border-radius: 50%; box-shadow: 0 0 6px var(--accent);"></span>
+                  Progreso en Vivo
+                </span>
+                <span style="font-size: 0.65rem; color: var(--text-muted);" id="live-feed-time">Iniciando...</span>
+              </div>
+              <div id="live-feed-content" style="font-size: 0.8rem; color: var(--text-secondary); max-height: 85px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; padding-right: 0.5rem;">
+                <!-- logs de simulación se inyectan aquí -->
+              </div>
+            </div>
+
+            <!-- Tabla de Estado de Cobradores -->
+            <div class="table-wrapper">
+              <table class="route-table" id="table-routes-progress">
+                <thead>
+                  <tr>
+                    <th>Nombre de Ruta</th>
+                    <th>Agente(s) Asignado(s)</th>
+                    <th>Capital de Trabajo</th>
+                    <th>Recaudo Recibido</th>
+                    <th>Estado del Agente</th>
+                    <th>Eficiencia</th>
+                  </tr>
+                </thead>
+                <tbody id="routes-tbody">
+                  <!-- Se inyecta dinámicamente con JavaScript -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div> <!-- Cierra supervisor-actions -->
+      </div> <!-- Cierra panel-sup-routes -->
+    </section>
+
+
+    <!-- 3. INTERFAZ DEL AGENTE/COBRADOR (VISTA MÓVIL OPTIMIZADA) -->
+    <section id="view-agent" class="view-section">
+      <div class="mobile-simulator-wrapper">
+        <div class="mobile-simulator-layout">
+          
+          <!-- Barra de Estado del Teléfono -->
+          <div class="phone-status-bar">
+            <span>BulaPay Net</span>
+            <span id="phone-time">14:40</span>
+            <span>📶 🔋 98%</span>
+          </div>
+
+          <!-- Contenido de Pantalla -->
+          <div class="phone-screen-content">
+            
+            <div class="agent-title-bar">
+              <div>
+                <h3 id="agent-welcome-name">Cargando Agente...</h3>
+                <span id="agent-active-route">Ruta no asignada</span>
+              </div>
+              <span class="role-tag">Agente de Ruta</span>
+            </div>
+
+            <!-- Pestañas internas de la terminal del agente -->
+            <div class="agent-tabs">
+              <button class="agent-tab-btn active" id="tab-agent-collect">Cobrar Cuota</button>
+              <button class="agent-tab-btn" id="tab-agent-register">Registrar Cliente</button>
+            </div>
+
+            <!-- PESTAÑA COBRAR CUOTA / BUSCADOR -->
+            <div id="panel-agent-collect">
+              
+              <!-- Buscador de Cédula -->
+              <div class="search-box">
+                <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">
+                  Consultar Cédula del Cliente
+                </label>
+                <div class="search-input-wrapper">
+                  <input type="number" id="agent-search-cedula" placeholder="Ingresar Cédula (Ej. 12345, 67890)">
+                  <button type="button" class="btn-search-icon" id="btn-agent-search">🔍</button>
+                </div>
+              </div>
+
+              <!-- Contenedor del Semáforo y Detalles de Historial -->
+              <div class="client-result-container" id="agent-search-results" style="display: none;">
+                
+                <!-- Encabezado Semáforo -->
+                <div class="traffic-light-header" id="client-traffic-light">
+                  <span id="client-risk-status">Cliente Excelente</span>
+                  <span class="light-dot" id="client-risk-dot"></span>
+                </div>
+
+                <!-- Detalles de cuenta del cliente -->
+                <div class="client-detail-card">
+                  <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: white;" id="client-detail-name">Roberto Gómez</h4>
+                  
+                  <div class="client-detail-row">
+                    <span class="client-detail-label">Cédula:</span>
+                    <span class="client-detail-val" id="client-detail-cedula">12345</span>
+                  </div>
+                  <div class="client-detail-row">
+                    <span class="client-detail-label">Teléfono:</span>
+                    <span class="client-detail-val" id="client-detail-phone">3115551234</span>
+                  </div>
+                  <div class="client-detail-row">
+                    <span class="client-detail-label">Estado de Cartera:</span>
+                    <span class="client-detail-val" id="client-detail-status">Al Día</span>
+                  </div>
+                  <div class="client-detail-row">
+                    <span class="client-detail-label">Cuota Regular:</span>
+                    <span class="client-detail-val" id="client-detail-installment">$100,000</span>
+                  </div>
+                  <div class="client-detail-row client-detail-row total">
+                    <span class="client-detail-label">Saldo Pendiente:</span>
+                    <span class="client-detail-val" id="client-detail-outstanding">$150,000</span>
+                  </div>
+                </div>
+
+                <!-- Formulario de Cobro -->
+                <div class="collect-money-form" id="form-collect-container">
+                  <h4>Registrar Recaudo de Cuota</h4>
+                  <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label for="collect-amount" style="font-size: 0.7rem;">Monto Recibido</label>
+                    <input type="number" id="collect-amount" placeholder="Ej. 100000" min="1">
+                  </div>
+                  <button type="button" class="btn btn-accent" id="btn-submit-collect" style="padding: 0.5rem;">
+                    Confirmar Transacción
+                  </button>
+                </div>
+
+              </div>
+
+              <!-- Mensaje por defecto cuando no hay búsqueda -->
+              <div id="agent-search-placeholder" style="text-align: center; padding: 2rem 1rem; color: var(--text-muted);">
+                <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem;">💳</span>
+                Busca una Cédula de cliente para evaluar su nivel de riesgo y registrar pagos.
+              </div>
+
+            </div>
+
+            <!-- PESTAÑA REGISTRAR NUEVO CLIENTE -->
+            <div id="panel-agent-register" style="display: none;">
+              <form id="form-register-client">
+                <div class="form-group">
+                  <label for="new-client-name">Nombre Completo del Cliente</label>
+                  <input type="text" id="new-client-name" placeholder="Nombre completo" required>
+                </div>
+                
+                <div class="form-group">
+                  <label for="new-client-cedula">Cédula (ID Único)</label>
+                  <input type="number" id="new-client-cedula" placeholder="Número de identificación" required>
+                </div>
+
+                <div class="form-group">
+                  <label for="new-client-phone">Número de Teléfono</label>
+                  <input type="tel" id="new-client-phone" placeholder="Ej. 3124567890" required>
+                </div>
+
+                <div class="form-group">
+                  <label for="new-client-email">Correo Electrónico</label>
+                  <input type="email" id="new-client-email" placeholder="correo@gmail.com" required>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                  <div class="form-group">
+                    <label for="new-client-city">Ciudad</label>
+                    <select id="new-client-city" required>
+                      <option value="Bogotá" selected>Bogotá</option>
+                      <option value="Medellín">Medellín</option>
+                      <option value="Cali">Cali</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="new-client-zone">Zona / Barrio</label>
+                    <input type="text" id="new-client-zone" placeholder="Ej. Chapinero" required>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="new-client-debt">Monto de la Venta (Crédito Total)</label>
+                  <input type="number" id="new-client-debt" placeholder="Ej. 500000" required min="1000">
+                </div>
+
+                <div class="form-group">
+                  <label for="new-client-installments">Número de Cuotas acordadas</label>
+                  <input type="number" id="new-client-installments" placeholder="Ej. 5" required min="1">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.6rem;">
+                  Crear Cliente y Generar Enlace
+                </button>
+              </form>
+            </div>
+
+          </div>
+
+          <!-- Barra de navegación inferior móvil -->
+          <div style="height: 50px; border-top: 1px solid var(--border-color); background-color: #0b111e; display: flex; align-items: center; justify-content: space-around; font-size: 0.75rem; color: var(--text-secondary);">
+            <div style="display: flex; flex-direction: column; align-items: center; color: var(--accent); cursor: pointer;" onclick="agentView.switchTab('collect')">
+              <span>🔍</span>
+              <span>Buscador</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer;" onclick="agentView.switchTab('register')">
+              <span>➕</span>
+              <span>Nuevo</span>
+            </div>
+          </div>
+
+          <!-- MODAL SIMULADO DE WHATSAPP / NOTIFICACIÓN AUTOMÁTICA -->
+          <div class="overlay-modal" id="notification-share-modal">
+            <div class="whatsapp-mockup">
+              <!-- Encabezado Chat -->
+              <div class="whatsapp-header">
+                <div class="whatsapp-avatar" id="wa-avatar">C</div>
+                <div class="whatsapp-chat-info">
+                  <h5 id="wa-name">Cliente Nuevo</h5>
+                  <span>En línea ahora</span>
+                </div>
+              </div>
+
+              <!-- Cuerpo Chat -->
+              <div class="whatsapp-body">
+                <div class="whatsapp-bubble out">
+                  👋 ¡Hola! Le damos la bienvenida a <strong>BulaPay</strong>. 
+                  Hemos registrado su venta a plazos.
+                  <br><br>
+                  Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado:
+                  <a href="#" id="wa-link-url" target="_blank">https://bulapay.co/c/12345</a>
+                  <span class="whatsapp-bubble-time">14:42 ✓✓</span>
+                </div>
+              </div>
+
+              <!-- Acciones del Modal -->
+              <div class="whatsapp-actions">
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; flex: 1;" id="btn-close-wa-modal">
+                  Cerrar Simulación
+                </button>
+                <button class="btn btn-accent" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; flex: 1;" id="btn-open-link-wa">
+                  Abrir Enlace Público
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+
+    <!-- 4. INTERFAZ DEL CLIENTE FINAL (VISTA PÚBLICA MEDIANTE ENLACE) -->
+    <section id="view-customer" class="view-section">
+      <div class="customer-view-container">
+        
+        <!-- Buscador de Estado de Cuenta (Sección A) -->
+        <div class="card customer-search-card" style="margin-bottom: 2rem;">
+          <div class="search-header" style="text-align: center; margin-bottom: 1.5rem;">
+            <span style="font-size: 2.2rem; display: block; margin-bottom: 0.5rem;">🔍</span>
+            <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.5rem;">Consulta de Estado de Cuenta</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem;">Consulta el estado de tus cuotas ingresando tu identificación.</p>
+          </div>
+          <form id="form-customer-search" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom: 0;">
+              <label for="cust-doc-type" style="font-size: 0.7rem;">Tipo de Documento</label>
+              <select id="cust-doc-type" required style="padding: 0.6rem 0.8rem; font-size: 0.85rem;">
+                <option value="CC" selected>Cédula (CC)</option>
+                <option value="CE">Cédula Extranjería (CE)</option>
+                <option value="NIT">NIT</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 2; min-width: 200px; margin-bottom: 0;">
+              <label for="cust-doc-number" style="font-size: 0.7rem;">Número de Documento</label>
+              <input type="number" id="cust-doc-number" placeholder="Ej. 12345" required style="padding: 0.6rem 0.8rem; font-size: 0.85rem;">
+            </div>
+            <button type="submit" class="btn btn-primary" style="height: 38px; padding: 0 1.5rem; font-size: 0.85rem; width: auto;">
+              Buscar Estado
+            </button>
+          </form>
+        </div>
+
+        <!-- Tarjeta de Encabezado (Oculta por defecto) -->
+        <div class="card customer-header-card" id="customer-statement-header" style="display: none; margin-bottom: 2rem;">
+          <span style="font-size: 0.8rem; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+            Cartón de Estado de Cuenta Digital
+          </span>
+          <h2 class="title-gradient" id="cust-client-name" style="margin-top: 0.5rem; margin-bottom: 0.5rem;">Cargando Cliente...</h2>
+          <p style="color: var(--text-secondary); font-size: 0.9rem;" id="cust-client-meta">Cédula: - | Agente Asignado: -</p>
+          
+          <!-- Resumen Deuda -->
+          <div class="customer-debt-summary">
+            <div class="debt-item">
+              <h5>Crédito Otorgado</h5>
+              <p id="cust-total-debt">$0</p>
+            </div>
+            <div class="debt-item">
+              <h5>Total Recaudado</h5>
+              <p id="cust-total-paid" style="color: var(--color-verde);">$0</p>
+            </div>
+            <div class="debt-item outstanding">
+              <h5>Saldo Pendiente</h5>
+              <p id="cust-outstanding">$0</p>
+            </div>
+          </div>
+
+          <!-- Progreso de Pago -->
+          <div class="cust-progress-wrapper">
+            <div class="cust-progress-info">
+              <span>Progreso de Amortización</span>
+              <span id="cust-progress-percent" style="font-weight: 700; color: var(--accent);">0%</span>
+            </div>
+            <div class="cust-progress-bg">
+              <div class="cust-progress-fill" id="cust-progress-fill"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cartón de Pagos Digital (Oculto por defecto) -->
+        <div class="card digital-ledger-container" id="customer-statement-ledger" style="display: none; margin-bottom: 2rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <h3 style="margin-bottom: 0;">
+              <span>🎴</span> Cartón de Control de Pagos
+            </h3>
+            <span class="read-only-badge" style="background-color: rgba(79, 70, 229, 0.15); color: var(--accent); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; border: 1px solid rgba(79, 70, 229, 0.3); display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600; text-transform: uppercase;">
+              🔒 Solo Lectura
+            </span>
+          </div>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
+            Aquí puede visualizar el registro detallado de las cuotas abonadas y el saldo restante. Cada cuota cuenta con una firma digital del agente de BulaPay.
+          </p>
+
+          <div class="digital-ledger-grid" id="customer-ledger-grid">
+            <!-- Cuadrícula de cuotas inyectada dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Directorio de Gestores de Cartera (Sección B) -->
+        <div class="card directory-section">
+          <h3>
+            <span>📍</span> Encuentra un Gestor en tu Zona
+          </h3>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
+            ¿Necesita gestionar un pago, solicitar un nuevo crédito o comunicarse con un supervisor? Filtre los gestores de BulaPay autorizados que operan en su área.
+          </p>
+
+          <!-- Filtro por Ciudad -->
+          <div class="directory-filter-wrapper">
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+              <label for="filter-zone">Filtrar por Ciudad o Zona</label>
+              <select id="filter-zone">
+                <option value="Todos">Todas las Ciudades / Zonas</option>
+                <option value="Bogotá">Bogotá (Norte, Centro, Chapinero)</option>
+                <option value="Medellín">Medellín (El Poblado, Laureles)</option>
+                <option value="Cali">Cali (Oriente, Versalles)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Cuadrícula de Gestores -->
+          <div class="agents-directory-grid" id="managers-dir-grid">
+            <!-- Se inyecta dinámicamente con JavaScript -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Pie de Página Fijo -->
+  <footer style="border-top: 1px solid var(--border-color); background-color: var(--bg-primary); padding: 1.5rem 2rem; margin-top: auto; font-size: 0.85rem; color: var(--text-secondary); text-align: center;">
+    <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <p>&copy; 2026 BulaPay. Todos los derechos reservados. SaaS de Gestión de Cartera y Logística.</p>
+      <div style="display: flex; gap: 1rem;">
+        <span id="pwa-status" style="color: var(--text-muted);">PWA Registrada</span>
+        <a href="#" style="color: var(--accent); text-decoration: none;" id="btn-install-pwa" style="display: none;">Instalar App</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- MODULOS JAVASCRIPT DE BulaPay -->
+  <script src="js/db.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/supervisor.js"></script>
+  <script src="js/agent.js"></script>
+  <script src="js/customer.js"></script>
+  <!-- Controlador Principal -->
+  <script src="js/app.js"></script>
+
+  <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
+  <div class="receipt-overlay" id="receipt-modal">
+    <div class="receipt-card">
+      <div class="receipt-stamp-mark" id="receipt-stamp-type">🟢</div>
+      <div class="receipt-header">
+        <svg viewBox="0 0 512 512" style="width: 50px; height: 50px; fill: none; stroke: var(--accent); stroke-width: 32; margin: 0 auto;">
+          <circle cx="256" cy="256" r="220" />
+          <path d="M150 250 l70 70 l140 -140" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <h3>Recibo de Pago Digital</h3>
+        <p>BulaPay Cartera y Logística</p>
+        <span class="receipt-badge-status" id="receipt-status-badge">PAGADO</span>
+      </div>
+      <div class="receipt-body">
+        <div class="receipt-row">
+          <span class="label">Cliente:</span>
+          <span class="value" id="receipt-client-name">-</span>
+        </div>
+        <div class="receipt-row">
+          <span class="label">Cédula:</span>
+          <span class="value" id="receipt-client-cedula">-</span>
+        </div>
+        <div class="receipt-row">
+          <span class="label">Nro de Cuota:</span>
+          <span class="value" id="receipt-installment-num">-</span>
+        </div>
+        <div class="receipt-row">
+          <span class="label">Fecha de Pago:</span>
+          <span class="value" id="receipt-date">-</span>
+        </div>
+        <div class="receipt-row">
+          <span class="label">Cobrador Autorizado:</span>
+          <span class="value" id="receipt-agent-name">-</span>
+        </div>
+        <div class="receipt-row total">
+          <span class="label">Monto Recibido:</span>
+          <span class="value" id="receipt-amount">$0</span>
+        </div>
+        <div style="font-size: 0.75rem; text-align: center; color: var(--text-secondary); margin-top: 1rem;">
+          Firma y Sello de Transacción
+        </div>
+        <div class="receipt-signature-box" id="receipt-signature">
+          BulaPay-SIG-xxxxx
+        </div>
+      </div>
+      <div class="receipt-footer">
+        <button class="btn btn-accent" id="btn-close-receipt" style="padding: 0.5rem; font-size: 0.85rem; width: auto; min-width: 120px; display: inline-block;">Entendido / Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KPIs: AGENTES ACTIVOS -->
+  <div class="supervisor-modal-overlay" id="modal-kpi-agents">
+    <div class="supervisor-modal-card">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeKpiModal('agents')">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">👥 Agentes de Ruta Activos</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Visualiza y filtra la actividad y rendimiento de tu personal de campo.</p>
+      
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label for="modal-agents-route-filter">Filtrar por Ruta</label>
+        <select id="modal-agents-route-filter" onchange="supervisorModule.filterModalAgents()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+          <!-- Se llena dinámicamente -->
+        </select>
+      </div>
+
+      <!-- Lista de Agentes -->
+      <div id="modal-agents-list-container" style="display: grid; gap: 1rem; max-height: 250px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 1.5rem;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+
+      <!-- Detalle del Agente Seleccionado -->
+      <div id="modal-agent-detail-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+        <h4 id="modal-agent-detail-title" style="margin-bottom: 1rem; color: white;">Detalles de Agente</h4>
+        <div style="display: grid; grid-template-columns: 1fr 120px; gap: 1.5rem; align-items: center;">
+          <div style="font-size: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="color: var(--text-secondary);">Clientes Asignados:</span>
+              <span id="modal-agent-clients-count" style="font-weight: 600; color: white;">0 clientes</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="color: var(--text-secondary);">Capital de Ruta:</span>
+              <span id="modal-agent-route-capital" style="font-weight: 600; color: white;">$0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="color: var(--text-secondary);">Recaudado Hoy:</span>
+              <span id="modal-agent-route-collected" style="font-weight: 600; color: var(--color-verde);">$0</span>
+            </div>
+          </div>
+          
+          <!-- Gráfico circular rápido en SVG -->
+          <div style="text-align: center; position: relative;">
+            <svg width="80" height="80" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="4"></circle>
+              <!-- Segmentos circulares: verde (al día), amarillo (pendiente), rojo (en mora) -->
+              <circle id="chart-segment-green" cx="18" cy="18" r="15.915" fill="none" stroke="var(--color-verde)" stroke-width="4" stroke-dasharray="100 0" stroke-dashoffset="0" style="transition: stroke-dasharray 0.5s ease;"></circle>
+              <circle id="chart-segment-yellow" cx="18" cy="18" r="15.915" fill="none" stroke="var(--color-amarillo)" stroke-width="4" stroke-dasharray="0 100" stroke-dashoffset="0" style="transition: stroke-dasharray 0.5s ease;"></circle>
+              <circle id="chart-segment-red" cx="18" cy="18" r="15.915" fill="none" stroke="var(--color-rojo)" stroke-width="4" stroke-dasharray="0 100" stroke-dashoffset="0" style="transition: stroke-dasharray 0.5s ease;"></circle>
+            </svg>
+            <div style="margin-top: 0.25rem; font-size: 0.65rem; color: var(--text-secondary);">Estado Cartera</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 0.75rem; justify-content: center; margin-top: 1.25rem; font-size: 0.7rem; border-top: 1px solid rgba(255,255,255,0.02); padding-top: 0.75rem;">
+          <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-verde); border-radius: 50%;"></span> Al día</span>
+          <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-amarillo); border-radius: 50%;"></span> Pendiente</span>
+          <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-rojo); border-radius: 50%;"></span> En mora</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KPIs: CAPITAL ASIGNADO -->
+  <div class="supervisor-modal-overlay" id="modal-kpi-capital">
+    <div class="supervisor-modal-card">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeKpiModal('capital')">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">💰 Distribución de Capital Asignado</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Resumen financiero agrupado por rutas de cobro activas.</p>
+      
+      <!-- Lista de Rutas -->
+      <div id="modal-capital-routes-container" style="display: grid; gap: 1rem; margin-bottom: 1.5rem; max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+
+      <!-- Detalle de Rendimiento de Ruta -->
+      <div id="modal-capital-detail-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+        <h4 id="modal-capital-detail-title" style="margin-bottom: 1rem; color: white;">Rendimiento de Ruta</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem;">
+          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Capital Base</span>
+            <span id="modal-capital-delivered" style="font-size: 1rem; font-weight: 700; color: white;">$0</span>
+          </div>
+          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Total Recaudado</span>
+            <span id="modal-capital-collected" style="font-size: 1rem; font-weight: 700; color: var(--color-verde);">$0</span>
+          </div>
+          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Por Recaudar</span>
+            <span id="modal-capital-remaining" style="font-size: 1rem; font-weight: 700; color: var(--accent);">$0</span>
+          </div>
+          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Índice Mora Histórico</span>
+            <span id="modal-capital-mora-index" style="font-size: 1rem; font-weight: 700; color: var(--color-rojo);">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KPIs: RECAUDO HOY -->
+  <div class="supervisor-modal-overlay" id="modal-kpi-collected">
+    <div class="supervisor-modal-card">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeKpiModal('collected')">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">📈 Ranking de Recaudo de Hoy</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Comparativa en tiempo real de eficiencia de recaudo por ruta.</p>
+      
+      <!-- Contenedor del Ranking Visual -->
+      <div id="modal-collected-ranking-container" style="display: grid; gap: 1.25rem;">
+        <!-- Se inyecta dinámicamente con barras de progreso comparativas -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KPIs: PROGRESO DE COBROS -->
+  <div class="supervisor-modal-overlay" id="modal-kpi-progress">
+    <div class="supervisor-modal-card" style="max-width: 800px; width: 100%;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeKpiModal('progress')">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">🔍 Panel de Auditoría de Cobros</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Auditoría de clientes morosos. Visualización estrictamente de Solo Lectura.</p>
+      
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label for="modal-audit-route-filter">Filtrar por Ruta</label>
+        <select id="modal-audit-route-filter" onchange="supervisorModule.filterAuditClients()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+          <!-- Se llena dinámicamente -->
+        </select>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 260px 1fr; gap: 1.5rem; align-items: start; flex-wrap: wrap;">
+        <!-- Lista de Clientes Morosos -->
+        <div>
+          <h4 style="font-size: 0.85rem; color: white; margin-bottom: 0.75rem;">Clientes en Mora/Atrasados</h4>
+          <div id="modal-audit-clients-list" style="display: grid; gap: 0.5rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem;">
+            <!-- Se inyecta dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Vista del Cartón Digital del Cliente -->
+        <div id="modal-audit-ledger-container" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; display: none; min-height: 250px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 id="modal-audit-client-name" style="color: white; margin: 0; font-size: 1rem;">Roberto Gómez</h4>
+            <span class="read-only-badge" style="background-color: rgba(79, 70, 229, 0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(79, 70, 229, 0.3); font-weight: 600;">🔒 SOLO LECTURA</span>
+          </div>
+          <p id="modal-audit-client-meta" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Cédula: 12345 | Saldo Pendiente: $150,000</p>
+          
+          <div class="digital-ledger-grid" id="modal-audit-ledger-grid" style="grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 0.5rem; max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
+            <!-- Cuadrícula del cartón digital inyectada dinámicamente -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,259 @@
+// Controlador Principal y Enrutador SPA de BulaPay PWA
+
+const app = {
+  // Configuración del Enrutador SPA
+  router: {
+    currentRoute: 'auth',
+
+    init() {
+      // Escuchar cambios de hash
+      window.addEventListener('hashchange', () => this.handleRouteFromHash());
+      
+      // Manejar carga inicial
+      this.handleInitialLoad();
+    },
+
+    navigate(route, param = null) {
+      if (param) {
+        window.location.hash = `${route}/${param}`;
+      } else {
+        window.location.hash = route;
+      }
+    },
+
+    handleInitialLoad() {
+      // 1. Prioridad: Verificar si hay parámetros de consulta URL (ej. ?view=customer&id=12345)
+      // Esto es crucial para simular el click de WhatsApp/SMS
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryView = urlParams.get('view');
+      const queryId = urlParams.get('id');
+
+      if (queryView) {
+        // Limpiar parámetros de la URL sin recargar para mantener limpia la SPA
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
+        this.navigate(queryView, queryId);
+        return;
+      }
+
+      // 2. Si hay hash en la URL, navegar a él
+      if (window.location.hash) {
+        this.handleRouteFromHash();
+        return;
+      }
+
+      // 3. Fallback: Evaluar sesión de usuario para redirigir
+      const user = window.BulaPayDB.getCurrentUser();
+      if (user) {
+        if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente') {
+          this.navigate('supervisor');
+        } else if (user.role === 'Agente de Ruta') {
+          this.navigate('agent');
+        }
+      } else {
+        this.navigate('auth');
+      }
+    },
+
+    handleRouteFromHash() {
+      const hash = window.location.hash.slice(1); // Remover '#'
+      const parts = hash.split('/');
+      const route = parts[0];
+      const param = parts[1] || null;
+
+      this.currentRoute = route;
+      this.renderView(route, param);
+    },
+
+    renderView(route, param) {
+      // Ocultar todas las secciones
+      const sections = document.querySelectorAll('.view-section');
+      sections.forEach(s => s.classList.remove('active'));
+
+      // Destruir procesos previos si aplica (ej. animaciones del mapa)
+      if (window.supervisorModule) {
+        window.supervisorModule.destroy();
+      }
+
+      const targetSectionId = `view-${route}`;
+      const targetSection = document.getElementById(targetSectionId);
+
+      if (!targetSection) {
+        // Fallback a login si no existe la ruta
+        console.warn(`Ruta desconocida: ${route}. Redirigiendo a auth.`);
+        this.navigate('auth');
+        return;
+      }
+
+      // Validaciones de Seguridad y Sesión
+      const user = window.BulaPayDB.getCurrentUser();
+
+      if (route === 'supervisor') {
+        if (!user || (user.role !== 'Usuario Supervisor' && user.role !== 'Comercio Independiente')) {
+          console.warn('Acceso denegado a panel de supervisor. Redirigiendo.');
+          this.navigate('auth');
+          return;
+        }
+        window.supervisorModule.init();
+      } 
+      
+      else if (route === 'agent') {
+        if (!user || user.role !== 'Agente de Ruta') {
+          console.warn('Acceso denegado a terminal de agente. Redirigiendo.');
+          this.navigate('agent-login');
+          return;
+        }
+        window.agentModule.init();
+      } 
+      
+      else if (route === 'agent-login') {
+        if (user && user.role === 'Agente de Ruta') {
+          this.navigate('agent');
+          return;
+        }
+        window.authModule.init();
+      }
+      
+      else if (route === 'customer') {
+        // El portal de cliente es de acceso público mediante el enlace único
+        window.customerModule.init(param);
+      } 
+      
+      else if (route === 'auth') {
+        window.authModule.init();
+      }
+
+      // Mostrar la sección correspondiente
+      targetSection.classList.add('active');
+      
+      // Scroll al inicio de la página
+      window.scrollTo(0, 0);
+    }
+  },
+
+  // Inicializar PWA e instalador
+  pwa: {
+    deferredPrompt: null,
+
+    init() {
+      // Registrar Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then(reg => {
+              console.log('✔ Service Worker registrado con éxito. Scope:', reg.scope);
+              const pwaStatus = document.getElementById('pwa-status');
+              if (pwaStatus) pwaStatus.textContent = 'PWA Activa (Offline Listo)';
+            })
+            .catch(err => {
+              console.error('❌ Fallo al registrar Service Worker:', err);
+            });
+        });
+      }
+
+      // Manejar prompt de instalación
+      const installBtn = document.getElementById('btn-install-pwa');
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        this.deferredPrompt = e;
+        
+        if (installBtn) {
+          installBtn.style.display = 'inline-block';
+          
+          installBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            installBtn.style.display = 'none';
+            
+            this.deferredPrompt.prompt();
+            this.deferredPrompt.userChoice.then((choiceResult) => {
+              if (choiceResult.outcome === 'accepted') {
+                console.log('El usuario aceptó la instalación de BulaPay PWA');
+              } else {
+                console.log('El usuario rechazó la instalación de BulaPay PWA');
+              }
+              this.deferredPrompt = null;
+            });
+          });
+        }
+      });
+
+      // App instalada exitosamente
+      window.addEventListener('appinstalled', () => {
+        console.log('BulaPay PWA instalada en el dispositivo.');
+        if (installBtn) installBtn.style.display = 'none';
+      });
+    }
+  },
+
+  // Inicialización global
+  init() {
+    this.pwa.init();
+    this.router.init();
+    
+    // Inicializar reloj del teléfono móvil simulado
+    this.startPhoneClock();
+  },
+
+  startPhoneClock() {
+    const clockElement = document.getElementById('phone-time');
+    if (clockElement) {
+      const updateClock = () => {
+        const now = new Date();
+        const hrs = String(now.getHours()).padStart(2, '0');
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        clockElement.textContent = `${hrs}:${mins}`;
+      };
+      updateClock();
+      setInterval(updateClock, 60000); // Actualizar cada minuto
+    }
+  }
+};
+
+// Arrancar la aplicación
+window.app = app;
+document.addEventListener('DOMContentLoaded', () => {
+  app.init();
+});
+
+// Utilidad Global: Mostrar Recibo Digital de Pago
+window.showBulaPayReceipt = function(payment, client) {
+  const modal = document.getElementById('receipt-modal');
+  if (!modal) return;
+
+  // Llenar campos
+  document.getElementById('receipt-client-name').textContent = client.name;
+  document.getElementById('receipt-client-cedula').textContent = client.cedula;
+  document.getElementById('receipt-installment-num').textContent = `Cuota ${payment.installmentNumber}`;
+  document.getElementById('receipt-date').textContent = payment.date;
+  document.getElementById('receipt-agent-name').textContent = payment.agentName;
+  document.getElementById('receipt-amount').textContent = `$${payment.amount.toLocaleString('es-CO')}`;
+  document.getElementById('receipt-signature').textContent = payment.signature;
+
+  const badge = document.getElementById('receipt-status-badge');
+  const stamp = document.getElementById('receipt-stamp-type');
+  
+  if (payment.status === 'Abonado') {
+    badge.textContent = 'ABONADO';
+    badge.className = 'receipt-badge-status abonado';
+    stamp.textContent = '🟡';
+    stamp.style.color = 'var(--color-amarillo)';
+  } else {
+    badge.textContent = 'PAGADO';
+    badge.className = 'receipt-badge-status';
+    stamp.textContent = '🟢';
+    stamp.style.color = 'var(--color-verde)';
+  }
+
+  modal.classList.add('active');
+
+  const btnClose = document.getElementById('btn-close-receipt');
+  if (btnClose) {
+    const handleClose = () => {
+      modal.classList.remove('active');
+      btnClose.removeEventListener('click', handleClose);
+    };
+    btnClose.addEventListener('click', handleClose);
+  }
+};
