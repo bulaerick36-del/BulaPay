@@ -86,7 +86,7 @@ const agentModule = {
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
 
-    if (currentUser && currentUser.role === 'Agente de Ruta') {
+    if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
       if (agentNameElement) agentNameElement.textContent = `Cobrador: ${currentUser.name}`;
       
       const routes = await window.BulaPayDB.getRoutes();

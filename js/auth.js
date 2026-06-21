@@ -21,23 +21,6 @@ const authModule = {
   },
 
   bindEvents() {
-    // Botón Global de Reinicio de Simulación
-    const btnResetDb = document.getElementById('btn-reset-db');
-    if (btnResetDb) {
-      btnResetDb.addEventListener('click', async () => {
-        if (confirm('⚠️ ¿Está seguro de restablecer toda la base de datos? Se perderán todos los datos modificados y nuevos registros.')) {
-          try {
-            await window.BulaPayDB.reseed();
-            alert('🔄 Base de datos restablecida a los valores iniciales de fábrica.');
-            window.location.reload();
-          } catch (err) {
-            console.error(err);
-            alert('❌ Error al restablecer la base de datos.');
-          }
-        }
-      });
-    }
-
     // Alternancia de Pestañas (Iniciar Sesión / Registrarse)
     this.tabLogin.addEventListener('click', () => this.switchTab('login'));
     this.tabRegister.addEventListener('click', () => this.switchTab('register'));
@@ -79,7 +62,7 @@ const authModule = {
         try {
           const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-          if (user && user.password === passwordInput && user.role === 'Agente de Ruta') {
+          if (user && user.password === passwordInput && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
             this.loginUser(user);
           } else if (user && user.password === passwordInput) {
             alert('❌ Acceso denegado. Este portal es exclusivo para Agentes de Ruta.');
@@ -189,9 +172,9 @@ const authModule = {
     document.getElementById('demo-quick-links').style.display = 'none';
 
     // Redirigir según el rol del usuario
-    if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente') {
+    if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor') {
       window.app.router.navigate('supervisor');
-    } else if (user.role === 'Agente de Ruta') {
+    } else if (user.role === 'Agente de Ruta' || user.role === 'agent') {
       window.app.router.navigate('agent');
     }
   },

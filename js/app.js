@@ -65,9 +65,9 @@ const app = {
       }
 
       if (user) {
-        if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente') {
+        if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor') {
           this.navigate('supervisor');
-        } else if (user.role === 'Agente de Ruta') {
+        } else if (user.role === 'Agente de Ruta' || user.role === 'agent') {
           this.navigate('agent');
         }
       } else {
@@ -109,7 +109,7 @@ const app = {
       const user = window.BulaPayDB.getCurrentUser();
 
       if (route === 'supervisor') {
-        if (!user || (user.role !== 'Usuario Supervisor' && user.role !== 'Comercio Independiente')) {
+        if (!user || (user.role !== 'Usuario Supervisor' && user.role !== 'Comercio Independiente' && user.role !== 'supervisor')) {
           console.warn('Acceso denegado a panel de supervisor. Redirigiendo.');
           this.navigate('auth');
           return;
@@ -118,7 +118,7 @@ const app = {
       } 
       
       else if (route === 'agent') {
-        if (!user || user.role !== 'Agente de Ruta') {
+        if (!user || (user.role !== 'Agente de Ruta' && user.role !== 'agent')) {
           console.warn('Acceso denegado a terminal de agente. Redirigiendo.');
           this.navigate('agent-login');
           return;
@@ -127,7 +127,7 @@ const app = {
       } 
       
       else if (route === 'agent-login') {
-        if (user && user.role === 'Agente de Ruta') {
+        if (user && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
           this.navigate('agent');
           return;
         }
