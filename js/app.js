@@ -5,12 +5,12 @@ const app = {
   router: {
     currentRoute: 'auth',
 
-    init() {
+    async init() {
       // Escuchar cambios de hash
       window.addEventListener('hashchange', () => this.handleRouteFromHash());
       
       // Manejar carga inicial
-      this.handleInitialLoad();
+      await this.handleInitialLoad();
     },
 
     navigate(route, param = null) {
@@ -21,7 +21,7 @@ const app = {
       }
     },
 
-    handleInitialLoad() {
+    async handleInitialLoad() {
       // 1. Prioridad: Verificar si hay parámetros de consulta URL (ej. ?view=customer&id=12345)
       // Esto es crucial para simular el click de WhatsApp/SMS
       const urlParams = new URLSearchParams(window.location.search);
@@ -44,7 +44,26 @@ const app = {
       }
 
       // 3. Fallback: Evaluar sesión de usuario para redirigir
-      const user = window.BulaPayDB.getCurrentUser();
+      let user = window.BulaPayDB.getCurrentUser();
+      
+      // Auto-login automático con usuario admin de Supabase si no hay sesión iniciada
+      if (!user) {
+        try {
+          user = await window.BulaPayDB.getUserByUsername('admin');
+          if (user) {
+            window.BulaPayDB.setCurrentUser(user);
+            // Actualizar navbar de forma segura si el modulo de autenticación está cargado
+            if (window.authModule && typeof window.authModule.updateNavBar === 'function') {
+              window.authModule.updateNavBar(user);
+            }
+            const demoLinks = document.getElementById('demo-quick-links');
+            if (demoLinks) demoLinks.style.display = 'none';
+          }
+        } catch (err) {
+          console.warn("Fallo al auto-iniciar sesión como admin:", err);
+        }
+      }
+
       if (user) {
         if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente') {
           this.navigate('supervisor');
@@ -188,9 +207,9 @@ const app = {
   },
 
   // Inicialización global
-  init() {
+  async init() {
     this.pwa.init();
-    this.router.init();
+    await this.router.init();
     
     // Inicializar reloj del teléfono móvil simulado
     this.startPhoneClock();
@@ -213,8 +232,8 @@ const app = {
 
 // Arrancar la aplicación
 window.app = app;
-document.addEventListener('DOMContentLoaded', () => {
-  app.init();
+document.addEventListener('DOMContentLoaded', async () => {
+  await app.init();
 });
 
 // Utilidad Global: Mostrar Recibo Digital de Pago

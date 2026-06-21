@@ -81,8 +81,12 @@ CREATE POLICY "Permitir todo a anonimos en users" ON users FOR ALL TO anon USING
 CREATE POLICY "Permitir todo a anonimos en clients" ON clients FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo a anonimos en payments" ON payments FOR ALL TO anon USING (true) WITH CHECK (true);
 
--- Insertar Datos Semilla (Seeds)
--- 1. Supervisores / Administradores
+-- Otorgar privilegios explícitos a los roles anon y authenticated (debido a que se deshabilitó la exposición automática de tablas)
+GRANT ALL ON TABLE routes TO anon, authenticated;
+GRANT ALL ON TABLE users TO anon, authenticated;
+GRANT ALL ON TABLE clients TO anon, authenticated;
+GRANT ALL ON TABLE payments TO anon, authenticated;
+
 INSERT INTO users ("username", "password", "name", "role", "company", "city", "zone", "phone", "email") VALUES
 ('admin', '123', 'Carlos Mendoza', 'Usuario Supervisor', 'Logística Mendoza S.A.', 'Bogotá', 'Chapinero / Norte', '+57 315 123 4567', 'contacto@logisticamendoza.co'),
 ('tienda', '123', 'Almacén La Esquina', 'Comercio Independiente', 'Almacén La Esquina', 'Bogotá', 'Centro / Santa Fe', '+57 318 987 6543', 'laesquina@gmail.com'),
