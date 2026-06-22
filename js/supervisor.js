@@ -175,7 +175,8 @@ const supervisorModule = {
           await this.initMapRouteFilter();
         } catch (err) {
           console.error(err);
-          alert('❌ Error al crear la ruta o guardar los agentes.');
+          const errorMsg = err.message || err.details || JSON.stringify(err);
+          alert(`❌ Error al crear la ruta o guardar los agentes:\n${errorMsg}`);
         }
       });
     }
@@ -1116,7 +1117,8 @@ const supervisorModule = {
       await this.initMapRouteFilter();
     } catch (err) {
       console.error(err);
-      alert('❌ Error al eliminar la ruta de Supabase.');
+      const errorMsg = err.message || err.details || JSON.stringify(err);
+      alert(`❌ Error al eliminar la ruta de Supabase:\n${errorMsg}`);
     }
   },
 
@@ -1220,7 +1222,8 @@ const supervisorModule = {
       await this.initMapRouteFilter();
     } catch (err) {
       console.error(err);
-      alert('❌ Error al desvincular el agente.');
+      const errorMsg = err.message || err.details || JSON.stringify(err);
+      alert(`❌ Error al desvincular el agente:\n${errorMsg}`);
     }
   },
 
@@ -1285,7 +1288,8 @@ const supervisorModule = {
       await this.initMapRouteFilter();
     } catch (err) {
       console.error(err);
-      alert('❌ Error al agregar y asignar el agente.');
+      const errorMsg = err.message || err.details || JSON.stringify(err);
+      alert(`❌ Error al agregar y asignar el agente:\n${errorMsg}`);
     }
   },
 
