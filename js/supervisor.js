@@ -280,35 +280,35 @@ const supervisorModule = {
 
   // 1. POPULATE MODAL: AGENTES ACTIVOS
   async populateKpiAgentsModal() {
-    const routeSelect = document.getElementById('modal-agents-route-filter');
+    const routeFilterInput = document.getElementById('modal-agents-route-filter');
     const listContainer = document.getElementById('modal-agents-list-container');
     const detailSection = document.getElementById('modal-agent-detail-section');
     
-    if (!routeSelect || !listContainer) return;
+    if (!routeFilterInput || !listContainer) return;
     
     if (detailSection) detailSection.style.display = 'none';
 
-    // Rellenar select
-    routeSelect.innerHTML = `<option value="Todos">Todas las Rutas</option>`;
-    const routes = await window.BulaPayDB.getRoutes();
-    routes.forEach(r => {
-      routeSelect.innerHTML += `<option value="${r.id}">${r.name}</option>`;
-    });
+    // Limpiar filtro
+    routeFilterInput.value = '';
 
     await this.filterModalAgents();
   },
 
   async filterModalAgents() {
-    const routeSelect = document.getElementById('modal-agents-route-filter');
+    const routeFilterInput = document.getElementById('modal-agents-route-filter');
     const listContainer = document.getElementById('modal-agents-list-container');
-    if (!routeSelect || !listContainer) return;
+    if (!routeFilterInput || !listContainer) return;
 
-    const selectedRouteId = routeSelect.value;
+    const filterText = routeFilterInput.value.trim().toLowerCase();
     const allUsers = await window.BulaPayDB.getUsers();
     let agents = allUsers.filter(u => u.role === 'Agente de Ruta');
+    const routes = await window.BulaPayDB.getRoutes();
 
-    if (selectedRouteId !== 'Todos') {
-      agents = agents.filter(a => a.routeId === selectedRouteId);
+    if (filterText !== '') {
+      agents = agents.filter(a => {
+        const r = routes.find(rt => rt.id === a.routeId);
+        return r && r.name.toLowerCase().includes(filterText);
+      });
     }
 
     listContainer.innerHTML = '';
@@ -317,7 +317,6 @@ const supervisorModule = {
       return;
     }
 
-    const routes = await window.BulaPayDB.getRoutes();
     agents.forEach(agent => {
       const r = routes.find(rt => rt.id === agent.routeId) || { name: 'Sin ruta asignada' };
       
@@ -334,7 +333,7 @@ const supervisorModule = {
       
       item.innerHTML = `
         <div>
-          <strong style="color: white; font-size: 0.9rem;">${agent.name}</strong>
+          <strong style="color: var(--text-primary); font-size: 0.9rem;">${agent.name}</strong>
           <div style="font-size: 0.75rem; color: var(--text-secondary);">Ruta: ${r.name}</div>
         </div>
         <span style="font-size: 0.75rem; color: var(--accent); font-weight: bold;">Ver detalles ➔</span>
@@ -342,7 +341,7 @@ const supervisorModule = {
       
       item.addEventListener('mouseenter', () => {
         item.style.borderColor = 'var(--accent)';
-        item.style.backgroundColor = 'rgba(0, 245, 212, 0.03)';
+        item.style.backgroundColor = 'rgba(16, 185, 129, 0.03)';
       });
       item.addEventListener('mouseleave', () => {
         item.style.borderColor = 'var(--border-color)';
@@ -354,7 +353,10 @@ const supervisorModule = {
     });
   },
 
+  selectedAuditAgentUsername: null,
+
   async showModalAgentDetail(username) {
+    this.selectedAuditAgentUsername = username;
     const detailSection = document.getElementById('modal-agent-detail-section');
     const title = document.getElementById('modal-agent-detail-title');
     const clientsCountEl = document.getElementById('modal-agent-clients-count');
@@ -419,6 +421,168 @@ const supervisorModule = {
     }
 
     detailSection.style.display = 'block';
+  },
+
+  async openAgentAuditView() {
+    const username = this.selectedAuditAgentUsername;
+    if (!username) return;
+
+    const overlay = document.getElementById('modal-agent-audit-portfolio');
+    const subtitle = document.getElementById('agent-audit-modal-subtitle');
+    const listContainer = document.getElementById('agent-audit-clients-list');
+    const ledgerContainer = document.getElementById('agent-audit-ledger-container');
+
+    if (!overlay || !listContainer) return;
+
+    if (ledgerContainer) ledgerContainer.style.display = 'none';
+    listContainer.innerHTML = '<div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 1rem;">Cargando cartera...</div>';
+
+    overlay.classList.add('active');
+
+    try {
+      const allUsers = await window.BulaPayDB.getUsers();
+      const agent = allUsers.find(u => u.username === username);
+      if (!agent) {
+        alert('❌ No se encontró la información del agente.');
+        this.closeAgentAuditModal();
+        return;
+      }
+
+      const routes = await window.BulaPayDB.getRoutes();
+      const route = routes.find(r => r.id === agent.routeId);
+      const routeName = route ? route.name : 'Sin ruta asignada';
+
+      if (subtitle) {
+        subtitle.textContent = `Auditoría de Cartera: ${agent.name} | Ruta: ${routeName}`;
+      }
+
+      // Obtener todos los clientes de la ruta
+      const allClients = await window.BulaPayDB.getClients();
+      const clients = allClients.filter(c => c.routeId === agent.routeId);
+
+      // Obtener todos los pagos de hoy
+      const todayStr = new Date().toISOString().split('T')[0];
+      const allPayments = await window.BulaPayDB.getPayments();
+      const todayPayments = allPayments.filter(p => p.date === todayStr);
+
+      listContainer.innerHTML = '';
+      if (clients.length === 0) {
+        listContainer.innerHTML = '<div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 8px;">Este agente no tiene clientes asignados en su ruta.</div>';
+        return;
+      }
+
+      clients.forEach(client => {
+        // Verificar si el cliente hizo un abono hoy
+        const madePaymentToday = todayPayments.some(p => p.clientCedula === client.cedula);
+        const statusColor = madePaymentToday ? 'var(--color-verde)' : 'var(--color-rojo)';
+        const statusLabel = madePaymentToday ? 'Recaudado Hoy' : 'Sin Cobro Hoy';
+        const bgLight = madePaymentToday ? 'rgba(16, 185, 129, 0.04)' : 'rgba(239, 68, 68, 0.04)';
+        const borderLight = madePaymentToday ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+
+        const item = document.createElement('div');
+        item.style.padding = '0.75rem 1rem';
+        item.style.background = bgLight;
+        item.style.border = `1px solid ${borderLight}`;
+        item.style.borderRadius = '8px';
+        item.style.cursor = 'pointer';
+        item.style.display = 'flex';
+        item.style.justifyContent = 'space-between';
+        item.style.alignItems = 'center';
+        item.style.transition = 'var(--transition-smooth)';
+
+        item.innerHTML = `
+          <div>
+            <strong style="color: ${statusColor}; font-size: 0.9rem; font-weight: 700; transition: color 0.3s ease;">${client.name}</strong>
+            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.15rem;">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
+          </div>
+          <span style="font-size: 0.65rem; background-color: ${madePaymentToday ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'}; color: ${statusColor}; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${statusLabel}</span>
+        `;
+
+        item.addEventListener('mouseenter', () => {
+          item.style.borderColor = statusColor;
+          item.style.backgroundColor = madePaymentToday ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+        });
+        item.addEventListener('mouseleave', () => {
+          item.style.borderColor = borderLight;
+          item.style.backgroundColor = bgLight;
+        });
+
+        item.addEventListener('click', () => this.showAgentClientAuditLedger(client.cedula));
+        listContainer.appendChild(item);
+      });
+
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al cargar la cartera para auditar.');
+    }
+  },
+
+  async showAgentClientAuditLedger(cedula) {
+    const ledgerContainer = document.getElementById('agent-audit-ledger-container');
+    const nameEl = document.getElementById('agent-audit-client-name');
+    const metaEl = document.getElementById('agent-audit-client-meta');
+    const gridEl = document.getElementById('agent-audit-ledger-grid');
+
+    if (!ledgerContainer || !gridEl) return;
+
+    try {
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
+      if (!client) return;
+
+      nameEl.textContent = client.name;
+      metaEl.textContent = `Cédula: ${client.cedula} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
+
+      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+
+      gridEl.innerHTML = '';
+      const totalSlots = client.installmentsCount;
+      
+      for (let i = 1; i <= totalSlots; i++) {
+        const payment = payments.find(p => p.installmentNumber === i);
+        const slotCard = document.createElement('div');
+        slotCard.className = 'ledger-slot-card'; // Reusar clases
+        slotCard.style.padding = '0.5rem';
+        slotCard.style.fontSize = '0.7rem';
+        slotCard.style.minHeight = '70px';
+
+        if (payment) {
+          const isAbonado = payment.status === 'Abonado';
+          slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+          
+          slotCard.innerHTML = `
+            <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
+            <span class="slot-amount" style="font-size: 0.75rem;">$${Number(payment.amount).toLocaleString('es-CO')}</span>
+            <span class="slot-date" style="font-size: 0.5rem; display:block;">${payment.date}</span>
+            <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isAbonado ? '🟡' : '🟢'}</div>
+          `;
+          slotCard.addEventListener('click', () => {
+            window.showBulaPayReceipt(payment, client);
+          });
+        } else {
+          slotCard.innerHTML = `
+            <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
+            <span class="slot-amount" style="color: var(--text-muted); font-size: 0.7rem;">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
+            <span class="slot-empty-text" style="font-size: 0.55rem;">Atrasado</span>
+          `;
+          slotCard.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+          slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.02)';
+        }
+
+        gridEl.appendChild(slotCard);
+      }
+
+      ledgerContainer.style.display = 'block';
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al cargar el historial del cliente.');
+    }
+  },
+
+  closeAgentAuditModal() {
+    const overlay = document.getElementById('modal-agent-audit-portfolio');
+    if (overlay) {
+      overlay.classList.remove('active');
+    }
   },
 
   // 2. POPULATE MODAL: CAPITAL ASIGNADO
@@ -665,6 +829,9 @@ const supervisorModule = {
           <span class="slot-date" style="font-size: 0.5rem; display:block;">${payment.date}</span>
           <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isAbonado ? '🟡' : '🟢'}</div>
         `;
+        slotCard.addEventListener('click', () => {
+          window.showBulaPayReceipt(payment, client);
+        });
       } else {
         slotCard.innerHTML = `
           <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>

@@ -786,9 +786,7 @@
       
       <div class="form-group" style="margin-bottom: 1.5rem;">
         <label for="modal-agents-route-filter">Filtrar por Ruta</label>
-        <select id="modal-agents-route-filter" onchange="supervisorModule.filterModalAgents()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
-          <!-- Se llena dinámicamente -->
-        </select>
+        <input type="text" id="modal-agents-route-filter" oninput="supervisorModule.filterModalAgents()" placeholder="Escribe el nombre de la ruta para filtrar..." style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
       </div>
 
       <!-- Lista de Agentes -->
@@ -831,6 +829,11 @@
           <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-verde); border-radius: 50%;"></span> Al día</span>
           <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-amarillo); border-radius: 50%;"></span> Pendiente</span>
           <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-rojo); border-radius: 50%;"></span> En mora</span>
+        </div>
+        <div style="margin-top: 1.5rem; display: flex; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 1.25rem;">
+          <button type="button" class="btn btn-accent" id="btn-audit-agent-clients" style="width: auto; min-width: 220px; padding: 0.6rem 1.2rem; font-size: 0.85rem;" onclick="supervisorModule.openAgentAuditView()">
+            🔍 Auditar Cartera del Agente
+          </button>
         </div>
       </div>
     </div>
@@ -965,6 +968,47 @@
       
       <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
         <button type="button" class="btn btn-primary" onclick="supervisorModule.closeEditRouteModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem;">Terminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AUDITORÍA DE CARTERA (CLIENTES DEL AGENTE) -->
+  <div class="supervisor-modal-overlay" id="modal-agent-audit-portfolio">
+    <div class="supervisor-modal-card" style="max-width: 850px; width: 100%; max-height: 90vh; overflow-y: auto;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeAgentAuditModal()">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">🔍 Auditoría de Cartera y Clientes</h3>
+      <p id="agent-audit-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Cargando información del agente...</p>
+      
+      <!-- Listado de Clientes con su Semáforo de Recaudo de Hoy -->
+      <div style="display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; align-items: start; flex-wrap: wrap;">
+        
+        <!-- Columna 1: Lista de Clientes -->
+        <div>
+          <h4 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem; text-transform: uppercase;">Clientes Asignados</h4>
+          <div id="agent-audit-clients-list" style="display: grid; gap: 0.5rem; max-height: 400px; overflow-y: auto; padding-right: 0.5rem;">
+            <!-- Se inyecta dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Columna 2: Detalle del Cartón Virtual (Solo Lectura) -->
+        <div id="agent-audit-ledger-container" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; display: none; min-height: 300px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 id="agent-audit-client-name" style="color: var(--text-primary); margin: 0; font-size: 1.1rem; font-weight: 700;">Roberto Gómez</h4>
+            <span class="read-only-badge" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-verde); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; border: 1px solid rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600; text-transform: uppercase;">
+              🔒 Cartón Solo Lectura
+            </span>
+          </div>
+          <p id="agent-audit-client-meta" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Cédula: 12345 | Saldo Pendiente: $150,000</p>
+          
+          <div class="digital-ledger-grid" id="agent-audit-ledger-grid" style="grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 0.5rem; max-height: 300px; overflow-y: auto; padding-right: 0.5rem;">
+            <!-- Cuadrícula del cartón digital inyectada dinámicamente -->
+          </div>
+        </div>
+
+      </div>
+
+      <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
+        <button type="button" class="btn btn-primary" onclick="supervisorModule.closeAgentAuditModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; width: auto;">Cerrar Auditoría</button>
       </div>
     </div>
   </div>
