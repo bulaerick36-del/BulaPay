@@ -94,6 +94,9 @@ const app = {
       if (window.supervisorModule) {
         window.supervisorModule.destroy();
       }
+      if (window.agentModule && typeof window.agentModule.destroy === 'function') {
+        window.agentModule.destroy();
+      }
 
       const targetSectionId = `view-${route}`;
       const targetSection = document.getElementById(targetSectionId);

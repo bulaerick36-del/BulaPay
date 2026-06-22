@@ -44,6 +44,11 @@ const agentModule = {
 
     this.bindEvents();
     await this.updateAgentHeader();
+
+    // Geolocalización del agente (inicial y periódico cada 5 min)
+    this.captureAndSendLocation();
+    if (this.locationInterval) clearInterval(this.locationInterval);
+    this.locationInterval = setInterval(() => this.captureAndSendLocation(), 5 * 60 * 1000);
   },
 
   bindEvents() {
@@ -215,6 +220,9 @@ const agentModule = {
       // Registrar en base de datos
       const savedPayment = await window.BulaPayDB.addPayment(newPayment);
 
+      // Reportar ubicación
+      this.captureAndSendLocation();
+
       // Desplegar recibo digital premium
       window.showBulaPayReceipt(savedPayment, this.currentClient);
 
@@ -249,6 +257,9 @@ const agentModule = {
 
       // Registrar en base de datos
       const savedPayment = await window.BulaPayDB.addPayment(newPayment);
+
+      // Reportar ubicación
+      this.captureAndSendLocation();
 
       // Desplegar recibo digital premium
       window.showBulaPayReceipt(savedPayment, this.currentClient);
@@ -326,6 +337,34 @@ const agentModule = {
 
     // Activar modal
     this.shareModal.classList.add('active');
+  },
+
+  async captureAndSendLocation() {
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser || !navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
+          console.log(`[GPS] Ubicación reportada: ${latitude}, ${longitude}`);
+        } catch (e) {
+          console.warn("Fallo al actualizar geolocalización en Supabase:", e);
+        }
+      },
+      (error) => {
+        console.warn("Permiso de geolocalización denegado o error de lectura:", error);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  },
+
+  destroy() {
+    if (this.locationInterval) {
+      clearInterval(this.locationInterval);
+      this.locationInterval = null;
+    }
   }
 };
 

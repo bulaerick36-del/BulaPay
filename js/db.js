@@ -438,6 +438,22 @@ const db = {
     window.dispatchEvent(new CustomEvent('bulapay-payment-registered'));
 
     return newPayment;
+  },
+
+  async updateUserLocation(username, lat, lng) {
+    const supabase = await initSupabase();
+    const { error } = await supabase
+      .from('users')
+      .update({
+        last_lat: Number(lat),
+        last_lng: Number(lng),
+        last_location_time: new Date().toISOString()
+      })
+      .eq('username', username.toLowerCase());
+    if (error) {
+      console.warn(`Error al actualizar ubicación de usuario "${username}":`, error);
+      throw error;
+    }
   }
 };
 

@@ -5,6 +5,9 @@ const supervisorModule = {
   liveFeedInterval: null,
   activeKpiModal: null,
   handlePaymentRegistered: null,
+  mapInstance: null,
+  mapMarkers: {},
+  mapUpdateInterval: null,
 
   async init() {
     this.formCreateRoute = document.getElementById('form-create-route');
@@ -19,10 +22,17 @@ const supervisorModule = {
 
     this.bindEvents();
     await this.renderDashboard();
-    this.startMapSimulation();
+    
+    // Inicializar el mapa GPS Leaflet
+    this.initGpsMap();
+
     await this.initMapRouteFilter();
     await this.renderLiveFeed();
     this.calculateRouteSuggestedQuota(); // Calcular inicial
+
+    // Actualizar marcadores periódicamente (cada 30 segundos)
+    if (this.mapUpdateInterval) clearInterval(this.mapUpdateInterval);
+    this.mapUpdateInterval = setInterval(() => this.updateMapMarkers(), 30 * 1000);
   },
 
   bindEvents() {
@@ -195,6 +205,7 @@ const supervisorModule = {
     this.handlePaymentRegistered = async () => {
       await this.renderDashboard();
       await this.renderLiveFeed();
+      await this.updateMapMarkers();
     };
     window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
   },
@@ -986,41 +997,100 @@ const supervisorModule = {
     });
   },
 
-  // ZOOM Y CENTRADO DE MAPA SIMULADO
-  centerMapOnRoute() {
+  initGpsMap() {
+    const mapContainer = document.getElementById('live-gps-map');
+    if (!mapContainer || typeof L === 'undefined') return;
+
+    if (this.mapInstance) {
+      try {
+        this.mapInstance.remove();
+      } catch (e) {
+        console.warn("Error al remover instancia previa del mapa:", e);
+      }
+      this.mapInstance = null;
+    }
+
+    this.mapMarkers = {};
+
+    // Centrado por defecto en La Guajira, Colombia
+    this.mapInstance = L.map('live-gps-map').setView([11.5444, -72.9069], 9);
+
+    // Tile server CartoDB Dark Matter para coincidir con la estética oscura premium de BulaPay
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(this.mapInstance);
+
+    this.updateMapMarkers();
+  },
+
+  async updateMapMarkers() {
+    if (!this.mapInstance) return;
+
     const filter = document.getElementById('map-route-filter');
-    const transformGroup = document.getElementById('map-transform-group');
-    if (!filter || !transformGroup) return;
+    const selectedRouteId = filter ? filter.value : 'Todos';
 
-    const value = filter.value;
+    const routes = await window.BulaPayDB.getRoutes();
+    const allUsers = await window.BulaPayDB.getUsers();
 
-    if (value === 'Todos') {
-      // Restablecer zoom completo
-      transformGroup.setAttribute('transform', 'translate(0, 0) scale(1)');
-      return;
+    let activeRoutes = routes;
+    if (selectedRouteId !== 'Todos') {
+      activeRoutes = routes.filter(r => r.id === selectedRouteId);
     }
 
-    // Coordenadas de los agentes para el centrado
-    let targetX = 200;
-    let targetY = 140;
-    let scale = 1.8;
+    const activeRouteIds = new Set(activeRoutes.map(r => r.id));
+    const agents = allUsers.filter(u => u.role === 'Agente de Ruta' && u.routeId && activeRouteIds.has(u.routeId));
 
-    if (value === 'route_1' || value.includes('1')) {
-      targetX = 150;
-      targetY = 70;
-    } else if (value === 'route_2' || value.includes('2')) {
-      targetX = 200;
-      targetY = 240;
-    } else {
-      targetX = 250;
-      targetY = 150;
-      scale = 1.5;
+    const markerGroup = [];
+
+    // Limpiar marcadores antiguos que no correspondan
+    const currentAgentUsernames = new Set(agents.map(a => a.username));
+    for (const username in this.mapMarkers) {
+      if (!currentAgentUsernames.has(username)) {
+        this.mapInstance.removeLayer(this.mapMarkers[username]);
+        delete this.mapMarkers[username];
+      }
     }
 
-    const transX = 200 - targetX * scale;
-    const transY = 140 - targetY * scale;
+    agents.forEach(agent => {
+      if (!agent.last_lat || !agent.last_lng) return;
 
-    transformGroup.setAttribute('transform', `translate(${transX}, ${transY}) scale(${scale})`);
+      const lat = Number(agent.last_lat);
+      const lng = Number(agent.last_lng);
+      
+      const routeName = routes.find(r => r.id === agent.routeId)?.name || 'Ruta';
+      const timeStr = agent.last_location_time 
+        ? new Date(agent.last_location_time).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+        : 'N/A';
+
+      const popupContent = `
+        <div style="font-family: var(--font-sans); font-size: 0.8rem; color: #000;">
+          <strong style="color: var(--primary); font-size: 0.85rem;">👤 ${agent.name}</strong><br>
+          <span style="color: #666;">Ruta: ${routeName}</span><br>
+          <span style="color: #999; font-size: 0.7rem;">Último reporte: ${timeStr}</span>
+        </div>
+      `;
+
+      if (this.mapMarkers[agent.username]) {
+        this.mapMarkers[agent.username].setLatLng([lat, lng]);
+        this.mapMarkers[agent.username].getPopup().setContent(popupContent);
+      } else {
+        const marker = L.marker([lat, lng]).addTo(this.mapInstance);
+        marker.bindPopup(popupContent);
+        this.mapMarkers[agent.username] = marker;
+      }
+
+      markerGroup.push([lat, lng]);
+    });
+
+    if (markerGroup.length > 0) {
+      this.mapInstance.fitBounds(markerGroup, { padding: [50, 50], maxZoom: 14 });
+    }
+  },
+
+  centerMapOnRoute() {
+    this.updateMapMarkers();
   },
 
   // 6. FEED EN VIVO REAL DE PAGOS
@@ -1622,9 +1692,21 @@ const supervisorModule = {
     if (this.liveFeedInterval) {
       clearInterval(this.liveFeedInterval);
     }
+    if (this.mapUpdateInterval) {
+      clearInterval(this.mapUpdateInterval);
+      this.mapUpdateInterval = null;
+    }
     if (this.handlePaymentRegistered) {
       window.removeEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
       this.handlePaymentRegistered = null;
+    }
+    if (this.mapInstance) {
+      try {
+        this.mapInstance.remove();
+      } catch (e) {
+        console.warn("Error removing map instance on destroy:", e);
+      }
+      this.mapInstance = null;
     }
   }
 };

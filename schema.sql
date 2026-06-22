@@ -38,7 +38,10 @@ CREATE TABLE users (
   "estado_suscripcion" TEXT DEFAULT 'activa_prueba',
   "id_metodo_pago" TEXT,
   "supervisor_id" TEXT,
-  "created_at" TIMESTAMPTZ DEFAULT NOW()
+  "created_at" TIMESTAMPTZ DEFAULT NOW(),
+  "last_lat" NUMERIC,
+  "last_lng" NUMERIC,
+  "last_location_time" TIMESTAMPTZ
 );
 
 -- 3. Tabla de Clientes
