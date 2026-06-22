@@ -16,6 +16,10 @@ const authModule = {
     this.navUserRole = document.getElementById('nav-user-role');
     this.btnLogout = document.getElementById('btn-logout');
 
+    this.linkTerms = document.getElementById('link-terms-conditions');
+    this.modalTerms = document.getElementById('terms-modal');
+    this.btnCloseTerms = document.getElementById('btn-close-terms');
+
     this.bindEvents();
     this.checkCurrentSession();
   },
@@ -29,6 +33,26 @@ const authModule = {
       this.authLinkRegister.addEventListener('click', (e) => {
         e.preventDefault();
         this.switchTab('register');
+      });
+    }
+
+    // Abrir Modal de Términos y Condiciones
+    if (this.linkTerms) {
+      this.linkTerms.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this.modalTerms) {
+          this.modalTerms.classList.add('active');
+        }
+      });
+    }
+
+    // Cerrar Modal de Términos y Condiciones
+    if (this.btnCloseTerms) {
+      this.btnCloseTerms.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this.modalTerms) {
+          this.modalTerms.classList.remove('active');
+        }
       });
     }
 

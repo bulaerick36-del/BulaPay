@@ -117,7 +117,7 @@
           <div class="form-group" style="display: flex; gap: 0.5rem; align-items: flex-start; margin-top: 1rem; margin-bottom: 1rem;">
             <input type="checkbox" id="register-legal" required style="width: 16px; height: 16px; min-height: 16px; min-width: 16px; margin-top: 0.2rem; cursor: pointer; flex-shrink: 0;">
             <label for="register-legal" style="font-size: 0.75rem; text-transform: none; line-height: 1.4; color: var(--text-secondary); cursor: pointer; user-select: none;">
-              Declaro bajo gravedad de juramento que los fondos gestionados son de origen lícito y asumo la responsabilidad exclusiva de las tasas aplicadas. Acepto los <a href="#" style="color: var(--accent); text-decoration: underline;" onclick="alert('Términos y Condiciones de BulaPay:\n\n1. Los fondos deben provenir de fuentes lícitas.\n2. BulaPay es una plataforma de software de gestión y logística.\n3. El usuario asume toda la responsabilidad por las tasas e interés pactados con sus clientes.'); return false;">Términos y Condiciones</a>.
+              Declaro bajo gravedad de juramento que los fondos gestionados son de origen lícito y asumo la responsabilidad exclusiva de las tasas aplicadas. Acepto los <a href="#" id="link-terms-conditions" style="color: var(--color-verde); text-decoration: underline; font-weight: 600;">Términos y Condiciones</a>.
             </label>
           </div>
           <button type="submit" class="btn btn-accent">Crear Cuenta Corporativa</button>
@@ -1007,6 +1007,35 @@
 
       <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
         <button type="button" class="btn btn-primary" onclick="supervisorModule.closeAgentAuditModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; width: auto;">Cerrar Auditoría</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE TÉRMINOS Y CONDICIONES (REGISTRO) -->
+  <div class="terms-overlay" id="terms-modal">
+    <div class="terms-card">
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">📄 Términos y Condiciones de Uso</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">BulaPay Cartera y Logística de Rutas</p>
+      
+      <div class="terms-scroll-body" id="terms-scroll-content">
+        <p><strong>DECLARACIÓN JURAMENTADA DE ORIGEN DE RECURSOS Y ACEPTACIÓN DE TÉRMINOS Y CONDICIONES DE USO - BULAPAY</strong></p>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1.25rem;">Por favor lea detenidamente el siguiente documento que constituye un contrato de adhesión legal.</p>
+
+        <p><strong>CLÁUSULA PRIMERA: NATURALEZA DEL SERVICIO</strong><br>
+        El usuario reconoce y acepta de forma expresa que <strong>BulaPay</strong> es única y exclusivamente una plataforma tecnológica de software para la logística de cobros, administración interna de carteras de crédito y optimización de rutas de recaudadores. <strong>BulaPay</strong> no es una entidad financiera, cooperativa de ahorro y crédito, ni un intermediario financiero. El software no capta dinero del público, no otorga créditos por cuenta propia, ni realiza intermediación en el mercado cambiario o bursátil. El uso de la herramienta se limita al control y registro de operaciones privadas de crédito llevadas a cabo de forma autónoma por el Supervisor.</p>
+
+        <p><strong>CLÁUSULA SEGUNDA: CUMPLIMIENTO SARLAFT Y ORIGEN DE RECURSOS</strong><br>
+        El Supervisor y/o Comercio declara bajo gravedad de juramento que todos los recursos, capitales y fondos registrados, recaudados o administrados mediante la plataforma <strong>BulaPay</strong> provienen de actividades lícitas de conformidad con la ley vigente. Así mismo, declara que dichos fondos no proceden directa ni indirectamente de conductas delictivas tales como el lavado de activos, la financiación del terrorismo, el narcotráfico, el contrabando o cualquier otra infracción de orden penal (normatividad SARLAFT/LAFT). El usuario se obliga a suministrar la información que las autoridades requieran y a no utilizar la herramienta en transacciones que pudiesen considerarse sospechosas o ilegales.</p>
+
+        <p><strong>CLÁUSULA TERCERA: LÍMITES DE USURA Y RESPONSABILIDAD CREDITICIA</strong><br>
+        Es responsabilidad única y absoluta del Supervisor definir de mutuo acuerdo con sus deudores las tasas de interés de plazo y de mora aplicadas a los créditos. El Supervisor declara que conoce las limitaciones legales sobre la tasa de interés de usura regulada y certificada periódicamente por los entes gubernamentales competentes del territorio correspondiente. El usuario se compromete de forma irrevocable a respetar estrictamente dichos límites legales y se abstendrá de utilizar el software <strong>BulaPay</strong> para registrar, cobrar o procesar intereses que configuren el delito de usura o cualquier práctica de cobro abusiva u hostil.</p>
+
+        <p><strong>CLÁUSULA CUARTA: CLÁUSULA DE INDEMNIDAD</strong><br>
+        El Supervisor y/o Comercio se obliga de forma irrevocable a mantener indemne a <strong>BulaPay</strong>, a sus desarrolladores, directores, representantes legales, empleados y empresas afiliadas frente a cualquier reclamación judicial o extrajudicial, demanda, sanción administrativa, multa o investigación gubernamental (incluyendo gastos legales y honorarios de abogados) que tenga origen en: (i) el incumplimiento de las leyes locales por parte del usuario, (ii) el origen ilícito de los fondos operados, (iii) el cobro de intereses por encima de los límites legales de usura, o (iv) los conflictos civiles, mercantiles o penales surgidos entre el Supervisor, sus cobradores/agentes y sus deudores/clientes finales.</p>
+      </div>
+      
+      <div style="text-align: right; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <button type="button" class="btn btn-primary" id="btn-close-terms" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; width: auto;">Aceptar y Cerrar</button>
       </div>
     </div>
   </div>
