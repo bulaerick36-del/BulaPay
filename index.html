@@ -198,9 +198,12 @@
         </div>
         <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('progress')">
           <div class="kpi-icon">📊</div>
-          <div class="kpi-info">
+          <div class="kpi-info" style="width: 100%;">
             <h4>Progreso de Cobros</h4>
             <p id="kpi-route-progress">0%</p>
+            <div class="progress-bar-container" style="margin-top: 0.5rem; background-color: rgba(255,255,255,0.05); height: 6px; border-radius: 10px; overflow: hidden; width: 100%;">
+              <div id="kpi-route-progress-bar" class="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.5s ease; border-radius: 10px;"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -903,17 +906,42 @@
       <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">🔍 Panel de Auditoría de Cobros</h3>
       <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Auditoría de clientes morosos. Visualización estrictamente de Solo Lectura.</p>
       
-      <div class="form-group" style="margin-bottom: 1.5rem;">
-        <label for="modal-audit-route-filter">Filtrar por Ruta</label>
-        <select id="modal-audit-route-filter" onchange="supervisorModule.filterAuditClients()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
-          <!-- Se llena dinámicamente -->
-        </select>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="modal-audit-route-filter">Filtrar por Ruta</label>
+          <select id="modal-audit-route-filter" onchange="supervisorModule.filterAuditClients()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
+            <!-- Se llena dinámicamente -->
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="modal-audit-date-filter">Fecha de Auditoría</label>
+          <input type="date" id="modal-audit-date-filter" onchange="supervisorModule.filterAuditClients()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
+        </div>
+      </div>
+
+      <!-- Panel de KPIs Financieros -->
+      <div id="modal-audit-kpis-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <!-- Tarjeta 1: Capital Esperado -->
+        <div class="card" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 0.75rem 1rem; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 70px;">
+          <span style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 500;">Capital Esperado</span>
+          <span id="modal-audit-kpi-expected" style="color: var(--text-primary); font-size: 1.25rem; font-weight: 700; margin-top: 0.25rem;">$0</span>
+        </div>
+        <!-- Tarjeta 2: Total Recaudado -->
+        <div class="card" style="background-color: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); padding: 0.75rem 1rem; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 70px;">
+          <span style="color: var(--accent); font-size: 0.75rem; font-weight: 500;">Total Recaudado</span>
+          <span id="modal-audit-kpi-collected" style="color: var(--accent); font-size: 1.25rem; font-weight: 700; margin-top: 0.25rem;">$0</span>
+        </div>
+        <!-- Tarjeta 3: Déficit / Faltante -->
+        <div class="card" style="background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.75rem 1rem; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 70px;">
+          <span style="color: var(--color-rojo); font-size: 0.75rem; font-weight: 500;">Déficit / Faltante</span>
+          <span id="modal-audit-kpi-deficit" style="color: var(--color-rojo); font-size: 1.25rem; font-weight: 700; margin-top: 0.25rem;">$0</span>
+        </div>
       </div>
 
       <div style="display: grid; grid-template-columns: 260px 1fr; gap: 1.5rem; align-items: start; flex-wrap: wrap;">
         <!-- Lista de Clientes Morosos -->
         <div>
-          <h4 style="font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.75rem;">Clientes en Mora/Atrasados</h4>
+          <h4 id="modal-audit-list-title" style="font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.75rem;">Clientes que NO pagaron</h4>
           <div id="modal-audit-clients-list" style="display: grid; gap: 0.5rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem;">
             <!-- Se inyecta dinámicamente -->
           </div>

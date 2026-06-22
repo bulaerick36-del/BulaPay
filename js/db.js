@@ -434,6 +434,9 @@ const db = {
       await this.updateRouteCollected(client.routeId, payment.amount);
     }
     
+    // Dispatch custom event to notify supervisor SPA in real-time
+    window.dispatchEvent(new CustomEvent('bulapay-payment-registered'));
+
     return newPayment;
   }
 };

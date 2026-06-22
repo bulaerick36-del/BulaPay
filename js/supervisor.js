@@ -4,6 +4,7 @@ const supervisorModule = {
   mapAnimationInterval: null,
   liveFeedInterval: null,
   activeKpiModal: null,
+  handlePaymentRegistered: null,
 
   async init() {
     this.formCreateRoute = document.getElementById('form-create-route');
@@ -186,6 +187,15 @@ const supervisorModule = {
     if (btnViewAgentClients) {
       btnViewAgentClients.addEventListener('click', () => this.openAgentAuditView());
     }
+
+    // Escuchar el evento de pago registrado en tiempo real
+    if (this.handlePaymentRegistered) {
+      window.removeEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
+    }
+    this.handlePaymentRegistered = async () => {
+      await this.renderDashboard();
+    };
+    window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
   },
 
   // CALCULADORA AUTOMÁTICA
@@ -755,12 +765,18 @@ const supervisorModule = {
   // 4. POPULATE MODAL: PROGRESO DE COBROS (AUDITORÍA CLIENTES MOROSOS)
   async populateKpiProgressModal() {
     const routeSelect = document.getElementById('modal-audit-route-filter');
+    const dateInput = document.getElementById('modal-audit-date-filter');
     const clientsList = document.getElementById('modal-audit-clients-list');
     const ledgerContainer = document.getElementById('modal-audit-ledger-container');
 
     if (!routeSelect || !clientsList) return;
 
     if (ledgerContainer) ledgerContainer.style.display = 'none';
+
+    // Establecer fecha por defecto (hoy)
+    if (dateInput) {
+      dateInput.value = new Date().toISOString().split('T')[0];
+    }
 
     routeSelect.innerHTML = `<option value="Todos">Todas las Rutas</option>`;
     const routes = await window.BulaPayDB.getRoutes();
@@ -771,35 +787,98 @@ const supervisorModule = {
     await this.filterAuditClients();
   },
 
-  async filterAuditClients() {
-    const routeSelect = document.getElementById('modal-audit-route-filter');
-    const clientsList = document.getElementById('modal-audit-clients-list');
-    if (!routeSelect || !clientsList) return;
+  // METRICAS DE AUDITORIA FINANCIERA (HISTORICO Y DIARIO)
+  async calculateAuditMetrics(selectedRouteId, selectedDate) {
+    const routes = await window.BulaPayDB.getRoutes();
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
 
-    const selectedRouteId = routeSelect.value;
-    
-    // Obtener morosos (riesgo Amarillo o Rojo, o con saldo pendiente > 0)
-    const allClients = await window.BulaPayDB.getClients();
-    let clients = allClients.filter(c => Number(c.outstanding) > 0 && (c.risk === 'Amarillo' || c.risk === 'Rojo'));
+    const routeIds = selectedRouteId === 'Todos' 
+      ? routes.map(r => r.id) 
+      : [selectedRouteId];
 
-    if (selectedRouteId !== 'Todos') {
-      clients = clients.filter(c => c.routeId === selectedRouteId);
+    // Clientes que pertenecen a las rutas seleccionadas
+    const routeClients = clients.filter(c => c.routeId && routeIds.includes(c.routeId));
+
+    let capitalEsperado = 0;
+    let totalRecaudado = 0;
+    const unpaidClients = [];
+
+    for (const client of routeClients) {
+      // Calcular abonos hechos antes de la fecha seleccionada
+      const clientPayments = payments.filter(p => p.clientCedula === client.cedula);
+      const paymentsBefore = clientPayments.filter(p => p.date < selectedDate);
+      const totalPaidBefore = paymentsBefore.reduce((sum, p) => sum + Number(p.amount), 0);
+
+      // Si ya estaba saldado antes de la fecha seleccionada, no se esperaba cuota
+      if (totalPaidBefore >= Number(client.totalDebt)) {
+        continue;
+      }
+
+      const expectedAmount = Number(client.installmentAmount);
+      capitalEsperado += expectedAmount;
+
+      // Pagos realizados en la fecha seleccionada
+      const paymentsOnDate = clientPayments.filter(p => p.date === selectedDate);
+      const amountPaidOnDate = paymentsOnDate.reduce((sum, p) => sum + Number(p.amount), 0);
+      totalRecaudado += amountPaidOnDate;
+
+      // Si no pagó ese día o registró "No Pago"
+      const hasNoPagoStatus = paymentsOnDate.some(p => p.status === 'No Pago');
+      if (amountPaidOnDate === 0 || hasNoPagoStatus) {
+        unpaidClients.push({
+          ...client,
+          dueToday: expectedAmount
+        });
+      }
     }
 
+    const deficit = Math.max(0, capitalEsperado - totalRecaudado);
+
+    return {
+      capitalEsperado,
+      totalRecaudado,
+      deficit,
+      unpaidClients
+    };
+  },
+
+  async filterAuditClients() {
+    const routeSelect = document.getElementById('modal-audit-route-filter');
+    const dateInput = document.getElementById('modal-audit-date-filter');
+    const clientsList = document.getElementById('modal-audit-clients-list');
+    const ledgerContainer = document.getElementById('modal-audit-ledger-container');
+    
+    if (!routeSelect || !dateInput || !clientsList) return;
+
+    const selectedRouteId = routeSelect.value;
+    const selectedDate = dateInput.value || new Date().toISOString().split('T')[0];
+
+    if (ledgerContainer) ledgerContainer.style.display = 'none';
+
+    // Calcular métricas
+    const metrics = await this.calculateAuditMetrics(selectedRouteId, selectedDate);
+
+    // Actualizar KPIs del modal
+    const expectedEl = document.getElementById('modal-audit-kpi-expected');
+    const collectedEl = document.getElementById('modal-audit-kpi-collected');
+    const deficitEl = document.getElementById('modal-audit-kpi-deficit');
+
+    if (expectedEl) expectedEl.textContent = `$${metrics.capitalEsperado.toLocaleString('es-CO')}`;
+    if (collectedEl) collectedEl.textContent = `$${metrics.totalRecaudado.toLocaleString('es-CO')}`;
+    if (deficitEl) deficitEl.textContent = `$${metrics.deficit.toLocaleString('es-CO')}`;
+
     clientsList.innerHTML = '';
-    if (clients.length === 0) {
-      clientsList.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 1rem;">No hay clientes en mora para el filtro seleccionado.</div>`;
+    if (metrics.unpaidClients.length === 0) {
+      clientsList.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 1rem;">No hay registros de déficit para esta fecha.</div>`;
       return;
     }
 
-    clients.forEach(client => {
-      const riskColor = client.risk === 'Rojo' ? 'var(--color-rojo)' : 'var(--color-amarillo)';
-      const riskLabel = client.risk === 'Rojo' ? 'Mora Severa' : 'Atrasado';
-
+    metrics.unpaidClients.forEach(client => {
       const item = document.createElement('div');
       item.style.padding = '0.5rem 0.75rem';
-      item.style.background = 'rgba(255,255,255,0.01)';
-      item.style.border = '1px solid var(--border-color)';
+      item.style.background = 'rgba(239, 68, 68, 0.02)';
+      item.style.border = '1px solid rgba(239, 68, 68, 0.15)';
       item.style.borderRadius = '6px';
       item.style.cursor = 'pointer';
       item.style.display = 'flex';
@@ -810,19 +889,19 @@ const supervisorModule = {
 
       item.innerHTML = `
         <div>
-          <strong style="color: white;">${client.name}</strong>
-          <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
+          <strong style="color: var(--color-rojo);">${client.name}</strong>
+          <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
         </div>
-        <span style="font-size: 0.75rem; color: ${riskColor}; font-weight: 600;">${riskLabel}</span>
+        <span style="font-size: 0.75rem; color: var(--color-rojo); font-weight: 600;">Cuota: $${Number(client.dueToday).toLocaleString('es-CO')}</span>
       `;
 
       item.addEventListener('mouseenter', () => {
-        item.style.borderColor = riskColor;
-        item.style.backgroundColor = 'rgba(255,255,255,0.03)';
+        item.style.borderColor = 'var(--color-rojo)';
+        item.style.backgroundColor = 'rgba(239, 68, 68, 0.05)';
       });
       item.addEventListener('mouseleave', () => {
-        item.style.borderColor = 'var(--border-color)';
-        item.style.backgroundColor = 'rgba(255,255,255,0.01)';
+        item.style.borderColor = 'rgba(239, 68, 68, 0.15)';
+        item.style.backgroundColor = 'rgba(239, 68, 68, 0.02)';
       });
 
       item.addEventListener('click', () => this.showAuditClientLedger(client.cedula));
@@ -1067,16 +1146,37 @@ const supervisorModule = {
     const totalCapital = routes.reduce((acc, curr) => acc + Number(curr.capital), 0);
     const totalCollected = routes.reduce((acc, curr) => acc + Number(curr.collected), 0);
     
+    // Calcular Progreso de Cobros con la nueva fórmula dinámica y en tiempo real
+    const todayStr = new Date().toISOString().split('T')[0];
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
+    const routeIds = new Set(routes.map(r => r.id));
+
+    const paymentsToday = payments.filter(p => p.date === todayStr);
+    const totalCollectedToday = paymentsToday.reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const expectedClients = clients.filter(c => {
+      if (!c.routeId || !routeIds.has(c.routeId)) return false;
+      const hasPaymentToday = paymentsToday.some(p => p.clientCedula === c.cedula);
+      return Number(c.outstanding) > 0 || hasPaymentToday;
+    });
+    const totalExpectedToday = expectedClients.reduce((sum, c) => sum + Number(c.installmentAmount), 0);
+
     let progressPercent = 0;
-    if (totalCapital > 0) {
-      progressPercent = Math.round((totalCollected / totalCapital) * 100);
+    if (totalExpectedToday > 0) {
+      progressPercent = Math.round((totalCollectedToday / totalExpectedToday) * 100);
     }
 
     // Inyectar KPIs
     if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
     if (this.kpiTotalCapital) this.kpiTotalCapital.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
     if (this.kpiTotalCollected) this.kpiTotalCollected.textContent = `$${totalCollected.toLocaleString('es-CO')}`;
+    
     if (this.kpiRouteProgress) this.kpiRouteProgress.textContent = `${progressPercent}%`;
+    const mainProgressBar = document.getElementById('kpi-route-progress-bar');
+    if (mainProgressBar) {
+      mainProgressBar.style.width = `${Math.min(progressPercent, 100)}%`;
+    }
 
     // Renderizar la tabla de progreso en vivo
     this.renderRoutesTable(routes);
@@ -1512,6 +1612,10 @@ const supervisorModule = {
     }
     if (this.liveFeedInterval) {
       clearInterval(this.liveFeedInterval);
+    }
+    if (this.handlePaymentRegistered) {
+      window.removeEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
+      this.handlePaymentRegistered = null;
     }
   }
 };
