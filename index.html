@@ -19,16 +19,12 @@
   <!-- Navegación Principal (SPA) -->
   <header>
     <div class="nav-container">
-      <a href="#" class="brand" id="brand-link">
-        <svg viewBox="0 0 512 512">
-          <!-- Logo de BulaPay importado del archivo SVG en línea -->
-          <rect width="100%" height="100%" rx="128" fill="none" />
-          <path d="M 96 280 C 96 140, 288 120, 288 220 C 288 280, 200 300, 160 270" 
-                fill="none" stroke="#4f46e5" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
-          <path d="M 120 120 L 192 192 L 150 200 L 220 280 L 140 290" 
-                fill="none" stroke="#00f5d4" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" />
+      <a href="#" class="brand" id="brand-link" style="display: flex; align-items: center; text-decoration: none;">
+        <svg width="150" height="42" viewBox="0 0 180 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 10H24C30.6274 10 36 15.3726 36 22C36 26.6874 33.308 30.7454 29.3364 32.8105C34.7936 34.2573 38 39.1177 38 45H26C26 40.5817 22.4183 37 18 37H12V45H4V10H12ZM12 18V29H20C23.3137 29 26 26.3137 26 23C26 19.6863 23.3137 18 20 18H12Z" fill="#10B981"/>
+          <path d="M36 26 L48 14 L65 14 L42 36 Z" fill="#10B981"/>
+          <text x="54" y="36" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="800" fill="#1F2937" letter-spacing="-0.5">Bula<tspan fill="#10B981">Pay</tspan></text>
         </svg>
-        <span>BulaPay</span>
       </a>
 
       <!-- Información del usuario logueado -->
@@ -56,16 +52,14 @@
     <!-- 1. MÓDULO DE AUTENTICACIÓN (LOGIN / REGISTRO) -->
     <section id="view-auth" class="view-section">
       <div class="auth-wrapper card">
-        <div class="auth-header">
-          <svg viewBox="0 0 512 512" style="width: 80px; height: 80px;">
-            <circle cx="256" cy="256" r="240" fill="none" stroke="#4f46e5" stroke-width="12" />
-            <path d="M 160 320 C 160 220, 352 200, 352 300 C 352 360, 264 380, 224 350" 
-                  fill="none" stroke="#4f46e5" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M 180 180 L 252 252 L 210 260 L 280 340 L 200 350" 
-                  fill="none" stroke="#00f5d4" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" />
+        <div class="auth-header" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 2rem;">
+          <svg width="180" height="50" viewBox="0 0 180 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 10H24C30.6274 10 36 15.3726 36 22C36 26.6874 33.308 30.7454 29.3364 32.8105C34.7936 34.2573 38 39.1177 38 45H26C26 40.5817 22.4183 37 18 37H12V45H4V10H12ZM12 18V29H20C23.3137 29 26 26.3137 26 23C26 19.6863 23.3137 18 20 18H12Z" fill="#10B981"/>
+            <path d="M36 26 L48 14 L65 14 L42 36 Z" fill="#10B981"/>
+            <text x="54" y="36" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="800" fill="#1F2937" letter-spacing="-0.5">Bula<tspan fill="#10B981">Pay</tspan></text>
           </svg>
-          <h2 class="title-gradient">Ingresar a BulaPay</h2>
-          <p style="color: var(--text-secondary); margin-bottom: 1rem;">Administración de Cartera y Logística de Rutas</p>
+          <h2 style="color: var(--text-primary); font-weight: 800; font-size: 1.8rem; margin-bottom: 0;">Ingresar a <span style="color: var(--primary);">BulaPay</span></h2>
+          <p style="color: var(--text-secondary); margin-bottom: 0;">Administración de Cartera y Logística de Rutas</p>
         </div>
 
         <!-- Pestañas Auth -->
@@ -302,7 +296,7 @@
               <h3 style="margin-bottom: 0;">Consulta de Rutas en Tiempo Real</h3>
               <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; width: auto;">
                 <label for="map-route-filter" style="margin-bottom: 0; font-size: 0.75rem; white-space: nowrap; color: var(--text-secondary);">Filtro:</label>
-                <select id="map-route-filter" onchange="supervisorModule.centerMapOnRoute()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; width: 160px; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px;">
+                <select id="map-route-filter" onchange="supervisorModule.centerMapOnRoute()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; width: 160px; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px;">
                   <option value="Todos">Todas las Rutas</option>
                   <!-- Se llena dinámicamente -->
                 </select>
@@ -444,7 +438,7 @@
 
                 <!-- Detalles de cuenta del cliente -->
                 <div class="client-detail-card">
-                  <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: white;" id="client-detail-name">Roberto Gómez</h4>
+                  <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-primary);" id="client-detail-name">Roberto Gómez</h4>
                   
                   <div class="client-detail-row">
                     <span class="client-detail-label">Cédula:</span>
@@ -547,7 +541,7 @@
           </div>
 
           <!-- Barra de navegación inferior móvil -->
-          <div style="height: 50px; border-top: 1px solid var(--border-color); background-color: #0b111e; display: flex; align-items: center; justify-content: space-around; font-size: 0.75rem; color: var(--text-secondary);">
+          <div style="height: 50px; border-top: 1px solid var(--border-color); background-color: var(--bg-secondary); display: flex; align-items: center; justify-content: space-around; font-size: 0.75rem; color: var(--text-secondary);">
             <div style="display: flex; flex-direction: column; align-items: center; color: var(--accent); cursor: pointer;" onclick="agentView.switchTab('collect')">
               <span>🔍</span>
               <span>Buscador</span>
@@ -798,7 +792,7 @@
       
       <div class="form-group" style="margin-bottom: 1.5rem;">
         <label for="modal-agents-route-filter">Filtrar por Ruta</label>
-        <select id="modal-agents-route-filter" onchange="supervisorModule.filterModalAgents()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+        <select id="modal-agents-route-filter" onchange="supervisorModule.filterModalAgents()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
           <!-- Se llena dinámicamente -->
         </select>
       </div>
@@ -810,16 +804,16 @@
 
       <!-- Detalle del Agente Seleccionado -->
       <div id="modal-agent-detail-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-        <h4 id="modal-agent-detail-title" style="margin-bottom: 1rem; color: white;">Detalles de Agente</h4>
+        <h4 id="modal-agent-detail-title" style="margin-bottom: 1rem; color: var(--text-primary);">Detalles de Agente</h4>
         <div style="display: grid; grid-template-columns: 1fr 120px; gap: 1.5rem; align-items: center;">
           <div style="font-size: 0.85rem;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
               <span style="color: var(--text-secondary);">Clientes Asignados:</span>
-              <span id="modal-agent-clients-count" style="font-weight: 600; color: white;">0 clientes</span>
+              <span id="modal-agent-clients-count" style="font-weight: 600; color: var(--text-primary);">0 clientes</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
               <span style="color: var(--text-secondary);">Capital de Ruta:</span>
-              <span id="modal-agent-route-capital" style="font-weight: 600; color: white;">$0</span>
+              <span id="modal-agent-route-capital" style="font-weight: 600; color: var(--text-primary);">$0</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
               <span style="color: var(--text-secondary);">Recaudado Hoy:</span>
@@ -862,21 +856,21 @@
 
       <!-- Detalle de Rendimiento de Ruta -->
       <div id="modal-capital-detail-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-        <h4 id="modal-capital-detail-title" style="margin-bottom: 1rem; color: white;">Rendimiento de Ruta</h4>
+        <h4 id="modal-capital-detail-title" style="margin-bottom: 1rem; color: var(--text-primary);">Rendimiento de Ruta</h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem;">
-          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
             <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Capital Base</span>
-            <span id="modal-capital-delivered" style="font-size: 1rem; font-weight: 700; color: white;">$0</span>
+            <span id="modal-capital-delivered" style="font-size: 1rem; font-weight: 700; color: var(--text-primary);">$0</span>
           </div>
-          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
             <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Total Recaudado</span>
             <span id="modal-capital-collected" style="font-size: 1rem; font-weight: 700; color: var(--color-verde);">$0</span>
           </div>
-          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
             <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Por Recaudar</span>
             <span id="modal-capital-remaining" style="font-size: 1rem; font-weight: 700; color: var(--accent);">$0</span>
           </div>
-          <div class="card" style="padding: 0.75rem 1rem; background-color: rgba(255,255,255,0.02); margin: 0; border-radius: 8px;">
+          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
             <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Índice Mora Histórico</span>
             <span id="modal-capital-mora-index" style="font-size: 1rem; font-weight: 700; color: var(--color-rojo);">0%</span>
           </div>
@@ -908,7 +902,7 @@
       
       <div class="form-group" style="margin-bottom: 1.5rem;">
         <label for="modal-audit-route-filter">Filtrar por Ruta</label>
-        <select id="modal-audit-route-filter" onchange="supervisorModule.filterAuditClients()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+        <select id="modal-audit-route-filter" onchange="supervisorModule.filterAuditClients()" style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
           <!-- Se llena dinámicamente -->
         </select>
       </div>
@@ -916,7 +910,7 @@
       <div style="display: grid; grid-template-columns: 260px 1fr; gap: 1.5rem; align-items: start; flex-wrap: wrap;">
         <!-- Lista de Clientes Morosos -->
         <div>
-          <h4 style="font-size: 0.85rem; color: white; margin-bottom: 0.75rem;">Clientes en Mora/Atrasados</h4>
+          <h4 style="font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.75rem;">Clientes en Mora/Atrasados</h4>
           <div id="modal-audit-clients-list" style="display: grid; gap: 0.5rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem;">
             <!-- Se inyecta dinámicamente -->
           </div>
@@ -925,7 +919,7 @@
         <!-- Vista del Cartón Digital del Cliente -->
         <div id="modal-audit-ledger-container" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; display: none; min-height: 250px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-            <h4 id="modal-audit-client-name" style="color: white; margin: 0; font-size: 1rem;">Roberto Gómez</h4>
+            <h4 id="modal-audit-client-name" style="color: var(--text-primary); margin: 0; font-size: 1rem;">Roberto Gómez</h4>
             <span class="read-only-badge" style="background-color: rgba(79, 70, 229, 0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(79, 70, 229, 0.3); font-weight: 600;">🔒 SOLO LECTURA</span>
           </div>
           <p id="modal-audit-client-meta" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Cédula: 12345 | Saldo Pendiente: $150,000</p>
@@ -956,23 +950,23 @@
       <form id="form-modal-add-agent">
         <div class="form-group" style="margin-bottom: 0.75rem;">
           <label style="font-size: 0.75rem;">Nombre Completo del Agente</label>
-          <input type="text" id="modal-new-agent-name" placeholder="Ej. Pedro Gómez" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+          <input type="text" id="modal-new-agent-name" placeholder="Ej. Pedro Gómez" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
         </div>
         <div class="form-group" style="margin-bottom: 0.75rem;">
           <label style="font-size: 0.75rem;">Número de Cédula</label>
-          <input type="text" id="modal-new-agent-cedula" placeholder="Ej. 98765432" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+          <input type="text" id="modal-new-agent-cedula" placeholder="Ej. 98765432" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
           <div class="form-group" style="margin-bottom: 0;">
             <label style="font-size: 0.75rem;">Usuario (Login)</label>
-            <input type="text" id="modal-new-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+            <input type="text" id="modal-new-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label style="font-size: 0.75rem;">Contraseña</label>
-            <input type="password" id="modal-new-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+            <input type="password" id="modal-new-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
           </div>
         </div>
-        <button type="submit" class="btn btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 0.6rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent);">➕ Registrar y Asignar Agente</button>
+        <button type="submit" class="btn btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 0.6rem; border-color: rgba(16, 185, 129, 0.3); color: var(--accent);">➕ Registrar y Asignar Agente</button>
       </form>
       
       <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">

@@ -5,37 +5,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* Paleta de Colores Dark Fintech */
-  --bg-primary: #0b111e;
-  --bg-secondary: #131c2f;
-  --bg-card: rgba(22, 33, 54, 0.65);
-  --bg-card-hover: rgba(28, 41, 68, 0.85);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-color-focus: rgba(0, 245, 212, 0.4);
+  /* Paleta de Colores Claro Fintech (Blanco y Verde Esmeralda) */
+  --bg-primary: #f3f4f6; /* Gris hielo muy claro */
+  --bg-secondary: #ffffff; /* Blanco puro */
+  --bg-card: #ffffff; /* Blanco puro */
+  --bg-card-hover: #fafafa;
+  --border-color: #e5e7eb; /* Gris suave */
+  --border-color-focus: rgba(16, 185, 129, 0.4); /* Verde esmeralda suave */
   
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #1f2937; /* Gris oscuro casi negro */
+  --text-secondary: #4b5563; /* Gris medio */
+  --text-muted: #9ca3af; /* Gris claro */
   
-  /* Colores de Acento y Marca */
-  --primary: #4f46e5;       /* Indigo */
-  --primary-hover: #4338ca;
-  --accent: #00f5d4;        /* Mint */
-  --accent-rgb: 0, 245, 212;
-  --accent-hover: #0ea5e9;  /* Cyan */
+  /* Colores de Acento y Marca (Verde Esmeralda #10b981) */
+  --primary: #10b981;       
+  --primary-hover: #059669;
+  --accent: #10b981;        
+  --accent-rgb: 16, 185, 129;
+  --accent-hover: #059669;  
   
   /* Semáforo de Riesgo (Cartera) */
   --color-verde: #10b981;    /* Cliente Excelente */
-  --color-verde-bg: rgba(16, 185, 129, 0.15);
+  --color-verde-bg: rgba(16, 185, 129, 0.1);
   --color-amarillo: #f59e0b; /* Pago con Retrasos */
   --color-amarillo-bg: rgba(245, 158, 11, 0.15);
   --color-rojo: #ef4444;     /* Cartera Castigada */
   --color-rojo-bg: rgba(239, 68, 68, 0.15);
 
   /* Sombras y Efectos */
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --blur-card: backdrop-filter: blur(16px);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.025);
+  --blur-card: none;
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   
   /* Fuentes */
@@ -79,12 +79,13 @@ body {
 
 /* Estructura SPA y Navegación */
 header {
-  background-color: rgba(11, 17, 30, 0.85);
+  background-color: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 100;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .nav-container {
@@ -197,18 +198,18 @@ main {
   border-radius: 16px;
   padding: 2rem;
   box-shadow: var(--shadow-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition: var(--transition-smooth);
 }
 
 .card:hover {
   background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: #d1d5db;
 }
 
 .title-gradient {
-  background: linear-gradient(135deg, #fff 40%, var(--accent) 100%);
+  background: linear-gradient(135deg, var(--text-primary) 40%, var(--accent) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 1.5rem;
@@ -231,26 +232,26 @@ main {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, #312e81 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, #047857 100%);
   color: white;
-  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.4);
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px 0 rgba(79, 70, 229, 0.6);
+  box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.4);
   filter: brightness(1.1);
 }
 
 .btn-accent {
-  background: linear-gradient(135deg, var(--accent) 0%, #0d9488 100%);
-  color: #0b111e;
-  box-shadow: 0 4px 14px 0 rgba(0, 245, 212, 0.3);
+  background: linear-gradient(135deg, var(--accent) 0%, #047857 100%);
+  color: white;
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
 }
 
 .btn-accent:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px 0 rgba(0, 245, 212, 0.5);
+  box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.4);
   filter: brightness(1.1);
 }
 
@@ -261,8 +262,8 @@ main {
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #f9fafb;
+  border-color: #d1d5db;
 }
 
 /* Formularios Fintech */
@@ -290,10 +291,10 @@ main {
 .form-group textarea {
   width: 100%;
   padding: 0.75rem 1rem;
-  background-color: rgba(11, 17, 30, 0.6);
+  background-color: #ffffff;
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  color: white;
+  color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 0.95rem;
   outline: none;
@@ -431,7 +432,7 @@ main {
 .kpi-info p {
   font-size: 1.6rem;
   font-weight: 700;
-  color: white;
+  color: var(--text-primary);
 }
 
 .supervisor-actions {
@@ -452,7 +453,7 @@ main {
 /* Mapa Dinámico Simulado */
 .map-canvas-container {
   height: 280px;
-  background-color: #0b0f19;
+  background-color: #ffffff;
   border-radius: 12px;
   margin-bottom: 1.5rem;
   border: 1px solid var(--border-color);
@@ -467,8 +468,8 @@ main {
   width: 100%;
   height: 100%;
   background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
@@ -567,10 +568,10 @@ main {
 .mobile-simulator-layout {
   max-width: 440px;
   margin: 0 auto;
-  background-color: #0b0f19;
+  background-color: #ffffff;
   border-radius: 36px;
-  border: 12px solid #2d3748;
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8);
+  border: 12px solid #1f2937;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15);
   height: 720px;
   display: flex;
   flex-direction: column;
@@ -581,7 +582,7 @@ main {
 /* Barra de Estado Móvil */
 .phone-status-bar {
   height: 24px;
-  background-color: #0b0f19;
+  background-color: #ffffff;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -596,7 +597,7 @@ main {
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0b111e 0%, #0d1527 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
 }
 
 .phone-screen-content::-webkit-scrollbar {
@@ -635,8 +636,8 @@ main {
   padding-right: 3rem;
   border-radius: 10px;
   border: 1px solid var(--border-color);
-  background-color: rgba(255,255,255,0.03);
-  color: white;
+  background-color: #ffffff;
+  color: var(--text-primary);
   width: 100%;
   padding: 0.75rem 1rem;
   outline: none;
@@ -706,11 +707,12 @@ main {
 }
 
 .client-detail-card {
-  background-color: rgba(255,255,255,0.02);
+  background-color: #ffffff;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 1.25rem;
   margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-card);
 }
 
 .client-detail-row {
@@ -733,12 +735,12 @@ main {
 }
 
 .client-detail-val {
-  color: white;
+  color: var(--text-primary);
 }
 
 .collect-money-form {
-  background-color: rgba(79, 70, 229, 0.05);
-  border: 1px solid rgba(79, 70, 229, 0.2);
+  background-color: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -804,7 +806,7 @@ main {
 }
 
 .whatsapp-header {
-  background-color: #1f2c34;
+  background-color: #008069;
   padding: 0.75rem 1rem;
   display: flex;
   align-items: center;
@@ -814,28 +816,29 @@ main {
 .whatsapp-avatar {
   width: 32px;
   height: 32px;
-  background-color: var(--primary);
+  background-color: #ffffff;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 0.8rem;
-  color: white;
+  color: #008069;
 }
 
 .whatsapp-chat-info h5 {
   font-size: 0.85rem;
-  color: white;
+  color: #ffffff;
 }
 
 .whatsapp-chat-info span {
   font-size: 0.65rem;
-  color: #8696a0;
+  color: #e1f5fe;
 }
 
 .whatsapp-body {
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect fill="%230b141a" width="100" height="100"/><circle cx="20" cy="20" r="1" fill="%23233138"/><circle cx="80" cy="50" r="1.5" fill="%23233138"/></svg>');
+  background-color: #efeae2;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="20" cy="20" r="1" fill="%23e5ddd5"/><circle cx="80" cy="50" r="1.5" fill="%23e5ddd5"/></svg>');
   padding: 1rem;
   min-height: 180px;
   display: flex;
@@ -844,8 +847,8 @@ main {
 }
 
 .whatsapp-bubble {
-  background-color: #202c33;
-  color: #e9edef;
+  background-color: #ffffff;
+  color: #303030;
   padding: 0.75rem;
   border-radius: 8px 8px 8px 0;
   font-size: 0.8rem;
@@ -853,16 +856,17 @@ main {
   align-self: flex-start;
   max-width: 85%;
   margin-bottom: 0.5rem;
+  box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
 }
 
 .whatsapp-bubble.out {
-  background-color: #005c4b;
+  background-color: #d9fdd3;
   align-self: flex-end;
   border-radius: 8px 8px 0 8px;
 }
 
 .whatsapp-bubble a {
-  color: #53bdeb;
+  color: #027eb5;
   text-decoration: underline;
   display: block;
   word-break: break-all;
@@ -873,16 +877,17 @@ main {
   display: block;
   text-align: right;
   font-size: 0.6rem;
-  color: rgba(255,255,255,0.4);
+  color: rgba(0,0,0,0.4);
   margin-top: 0.25rem;
 }
 
 .whatsapp-actions {
-  background-color: #1f2c34;
+  background-color: #f0f2f5;
   padding: 0.75rem;
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
+  border-top: 1px solid #e9edef;
 }
 
 /* 4. INTERFAZ CLIENTE FINAL (VISTA PÚBLICA) */
@@ -948,8 +953,8 @@ main {
 }
 
 .ledger-slot-card {
-  background: rgba(255, 255, 255, 0.02);
-  border: 2px dashed rgba(255, 255, 255, 0.1);
+  background: #f9fafb;
+  border: 2px dashed #d1d5db;
   border-radius: 12px;
   padding: 1rem;
   text-align: center;
@@ -1049,7 +1054,7 @@ main {
 }
 
 .agent-dir-card {
-  background-color: rgba(255,255,255,0.02);
+  background-color: #f9fafb;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 1.25rem;
@@ -1187,7 +1192,7 @@ main {
 }
 
 .supervisor-tab-btn:hover {
-  color: white;
+  color: var(--text-primary);
 }
 
 .supervisor-tab-btn.active {
@@ -1263,14 +1268,14 @@ main {
 }
 
 .receipt-card {
-  background: #131c2f;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: 20px;
   width: 90%;
   max-width: 380px;
   padding: 2rem 1.5rem;
   position: relative;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   transform: translateY(20px);
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
@@ -1292,12 +1297,12 @@ main {
 
 .receipt-card::before {
   top: 0;
-  background-image: radial-gradient(circle at 8px -4px, transparent 8px, #0b111e 8px);
+  background-image: radial-gradient(circle at 8px -4px, transparent 8px, var(--bg-primary) 8px);
 }
 
 .receipt-card::after {
   bottom: 0;
-  background-image: radial-gradient(circle at 8px 12px, transparent 8px, #0b111e 8px);
+  background-image: radial-gradient(circle at 8px 12px, transparent 8px, var(--bg-primary) 8px);
 }
 
 .receipt-header {
@@ -1309,7 +1314,7 @@ main {
 
 .receipt-header h3 {
   font-size: 1.25rem;
-  color: white;
+  color: var(--text-primary);
   margin-top: 0.5rem;
 }
 
@@ -1361,12 +1366,12 @@ main {
 }
 
 .receipt-row .value {
-  color: white;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .receipt-row.total .value {
-  color: var(--accent);
+  color: var(--primary);
 }
 
 .receipt-signature-box {
@@ -1446,7 +1451,7 @@ main {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(11, 17, 30, 0.85);
+  background-color: rgba(17, 24, 39, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   display: none;
@@ -1501,7 +1506,7 @@ main {
 }
 
 .supervisor-modal-close:hover {
-  color: white;
+  color: var(--text-primary);
 }
 
 .kpi-card-clickable {
