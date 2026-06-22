@@ -1015,8 +1015,8 @@ const supervisorModule = {
     // Centrado por defecto en La Guajira, Colombia
     this.mapInstance = L.map('live-gps-map').setView([11.5444, -72.9069], 9);
 
-    // Tile server CartoDB Dark Matter para coincidir con la estética oscura premium de BulaPay
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // Tile server CartoDB Positron para una estética clara
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
       subdomains: 'abcd',
       maxZoom: 20
