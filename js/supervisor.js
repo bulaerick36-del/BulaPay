@@ -21,7 +21,7 @@ const supervisorModule = {
     await this.renderDashboard();
     this.startMapSimulation();
     await this.initMapRouteFilter();
-    this.startLiveFeedSimulation();
+    await this.renderLiveFeed();
     this.calculateRouteSuggestedQuota(); // Calcular inicial
   },
 
@@ -194,6 +194,7 @@ const supervisorModule = {
     }
     this.handlePaymentRegistered = async () => {
       await this.renderDashboard();
+      await this.renderLiveFeed();
     };
     window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
   },
@@ -1022,112 +1023,65 @@ const supervisorModule = {
     transformGroup.setAttribute('transform', `translate(${transX}, ${transY}) scale(${scale})`);
   },
 
-  // 6. FEED EN VIVO DE SIMULACIÓN
-  async startLiveFeedSimulation() {
+  // 6. FEED EN VIVO REAL DE PAGOS
+  async renderLiveFeed() {
     const feedContent = document.getElementById('live-feed-content');
     const feedTime = document.getElementById('live-feed-time');
     if (!feedContent) return;
 
     feedContent.innerHTML = '';
-    
-    if (this.liveFeedInterval) {
-      clearInterval(this.liveFeedInterval);
-    }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
     const routes = await window.BulaPayDB.getRoutes();
 
-    if (routes.length === 0) {
-      const logEl = document.createElement('div');
-      logEl.className = 'live-feed-log';
-      logEl.textContent = '📍 Central de monitoreo activa. Registre una ruta para iniciar el seguimiento en vivo.';
-      feedContent.appendChild(logEl);
-      if (feedTime) {
-        feedTime.textContent = 'Sin eventos activos';
-      }
+    // Filtra los pagos de hoy
+    const paymentsToday = payments
+      .filter(p => p.date === todayStr)
+      .sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeA - timeB;
+      });
+
+    if (paymentsToday.length === 0) {
+      feedContent.innerHTML = `<div class="live-feed-log" style="color: var(--text-secondary); font-style: italic; text-align: center;">Sin actividad de cobros registrada hoy.</div>`;
+      if (feedTime) feedTime.textContent = 'Actualizado hace un momento';
       return;
     }
 
-    // Logs iniciales con agentes reales
-    const firstAgent = routes[0].agentName.split(',')[0];
-    const log1 = document.createElement('div');
-    log1.className = 'live-feed-log';
-    log1.textContent = `📍 Central de monitoreo activa. Conexión establecida con las rutas de cobro.`;
-    feedContent.appendChild(log1);
+    paymentsToday.forEach(p => {
+      const client = clients.find(c => c.cedula === p.clientCedula);
+      const clientName = client ? client.name : `Cliente (${p.clientCedula})`;
+      
+      const route = client && client.routeId ? routes.find(r => r.id === client.routeId) : null;
+      const routeName = route ? route.name : 'Ruta Desconocida';
 
-    const log2 = document.createElement('div');
-    log2.className = 'live-feed-log';
-    log2.textContent = `📍 Agente ${firstAgent} inició el recorrido de la ruta: ${routes[0].name}.`;
-    feedContent.appendChild(log2);
+      const logEl = document.createElement('div');
+      logEl.className = 'live-feed-log';
+      
+      if (p.status === 'No Pago') {
+        logEl.textContent = `📍 Agente ${p.agentName} reportó NO PAGO del Cliente ${clientName} en la ruta ${routeName}.`;
+        logEl.style.color = 'var(--color-rojo)';
+      } else {
+        logEl.textContent = `📍 Agente ${p.agentName} registró un recaudo de $${Number(p.amount).toLocaleString('es-CO')} para el Cliente ${clientName} en la ruta ${routeName}.`;
+        logEl.style.color = p.status === 'Abonado' ? 'var(--color-amarillo)' : 'var(--accent)';
+      }
+      
+      feedContent.appendChild(logEl);
+    });
 
-    if (routes.length > 1) {
-      const secondAgent = routes[1].agentName.split(',')[0];
-      const log3 = document.createElement('div');
-      log3.className = 'live-feed-log';
-      log3.textContent = `📍 Agente ${secondAgent} reportó inicio de actividades en ${routes[1].name}.`;
-      feedContent.appendChild(log3);
-    }
+    feedContent.scrollTop = feedContent.scrollHeight;
 
     if (feedTime) {
-      feedTime.textContent = 'Actualizado hace unos segundos';
+      const now = new Date();
+      feedTime.textContent = `Último evento: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
     }
+  },
 
-    const logTemplates = [
-      'Agente {agent} registró un recaudo de ${amount} para el Cliente {client}.',
-      'Agente {agent} reportó retraso del Cliente {client} (Riesgo Amarillo).',
-      'Agente {agent} completó la cobranza en el sector {sector}.',
-      'Agente {agent} generó un recibo digital (Sello {signature}).',
-      'Sistema BulaPay actualizó el estado de la ruta {route}.'
-    ];
-
-    this.liveFeedInterval = setInterval(async () => {
-      try {
-        const currentRoutes = await window.BulaPayDB.getRoutes();
-        const currentClients = await window.BulaPayDB.getClients();
-        
-        if (currentRoutes.length === 0 || currentClients.length === 0) return;
-
-        const randomRoute = currentRoutes[Math.floor(Math.random() * currentRoutes.length)];
-        const routeClients = currentClients.filter(c => c.routeId === randomRoute.id);
-        if (routeClients.length === 0) return;
-
-        const randomClient = routeClients[Math.floor(Math.random() * routeClients.length)];
-        const agentName = randomRoute.agentName.split(',')[0]; 
-
-        // Generar datos aleatorios
-        const amount = (Math.floor(Math.random() * 5) + 1) * 20000;
-        const sectors = ['Norte', 'Centro', 'Sur', 'Zona Comercial', 'Occidente'];
-        const sector = sectors[Math.floor(Math.random() * sectors.length)];
-        const signature = 'BulaPay-SIG-' + Math.floor(Math.random() * 90000 + 10000);
-
-        // Elegir plantilla aleatoria
-        let logText = logTemplates[Math.floor(Math.random() * logTemplates.length)];
-        logText = logText
-          .replace('{agent}', agentName)
-          .replace('{client}', randomClient.name)
-          .replace('{amount}', amount.toLocaleString('es-CO'))
-          .replace('{sector}', sector)
-          .replace('{signature}', signature)
-          .replace('{route}', randomRoute.name);
-
-        const logEl = document.createElement('div');
-        logEl.className = 'live-feed-log';
-        logEl.textContent = '📍 ' + logText;
-        
-        feedContent.appendChild(logEl);
-        feedContent.scrollTop = feedContent.scrollHeight;
-
-        if (feedContent.children.length > 8) {
-          feedContent.removeChild(feedContent.firstChild);
-        }
-
-        if (feedTime) {
-          const now = new Date();
-          feedTime.textContent = `Último evento: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-        }
-      } catch (err) {
-        console.warn("Fallo en la simulación de logs dinámicos:", err);
-      }
-    }, 6000);
+  startLiveFeedSimulation() {
+    // Deprecated - reemplazado por renderLiveFeed()
   },
 
   // RENDERIZAR DASHBOARD KPIs Y TABLA
@@ -1179,10 +1133,10 @@ const supervisorModule = {
     }
 
     // Renderizar la tabla de progreso en vivo
-    this.renderRoutesTable(routes);
+    await this.renderRoutesTable(routes);
   },
 
-  renderRoutesTable(routes) {
+  async renderRoutesTable(routes) {
     if (!this.routesTbody) return;
     this.routesTbody.innerHTML = '';
 
@@ -1191,21 +1145,76 @@ const supervisorModule = {
       return;
     }
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
+
+    // Group routes by name
+    const groupedRoutes = {};
+
     routes.forEach(route => {
-      const progress = Number(route.capital) > 0 ? Math.round((Number(route.collected) / Number(route.capital)) * 100) : 0;
+      const name = route.name;
+      if (!groupedRoutes[name]) {
+        groupedRoutes[name] = {
+          name: name,
+          routeIds: [],
+          agentNames: new Set(),
+          capital: 0,
+          status: route.status
+        };
+      }
+      groupedRoutes[name].routeIds.push(route.id);
+      if (route.agentName) {
+        route.agentName.split(',').forEach(a => {
+          const trimmed = a.trim();
+          if (trimmed) groupedRoutes[name].agentNames.add(trimmed);
+        });
+      }
+      groupedRoutes[name].capital += Number(route.capital);
+      if (route.status === 'En Ruta') {
+        groupedRoutes[name].status = 'En Ruta';
+      } else if (route.status === 'Incidencia' && groupedRoutes[name].status !== 'En Ruta') {
+        groupedRoutes[name].status = 'Incidencia';
+      }
+    });
+
+    const paymentsToday = payments.filter(p => p.date === todayStr);
+
+    for (const name in groupedRoutes) {
+      const gRoute = groupedRoutes[name];
+      const rIds = gRoute.routeIds;
+
+      const routeClients = clients.filter(c => c.routeId && rIds.includes(c.routeId));
+      const clientCedulas = new Set(routeClients.map(c => c.cedula));
       
+      const routePaymentsToday = paymentsToday.filter(p => clientCedulas.has(p.clientCedula));
+      const totalCollectedToday = routePaymentsToday.reduce((sum, p) => sum + Number(p.amount), 0);
+
+      const expectedClients = routeClients.filter(c => {
+        const hasPaymentToday = routePaymentsToday.some(p => p.clientCedula === c.cedula);
+        return Number(c.outstanding) > 0 || hasPaymentToday;
+      });
+      const totalExpectedToday = expectedClients.reduce((sum, c) => sum + Number(c.installmentAmount), 0);
+
+      let progress = 0;
+      if (totalExpectedToday > 0) {
+        progress = Math.round((totalCollectedToday / totalExpectedToday) * 100);
+      }
+
       let statusClass = 'en-ruta';
-      if (route.status === 'Completado') statusClass = 'completado';
-      if (route.status === 'Incidencia') statusClass = 'incidencia';
+      if (gRoute.status === 'Completado') statusClass = 'completado';
+      if (gRoute.status === 'Incidencia') statusClass = 'incidencia';
+
+      const agentsList = Array.from(gRoute.agentNames).join(', ') || 'Sin Agente';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td style="font-weight: 600; color: white;">${route.name}</td>
-        <td>👤 ${route.agentName}</td>
-        <td>$${Number(route.capital).toLocaleString('es-CO')}</td>
-        <td style="color: var(--accent); font-weight: 600;">$${Number(route.collected).toLocaleString('es-CO')}</td>
+        <td style="font-weight: 600; color: white;">${gRoute.name}</td>
+        <td>👤 ${agentsList}</td>
+        <td>$${Number(gRoute.capital).toLocaleString('es-CO')}</td>
+        <td style="color: var(--accent); font-weight: 600;">$${totalCollectedToday.toLocaleString('es-CO')}</td>
         <td>
-          <span class="status-badge ${statusClass}">${route.status}</span>
+          <span class="status-badge ${statusClass}">${gRoute.status}</span>
         </td>
         <td>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -1217,7 +1226,7 @@ const supervisorModule = {
         </td>
       `;
       this.routesTbody.appendChild(tr);
-    });
+    }
   },
 
   async startMapSimulation() {
