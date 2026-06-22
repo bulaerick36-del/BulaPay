@@ -730,57 +730,79 @@ const supervisorModule = {
   },
 
   // 6. FEED EN VIVO DE SIMULACIÓN
-  startLiveFeedSimulation() {
+  async startLiveFeedSimulation() {
     const feedContent = document.getElementById('live-feed-content');
     const feedTime = document.getElementById('live-feed-time');
     if (!feedContent) return;
 
     feedContent.innerHTML = '';
     
-    // Logs semilla
-    const initialLogs = [
-      '📍 Sistema BulaPay iniciado. Central de monitoreo en línea.',
-      '📍 Agente Juan Pérez inició el recorrido de la Ruta Centro - Norte.',
-      '📍 Agente María López reportó llegada a la Zona Sur.'
-    ];
+    if (this.liveFeedInterval) {
+      clearInterval(this.liveFeedInterval);
+    }
 
-    initialLogs.forEach(log => {
+    const routes = await window.BulaPayDB.getRoutes();
+
+    if (routes.length === 0) {
       const logEl = document.createElement('div');
       logEl.className = 'live-feed-log';
-      logEl.textContent = log;
+      logEl.textContent = '📍 Central de monitoreo activa. Registre una ruta para iniciar el seguimiento en vivo.';
       feedContent.appendChild(logEl);
-    });
+      if (feedTime) {
+        feedTime.textContent = 'Sin eventos activos';
+      }
+      return;
+    }
+
+    // Logs iniciales con agentes reales
+    const firstAgent = routes[0].agentName.split(',')[0];
+    const log1 = document.createElement('div');
+    log1.className = 'live-feed-log';
+    log1.textContent = `📍 Central de monitoreo activa. Conexión establecida con las rutas de cobro.`;
+    feedContent.appendChild(log1);
+
+    const log2 = document.createElement('div');
+    log2.className = 'live-feed-log';
+    log2.textContent = `📍 Agente ${firstAgent} inició el recorrido de la ruta: ${routes[0].name}.`;
+    feedContent.appendChild(log2);
+
+    if (routes.length > 1) {
+      const secondAgent = routes[1].agentName.split(',')[0];
+      const log3 = document.createElement('div');
+      log3.className = 'live-feed-log';
+      log3.textContent = `📍 Agente ${secondAgent} reportó inicio de actividades en ${routes[1].name}.`;
+      feedContent.appendChild(log3);
+    }
 
     if (feedTime) {
       feedTime.textContent = 'Actualizado hace unos segundos';
-    }
-
-    if (this.liveFeedInterval) {
-      clearInterval(this.liveFeedInterval);
     }
 
     const logTemplates = [
       'Agente {agent} registró un recaudo de ${amount} para el Cliente {client}.',
       'Agente {agent} reportó retraso del Cliente {client} (Riesgo Amarillo).',
       'Agente {agent} completó la cobranza en el sector {sector}.',
-      'Agente {agent} generó un recibo digital digital (Sello {signature}).',
+      'Agente {agent} generó un recibo digital (Sello {signature}).',
       'Sistema BulaPay actualizó el estado de la ruta {route}.'
     ];
 
     this.liveFeedInterval = setInterval(async () => {
       try {
-        const routes = await window.BulaPayDB.getRoutes();
-        const clients = await window.BulaPayDB.getClients();
+        const currentRoutes = await window.BulaPayDB.getRoutes();
+        const currentClients = await window.BulaPayDB.getClients();
         
-        if (routes.length === 0 || clients.length === 0) return;
+        if (currentRoutes.length === 0 || currentClients.length === 0) return;
 
-        const randomRoute = routes[Math.floor(Math.random() * routes.length)];
-        const randomClient = clients[Math.floor(Math.random() * clients.length)];
-        const agentName = randomRoute.agentName.split(',')[0]; // Tomar el primer agente si hay múltiples
+        const randomRoute = currentRoutes[Math.floor(Math.random() * currentRoutes.length)];
+        const routeClients = currentClients.filter(c => c.routeId === randomRoute.id);
+        if (routeClients.length === 0) return;
+
+        const randomClient = routeClients[Math.floor(Math.random() * routeClients.length)];
+        const agentName = randomRoute.agentName.split(',')[0]; 
 
         // Generar datos aleatorios
         const amount = (Math.floor(Math.random() * 5) + 1) * 20000;
-        const sectors = ['Chapinero', 'Centro Histórico', 'Zona Financiera', 'El Poblado', 'Oriente'];
+        const sectors = ['Norte', 'Centro', 'Sur', 'Zona Comercial', 'Occidente'];
         const sector = sectors[Math.floor(Math.random() * sectors.length)];
         const signature = 'BulaPay-SIG-' + Math.floor(Math.random() * 90000 + 10000);
 
@@ -799,11 +821,8 @@ const supervisorModule = {
         logEl.textContent = '📍 ' + logText;
         
         feedContent.appendChild(logEl);
-        
-        // Auto scroll al final del feed
         feedContent.scrollTop = feedContent.scrollHeight;
 
-        // Limitar a máximo 8 logs en pantalla para evitar saturación
         if (feedContent.children.length > 8) {
           feedContent.removeChild(feedContent.firstChild);
         }
@@ -887,7 +906,7 @@ const supervisorModule = {
     });
   },
 
-  startMapSimulation() {
+  async startMapSimulation() {
     if (this.mapAnimationInterval) {
       clearInterval(this.mapAnimationInterval);
     }
@@ -896,7 +915,43 @@ const supervisorModule = {
     const agent1Pulse = document.getElementById('map-agent-1-pulse');
     const agent2 = document.getElementById('map-agent-2');
     const agent2Pulse = document.getElementById('map-agent-2-pulse');
-    
+    const lbl1 = document.getElementById('map-lbl-agent-1');
+    const lbl2 = document.getElementById('map-lbl-agent-2');
+
+    // Obtener rutas activas
+    const routes = await window.BulaPayDB.getRoutes();
+
+    if (routes.length === 0) {
+      if (agent1) agent1.style.display = 'none';
+      if (agent1Pulse) agent1Pulse.style.display = 'none';
+      if (lbl1) lbl1.style.display = 'none';
+      if (agent2) agent2.style.display = 'none';
+      if (agent2Pulse) agent2Pulse.style.display = 'none';
+      if (lbl2) lbl2.style.display = 'none';
+      return;
+    }
+
+    // Configurar agentes según las rutas reales
+    if (agent1) agent1.style.display = 'block';
+    if (agent1Pulse) agent1Pulse.style.display = 'block';
+    if (lbl1) {
+      lbl1.style.display = 'block';
+      lbl1.textContent = `${routes[0].agentName.split(',')[0]} (En Ruta)`;
+    }
+
+    if (routes.length > 1) {
+      if (agent2) agent2.style.display = 'block';
+      if (agent2Pulse) agent2Pulse.style.display = 'block';
+      if (lbl2) {
+        lbl2.style.display = 'block';
+        lbl2.textContent = `${routes[1].agentName.split(',')[0]} (En Ruta)`;
+      }
+    } else {
+      if (agent2) agent2.style.display = 'none';
+      if (agent2Pulse) agent2Pulse.style.display = 'none';
+      if (lbl2) lbl2.style.display = 'none';
+    }
+
     const path1 = [
       {cx: 150, cy: 70},
       {cx: 200, cy: 110},
@@ -921,7 +976,7 @@ const supervisorModule = {
 
     this.mapAnimationInterval = setInterval(() => {
       // Agente 1
-      if (agent1 && agent1Pulse) {
+      if (agent1 && agent1Pulse && agent1.style.display !== 'none') {
         index1 += dir1;
         if (index1 >= path1.length || index1 < 0) {
           dir1 *= -1;
@@ -933,7 +988,6 @@ const supervisorModule = {
         agent1Pulse.setAttribute('cx', pos1.cx);
         agent1Pulse.setAttribute('cy', pos1.cy);
         
-        const lbl1 = document.getElementById('map-lbl-agent-1');
         if (lbl1) {
           lbl1.setAttribute('x', pos1.cx + 15);
           lbl1.setAttribute('y', pos1.cy - 5);
@@ -941,7 +995,7 @@ const supervisorModule = {
       }
 
       // Agente 2
-      if (agent2 && agent2Pulse) {
+      if (agent2 && agent2Pulse && agent2.style.display !== 'none') {
         index2 += dir2;
         if (index2 >= path2.length || index2 < 0) {
           dir2 *= -1;
@@ -953,7 +1007,6 @@ const supervisorModule = {
         agent2Pulse.setAttribute('cx', pos2.cx);
         agent2Pulse.setAttribute('cy', pos2.cy);
 
-        const lbl2 = document.getElementById('map-lbl-agent-2');
         if (lbl2) {
           lbl2.setAttribute('x', pos2.cx + 15);
           lbl2.setAttribute('y', pos2.cy - 5);

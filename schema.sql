@@ -16,6 +16,7 @@ CREATE TABLE routes (
   "collected" NUMERIC NOT NULL DEFAULT 0,
   "status" TEXT NOT NULL DEFAULT 'En Ruta',
   "date" DATE NOT NULL DEFAULT CURRENT_DATE,
+  "supervisor_id" TEXT,
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -36,6 +37,7 @@ CREATE TABLE users (
   "documentNumber" TEXT,
   "estado_suscripcion" TEXT DEFAULT 'activa_prueba',
   "id_metodo_pago" TEXT,
+  "supervisor_id" TEXT,
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -53,6 +55,7 @@ CREATE TABLE clients (
   "installmentsCount" INTEGER NOT NULL DEFAULT 1,
   "installmentAmount" NUMERIC NOT NULL DEFAULT 0,
   "routeId" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "supervisor_id" TEXT,
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -66,6 +69,7 @@ CREATE TABLE payments (
   "agentName" TEXT NOT NULL,
   "status" TEXT NOT NULL,
   "signature" TEXT NOT NULL,
+  "supervisor_id" TEXT,
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 

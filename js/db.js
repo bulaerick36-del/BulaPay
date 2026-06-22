@@ -51,44 +51,44 @@ const db = {
     
     // Insertar Supervisores y Comercios Semilla
     const { error: usersErr } = await supabase.from('users').insert([
-      { username: 'admin', password: '123', name: 'Carlos Mendoza', role: 'Usuario Supervisor', company: 'Logística Mendoza S.A.', city: 'Bogotá', zone: 'Chapinero / Norte', phone: '+57 315 123 4567', email: 'contacto@logisticamendoza.co' },
-      { username: 'tienda', password: '123', name: 'Almacén La Esquina', role: 'Comercio Independiente', company: 'Almacén La Esquina', city: 'Bogotá', zone: 'Centro / Santa Fe', phone: '+57 318 987 6543', email: 'laesquina@gmail.com' },
-      { username: 'medellin_sup', password: '123', name: 'Inés Restrepo', role: 'Usuario Supervisor', company: 'Inversiones Antioquia', city: 'Medellín', zone: 'El Poblado / Laureles', phone: '+57 310 444 5566', email: 'contacto@inversionesantioquia.com' },
-      { username: 'cali_sup', password: '123', name: 'Felipe Caicedo', role: 'Usuario Supervisor', company: 'CrediCali S.A.S.', city: 'Cali', zone: 'Oriente / Versalles', phone: '+57 312 888 9900', email: 'felipe.caicedo@credicali.com' }
+      { username: 'admin', password: '123', name: 'Carlos Mendoza', role: 'Usuario Supervisor', company: 'Logística Mendoza S.A.', city: 'Bogotá', zone: 'Chapinero / Norte', phone: '+57 315 123 4567', email: 'contacto@logisticamendoza.co', supervisor_id: 'admin' },
+      { username: 'tienda', password: '123', name: 'Almacén La Esquina', role: 'Comercio Independiente', company: 'Almacén La Esquina', city: 'Bogotá', zone: 'Centro / Santa Fe', phone: '+57 318 987 6543', email: 'laesquina@gmail.com', supervisor_id: 'tienda' },
+      { username: 'medellin_sup', password: '123', name: 'Inés Restrepo', role: 'Usuario Supervisor', company: 'Inversiones Antioquia', city: 'Medellín', zone: 'El Poblado / Laureles', phone: '+57 310 444 5566', email: 'contacto@inversionesantioquia.com', supervisor_id: 'medellin_sup' },
+      { username: 'cali_sup', password: '123', name: 'Felipe Caicedo', role: 'Usuario Supervisor', company: 'CrediCali S.A.S.', city: 'Cali', zone: 'Oriente / Versalles', phone: '+57 312 888 9900', email: 'felipe.caicedo@credicali.com', supervisor_id: 'cali_sup' }
     ]);
     if (usersErr) console.error("Error al sembrar usuarios semilla:", usersErr);
     
     // Insertar Rutas Semilla
     const { error: routesErr } = await supabase.from('routes').insert([
-      { id: 'route_1', name: 'Ruta Centro - Norte', agentUsername: 'agente1', agentName: 'Juan Pérez', capital: 500000, collected: 180000, status: 'En Ruta', date: '2026-06-18' },
-      { id: 'route_2', name: 'Ruta Zona Sur', agentUsername: 'agente2', agentName: 'María López', capital: 300000, collected: 150000, status: 'Completado', date: '2026-06-18' }
+      { id: 'route_1', name: 'Ruta Centro - Norte', agentUsername: 'agente1', agentName: 'Juan Pérez', capital: 500000, collected: 180000, status: 'En Ruta', date: '2026-06-18', supervisor_id: 'admin' },
+      { id: 'route_2', name: 'Ruta Zona Sur', agentUsername: 'agente2', agentName: 'María López', capital: 300000, collected: 150000, status: 'Completado', date: '2026-06-18', supervisor_id: 'admin' }
     ]);
     if (routesErr) console.error("Error al sembrar rutas semilla:", routesErr);
     
     // Insertar Agentes de Ruta Semilla (que dependen de la ruta creada previamente)
     const { error: agentsErr } = await supabase.from('users').insert([
-      { username: 'agente1', password: '123', name: 'Juan Pérez', role: 'Agente de Ruta', supervisor: 'admin', routeId: 'route_1' },
-      { username: 'agente2', password: '123', name: 'María López', role: 'Agente de Ruta', supervisor: 'admin', routeId: 'route_2' }
+      { username: 'agente1', password: '123', name: 'Juan Pérez', role: 'Agente de Ruta', supervisor: 'admin', routeId: 'route_1', supervisor_id: 'admin' },
+      { username: 'agente2', password: '123', name: 'María López', role: 'Agente de Ruta', supervisor: 'admin', routeId: 'route_2', supervisor_id: 'admin' }
     ]);
     if (agentsErr) console.error("Error al sembrar agentes semilla:", agentsErr);
     
     // Insertar Clientes Semilla
     const { error: clientsErr } = await supabase.from('clients').insert([
-      { cedula: '12345', name: 'Roberto Gómez', phone: '3115551234', email: 'roberto.gomez@gmail.com', city: 'Bogotá', zone: 'Centro', risk: 'Verde', totalDebt: 500000, outstanding: 150000, installmentsCount: 5, installmentAmount: 100000, routeId: 'route_1' },
-      { cedula: '67890', name: 'Ana María Silva', phone: '3125556789', email: 'ana.silva@outlook.com', city: 'Bogotá', zone: 'Norte', risk: 'Amarillo', totalDebt: 400000, outstanding: 240000, installmentsCount: 5, installmentAmount: 80000, routeId: 'route_1' },
-      { cedula: '11223', name: 'Pedro Pablo Restrepo', phone: '3105559988', email: 'pedro.restrepo@yahoo.com', city: 'Medellín', zone: 'Sur', risk: 'Rojo', totalDebt: 600000, outstanding: 450000, installmentsCount: 6, installmentAmount: 100000, routeId: 'route_2' }
+      { cedula: '12345', name: 'Roberto Gómez', phone: '3115551234', email: 'roberto.gomez@gmail.com', city: 'Bogotá', zone: 'Centro', risk: 'Verde', totalDebt: 500000, outstanding: 150000, installmentsCount: 5, installmentAmount: 100000, routeId: 'route_1', supervisor_id: 'admin' },
+      { cedula: '67890', name: 'Ana María Silva', phone: '3125556789', email: 'ana.silva@outlook.com', city: 'Bogotá', zone: 'Norte', risk: 'Amarillo', totalDebt: 400000, outstanding: 240000, installmentsCount: 5, installmentAmount: 80000, routeId: 'route_1', supervisor_id: 'admin' },
+      { cedula: '11223', name: 'Pedro Pablo Restrepo', phone: '3105559988', email: 'pedro.restrepo@yahoo.com', city: 'Medellín', zone: 'Sur', risk: 'Rojo', totalDebt: 600000, outstanding: 450000, installmentsCount: 6, installmentAmount: 100000, routeId: 'route_2', supervisor_id: 'admin' }
     ]);
     if (clientsErr) console.error("Error al sembrar clientes semilla:", clientsErr);
     
     // Insertar Pagos Semilla
     const { error: paymentsErr } = await supabase.from('payments').insert([
-      { id: 'pay_1', clientCedula: '12345', installmentNumber: 1, amount: 100000, date: '2026-06-01', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-01' },
-      { id: 'pay_2', clientCedula: '12345', installmentNumber: 2, amount: 100000, date: '2026-06-08', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-02' },
-      { id: 'pay_3', clientCedula: '12345', installmentNumber: 3, amount: 150000, date: '2026-06-15', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-03' },
-      { id: 'pay_4', clientCedula: '67890', installmentNumber: 1, amount: 80000, date: '2026-06-02', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-01' },
-      { id: 'pay_5', clientCedula: '67890', installmentNumber: 2, amount: 80000, date: '2026-06-12', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-02' },
-      { id: 'pay_6', clientCedula: '11223', installmentNumber: 1, amount: 100000, date: '2026-05-20', agentName: 'María López', status: 'Pagado', signature: 'BulaPay-SIG-11223-01' },
-      { id: 'pay_7', clientCedula: '11223', installmentNumber: 2, amount: 50000, date: '2026-05-30', agentName: 'María López', status: 'Abonado', signature: 'BulaPay-SIG-11223-02' }
+      { id: 'pay_1', clientCedula: '12345', installmentNumber: 1, amount: 100000, date: '2026-06-01', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-01', supervisor_id: 'admin' },
+      { id: 'pay_2', clientCedula: '12345', installmentNumber: 2, amount: 100000, date: '2026-06-08', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-02', supervisor_id: 'admin' },
+      { id: 'pay_3', clientCedula: '12345', installmentNumber: 3, amount: 150000, date: '2026-06-15', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-03', supervisor_id: 'admin' },
+      { id: 'pay_4', clientCedula: '67890', installmentNumber: 1, amount: 80000, date: '2026-06-02', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-01', supervisor_id: 'admin' },
+      { id: 'pay_5', clientCedula: '67890', installmentNumber: 2, amount: 80000, date: '2026-06-12', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-02', supervisor_id: 'admin' },
+      { id: 'pay_6', clientCedula: '11223', installmentNumber: 1, amount: 100000, date: '2026-05-20', agentName: 'María López', status: 'Pagado', signature: 'BulaPay-SIG-11223-01', supervisor_id: 'admin' },
+      { id: 'pay_7', clientCedula: '11223', installmentNumber: 2, amount: 50000, date: '2026-05-30', agentName: 'María López', status: 'Abonado', signature: 'BulaPay-SIG-11223-02', supervisor_id: 'admin' }
     ]);
     if (paymentsErr) console.error("Error al sembrar pagos semilla:", paymentsErr);
 
@@ -98,9 +98,12 @@ const db = {
   // USERS
   async getUsers() {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return [];
     const { data, error } = await supabase
       .from('users')
-      .select('*');
+      .select('*')
+      .or(`supervisor_id.eq.${supId},username.eq.${supId}`);
     if (error) {
       console.error("Error al obtener usuarios en Supabase:", error);
       return [];
@@ -110,6 +113,13 @@ const db = {
 
   async saveUser(user) {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (supId && !user.supervisor_id) {
+      user.supervisor_id = supId;
+    }
+    if (user.role === 'Usuario Supervisor' && !user.supervisor_id) {
+      user.supervisor_id = user.username;
+    }
     const { data, error } = await supabase
       .from('users')
       .insert([user])
@@ -147,9 +157,18 @@ const db = {
     }
   },
 
-  // CURRENT SESSION (Mantenido local por simplicidad de navegación)
+  // CURRENT SESSION
   getCurrentUser() {
     return JSON.parse(localStorage.getItem(DB_KEYS.CURRENT_USER)) || null;
+  },
+
+  getSupervisorId() {
+    const user = this.getCurrentUser();
+    if (!user) return null;
+    if (user.role === 'Agente de Ruta' || user.role === 'agent') {
+      return user.supervisor || null;
+    }
+    return user.username;
   },
 
   setCurrentUser(user) {
@@ -163,9 +182,12 @@ const db = {
   // ROUTES
   async getRoutes() {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return [];
     const { data, error } = await supabase
       .from('routes')
-      .select('*');
+      .select('*')
+      .eq('supervisor_id', supId);
     if (error) {
       console.error("Error al obtener rutas en Supabase:", error);
       return [];
@@ -175,10 +197,13 @@ const db = {
 
   async getRouteById(id) {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return null;
     const { data, error } = await supabase
       .from('routes')
       .select('*')
       .eq('id', id)
+      .eq('supervisor_id', supId)
       .maybeSingle();
     if (error) {
       console.error(`Error al obtener ruta por ID "${id}":`, error);
@@ -189,6 +214,10 @@ const db = {
 
   async saveRoute(route) {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (supId) {
+      route.supervisor_id = supId;
+    }
     const { data, error } = await supabase
       .from('routes')
       .insert([route])
@@ -260,9 +289,12 @@ const db = {
   // CLIENTS
   async getClients() {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return [];
     const { data, error } = await supabase
       .from('clients')
-      .select('*');
+      .select('*')
+      .eq('supervisor_id', supId);
     if (error) {
       console.error("Error al obtener clientes en Supabase:", error);
       return [];
@@ -272,10 +304,13 @@ const db = {
 
   async getClientByCedula(cedula) {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return null;
     const { data, error } = await supabase
       .from('clients')
       .select('*')
       .eq('cedula', String(cedula))
+      .eq('supervisor_id', supId)
       .maybeSingle();
     if (error) {
       console.error(`Error al obtener cliente por cédula "${cedula}":`, error);
@@ -286,6 +321,10 @@ const db = {
 
   async saveClient(client) {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (supId) {
+      client.supervisor_id = supId;
+    }
     const { data, error } = await supabase
       .from('clients')
       .insert([client])
@@ -323,9 +362,12 @@ const db = {
   // PAYMENTS
   async getPayments() {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return [];
     const { data, error } = await supabase
       .from('payments')
-      .select('*');
+      .select('*')
+      .eq('supervisor_id', supId);
     if (error) {
       console.error("Error al obtener pagos en Supabase:", error);
       return [];
@@ -335,10 +377,13 @@ const db = {
 
   async getPaymentsByClient(cedula) {
     const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return [];
     const { data, error } = await supabase
       .from('payments')
       .select('*')
-      .eq('clientCedula', String(cedula));
+      .eq('clientCedula', String(cedula))
+      .eq('supervisor_id', supId);
     if (error) {
       console.error(`Error al obtener pagos del cliente "${cedula}":`, error);
       return [];
@@ -356,6 +401,8 @@ const db = {
     const signature = `BulaPay-SIG-${payment.clientCedula}-${Date.now().toString().slice(-4)}`;
     const id = 'pay_' + installmentNumber + '_' + Date.now();
     
+    const supId = this.getSupervisorId();
+    
     const newPayment = {
       id: id,
       clientCedula: String(payment.clientCedula),
@@ -364,7 +411,8 @@ const db = {
       date: payment.date || new Date().toISOString().split('T')[0],
       agentName: payment.agentName,
       status: payment.status,
-      signature: signature
+      signature: signature,
+      supervisor_id: supId
     };
 
     // 1. Registrar pago
