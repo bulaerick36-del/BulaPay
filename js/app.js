@@ -45,24 +45,6 @@ const app = {
 
       // 3. Fallback: Evaluar sesión de usuario para redirigir
       let user = window.BulaPayDB.getCurrentUser();
-      
-      // Auto-login automático con usuario admin de Supabase si no hay sesión iniciada
-      if (!user) {
-        try {
-          user = await window.BulaPayDB.getUserByUsername('admin');
-          if (user) {
-            window.BulaPayDB.setCurrentUser(user);
-            // Actualizar navbar de forma segura si el modulo de autenticación está cargado
-            if (window.authModule && typeof window.authModule.updateNavBar === 'function') {
-              window.authModule.updateNavBar(user);
-            }
-            const demoLinks = document.getElementById('demo-quick-links');
-            if (demoLinks) demoLinks.style.display = 'none';
-          }
-        } catch (err) {
-          console.warn("Fallo al auto-iniciar sesión como admin:", err);
-        }
-      }
 
       if (user) {
         if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor') {

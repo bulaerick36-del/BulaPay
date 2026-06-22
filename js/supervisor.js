@@ -1165,7 +1165,7 @@ const supervisorModule = {
 
   // RENDERIZAR DASHBOARD KPIs Y TABLA
   async renderDashboard() {
-    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador Demo', username: 'admin' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
     if (this.welcomeMsg) {
       this.welcomeMsg.textContent = `Bienvenido, ${currentUser.name} | ${currentUser.company || 'BulaPay'}`;
     }

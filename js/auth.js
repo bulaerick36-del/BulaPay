@@ -125,12 +125,12 @@ const authModule = {
     // Cerrar Sesión
     this.btnLogout.addEventListener('click', () => {
       window.BulaPayDB.logout();
+      localStorage.clear();
+      sessionStorage.clear();
       this.userNavInfo.style.display = 'none';
       
-      // Mostrar accesos rápidos de demo de nuevo por comodidad
-      document.getElementById('demo-quick-links').style.display = 'flex';
-      
-      window.app.router.navigate('auth');
+      window.location.hash = 'auth';
+      window.location.reload();
     });
   },
 
@@ -167,10 +167,6 @@ const authModule = {
     window.BulaPayDB.setCurrentUser(user);
     this.updateNavBar(user);
 
-    // Ocultar accesos rápidos de demo para simular una experiencia limpia de producción,
-    // pero se pueden activar en el enrutador si es necesario.
-    document.getElementById('demo-quick-links').style.display = 'none';
-
     // Redirigir según el rol del usuario
     if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor') {
       window.app.router.navigate('supervisor');
@@ -193,11 +189,8 @@ const authModule = {
     const user = window.BulaPayDB.getCurrentUser();
     if (user) {
       this.updateNavBar(user);
-      // Ocultar demos si ya está logueado
-      document.getElementById('demo-quick-links').style.display = 'none';
     } else {
       this.userNavInfo.style.display = 'none';
-      document.getElementById('demo-quick-links').style.display = 'flex';
     }
   }
 };

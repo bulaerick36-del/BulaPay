@@ -107,7 +107,7 @@ const agentModule = {
           : 'Ruta no asignada';
       }
     } else {
-      // Demo fallback
+      // Generic fallback
       if (agentNameElement) agentNameElement.textContent = 'Cobrador: Juan Pérez';
       if (agentRouteElement) agentRouteElement.textContent = 'Ruta Centro - Norte';
     }
