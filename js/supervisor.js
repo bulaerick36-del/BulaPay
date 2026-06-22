@@ -1022,6 +1022,12 @@ const supervisorModule = {
       maxZoom: 20
     }).addTo(this.mapInstance);
 
+    setTimeout(() => {
+      if (this.mapInstance) {
+        this.mapInstance.invalidateSize();
+      }
+    }, 400);
+
     this.updateMapMarkers();
   },
 
@@ -1090,6 +1096,9 @@ const supervisorModule = {
   },
 
   centerMapOnRoute() {
+    if (this.mapInstance) {
+      this.mapInstance.invalidateSize();
+    }
     this.updateMapMarkers();
   },
 
