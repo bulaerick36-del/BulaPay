@@ -224,67 +224,76 @@
         
           <!-- Crear Ruta Logística con Múltiples Agentes y Calculadora -->
           <div class="card route-form-container">
-            <h3>Crear Nueva Ruta Logística</h3>
-            <form id="form-create-route">
-              <div class="form-group">
-                <label for="route-name">Nombre de la Ruta</label>
-                <input type="text" id="route-name" placeholder="Ej. Ruta Norte - Chapinero" required>
-              </div>
-              
-              <!-- Calculadora Automática de Cuotas -->
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                <div class="form-group">
-                  <label for="route-capital">Capital Base</label>
-                  <input type="number" id="route-capital" placeholder="Ej. 150000" required min="0" oninput="supervisorModule.calculateRouteSuggestedQuota()">
-                </div>
-                <div class="form-group">
-                  <label for="route-margin">Margen de Servicio (%)</label>
-                  <input type="number" id="route-margin" placeholder="Ej. 20" required min="0" value="20" oninput="supervisorModule.calculateRouteSuggestedQuota()">
-                </div>
-              </div>
-              
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                <div class="form-group">
-                  <label for="route-total-recollect">Total a Recaudar</label>
-                  <input type="text" id="route-total-recollect" placeholder="Calculado automáticamente" readonly style="background-color: rgba(255,255,255,0.02); color: var(--accent); font-weight: bold; border-color: rgba(0, 245, 212, 0.2);">
-                </div>
-                <div class="form-group">
-                  <label for="route-suggested-quota">Cuota Diaria (30 días)</label>
-                  <input type="text" id="route-suggested-quota" placeholder="Sugerido automáticamente" readonly style="background-color: rgba(255,255,255,0.02); color: var(--accent); font-weight: bold; border-color: rgba(0, 245, 212, 0.2);">
-                </div>
-              </div>
+            <div class="sub-tabs-container" style="display: flex; background-color: var(--bg-secondary); padding: 0.25rem; border-radius: 8px; margin-bottom: 1.25rem; border: 1px solid var(--border-color);">
+              <button type="button" id="btn-route-tab-create" class="sub-tab active" style="flex: 1; padding: 0.5rem; background: var(--bg-primary); border: none; color: var(--accent); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Crear Ruta</button>
+              <button type="button" id="btn-route-tab-manage" class="sub-tab" style="flex: 1; padding: 0.5rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Gestionar Rutas</button>
+            </div>
 
-              <!-- Registro Múltiple de Agentes -->
-              <h4 style="font-size: 0.85rem; color: var(--accent); margin: 1.5rem 0 0.5rem 0; text-transform: uppercase;">
-                Asignación de Agentes de Ruta
-              </h4>
-
-              <div id="route-agents-list" style="margin-bottom: 1rem;">
-                <div class="agent-fields-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
-                  <h5 style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.5rem;">Agente Principal</h5>
-                  <div class="form-group" style="margin-bottom: 0.75rem;">
-                    <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
-                    <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
+            <!-- Contenedor de Crear Ruta -->
+            <div id="route-tab-content-create" style="display: block;">
+              <h3>Crear Nueva Ruta Logística</h3>
+              <form id="form-create-route">
+                <div class="form-group">
+                  <label for="route-name">Nombre de la Ruta</label>
+                  <input type="text" id="route-name" placeholder="Ej. Maicao" required>
+                </div>
+                
+                <!-- Campos de capital y porcentaje -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                  <div class="form-group">
+                    <label for="route-capital">Capital Asignado</label>
+                    <input type="number" id="route-capital" placeholder="Ej. 150000" required min="0">
                   </div>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                      <label style="font-size: 0.7rem;">Usuario (Login)</label>
-                      <input type="text" class="route-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem;">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                      <label style="font-size: 0.7rem;">Contraseña</label>
-                      <input type="password" class="route-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem;">
-                    </div>
+                  <div class="form-group">
+                    <label for="route-margin">Porcentaje (%)</label>
+                    <input type="number" id="route-margin" placeholder="Ej. 20" required min="0" value="20">
                   </div>
                 </div>
+
+                <!-- Registro Múltiple de Agentes -->
+                <h4 style="font-size: 0.85rem; color: var(--accent); margin: 1.5rem 0 0.5rem 0; text-transform: uppercase;">
+                  Asignación de Agentes de Ruta
+                </h4>
+
+                <div id="route-agents-list" style="margin-bottom: 1rem;">
+                  <div class="agent-fields-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
+                    <h5 style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.5rem;">Agente Principal</h5>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                      <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
+                      <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                      <label style="font-size: 0.7rem;">Número de Cédula</label>
+                      <input type="text" class="route-agent-cedula" placeholder="Ej. 12345678" required style="padding: 0.5rem; font-size: 0.85rem;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                      <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.7rem;">Usuario (Login)</label>
+                        <input type="text" class="route-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem;">
+                      </div>
+                      <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.7rem;">Contraseña</label>
+                        <input type="password" class="route-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem;">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button type="button" class="btn btn-secondary" onclick="supervisorModule.addAgentFieldGroup()" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; width: auto; margin-bottom: 1.5rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); align-self: flex-start; display: block;">
+                  ➕ Agregar otro agente
+                </button>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Crear Ruta y Agentes</button>
+              </form>
+            </div>
+
+            <!-- Contenedor de Gestionar Rutas -->
+            <div id="route-tab-content-manage" style="display: none;">
+              <h3>Gestionar Rutas Logísticas</h3>
+              <div id="manage-routes-list" style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; padding-right: 0.25rem;">
+                <!-- Se poblará dinámicamente -->
               </div>
-
-              <button type="button" class="btn btn-secondary" onclick="supervisorModule.addAgentFieldGroup()" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; width: auto; margin-bottom: 1.5rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); align-self: flex-start; display: block;">
-                ➕ Agregar otro agente
-              </button>
-
-              <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Crear Ruta y Agentes</button>
-            </form>
+            </div>
           </div>
 
           <!-- Consultar Ruta en Vivo con Filtro de Mapa y Feed de Progreso -->
@@ -925,6 +934,49 @@
             <!-- Cuadrícula del cartón digital inyectada dinámicamente -->
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GESTIONAR PERSONAL DE RUTA (EDITAR AGENTES) -->
+  <div class="supervisor-modal-overlay" id="modal-edit-route-agents">
+    <div class="supervisor-modal-card" style="max-width: 500px; max-height: 90vh; overflow-y: auto;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeEditRouteModal()">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">👥 Editar Personal de Ruta</h3>
+      <p id="edit-route-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Gestiona los agentes asignados a esta ruta.</p>
+      
+      <!-- Agentes Actuales -->
+      <h4 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem; text-transform: uppercase;">Agentes Asignados</h4>
+      <div id="edit-route-current-agents" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+      
+      <!-- Agregar Nuevo Agente -->
+      <h4 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem; text-transform: uppercase;">Agregar Nuevo Agente</h4>
+      <form id="form-modal-add-agent">
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+          <label style="font-size: 0.75rem;">Nombre Completo del Agente</label>
+          <input type="text" id="modal-new-agent-name" placeholder="Ej. Pedro Gómez" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+          <label style="font-size: 0.75rem;">Número de Cédula</label>
+          <input type="text" id="modal-new-agent-cedula" placeholder="Ej. 98765432" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.75rem;">Usuario (Login)</label>
+            <input type="text" id="modal-new-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.75rem;">Contraseña</label>
+            <input type="password" id="modal-new-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; width: 100%;">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 0.6rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent);">➕ Registrar y Asignar Agente</button>
+      </form>
+      
+      <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
+        <button type="button" class="btn btn-primary" onclick="supervisorModule.closeEditRouteModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem;">Terminar</button>
       </div>
     </div>
   </div>

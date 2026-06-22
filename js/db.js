@@ -135,6 +135,18 @@ const db = {
     return data;
   },
 
+  async deleteUser(username) {
+    const supabase = await initSupabase();
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('username', username.toLowerCase());
+    if (error) {
+      console.error(`Error al eliminar usuario "${username}" en Supabase:`, error);
+      throw error;
+    }
+  },
+
   // CURRENT SESSION (Mantenido local por simplicidad de navegación)
   getCurrentUser() {
     return JSON.parse(localStorage.getItem(DB_KEYS.CURRENT_USER)) || null;
@@ -201,6 +213,47 @@ const db = {
         console.error(`Error al actualizar recaudo de ruta "${routeId}":`, error);
         throw error;
       }
+    }
+  },
+
+  async deleteRoute(routeId) {
+    const supabase = await initSupabase();
+    
+    // 1. Eliminar agentes asignados a esta ruta
+    const { error: userErr } = await supabase
+      .from('users')
+      .delete()
+      .eq('routeId', routeId)
+      .eq('role', 'Agente de Ruta');
+    if (userErr) console.error("Error al eliminar agentes asociados a la ruta:", userErr);
+
+    // 2. Desvincular clientes asignados a esta ruta
+    const { error: clientErr } = await supabase
+      .from('clients')
+      .update({ routeId: null })
+      .eq('routeId', routeId);
+    if (clientErr) console.error("Error al desvincular clientes de la ruta:", clientErr);
+
+    // 3. Eliminar la ruta en sí
+    const { error } = await supabase
+      .from('routes')
+      .delete()
+      .eq('id', routeId);
+    if (error) {
+      console.error(`Error al eliminar ruta "${routeId}" en Supabase:`, error);
+      throw error;
+    }
+  },
+
+  async updateRouteAgents(routeId, agentUsernames, agentNames) {
+    const supabase = await initSupabase();
+    const { error } = await supabase
+      .from('routes')
+      .update({ agentUsername: agentUsernames, agentName: agentNames })
+      .eq('id', routeId);
+    if (error) {
+      console.error(`Error al actualizar agentes de la ruta "${routeId}" en Supabase:`, error);
+      throw error;
     }
   },
 

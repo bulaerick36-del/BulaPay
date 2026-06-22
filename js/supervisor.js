@@ -25,6 +25,51 @@ const supervisorModule = {
   },
 
   bindEvents() {
+    // Manejo de Pestañas de Ruta (Crear / Gestionar)
+    const btnTabCreate = document.getElementById('btn-route-tab-create');
+    const btnTabManage = document.getElementById('btn-route-tab-manage');
+    const contentCreate = document.getElementById('route-tab-content-create');
+    const contentManage = document.getElementById('route-tab-content-manage');
+
+    if (btnTabCreate && btnTabManage) {
+      btnTabCreate.addEventListener('click', () => {
+        btnTabCreate.classList.add('active');
+        btnTabCreate.style.backgroundColor = 'var(--bg-primary)';
+        btnTabCreate.style.color = 'var(--accent)';
+        
+        btnTabManage.classList.remove('active');
+        btnTabManage.style.backgroundColor = 'transparent';
+        btnTabManage.style.color = 'var(--text-secondary)';
+
+        contentCreate.style.display = 'block';
+        contentManage.style.display = 'none';
+      });
+
+      btnTabManage.addEventListener('click', async () => {
+        btnTabManage.classList.add('active');
+        btnTabManage.style.backgroundColor = 'var(--bg-primary)';
+        btnTabManage.style.color = 'var(--accent)';
+        
+        btnTabCreate.classList.remove('active');
+        btnTabCreate.style.backgroundColor = 'transparent';
+        btnTabCreate.style.color = 'var(--text-secondary)';
+
+        contentCreate.style.display = 'none';
+        contentManage.style.display = 'block';
+
+        await this.renderManageRoutesList();
+      });
+    }
+
+    // Submit del formulario para agregar agente en el modal
+    const formModalAddAgent = document.getElementById('form-modal-add-agent');
+    if (formModalAddAgent) {
+      formModalAddAgent.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await this.handleAddAgentFromModal();
+      });
+    }
+
     // Crear Nueva Ruta y Credenciales de Agente (Múltiples)
     if (this.formCreateRoute) {
       this.formCreateRoute.addEventListener('submit', async (e) => {
@@ -40,6 +85,7 @@ const supervisorModule = {
 
         for (const group of agentGroups) {
           const nameInput = group.querySelector('.route-agent-name').value.trim();
+          const cedulaInput = group.querySelector('.route-agent-cedula').value.trim();
           const usernameInput = group.querySelector('.route-agent-username').value.trim().toLowerCase();
           const passwordInput = group.querySelector('.route-agent-password').value;
 
@@ -53,6 +99,7 @@ const supervisorModule = {
 
           agentsData.push({
             name: nameInput,
+            cedula: cedulaInput,
             username: usernameInput,
             password: passwordInput
           });
@@ -89,7 +136,9 @@ const supervisorModule = {
               name: agent.name,
               role: 'Agente de Ruta',
               supervisor: supervisorUser.username,
-              routeId: routeId
+              routeId: routeId,
+              documentType: 'CC',
+              documentNumber: agent.cedula
             };
             await window.BulaPayDB.saveUser(newAgent);
           }
@@ -105,6 +154,10 @@ const supervisorModule = {
                 <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
                 <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
               </div>
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label style="font-size: 0.7rem;">Número de Cédula</label>
+                <input type="text" class="route-agent-cedula" placeholder="Ej. 12345678" required style="padding: 0.5rem; font-size: 0.85rem;">
+              </div>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
                 <div class="form-group" style="margin-bottom: 0;">
                   <label style="font-size: 0.7rem;">Usuario (Login)</label>
@@ -118,7 +171,6 @@ const supervisorModule = {
             </div>
           `;
 
-          this.calculateRouteSuggestedQuota();
           await this.renderDashboard();
           await this.initMapRouteFilter();
         } catch (err) {
@@ -171,6 +223,10 @@ const supervisorModule = {
       <div class="form-group" style="margin-bottom: 0.75rem;">
         <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
         <input type="text" class="route-agent-name" placeholder="Ej. Pedro Gómez" required style="padding: 0.5rem; font-size: 0.85rem;">
+      </div>
+      <div class="form-group" style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.7rem;">Número de Cédula</label>
+        <input type="text" class="route-agent-cedula" placeholder="Ej. 98765432" required style="padding: 0.5rem; font-size: 0.85rem;">
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
         <div class="form-group" style="margin-bottom: 0;">
@@ -904,6 +960,280 @@ const supervisorModule = {
         }
       }
     }, 3000);
+  },
+
+  async renderManageRoutesList() {
+    const listContainer = document.getElementById('manage-routes-list');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = `
+      <div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 2rem;">
+        Cargando rutas...
+      </div>
+    `;
+
+    try {
+      const routes = await window.BulaPayDB.getRoutes();
+      const allUsers = await window.BulaPayDB.getUsers();
+      
+      listContainer.innerHTML = '';
+      if (routes.length === 0) {
+        listContainer.innerHTML = `
+          <div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 2rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+            No hay rutas registradas.
+          </div>
+        `;
+        return;
+      }
+
+      routes.forEach(route => {
+        // Encontrar agentes asociados
+        const routeAgents = allUsers.filter(u => u.routeId === route.id && u.role === 'Agente de Ruta');
+        const agentsText = routeAgents.length > 0 
+          ? routeAgents.map(a => `${a.name} (${a.documentNumber || 'Sin Cédula'})`).join(', ') 
+          : 'Sin agentes asignados';
+
+        const card = document.createElement('div');
+        card.style.background = 'rgba(255, 255, 255, 0.02)';
+        card.style.border = '1px solid var(--border-color)';
+        card.style.borderRadius = '10px';
+        card.style.padding = '1rem';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.gap = '0.75rem';
+        card.style.transition = 'var(--transition-smooth)';
+
+        card.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+              <h4 style="color: white; margin: 0; font-size: 1rem;">${route.name}</h4>
+              <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">ID: ${route.id}</p>
+            </div>
+            <span style="font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; background: rgba(0, 245, 212, 0.1); color: var(--accent); border: 1px solid rgba(0, 245, 212, 0.2);">${route.status || 'En Ruta'}</span>
+          </div>
+          
+          <div style="font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.25rem;">
+            <div>
+              <span style="color: var(--text-secondary);">Capital Base:</span>
+              <strong style="color: white;">$${Number(route.capital).toLocaleString('es-CO')}</strong>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary);">Agentes:</span>
+              <span style="color: white;">${agentsText}</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="supervisorModule.openEditRouteModal('${route.id}')" style="flex: 1; padding: 0.4rem; font-size: 0.75rem; border-color: rgba(0, 245, 212, 0.2); color: var(--accent);">👤 Editar Personal</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="supervisorModule.handleDeleteRoute('${route.id}', '${route.name}')" style="flex: 1; padding: 0.4rem; font-size: 0.75rem; background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--color-rojo);">🗑️ Eliminar</button>
+          </div>
+        `;
+        
+        card.addEventListener('mouseenter', () => {
+          card.style.borderColor = 'rgba(0, 245, 212, 0.3)';
+          card.style.background = 'rgba(255, 255, 255, 0.03)';
+        });
+        card.addEventListener('mouseleave', () => {
+          card.style.borderColor = 'var(--border-color)';
+          card.style.background = 'rgba(255, 255, 255, 0.02)';
+        });
+
+        listContainer.appendChild(card);
+      });
+    } catch (err) {
+      console.error(err);
+      listContainer.innerHTML = `
+        <div style="color: var(--color-rojo); text-align: center; font-size: 0.85rem; padding: 2rem;">
+          ❌ Error al cargar las rutas.
+        </div>
+      `;
+    }
+  },
+
+  async handleDeleteRoute(routeId, routeName) {
+    if (!confirm(`¿Está seguro de que desea eliminar la ruta "${routeName}"?\nEsta acción también eliminará permanentemente todos los agentes de ruta asociados y desvinculará a los clientes de esta ruta.`)) {
+      return;
+    }
+
+    try {
+      await window.BulaPayDB.deleteRoute(routeId);
+      alert(`✅ Ruta "${routeName}" eliminada con éxito.`);
+      await this.renderDashboard();
+      await this.renderManageRoutesList();
+      await this.initMapRouteFilter();
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al eliminar la ruta de Supabase.');
+    }
+  },
+
+  editingRouteId: null,
+
+  async openEditRouteModal(routeId) {
+    this.editingRouteId = routeId;
+    const subtitle = document.getElementById('edit-route-modal-subtitle');
+    const container = document.getElementById('edit-route-current-agents');
+    
+    if (!container) return;
+
+    container.innerHTML = `
+      <div style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 1rem;">
+        Cargando agentes...
+      </div>
+    `;
+
+    try {
+      const route = await window.BulaPayDB.getRouteById(routeId);
+      if (!route) {
+        alert('❌ No se encontró la ruta especificada.');
+        this.closeEditRouteModal();
+        return;
+      }
+
+      if (subtitle) {
+        subtitle.textContent = `Gestión de agentes para la ruta: ${route.name}`;
+      }
+
+      const allUsers = await window.BulaPayDB.getUsers();
+      const routeAgents = allUsers.filter(u => u.routeId === routeId && u.role === 'Agente de Ruta');
+
+      container.innerHTML = '';
+      if (routeAgents.length === 0) {
+        container.innerHTML = `
+          <div style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 6px;">
+            No hay agentes asignados a esta ruta.
+          </div>
+        `;
+      } else {
+        routeAgents.forEach(agent => {
+          const item = document.createElement('div');
+          item.style.display = 'flex';
+          item.style.justifyContent = 'space-between';
+          item.style.alignItems = 'center';
+          item.style.background = 'rgba(255, 255, 255, 0.02)';
+          item.style.border = '1px solid var(--border-color)';
+          item.style.borderRadius = '8px';
+          item.style.padding = '0.5rem 0.75rem';
+
+          item.innerHTML = `
+            <div>
+              <strong style="color: white; font-size: 0.85rem;">${agent.name}</strong>
+              <div style="font-size: 0.75rem; color: var(--text-secondary);">Cédula: ${agent.documentNumber || 'Sin Cédula'} | Usuario: ${agent.username}</div>
+            </div>
+            <button type="button" onclick="supervisorModule.removeAgentFromRoute('${agent.username}', '${routeId}')" style="background: transparent; border: none; color: var(--color-rojo); cursor: pointer; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; padding: 0.25rem;">Desvincular</button>
+          `;
+          container.appendChild(item);
+        });
+      }
+
+      document.getElementById('modal-edit-route-agents').classList.add('active');
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al cargar el personal de la ruta.');
+    }
+  },
+
+  closeEditRouteModal() {
+    const modal = document.getElementById('modal-edit-route-agents');
+    if (modal) {
+      modal.classList.remove('active');
+    }
+    const form = document.getElementById('form-modal-add-agent');
+    if (form) form.reset();
+    this.editingRouteId = null;
+  },
+
+  async removeAgentFromRoute(username, routeId) {
+    if (!confirm(`¿Está seguro de que desea desvincular y eliminar al agente "${username}" de esta ruta?`)) {
+      return;
+    }
+
+    try {
+      await window.BulaPayDB.deleteUser(username);
+      
+      // Sincronizar campos concatenados en la tabla routes
+      const allUsers = await window.BulaPayDB.getUsers();
+      const remainingAgents = allUsers.filter(u => u.routeId === routeId && u.role === 'Agente de Ruta');
+      
+      const usernames = remainingAgents.map(a => a.username).join(', ');
+      const names = remainingAgents.map(a => a.name).join(', ');
+      
+      await window.BulaPayDB.updateRouteAgents(routeId, usernames, names);
+      
+      // Actualizar modal, listado de rutas y dashboard
+      await this.openEditRouteModal(routeId);
+      await this.renderManageRoutesList();
+      await this.renderDashboard();
+      await this.initMapRouteFilter();
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al desvincular el agente.');
+    }
+  },
+
+  async handleAddAgentFromModal() {
+    const routeId = this.editingRouteId;
+    if (!routeId) return;
+
+    const nameInput = document.getElementById('modal-new-agent-name');
+    const cedulaInput = document.getElementById('modal-new-agent-cedula');
+    const usernameInput = document.getElementById('modal-new-agent-username');
+    const passwordInput = document.getElementById('modal-new-agent-password');
+
+    if (!nameInput || !cedulaInput || !usernameInput || !passwordInput) return;
+
+    const name = nameInput.value.trim();
+    const cedula = cedulaInput.value.trim();
+    const username = usernameInput.value.trim().toLowerCase();
+    const password = passwordInput.value;
+
+    try {
+      // Validar si el usuario ya existe
+      const existingUser = await window.BulaPayDB.getUserByUsername(username);
+      if (existingUser) {
+        alert(`❌ El nombre de usuario "${username}" ya está registrado.`);
+        return;
+      }
+
+      const supervisorUser = window.BulaPayDB.getCurrentUser() || { username: 'admin' };
+      
+      // Guardar agente
+      const newAgent = {
+        username: username,
+        password: password,
+        name: name,
+        role: 'Agente de Ruta',
+        supervisor: supervisorUser.username,
+        routeId: routeId,
+        documentType: 'CC',
+        documentNumber: cedula
+      };
+
+      await window.BulaPayDB.saveUser(newAgent);
+
+      // Sincronizar campos concatenados en la tabla routes
+      const allUsers = await window.BulaPayDB.getUsers();
+      const allRouteAgents = allUsers.filter(u => u.routeId === routeId && u.role === 'Agente de Ruta');
+      
+      const usernames = allRouteAgents.map(a => a.username).join(', ');
+      const names = allRouteAgents.map(a => a.name).join(', ');
+
+      await window.BulaPayDB.updateRouteAgents(routeId, usernames, names);
+
+      alert(`✅ Agente "${name}" registrado y asignado con éxito.`);
+      
+      // Limpiar formulario del modal
+      document.getElementById('form-modal-add-agent').reset();
+
+      // Recargar modal, listado de rutas y dashboard
+      await this.openEditRouteModal(routeId);
+      await this.renderManageRoutesList();
+      await this.renderDashboard();
+      await this.initMapRouteFilter();
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al agregar y asignar el agente.');
+    }
   },
 
   destroy() {
