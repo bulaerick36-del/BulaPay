@@ -180,6 +180,12 @@ const supervisorModule = {
         }
       });
     }
+
+    // Conectar el botón de ver cartera de clientes del agente
+    const btnViewAgentClients = document.getElementById('btn-view-agent-clients');
+    if (btnViewAgentClients) {
+      btnViewAgentClients.addEventListener('click', () => this.openAgentAuditView());
+    }
   },
 
   // CALCULADORA AUTOMÁTICA
