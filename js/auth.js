@@ -125,12 +125,13 @@ const authModule = {
     // Cerrar Sesión
     this.btnLogout.addEventListener('click', () => {
       window.BulaPayDB.logout();
-      localStorage.clear();
-      sessionStorage.clear();
       this.userNavInfo.style.display = 'none';
       
-      window.location.hash = 'auth';
-      window.location.reload();
+      // Mostrar accesos rápidos de nuevo por comodidad
+      const devLinks = document.getElementById('demo-quick-links');
+      if (devLinks) devLinks.style.display = 'flex';
+      
+      window.app.router.navigate('auth');
     });
   },
 
@@ -167,6 +168,10 @@ const authModule = {
     window.BulaPayDB.setCurrentUser(user);
     this.updateNavBar(user);
 
+    // Ocultar accesos rápidos para simular una experiencia limpia
+    const devLinks = document.getElementById('demo-quick-links');
+    if (devLinks) devLinks.style.display = 'none';
+
     // Redirigir según el rol del usuario
     if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor') {
       window.app.router.navigate('supervisor');
@@ -187,10 +192,13 @@ const authModule = {
 
   checkCurrentSession() {
     const user = window.BulaPayDB.getCurrentUser();
+    const devLinks = document.getElementById('demo-quick-links');
     if (user) {
       this.updateNavBar(user);
+      if (devLinks) devLinks.style.display = 'none';
     } else {
       this.userNavInfo.style.display = 'none';
+      if (devLinks) devLinks.style.display = 'flex';
     }
   }
 };
