@@ -4,6 +4,9 @@ const DB_KEYS = {
   CURRENT_USER: 'bulapay_current_user'
 };
 
+const SUPABASE_URL = 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_gXixzFlqN8TgbAwq6BsgWQ_LFfhnU4X';
+
 let supabaseInstance = null;
 
 async function initSupabase() {
@@ -21,12 +24,8 @@ async function initSupabase() {
     console.warn("Fallo al obtener configuración dinámica de Supabase, usando fallbacks:", e);
   }
 
-  // Fallbacks estáticos provistos en la configuración inicial
-  const urlFallback = 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
-  const keyFallback = 'sb_publishable_gXixzFlqN8TgbAwq6BsgWQ_LFfhnU4X';
-
   if (window.supabase) {
-    supabaseInstance = window.supabase.createClient(urlFallback, keyFallback);
+    supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   } else {
     console.error("La librería de Supabase no está cargada en el objeto window.");
   }
@@ -51,34 +50,38 @@ const db = {
     await supabase.from('users').delete().neq('username', '');
     
     // Insertar Supervisores y Comercios Semilla
-    await supabase.from('users').insert([
+    const { error: usersErr } = await supabase.from('users').insert([
       { username: 'admin', password: '123', name: 'Carlos Mendoza', role: 'Usuario Supervisor', company: 'Logística Mendoza S.A.', city: 'Bogotá', zone: 'Chapinero / Norte', phone: '+57 315 123 4567', email: 'contacto@logisticamendoza.co' },
       { username: 'tienda', password: '123', name: 'Almacén La Esquina', role: 'Comercio Independiente', company: 'Almacén La Esquina', city: 'Bogotá', zone: 'Centro / Santa Fe', phone: '+57 318 987 6543', email: 'laesquina@gmail.com' },
       { username: 'medellin_sup', password: '123', name: 'Inés Restrepo', role: 'Usuario Supervisor', company: 'Inversiones Antioquia', city: 'Medellín', zone: 'El Poblado / Laureles', phone: '+57 310 444 5566', email: 'contacto@inversionesantioquia.com' },
       { username: 'cali_sup', password: '123', name: 'Felipe Caicedo', role: 'Usuario Supervisor', company: 'CrediCali S.A.S.', city: 'Cali', zone: 'Oriente / Versalles', phone: '+57 312 888 9900', email: 'felipe.caicedo@credicali.com' }
     ]);
+    if (usersErr) console.error("Error al sembrar usuarios semilla:", usersErr);
     
     // Insertar Rutas Semilla
-    await supabase.from('routes').insert([
+    const { error: routesErr } = await supabase.from('routes').insert([
       { id: 'route_1', name: 'Ruta Centro - Norte', agentUsername: 'agente1', agentName: 'Juan Pérez', capital: 500000, collected: 180000, status: 'En Ruta', date: '2026-06-18' },
       { id: 'route_2', name: 'Ruta Zona Sur', agentUsername: 'agente2', agentName: 'María López', capital: 300000, collected: 150000, status: 'Completado', date: '2026-06-18' }
     ]);
+    if (routesErr) console.error("Error al sembrar rutas semilla:", routesErr);
     
     // Insertar Agentes de Ruta Semilla (que dependen de la ruta creada previamente)
-    await supabase.from('users').insert([
+    const { error: agentsErr } = await supabase.from('users').insert([
       { username: 'agente1', password: '123', name: 'Juan Pérez', role: 'Agente de Ruta', supervisor: 'admin', routeId: 'route_1' },
       { username: 'agente2', password: '123', name: 'María López', role: 'Agente de Ruta', supervisor: 'admin', routeId: 'route_2' }
     ]);
+    if (agentsErr) console.error("Error al sembrar agentes semilla:", agentsErr);
     
     // Insertar Clientes Semilla
-    await supabase.from('clients').insert([
+    const { error: clientsErr } = await supabase.from('clients').insert([
       { cedula: '12345', name: 'Roberto Gómez', phone: '3115551234', email: 'roberto.gomez@gmail.com', city: 'Bogotá', zone: 'Centro', risk: 'Verde', totalDebt: 500000, outstanding: 150000, installmentsCount: 5, installmentAmount: 100000, routeId: 'route_1' },
       { cedula: '67890', name: 'Ana María Silva', phone: '3125556789', email: 'ana.silva@outlook.com', city: 'Bogotá', zone: 'Norte', risk: 'Amarillo', totalDebt: 400000, outstanding: 240000, installmentsCount: 5, installmentAmount: 80000, routeId: 'route_1' },
       { cedula: '11223', name: 'Pedro Pablo Restrepo', phone: '3105559988', email: 'pedro.restrepo@yahoo.com', city: 'Medellín', zone: 'Sur', risk: 'Rojo', totalDebt: 600000, outstanding: 450000, installmentsCount: 6, installmentAmount: 100000, routeId: 'route_2' }
     ]);
+    if (clientsErr) console.error("Error al sembrar clientes semilla:", clientsErr);
     
     // Insertar Pagos Semilla
-    await supabase.from('payments').insert([
+    const { error: paymentsErr } = await supabase.from('payments').insert([
       { id: 'pay_1', clientCedula: '12345', installmentNumber: 1, amount: 100000, date: '2026-06-01', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-01' },
       { id: 'pay_2', clientCedula: '12345', installmentNumber: 2, amount: 100000, date: '2026-06-08', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-02' },
       { id: 'pay_3', clientCedula: '12345', installmentNumber: 3, amount: 150000, date: '2026-06-15', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-03' },
@@ -87,6 +90,7 @@ const db = {
       { id: 'pay_6', clientCedula: '11223', installmentNumber: 1, amount: 100000, date: '2026-05-20', agentName: 'María López', status: 'Pagado', signature: 'BulaPay-SIG-11223-01' },
       { id: 'pay_7', clientCedula: '11223', installmentNumber: 2, amount: 50000, date: '2026-05-30', agentName: 'María López', status: 'Abonado', signature: 'BulaPay-SIG-11223-02' }
     ]);
+    if (paymentsErr) console.error("Error al sembrar pagos semilla:", paymentsErr);
 
     localStorage.removeItem(DB_KEYS.CURRENT_USER);
   },
@@ -106,14 +110,15 @@ const db = {
 
   async saveUser(user) {
     const supabase = await initSupabase();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('users')
-      .insert([user]);
+      .insert([user])
+      .select();
     if (error) {
       console.error("Error al guardar usuario en Supabase:", error);
       throw error;
     }
-    return user;
+    return data ? data[0] : user;
   },
 
   async getUserByUsername(username) {
@@ -172,14 +177,15 @@ const db = {
 
   async saveRoute(route) {
     const supabase = await initSupabase();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('routes')
-      .insert([route]);
+      .insert([route])
+      .select();
     if (error) {
       console.error("Error al crear ruta en Supabase:", error);
       throw error;
     }
-    return route;
+    return data ? data[0] : route;
   },
 
   async updateRouteCollected(routeId, collectedAdd) {
@@ -227,14 +233,15 @@ const db = {
 
   async saveClient(client) {
     const supabase = await initSupabase();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('clients')
-      .insert([client]);
+      .insert([client])
+      .select();
     if (error) {
       console.error("Error al guardar cliente en Supabase:", error);
       throw error;
     }
-    return client;
+    return data ? data[0] : client;
   },
 
   async updateClientOutstanding(cedula, amountPaid) {
@@ -308,9 +315,10 @@ const db = {
     };
 
     // 1. Registrar pago
-    const { error: payError } = await supabase
+    const { data, error: payError } = await supabase
       .from('payments')
-      .insert([newPayment]);
+      .insert([newPayment])
+      .select();
     if (payError) {
       console.error("Error al registrar pago en Supabase:", payError);
       throw payError;
