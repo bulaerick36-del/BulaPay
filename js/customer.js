@@ -122,14 +122,22 @@ const customerModule = {
 
       if (payment) {
         const isAbonado = payment.status === 'Abonado';
-        slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+        const isNoPago = payment.status === 'No Pago';
+        
+        if (isNoPago) {
+          slotCard.classList.add('nopago');
+          slotCard.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+          slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
+        } else {
+          slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+        }
         
         slotCard.innerHTML = `
           <span class="slot-num">CUOTA ${i}</span>
           <span class="slot-amount">$${Number(payment.amount).toLocaleString('es-CO')}</span>
           <span class="slot-date">${payment.date}</span>
           <span class="slot-signature">${payment.signature}</span>
-          <div class="slot-stamp">${isAbonado ? '🟡' : '🟢'}</div>
+          <div class="slot-stamp">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
         `;
 
         slotCard.addEventListener('click', () => {

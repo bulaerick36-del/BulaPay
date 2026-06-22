@@ -463,9 +463,14 @@
                     <label for="collect-amount" style="font-size: 0.7rem;">Monto Recibido</label>
                     <input type="number" id="collect-amount" placeholder="Ej. 100000" min="1">
                   </div>
-                  <button type="button" class="btn btn-accent" id="btn-submit-collect" style="padding: 0.5rem;">
-                    Confirmar Transacción
-                  </button>
+                  <div style="display: flex; gap: 0.5rem; width: 100%;">
+                    <button type="button" class="btn btn-accent" id="btn-submit-collect" style="padding: 0.5rem; flex: 1;">
+                      Confirmar Transacción
+                    </button>
+                    <button type="button" class="btn btn-danger" id="btn-submit-nopago" style="padding: 0.5rem; background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--color-rojo); flex: 1;">
+                      Registrar No Pago
+                    </button>
+                  </div>
                 </div>
 
               </div>
@@ -786,7 +791,8 @@
       
       <div class="form-group" style="margin-bottom: 1.5rem;">
         <label for="modal-agents-route-filter">Filtrar por Ruta</label>
-        <input type="text" id="modal-agents-route-filter" oninput="supervisorModule.filterModalAgents()" placeholder="Escribe el nombre de la ruta para filtrar..." style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
+        <input type="text" id="modal-agents-route-filter" list="route-datalist" oninput="supervisorModule.filterModalAgents()" placeholder="Escribe el nombre de la ruta para filtrar..." style="padding: 0.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
+        <datalist id="route-datalist"></datalist>
       </div>
 
       <!-- Lista de Agentes -->
@@ -832,7 +838,7 @@
         </div>
         <div style="margin-top: 1.5rem; display: flex; justify-content: center; border-top: 1px dashed var(--border-color); padding-top: 1.25rem;">
           <button type="button" class="btn btn-accent" id="btn-audit-agent-clients" style="width: auto; min-width: 220px; padding: 0.6rem 1.2rem; font-size: 0.85rem;" onclick="supervisorModule.openAgentAuditView()">
-            🔍 Auditar Cartera del Agente
+            👥 Ver Clientes
           </button>
         </div>
       </div>

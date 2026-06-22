@@ -29,6 +29,7 @@ const agentModule = {
     // Recaudo
     this.inputCollectAmount = document.getElementById('collect-amount');
     this.btnSubmitCollect = document.getElementById('btn-submit-collect');
+    this.btnSubmitNoPago = document.getElementById('btn-submit-nopago');
 
     // Registro
     this.formRegisterClient = document.getElementById('form-register-client');
@@ -60,6 +61,9 @@ const agentModule = {
 
     // Registrar Pago
     this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
+    if (this.btnSubmitNoPago) {
+      this.btnSubmitNoPago.addEventListener('click', () => this.registerNoPayment());
+    }
 
     // Registrar Cliente Nuevo
     this.formRegisterClient.addEventListener('submit', async (e) => {
@@ -220,6 +224,41 @@ const agentModule = {
     } catch (err) {
       console.error(err);
       alert('❌ Error al registrar el pago.');
+    }
+  },
+
+  async registerNoPayment() {
+    if (!this.currentClient) return;
+
+    if (!confirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`)) {
+      return;
+    }
+
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+
+    try {
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const newPayment = {
+        clientCedula: this.currentClient.cedula,
+        installmentNumber: payments.length + 1,
+        amount: 0,
+        date: new Date().toISOString().split('T')[0],
+        agentName: currentUser.name,
+        status: 'No Pago'
+      };
+
+      // Registrar en base de datos
+      const savedPayment = await window.BulaPayDB.addPayment(newPayment);
+
+      // Desplegar recibo digital premium
+      window.showBulaPayReceipt(savedPayment, this.currentClient);
+
+      // Re-buscar el cliente para actualizar pantalla
+      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      this.renderClientInfo(updatedClient);
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al registrar el no pago.');
     }
   },
 

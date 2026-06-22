@@ -283,6 +283,7 @@ const supervisorModule = {
     const routeFilterInput = document.getElementById('modal-agents-route-filter');
     const listContainer = document.getElementById('modal-agents-list-container');
     const detailSection = document.getElementById('modal-agent-detail-section');
+    const datalist = document.getElementById('route-datalist');
     
     if (!routeFilterInput || !listContainer) return;
     
@@ -290,6 +291,17 @@ const supervisorModule = {
 
     // Limpiar filtro
     routeFilterInput.value = '';
+
+    // Llenar datalist dinámicamente con los nombres de todas las rutas activas
+    if (datalist) {
+      datalist.innerHTML = '';
+      const routes = await window.BulaPayDB.getRoutes();
+      routes.forEach(r => {
+        const option = document.createElement('option');
+        option.value = r.name;
+        datalist.appendChild(option);
+      });
+    }
 
     await this.filterModalAgents();
   },
@@ -473,7 +485,9 @@ const supervisorModule = {
 
       clients.forEach(client => {
         // Verificar si el cliente hizo un abono hoy
-        const madePaymentToday = todayPayments.some(p => p.clientCedula === client.cedula);
+        const clientTodayPayments = todayPayments.filter(p => p.clientCedula === client.cedula);
+        const madePaymentToday = clientTodayPayments.some(p => p.status === 'Pagado' || p.status === 'Abonado');
+        const statusIcon = madePaymentToday ? '✅' : '❌';
         const statusColor = madePaymentToday ? 'var(--color-verde)' : 'var(--color-rojo)';
         const statusLabel = madePaymentToday ? 'Recaudado Hoy' : 'Sin Cobro Hoy';
         const bgLight = madePaymentToday ? 'rgba(16, 185, 129, 0.04)' : 'rgba(239, 68, 68, 0.04)';
@@ -492,8 +506,9 @@ const supervisorModule = {
 
         item.innerHTML = `
           <div>
-            <strong style="color: ${statusColor}; font-size: 0.9rem; font-weight: 700; transition: color 0.3s ease;">${client.name}</strong>
-            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.15rem;">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
+            <span style="font-size: 1.1rem; margin-right: 0.5rem; vertical-align: middle;">${statusIcon}</span>
+            <strong style="color: ${statusColor}; font-size: 0.9rem; font-weight: 700; transition: color 0.3s ease; vertical-align: middle;">${client.name}</strong>
+            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.15rem; padding-left: 1.7rem;">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
           </div>
           <span style="font-size: 0.65rem; background-color: ${madePaymentToday ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'}; color: ${statusColor}; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${statusLabel}</span>
         `;
@@ -547,13 +562,21 @@ const supervisorModule = {
 
         if (payment) {
           const isAbonado = payment.status === 'Abonado';
-          slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+          const isNoPago = payment.status === 'No Pago';
+          
+          if (isNoPago) {
+            slotCard.classList.add('nopago');
+            slotCard.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+            slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
+          } else {
+            slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+          }
           
           slotCard.innerHTML = `
             <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
             <span class="slot-amount" style="font-size: 0.75rem;">$${Number(payment.amount).toLocaleString('es-CO')}</span>
             <span class="slot-date" style="font-size: 0.5rem; display:block;">${payment.date}</span>
-            <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isAbonado ? '🟡' : '🟢'}</div>
+            <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
           `;
           slotCard.addEventListener('click', () => {
             window.showBulaPayReceipt(payment, client);
@@ -570,6 +593,15 @@ const supervisorModule = {
 
         gridEl.appendChild(slotCard);
       }
+
+      // Restricción crítica: Ocultar o eliminar del DOM cualquier botón de 'Registrar Pago', 'Editar Cliente' o 'Eliminar'
+      const forbiddenButtons = ledgerContainer.querySelectorAll('button');
+      forbiddenButtons.forEach(btn => {
+        const text = btn.textContent.toLowerCase();
+        if (text.includes('registrar') || text.includes('pago') || text.includes('editar') || text.includes('eliminar') || text.includes('borrar')) {
+          btn.remove();
+        }
+      });
 
       ledgerContainer.style.display = 'block';
     } catch (err) {
@@ -821,13 +853,21 @@ const supervisorModule = {
 
       if (payment) {
         const isAbonado = payment.status === 'Abonado';
-        slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+        const isNoPago = payment.status === 'No Pago';
+        
+        if (isNoPago) {
+          slotCard.classList.add('nopago');
+          slotCard.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+          slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
+        } else {
+          slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+        }
         
         slotCard.innerHTML = `
           <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
           <span class="slot-amount" style="font-size: 0.75rem;">$${Number(payment.amount).toLocaleString('es-CO')}</span>
           <span class="slot-date" style="font-size: 0.5rem; display:block;">${payment.date}</span>
-          <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isAbonado ? '🟡' : '🟢'}</div>
+          <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
         `;
         slotCard.addEventListener('click', () => {
           window.showBulaPayReceipt(payment, client);

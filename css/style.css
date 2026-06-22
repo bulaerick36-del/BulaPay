@@ -990,6 +990,12 @@ main {
   border-style: solid;
 }
 
+.ledger-slot-card.nopago {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(239, 68, 68, 0.15) 100%);
+  border: 2px solid var(--color-rojo);
+  border-style: solid;
+}
+
 .slot-num {
   font-size: 0.75rem;
   font-weight: 700;
@@ -1004,6 +1010,9 @@ main {
 }
 .ledger-slot-card.abonado .slot-num {
   color: var(--color-amarillo);
+}
+.ledger-slot-card.nopago .slot-num {
+  color: var(--color-rojo);
 }
 
 .slot-amount {
@@ -1446,11 +1455,11 @@ main {
 }
 
 /* Interactividad de Ledger Cards */
-.ledger-slot-card.paid, .ledger-slot-card.abonado {
+.ledger-slot-card.paid, .ledger-slot-card.abonado, .ledger-slot-card.nopago {
   cursor: pointer;
 }
 
-.ledger-slot-card.paid:hover, .ledger-slot-card.abonado:hover {
+.ledger-slot-card.paid:hover, .ledger-slot-card.abonado:hover, .ledger-slot-card.nopago:hover {
   transform: scale(1.03) translateY(-2px);
   box-shadow: 0 8px 20px rgba(0, 245, 212, 0.15);
   border-color: var(--accent);
