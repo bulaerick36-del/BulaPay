@@ -31,10 +31,13 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.MAILERSEND_API_KEY;
+  // Obtener la API Key desde el entorno de Vercel/Node
+  const apiKey = process.env.MAILERSEND_API_KEY || process.env.MAILER_SEND_API_KEY || process.env.MAILERSEND_TOKEN;
   if (!apiKey) {
-    console.error('Missing MAILERSEND_API_KEY env variable');
-    res.status(500).json({ error: 'MailerSend API Key is not configured in backend environment' });
+    console.error('Missing MAILERSEND_API_KEY env variable in backend');
+    res.status(500).json({ 
+      error: 'La variable de entorno MAILERSEND_API_KEY no está configurada en Vercel. Por favor, añádela en la configuración de variables de entorno de tu proyecto en Vercel.' 
+    });
     return;
   }
 
