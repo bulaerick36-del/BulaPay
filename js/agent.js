@@ -784,6 +784,7 @@ const agentModule = {
 
   async sendWelcomeEmail(clientData) {
     console.log('[DEBUG] sendWelcomeEmail - Preparando fetch a /api/send-email con body:', { clientData });
+    let data = { details: 'No details' };
     try {
       console.log('[DEBUG] sendWelcomeEmail - Iniciando fetch...');
       const response = await fetch('/api/send-email', {
@@ -802,18 +803,17 @@ const agentModule = {
       } else {
         const errorText = await response.text();
         console.error('[DEBUG ERROR] Error en respuesta de /api/send-email (Raw):', errorText);
-        let displayMsg = errorText;
         try {
-          const errorJson = JSON.parse(errorText);
-          displayMsg = JSON.stringify(errorJson, null, 2);
+          data = JSON.parse(errorText);
         } catch (e) {
-          // No es JSON válido, se usará el texto plano
+          data = { error: errorText, details: errorText };
         }
-        alert('❌ Error al enviar el correo (Respuesta del Servidor):\n' + displayMsg);
+        const err = new Error(data.error || `Código de estado: ${response.status}`);
+        throw err;
       }
     } catch (err) {
       console.error('[DEBUG ERROR] Error atrapado al enviar correo en sendWelcomeEmail:', err);
-      alert('❌ Excepción atrapada en frontend:\n' + (err.message || JSON.stringify(err)));
+      alert('Error técnico: ' + err.message + ' - Detalles: ' + JSON.stringify(data.details));
     }
   },
 
