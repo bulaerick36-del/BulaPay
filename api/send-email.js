@@ -88,21 +88,24 @@ module.exports = async (req, res) => {
     } else {
       const errorText = await response.text();
       console.error('[DEBUG BACKEND ERROR] MailerSend Response Error (Raw):', errorText);
+      let errorJson = null;
       try {
-        const errorJson = JSON.parse(errorText);
+        errorJson = JSON.parse(errorText);
         console.error('[DEBUG BACKEND ERROR] MailerSend Response Error (Parsed JSON):', errorJson);
-        const detailedMsg = errorJson.message || JSON.stringify(errorJson);
-        res.status(response.status).json({ error: detailedMsg });
-      } catch (e) {
-        res.status(response.status).json({ error: errorText || `Código de estado MailerSend: ${response.status}` });
-      }
+      } catch (e) {}
+
+      res.status(response.status).json({
+        error: errorJson || errorText || `MailerSend respondió con código de estado: ${response.status}`,
+        mailerSendStatus: response.status,
+        rawResponse: errorText
+      });
     }
   } catch (err) {
     console.error('[DEBUG BACKEND ERROR] Excepción al enviar por MailerSend:', err);
-    if (err.response && err.response.data) {
-      console.error('[DEBUG BACKEND ERROR] err.response.data:', err.response.data);
-    }
-    const errMsg = err.message || 'Error de red o de servidor desconocido';
-    res.status(500).json({ error: errMsg });
+    res.status(500).json({
+      error: `Excepción en backend: ${err.message || err}`,
+      stack: err.stack || null,
+      details: err.toString()
+    });
   }
 };

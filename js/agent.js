@@ -802,23 +802,18 @@ const agentModule = {
       } else {
         const errorText = await response.text();
         console.error('[DEBUG ERROR] Error en respuesta de /api/send-email (Raw):', errorText);
-        let errorMsg = 'Error desconocido en el servidor backend';
+        let displayMsg = errorText;
         try {
           const errorJson = JSON.parse(errorText);
-          console.error('[DEBUG ERROR] Error en respuesta de /api/send-email (Parsed JSON):', errorJson);
-          if (errorJson && errorJson.error) {
-            errorMsg = typeof errorJson.error === 'object' ? JSON.stringify(errorJson.error) : errorJson.error;
-          }
+          displayMsg = JSON.stringify(errorJson, null, 2);
         } catch (e) {
-          if (errorText) {
-            errorMsg = errorText;
-          }
+          // No es JSON válido, se usará el texto plano
         }
-        alert('❌ Error al enviar el correo: ' + errorMsg);
+        alert('❌ Error al enviar el correo (Respuesta del Servidor):\n' + displayMsg);
       }
     } catch (err) {
       console.error('[DEBUG ERROR] Error atrapado al enviar correo en sendWelcomeEmail:', err);
-      alert('❌ Error al enviar el correo (red/sistema): ' + (err.message || err));
+      alert('❌ Excepción atrapada en frontend:\n' + (err.message || JSON.stringify(err)));
     }
   },
 
