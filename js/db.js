@@ -319,6 +319,34 @@ const db = {
     return data;
   },
 
+  async getGlobalClientByCedula(cedula) {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('cedula', String(cedula))
+      .maybeSingle();
+    if (error) {
+      console.error(`Error al obtener cliente global por cédula "${cedula}":`, error);
+      return null;
+    }
+    return data;
+  },
+
+  async getGlobalRouteById(routeId) {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*')
+      .eq('id', routeId)
+      .maybeSingle();
+    if (error) {
+      console.error(`Error al obtener ruta global "${routeId}":`, error);
+      return null;
+    }
+    return data;
+  },
+
   async saveClient(client) {
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();

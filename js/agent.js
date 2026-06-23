@@ -164,78 +164,89 @@ const agentModule = {
     }
   },
 
-  verificarHistorialCliente(cedula) {
+  async verificarHistorialCliente(cedula) {
     if (!cedula) {
       alert('⚠️ Por favor ingrese un número de Cédula.');
       return;
     }
 
-    // Ocultar placeholder y mostrar resultados
+    // Estado de Cargando...
     this.historyPlaceholder.style.display = 'none';
     this.historyResults.style.display = 'block';
-
-    // Rellenar cédula
     this.historyClientCedulaVal.textContent = cedula;
-
-    // Resetear clases de semáforo
+    this.historyClientName.textContent = 'Cargando...';
+    this.historyClientRiskLabel.textContent = 'Cargando...';
+    this.historyClientRiskLabel.style.color = 'var(--text-secondary)';
+    this.historyClientNote.textContent = 'Consultando base de datos central de BulaPay en Supabase...';
+    this.historyActiveCreditsAlert.style.display = 'none';
     this.historyTrafficLight.className = 'traffic-light-header';
+    this.historyRiskStatus.textContent = '⏳ Buscando historial...';
 
-    // Determinar nivel de riesgo con datos de prueba
-    // Si termina en 1 o 2 -> Rojo
-    // Si termina en 3 o 4 -> Amarillo
-    // Si termina en cualquier otro -> Verde
-    const lastDigit = cedula.charAt(cedula.length - 1);
-    
-    // Nombres ficticios para hacerlo realista
-    const mockNames = {
-      '1': 'Carlos Eduardo Restrepo',
-      '2': 'María Camila Buendía',
-      '3': 'Jairo Alonso Martínez',
-      '4': 'Sandra Patricia Rojas',
-      '5': 'Andrés Felipe Gómez',
-      '6': 'Diana Marcela Torres',
-      '7': 'Gustavo Adolfo Petro',
-      '8': 'Gloria Isabel Ospina',
-      '9': 'Héctor Fabio Valencia',
-      '0': 'Leonor Inés Gutiérrez'
-    };
-    const name = mockNames[lastDigit] || 'Cliente de Prueba BulaPay';
-    this.historyClientName.textContent = name;
+    try {
+      const client = await window.BulaPayDB.getGlobalClientByCedula(cedula);
+      
+      if (!client) {
+        // Cliente NO existe: Mostrar alerta o tarjeta verde indicando: "Cliente no encontrado en la base de datos. Es un cliente nuevo (Sin historial)"
+        this.historyTrafficLight.className = 'traffic-light-header verde';
+        this.historyRiskStatus.textContent = '🟢 VERDE (Cliente Nuevo)';
+        this.historyClientName.textContent = 'Cliente Nuevo';
+        this.historyClientRiskLabel.textContent = 'VERDE (Sin Historial)';
+        this.historyClientRiskLabel.style.color = 'var(--color-verde)';
+        this.historyClientNote.textContent = 'Cliente no encontrado en la base de datos BulaPay. Es un cliente nuevo sin historial financiero.';
+        this.historyActiveCreditsAlert.style.display = 'none';
+        return;
+      }
 
-    if (lastDigit === '1' || lastDigit === '2') {
-      // 🔴 ROJO (Alto Riesgo)
-      this.historyTrafficLight.classList.add('rojo');
-      this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo)';
-      this.historyClientRiskLabel.textContent = 'ROJO (Alto Riesgo)';
-      this.historyClientRiskLabel.style.color = 'var(--color-rojo)';
-      this.historyClientNote.textContent = 'No prestar, reportado en Maicao por mora severa.';
-      
-      // Alerta de Créditos Activos Globales
-      this.historyActiveCreditsAlert.style.display = 'flex';
-      this.historyActiveCreditsAlert.className = 'risk-alert-box'; // Red alert style
-      this.historyActiveCreditsAlert.innerHTML = '⚠️ Cuidado: Este cliente ya tiene 3 créditos activos en la ruta El Molino.';
-    } else if (lastDigit === '3' || lastDigit === '4') {
-      // 🟡 AMARILLO (Riesgo Medio)
-      this.historyTrafficLight.classList.add('amarillo');
-      this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
-      this.historyClientRiskLabel.textContent = 'AMARILLO (Riesgo Medio)';
-      this.historyClientRiskLabel.style.color = 'var(--color-amarillo)';
-      this.historyClientNote.textContent = 'Cliente que pagó, pero con demoras constantes.';
-      
-      // Alerta de Créditos Activos Globales
-      this.historyActiveCreditsAlert.style.display = 'flex';
-      this.historyActiveCreditsAlert.className = 'risk-alert-box warning'; // Yellow alert style
-      this.historyActiveCreditsAlert.innerHTML = '⚠️ Cuidado: Este cliente ya tiene 1 crédito activo en la ruta Valledupar.';
-    } else {
-      // 🟢 VERDE (Cliente Excelente)
-      this.historyTrafficLight.classList.add('verde');
-      this.historyRiskStatus.textContent = '🟢 VERDE (Cliente Excelente)';
-      this.historyClientRiskLabel.textContent = 'VERDE (Cliente Excelente)';
-      this.historyClientRiskLabel.style.color = 'var(--color-verde)';
-      this.historyClientNote.textContent = 'Cliente puntual, apto para nuevos créditos.';
-      
-      // Ocultar alerta de créditos
-      this.historyActiveCreditsAlert.style.display = 'none';
+      // Cliente SÍ existe: Mostrar Nombre Real
+      this.historyClientName.textContent = client.name;
+
+      const hasOutstanding = Number(client.outstanding) > 0;
+      const isRojo = client.risk === 'Rojo';
+
+      if (hasOutstanding && isRojo) {
+        // 🔴 ROJO: Crédito en mora
+        this.historyTrafficLight.className = 'traffic-light-header rojo';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo)';
+        this.historyClientRiskLabel.textContent = 'ROJO (Alto Riesgo)';
+        this.historyClientRiskLabel.style.color = 'var(--color-rojo)';
+        this.historyClientNote.textContent = 'No prestar, reportado en Maicao por deudas caídas / mora severa.';
+        
+        // Consultar la ruta del crédito activo
+        const route = client.routeId ? await window.BulaPayDB.getGlobalRouteById(client.routeId) : null;
+        const routeName = route ? route.name : 'Ruta Desconocida';
+        
+        this.historyActiveCreditsAlert.style.display = 'flex';
+        this.historyActiveCreditsAlert.className = 'risk-alert-box'; // Red style
+        this.historyActiveCreditsAlert.innerHTML = `⚠️ Cuidado: Este cliente tiene una deuda activa de $${Number(client.outstanding).toLocaleString('es-CO')} en la ruta "${routeName}" (${client.city}).`;
+      } else if (hasOutstanding && !isRojo) {
+        // 🟡 AMARILLO: Crédito activo al día
+        this.historyTrafficLight.className = 'traffic-light-header amarillo';
+        this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
+        this.historyClientRiskLabel.textContent = 'AMARILLO (Riesgo Medio)';
+        this.historyClientRiskLabel.style.color = 'var(--color-amarillo)';
+        this.historyClientNote.textContent = 'Cliente que pagó, pero tiene deudas o demoras constantes en la plataforma.';
+        
+        // Consultar la ruta del crédito activo
+        const route = client.routeId ? await window.BulaPayDB.getGlobalRouteById(client.routeId) : null;
+        const routeName = route ? route.name : 'Ruta Desconocida';
+        
+        this.historyActiveCreditsAlert.style.display = 'flex';
+        this.historyActiveCreditsAlert.className = 'risk-alert-box warning'; // Yellow style
+        this.historyActiveCreditsAlert.innerHTML = `⚠️ Cuidado: Este cliente ya tiene un crédito activo de $${Number(client.outstanding).toLocaleString('es-CO')} en la ruta "${routeName}" (${client.city}).`;
+      } else {
+        // 🟢 VERDE: Todos los créditos pagados y cerrados
+        this.historyTrafficLight.className = 'traffic-light-header verde';
+        this.historyRiskStatus.textContent = '🟢 VERDE (Cliente Excelente)';
+        this.historyClientRiskLabel.textContent = 'VERDE (Cliente Excelente)';
+        this.historyClientRiskLabel.style.color = 'var(--color-verde)';
+        this.historyClientNote.textContent = 'Cliente puntual, apto para nuevos créditos. Todos los créditos están cancelados.';
+        this.historyActiveCreditsAlert.style.display = 'none';
+      }
+    } catch (err) {
+      console.error("Error al consultar Supabase:", err);
+      alert('❌ Error al consultar la central de riesgos.');
+      this.historyPlaceholder.style.display = 'block';
+      this.historyResults.style.display = 'none';
     }
   },
 
