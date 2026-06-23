@@ -91,9 +91,10 @@ module.exports = async (req, res) => {
       try {
         const errorJson = JSON.parse(errorText);
         console.error('[DEBUG BACKEND ERROR] MailerSend Response Error (Parsed JSON):', errorJson);
-        res.status(response.status).json({ error: errorJson });
+        const detailedMsg = errorJson.message || JSON.stringify(errorJson);
+        res.status(response.status).json({ error: detailedMsg });
       } catch (e) {
-        res.status(response.status).json({ error: errorText });
+        res.status(response.status).json({ error: errorText || `Código de estado MailerSend: ${response.status}` });
       }
     }
   } catch (err) {
@@ -101,10 +102,7 @@ module.exports = async (req, res) => {
     if (err.response && err.response.data) {
       console.error('[DEBUG BACKEND ERROR] err.response.data:', err.response.data);
     }
-    res.status(500).json({ 
-      error: err.message, 
-      stack: err.stack,
-      responseData: err.response?.data || null
-    });
+    const errMsg = err.message || 'Error de red o de servidor desconocido';
+    res.status(500).json({ error: errMsg });
   }
 };
