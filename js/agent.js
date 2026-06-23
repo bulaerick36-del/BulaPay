@@ -1,5 +1,40 @@
 // Módulo del Agente / Cobrador (Vista Móvil Optimizada)
 
+const COLOMBIA_GEOGRAPHY = {
+  "Amazonas": ["Leticia", "Puerto Nariño"],
+  "Antioquia": ["Medellín", "Bello", "Itagüí", "Envigado", "Rionegro", "Apartadó", "Turbo", "Caucasia"],
+  "Arauca": ["Arauca", "Tame", "Saravena"],
+  "Atlántico": ["Barranquilla", "Soledad", "Malambo", "Sabanagrande", "Baranoa"],
+  "Bolívar": ["Cartagena", "Magangué", "El Carmen de Bolívar", "Turbaco"],
+  "Boyacá": ["Tunja", "Duitama", "Sogamoso", "Chiquinquirá", "Paipa"],
+  "Caldas": ["Manizales", "La Dorada", "Chinchiná", "Riosucio"],
+  "Caquetá": ["Florencia", "San Vicente del Caguán"],
+  "Casanare": ["Yopal", "Aguazul", "Villanueva"],
+  "Cauca": ["Popayán", "Santander de Quilichao", "Puerto Tejada"],
+  "Cesar": ["Valledupar", "Aguachica", "Agustín Codazzi", "Bosconia"],
+  "Chocó": ["Quibdó", "Istmina", "Condoto"],
+  "Córdoba": ["Montería", "Cereté", "Sahagún", "Lorica", "Montelíbano"],
+  "Cundinamarca": ["Bogotá", "Soacha", "Facatativá", "Chía", "Zipaquirá", "Fusagasugá", "Girardot"],
+  "Guainía": ["Inírida"],
+  "Guaviare": ["San José del Guaviare"],
+  "Huila": ["Neiva", "Pitalito", "Garzón", "La Plata"],
+  "La Guajira": ["Riohacha", "Maicao", "Uribia", "San Juan del Cesar", "Villanueva"],
+  "Magdalena": ["Santa Marta", "Ciénaga", "Fundación", "El Banco"],
+  "Meta": ["Villavicencio", "Acacías", "Granada", "Puerto López"],
+  "Nariño": ["Pasto", "Tumaco", "Ipiales", "Túquerres"],
+  "Norte de Santander": ["Cúcuta", "Ocaña", "Pamplona", "Villa del Rosario"],
+  "Putumayo": ["Mocoa", "Orito", "Puerto Asís"],
+  "Quindío": ["Armenia", "Calarcá", "Montenegro", "Quimbaya"],
+  "Risaralda": ["Pereira", "Dosquebradas", "Santa Rosa de Cabal"],
+  "San Andrés y Providencia": ["San Andrés", "Providencia"],
+  "Santander": ["Bucaramanga", "Floridablanca", "Girón", "Piedecuesta", "Barrancabermeja", "San Gil"],
+  "Sucre": ["Sincelejo", "Corozal", "San Marcos"],
+  "Tolima": ["Ibagué", "Espinal", "Melgar", "Mariquita", "Líbano"],
+  "Valle del Cauca": ["Cali", "Buenaventura", "Palmira", "Tuluá", "Yumbo", "Buga", "Cartago"],
+  "Vaupés": ["Mitú"],
+  "Vichada": ["Puerto Carreño"]
+};
+
 const agentModule = {
   currentClient: null,
 
@@ -72,6 +107,7 @@ const agentModule = {
 
     this.bindEvents();
     await this.updateAgentHeader();
+    this.initGeography();
     this.initCalculator();
 
     // Geolocalización del agente (inicial y periódico cada 5 min)
@@ -562,9 +598,12 @@ const agentModule = {
     const cedula = document.getElementById('new-client-cedula').value.trim();
     const phone = document.getElementById('new-client-phone').value.trim();
     const email = document.getElementById('new-client-email').value.trim();
-    const city = document.getElementById('new-client-city').value;
+    const department = document.getElementById('new-client-department').value;
+    const cityVal = document.getElementById('new-client-city').value;
+    const city = department ? `${department} - ${cityVal}` : cityVal;
     const zone = document.getElementById('new-client-zone').value.trim();
-    const debt = parseFloat(document.getElementById('new-client-debt').value);
+    const debtRaw = document.getElementById('new-client-debt').value.replace(/\./g, '');
+    const debt = parseFloat(debtRaw) || 0;
     const installments = parseInt(document.getElementById('new-client-installments').value);
 
     try {
@@ -647,6 +686,34 @@ const agentModule = {
     );
   },
 
+  initGeography() {
+    const deptSelect = document.getElementById('new-client-department');
+    const citySelect = document.getElementById('new-client-city');
+    if (!deptSelect || !citySelect) return;
+
+    // Llenar departamentos
+    deptSelect.innerHTML = '<option value="" disabled selected>Seleccione Departamento...</option>';
+    Object.keys(COLOMBIA_GEOGRAPHY).sort().forEach(dept => {
+      const opt = document.createElement('option');
+      opt.value = dept;
+      opt.textContent = dept;
+      deptSelect.appendChild(opt);
+    });
+
+    // Llenar ciudades cuando cambie departamento
+    deptSelect.addEventListener('change', () => {
+      const selectedDept = deptSelect.value;
+      citySelect.innerHTML = '<option value="" disabled selected>Seleccione Municipio / Ciudad...</option>';
+      const cities = COLOMBIA_GEOGRAPHY[selectedDept] || [];
+      cities.sort().forEach(city => {
+        const opt = document.createElement('option');
+        opt.value = city;
+        opt.textContent = city;
+        citySelect.appendChild(opt);
+      });
+    });
+  },
+
   initCalculator() {
     const capitalInput = document.getElementById('new-client-capital');
     const interestInput = document.getElementById('new-client-interest-percent');
@@ -656,19 +723,29 @@ const agentModule = {
 
     if (!capitalInput || !interestInput || !debtInput || !installmentsInput || !installmentValInput) return;
 
+    const formatNumber = (num) => {
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    };
+
     const calculate = () => {
-      const capital = parseFloat(capitalInput.value) || 0;
+      const capitalRaw = capitalInput.value.replace(/\./g, '');
+      const capital = parseFloat(capitalRaw) || 0;
       const interest = parseFloat(interestInput.value) || 0;
       const installments = parseInt(installmentsInput.value) || 1;
 
       const totalDebt = Math.round(capital + (capital * (interest / 100)));
       const installmentVal = Math.round(totalDebt / installments);
 
-      debtInput.value = totalDebt;
-      installmentValInput.value = installmentVal;
+      debtInput.value = totalDebt ? formatNumber(totalDebt) : "";
+      installmentValInput.value = installmentVal ? formatNumber(installmentVal) : "";
     };
 
-    capitalInput.addEventListener('input', calculate);
+    capitalInput.addEventListener('input', (e) => {
+      let val = e.target.value.replace(/\D/g, '');
+      e.target.value = val ? formatNumber(val) : '';
+      calculate();
+    });
+
     interestInput.addEventListener('input', calculate);
     installmentsInput.addEventListener('input', calculate);
   },

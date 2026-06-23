@@ -530,23 +530,28 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
                   <div class="form-group">
-                    <label for="new-client-city">Ciudad</label>
-                    <select id="new-client-city" required>
-                      <option value="Bogotá" selected>Bogotá</option>
-                      <option value="Medellín">Medellín</option>
-                      <option value="Cali">Cali</option>
+                    <label for="new-client-department">Departamento</label>
+                    <select id="new-client-department" required>
+                      <option value="" disabled selected>Seleccione Departamento...</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <label for="new-client-zone">Zona / Barrio</label>
-                    <input type="text" id="new-client-zone" placeholder="Ej. Chapinero" required>
+                    <label for="new-client-city">Municipio / Ciudad</label>
+                    <select id="new-client-city" required>
+                      <option value="" disabled selected>Seleccione...</option>
+                    </select>
                   </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="new-client-zone">Zona / Barrio</label>
+                  <input type="text" id="new-client-zone" placeholder="Ej. Chapinero" required>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
                   <div class="form-group">
                     <label for="new-client-capital">Capital Prestado</label>
-                    <input type="number" id="new-client-capital" placeholder="Ej. 300000" required min="1000">
+                    <input type="text" id="new-client-capital" placeholder="Ej. 300.000" required>
                   </div>
                   <div class="form-group">
                     <label for="new-client-interest-percent">Interés (%)</label>
@@ -556,7 +561,7 @@
 
                 <div class="form-group">
                   <label for="new-client-debt">Total a Recaudar</label>
-                  <input type="number" id="new-client-debt" readonly style="background-color: var(--bg-secondary); color: var(--accent); font-weight: bold;" placeholder="Calculado automáticamente">
+                  <input type="text" id="new-client-debt" readonly style="background-color: var(--bg-secondary); color: var(--accent); font-weight: bold;" placeholder="Calculado automáticamente">
                 </div>
 
                 <div class="form-group">
@@ -566,7 +571,7 @@
 
                 <div class="form-group">
                   <label for="new-client-installment-val">Valor de la Cuota</label>
-                  <input type="number" id="new-client-installment-val" readonly style="background-color: var(--bg-secondary); color: var(--color-verde); font-weight: bold;" placeholder="Calculado automáticamente">
+                  <input type="text" id="new-client-installment-val" readonly style="background-color: var(--bg-secondary); color: var(--color-verde); font-weight: bold;" placeholder="Calculado automáticamente">
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.6rem;">
