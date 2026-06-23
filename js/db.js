@@ -348,20 +348,28 @@ const db = {
   },
 
   async saveClient(client) {
-    const supabase = await initSupabase();
-    const supId = this.getSupervisorId();
-    if (supId) {
-      client.supervisor_id = supId;
+    console.log('[DEBUG DB] saveClient - Preparando inserción de cliente en Supabase:', client);
+    try {
+      const supabase = await initSupabase();
+      const supId = this.getSupervisorId();
+      if (supId) {
+        client.supervisor_id = supId;
+      }
+      console.log('[DEBUG DB] saveClient - Conectando a Supabase e insertando...');
+      const { data, error } = await supabase
+        .from('clients')
+        .insert([client])
+        .select();
+      if (error) {
+        console.error("[DEBUG DB ERROR] Error devuelto por Supabase al registrar cliente:", error);
+        throw error;
+      }
+      console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
+      return data ? data[0] : client;
+    } catch (err) {
+      console.error("[DEBUG DB ERROR] Excepción atrapada en saveClient:", err);
+      throw err;
     }
-    const { data, error } = await supabase
-      .from('clients')
-      .insert([client])
-      .select();
-    if (error) {
-      console.error("Error al guardar cliente en Supabase:", error);
-      throw error;
-    }
-    return data ? data[0] : client;
   },
 
   async updateClientOutstanding(cedula, amountPaid) {

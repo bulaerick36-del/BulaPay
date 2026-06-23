@@ -48,7 +48,16 @@ module.exports = async (req, res) => {
     "Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado haciendo clic en el siguiente enlace:<br><br>" +
     "<a href=\"" + appUrl + "\" style=\"background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;\">Ver mi Cartón Digital</a>";
 
+  console.log('[DEBUG BACKEND] Preparando envío de email a MailerSend.');
+  console.log('[DEBUG BACKEND] Configuración:', {
+    hasApiKey: !!apiKey,
+    toEmail: clientData.email,
+    toName: clientData.name,
+    appUrl: appUrl
+  });
+
   try {
+    console.log('[DEBUG BACKEND] Iniciando fetch a MailerSend API...');
     const response = await fetch('https://api.mailersend.com/v1/email', {
       method: 'POST',
       headers: {
@@ -71,15 +80,18 @@ module.exports = async (req, res) => {
       })
     });
 
+    console.log('[DEBUG BACKEND] MailerSend status code devuelto:', response.status);
+
     if (response.ok) {
+      console.log('[DEBUG BACKEND] Envío exitoso. Retornando 200.');
       res.status(200).json({ success: true });
     } else {
       const errorText = await response.text();
-      console.error('MailerSend Response Error:', errorText);
+      console.error('[DEBUG BACKEND ERROR] MailerSend Response Error:', errorText);
       res.status(response.status).json({ error: errorText });
     }
   } catch (err) {
-    console.error('Fetch to MailerSend failed:', err);
-    res.status(500).json({ error: err.message });
+    console.error('[DEBUG BACKEND ERROR] Excepción al enviar por MailerSend:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 };

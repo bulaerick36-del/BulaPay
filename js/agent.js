@@ -624,10 +624,16 @@ const agentModule = {
     const debt = parseFloat(debtRaw) || 0;
     const installments = parseInt(document.getElementById('new-client-installments').value);
 
+    console.log('[DEBUG] Intentando registrar nuevo cliente. Datos del formulario:', {
+      name, cedula, phone, email, department, cityVal, city, zone, debt, installments
+    });
+
     try {
+      console.log('[DEBUG] Dentro del bloque try de registerNewClient. Verificando cédula existente...');
       // Validar existencia
       const existing = await window.BulaPayDB.getClientByCedula(cedula);
       if (existing) {
+        console.warn('[DEBUG] Cédula ya existente registrada:', existing);
         alert('❌ Ya existe un cliente registrado con esta Cédula.');
         return;
       }
@@ -650,11 +656,15 @@ const agentModule = {
         routeId
       };
 
+      console.log('[DEBUG] Objeto cliente a guardar:', newClient);
+
       // Guardar
       await window.BulaPayDB.saveClient(newClient);
       this.currentClient = newClient;
+      console.log('[DEBUG] Cliente guardado exitosamente en base de datos. currentClient:', this.currentClient);
 
       // Envío de email de bienvenida (Resend placeholder)
+      console.log('[DEBUG] Llamando a sendWelcomeEmail para:', newClient.email);
       this.sendWelcomeEmail(newClient);
 
       // Resetear formulario
@@ -663,8 +673,12 @@ const agentModule = {
       // Mostrar modal simulador WhatsApp
       this.showWhatsAppMockup(newClient);
     } catch (err) {
-      console.error(err);
-      alert('❌ Error al registrar el cliente.');
+      console.error('[DEBUG ERROR] Error atrapado al registrar cliente en agent.js:', err);
+      if (err && typeof err === 'object') {
+        console.error('[DEBUG ERROR] Detalles del error (claves):', Object.keys(err));
+        console.error('[DEBUG ERROR] Error stringificado:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      }
+      alert('❌ Error al registrar el cliente. Detalles técnicos en la consola.');
     }
   },
 
@@ -769,7 +783,9 @@ const agentModule = {
   },
 
   async sendWelcomeEmail(clientData) {
+    console.log('[DEBUG] sendWelcomeEmail - Preparando fetch a /api/send-email con body:', { clientData });
     try {
+      console.log('[DEBUG] sendWelcomeEmail - Iniciando fetch...');
       const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: {
@@ -778,15 +794,18 @@ const agentModule = {
         body: JSON.stringify({ clientData })
       });
 
+      console.log('[DEBUG] sendWelcomeEmail - Respuesta del servidor recibida. Status:', response.status, 'OK:', response.ok);
+
       if (response.ok) {
+        console.log('[DEBUG] sendWelcomeEmail - Correo enviado exitosamente');
         alert('✅ Correo enviado exitosamente a ' + clientData.email);
       } else {
         const errorText = await response.text();
-        console.error('Error del endpoint /api/send-email:', errorText);
+        console.error('[DEBUG ERROR] Error en respuesta de /api/send-email:', errorText);
         alert('❌ Hubo un error enviando el correo.');
       }
     } catch (err) {
-      console.error('Error al realizar fetch al backend /api/send-email:', err);
+      console.error('[DEBUG ERROR] Error atrapado al enviar correo en sendWelcomeEmail:', err);
       alert('❌ Hubo un error enviando el correo.');
     }
   },
