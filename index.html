@@ -365,6 +365,7 @@
             <!-- Pestañas internas de la terminal del agente -->
             <div class="agent-tabs">
               <button class="agent-tab-btn active" id="tab-agent-collect">Cobrar Cuota</button>
+              <button class="agent-tab-btn" id="tab-agent-history">Verificar Historial</button>
               <button class="agent-tab-btn" id="tab-agent-register">Registrar Cliente</button>
             </div>
 
@@ -440,6 +441,61 @@
               <div id="agent-search-placeholder" style="text-align: center; padding: 2rem 1rem; color: var(--text-muted);">
                 <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem;">💳</span>
                 Busca una Cédula de cliente para evaluar su nivel de riesgo y registrar pagos.
+              </div>
+
+            </div>
+
+            <!-- PESTAÑA VERIFICAR HISTORIAL / CENTRAL DE RIESGOS -->
+            <div id="panel-agent-history" style="display: none;">
+              
+              <!-- Buscador de Cédula de Historial -->
+              <div class="search-box">
+                <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">
+                  Evaluar Riesgo por Cédula del Cliente
+                </label>
+                <div class="search-input-wrapper">
+                  <input type="number" id="agent-history-cedula" placeholder="Ingresar Cédula (Ej. 12345, 67890, 999)">
+                  <button type="button" class="btn-search-icon" id="btn-agent-history-search">🔍</button>
+                </div>
+              </div>
+
+              <!-- Contenedor del Semáforo y Detalles de Historial -->
+              <div class="client-result-container" id="agent-history-results" style="display: none;">
+                
+                <!-- Encabezado Semáforo -->
+                <div class="traffic-light-header" id="history-traffic-light">
+                  <span id="history-risk-status">Calificación de Riesgo</span>
+                  <span class="light-dot" id="history-risk-dot"></span>
+                </div>
+
+                <!-- Detalles de cuenta/historial del cliente -->
+                <div class="client-detail-card">
+                  <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-primary);" id="history-client-name">-</h4>
+                  
+                  <div class="client-detail-row">
+                    <span class="client-detail-label">Cédula:</span>
+                    <span class="client-detail-val" id="history-client-cedula-val">00000</span>
+                  </div>
+                  <div class="client-detail-row">
+                    <span class="client-detail-label">Calificación:</span>
+                    <span class="client-detail-val" id="history-client-risk-label" style="font-weight: 700;">-</span>
+                  </div>
+                  <div class="client-detail-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+                    <span class="client-detail-label">Nota de Historial:</span>
+                    <span class="client-detail-val" id="history-client-note" style="font-style: italic; color: var(--text-secondary);">Sin datos.</span>
+                  </div>
+                </div>
+
+                <!-- Alerta de Créditos Activos Globales -->
+                <div class="risk-alert-box" id="history-active-credits-alert" style="display: none;">
+                  <!-- Contenido dinámico -->
+                </div>
+              </div>
+
+              <!-- Mensaje por defecto cuando no hay búsqueda -->
+              <div id="agent-history-placeholder" style="text-align: center; padding: 2rem 1rem; color: var(--text-muted);">
+                <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem;">🚦</span>
+                Consulta una Cédula de cliente para evaluar su nivel de riesgo financiero y créditos activos.
               </div>
 
             </div>
