@@ -22,6 +22,7 @@ const agentModule = {
     this.btnHistorySearch = document.getElementById('btn-agent-history-search');
     this.historyPlaceholder = document.getElementById('agent-history-placeholder');
     this.historyResults = document.getElementById('agent-history-results');
+    this.historyError = document.getElementById('agent-history-error');
 
     // Detalles Cliente Historial
     this.historyTrafficLight = document.getElementById('history-traffic-light');
@@ -158,6 +159,10 @@ const agentModule = {
     } else if (tab === 'history') {
       this.tabHistory.classList.add('active');
       this.panelHistory.style.display = 'block';
+      this.historyResults.style.display = 'none';
+      this.historyError.style.display = 'none';
+      this.historyPlaceholder.style.display = 'block';
+      this.inputHistoryCedula.value = '';
     } else if (tab === 'register') {
       this.tabRegister.classList.add('active');
       this.panelRegister.style.display = 'block';
@@ -172,6 +177,7 @@ const agentModule = {
 
     // Estado de Cargando...
     this.historyPlaceholder.style.display = 'none';
+    this.historyError.style.display = 'none';
     this.historyResults.style.display = 'block';
     this.historyClientCedulaVal.textContent = cedula;
     this.historyClientName.textContent = 'Cargando...';
@@ -186,18 +192,15 @@ const agentModule = {
       const client = await window.BulaPayDB.getGlobalClientByCedula(cedula);
       
       if (!client) {
-        // Cliente NO existe: Mostrar alerta o tarjeta verde indicando: "Cliente no encontrado en la base de datos. Es un cliente nuevo (Sin historial)"
-        this.historyTrafficLight.className = 'traffic-light-header verde';
-        this.historyRiskStatus.textContent = '🟢 VERDE (Cliente Nuevo)';
-        this.historyClientName.textContent = 'Cliente Nuevo';
-        this.historyClientRiskLabel.textContent = 'VERDE (Sin Historial)';
-        this.historyClientRiskLabel.style.color = 'var(--color-verde)';
-        this.historyClientNote.textContent = 'Cliente no encontrado en la base de datos BulaPay. Es un cliente nuevo sin historial financiero.';
-        this.historyActiveCreditsAlert.style.display = 'none';
+        // Cliente NO existe: Ocultar resultados y mostrar error visual rojo
+        this.historyResults.style.display = 'none';
+        this.historyError.style.display = 'block';
         return;
       }
 
       // Cliente SÍ existe: Mostrar Nombre Real
+      this.historyResults.style.display = 'block';
+      this.historyError.style.display = 'none';
       this.historyClientName.textContent = client.name;
 
       const hasOutstanding = Number(client.outstanding) > 0;
@@ -247,6 +250,7 @@ const agentModule = {
       alert('❌ Error al consultar la central de riesgos.');
       this.historyPlaceholder.style.display = 'block';
       this.historyResults.style.display = 'none';
+      this.historyError.style.display = 'none';
     }
   },
 

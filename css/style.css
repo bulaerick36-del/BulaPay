@@ -56,6 +56,8 @@
 .mx-auto { margin-left: auto !important; margin-right: auto !important; }
 .mb-4 { margin-bottom: 1rem !important; }
 .d-block { display: block !important; }
+.text-red-600 { color: #dc2626 !important; }
+.bg-red-100 { background-color: #fee2e2 !important; }
 
 
 /* Reset de Estilos */
