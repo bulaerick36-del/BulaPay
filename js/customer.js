@@ -16,6 +16,8 @@ const customerModule = {
     // Contenedores del estado de cuenta
     this.statementHeader = document.getElementById('customer-statement-header');
     this.statementLedger = document.getElementById('customer-statement-ledger');
+    this.adTop = document.getElementById('customer-ad-top');
+    this.adBottom = document.getElementById('customer-ad-bottom');
 
     // Elementos de resumen cliente
     this.custName = document.getElementById('cust-client-name');
@@ -35,6 +37,8 @@ const customerModule = {
       if (this.inputDocNumber) this.inputDocNumber.value = '';
       if (this.statementHeader) this.statementHeader.style.display = 'none';
       if (this.statementLedger) this.statementLedger.style.display = 'none';
+      if (this.adTop) this.adTop.style.display = 'none';
+      if (this.adBottom) this.adBottom.style.display = 'none';
     }
     
     await this.renderAgentsDirectory();
@@ -66,6 +70,8 @@ const customerModule = {
         alert('❌ Cliente no registrado en el sistema BulaPay.');
         if (this.statementHeader) this.statementHeader.style.display = 'none';
         if (this.statementLedger) this.statementLedger.style.display = 'none';
+        if (this.adTop) this.adTop.style.display = 'none';
+        if (this.adBottom) this.adBottom.style.display = 'none';
         return;
       }
 
@@ -100,12 +106,18 @@ const customerModule = {
       // Renderizar Cartón de Pagos
       this.renderLedgerGrid(client, payments);
 
-      // Mostrar el cartón y el resumen
+      // Mostrar el cartón, resumen y publicidad
       if (this.statementHeader) this.statementHeader.style.display = 'block';
       if (this.statementLedger) this.statementLedger.style.display = 'block';
+      if (this.adTop) this.adTop.style.display = 'block';
+      if (this.adBottom) this.adBottom.style.display = 'block';
     } catch (err) {
       console.error(err);
       alert('❌ Error al cargar el estado de cuenta del cliente.');
+      if (this.statementHeader) this.statementHeader.style.display = 'none';
+      if (this.statementLedger) this.statementLedger.style.display = 'none';
+      if (this.adTop) this.adTop.style.display = 'none';
+      if (this.adBottom) this.adBottom.style.display = 'none';
     }
   },
 
@@ -113,45 +125,75 @@ const customerModule = {
     if (!this.ledgerGrid) return;
     this.ledgerGrid.innerHTML = '';
 
-    const totalSlots = client.installmentsCount;
+    const totalSlots = client.installmentsCount || 5;
+    const installmentAmount = client.installmentAmount || 100000;
     
+    // Mapear los números de cuotas que ya han sido pagadas
+    const paidInstallments = payments
+      .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0);
+
+    // Ajustar fecha de creación del crédito para estimar los atrasos
+    let creditDate = new Date(client.created_at || Date.now());
+    if (payments.length > 0) {
+      const earliestPayDate = new Date(Math.min(...payments.map(p => new Date(p.date))));
+      if (earliestPayDate < creditDate) {
+        creditDate = new Date(earliestPayDate.getTime() - (7 * 24 * 60 * 60 * 1000));
+      }
+    }
+
+    const today = new Date();
+    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
     for (let i = 1; i <= totalSlots; i++) {
       const payment = payments.find(p => p.installmentNumber === i);
       const slotCard = document.createElement('div');
       slotCard.className = 'ledger-slot-card';
+      
+      // Regla estricta: Bloquear interacción (Solo Lectura)
+      slotCard.style.pointerEvents = 'none';
 
-      if (payment) {
-        const isAbonado = payment.status === 'Abonado';
-        const isNoPago = payment.status === 'No Pago';
-        
-        if (isNoPago) {
-          slotCard.classList.add('nopago');
-          slotCard.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-          slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
-        } else {
-          slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
-        }
-        
+      // Calcular fecha de vencimiento (una cuota por semana)
+      const dueDate = new Date(creditDate);
+      dueDate.setDate(creditDate.getDate() + (i * 7));
+      const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      
+      const isPaid = paidInstallments.some(p => p.installmentNumber === i);
+      
+      if (isPaid) {
+        slotCard.classList.add('paid');
+        slotCard.style.backgroundColor = 'var(--color-verde-bg)';
+        slotCard.style.borderColor = 'rgba(16, 185, 129, 0.4)';
         slotCard.innerHTML = `
-          <span class="slot-num">CUOTA ${i}</span>
-          <span class="slot-amount">$${Number(payment.amount).toLocaleString('es-CO')}</span>
-          <span class="slot-date">${payment.date}</span>
-          <span class="slot-signature">${payment.signature}</span>
-          <div class="slot-stamp">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
+          <span class="slot-num" style="color: var(--color-verde);">CUOTA ${i}</span>
+          <span class="slot-amount" style="color: var(--color-verde); font-weight: bold;">$${Number(payment ? payment.amount : installmentAmount).toLocaleString('es-CO')}</span>
+          <span class="slot-date" style="color: var(--text-secondary);">${payment ? payment.date : ''}</span>
+          <span class="slot-signature" style="font-size: 0.5rem; font-family: monospace; color: var(--text-muted);">${payment ? payment.signature : 'Firmado'}</span>
+          <div class="slot-stamp">✔</div>
         `;
-
-        slotCard.addEventListener('click', () => {
-          window.showBulaPayReceipt(payment, client);
-        });
       } else {
-        slotCard.innerHTML = `
-          <span class="slot-num">CUOTA ${i}</span>
-          <span class="slot-amount" style="color: var(--text-muted);">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
-          <span class="slot-empty-text">Pendiente</span>
-          <span class="slot-signature" style="color: var(--text-muted); font-size: 0.5rem;">Sello Digital BulaPay</span>
-        `;
+        const isOverdue = dueDateOnly < todayDateOnly;
+        if (isOverdue) {
+          slotCard.classList.add('nopago');
+          slotCard.style.backgroundColor = 'var(--color-rojo-bg)';
+          slotCard.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+          slotCard.innerHTML = `
+            <span class="slot-num" style="color: var(--color-rojo);">CUOTA ${i}</span>
+            <span class="slot-amount" style="color: var(--color-rojo); font-weight: bold;">$${Number(installmentAmount).toLocaleString('es-CO')}</span>
+            <span class="slot-empty-text" style="color: var(--color-rojo);">⚠️ Atrasado</span>
+            <span class="slot-signature" style="color: var(--text-muted); font-size: 0.5rem;">Venció: ${dueDate.toISOString().split('T')[0]}</span>
+          `;
+        } else {
+          slotCard.style.backgroundColor = 'var(--bg-secondary)';
+          slotCard.style.borderColor = 'var(--border-color)';
+          slotCard.innerHTML = `
+            <span class="slot-num" style="color: var(--text-secondary);">CUOTA ${i}</span>
+            <span class="slot-amount" style="color: var(--text-primary); font-weight: bold;">$${Number(installmentAmount).toLocaleString('es-CO')}</span>
+            <span class="slot-empty-text" style="color: var(--text-muted);">Pendiente</span>
+            <span class="slot-signature" style="color: var(--text-muted); font-size: 0.5rem;">Por vencer</span>
+          `;
+        }
       }
-
+      
       this.ledgerGrid.appendChild(slotCard);
     }
   },

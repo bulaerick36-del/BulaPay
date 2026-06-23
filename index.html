@@ -543,14 +543,30 @@
                   </div>
                 </div>
 
-                <div class="form-group">
-                  <label for="new-client-debt">Monto de la Venta (Crédito Total)</label>
-                  <input type="number" id="new-client-debt" placeholder="Ej. 500000" required min="1000">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                  <div class="form-group">
+                    <label for="new-client-capital">Capital Prestado</label>
+                    <input type="number" id="new-client-capital" placeholder="Ej. 300000" required min="1000">
+                  </div>
+                  <div class="form-group">
+                    <label for="new-client-interest-percent">Interés (%)</label>
+                    <input type="number" id="new-client-interest-percent" placeholder="Ej. 20" required min="0" max="100" value="20">
+                  </div>
                 </div>
 
                 <div class="form-group">
-                  <label for="new-client-installments">Número de Cuotas acordadas</label>
-                  <input type="number" id="new-client-installments" placeholder="Ej. 5" required min="1">
+                  <label for="new-client-debt">Total a Recaudar</label>
+                  <input type="number" id="new-client-debt" readonly style="background-color: var(--bg-secondary); color: var(--accent); font-weight: bold;" placeholder="Calculado automáticamente">
+                </div>
+
+                <div class="form-group">
+                  <label for="new-client-installments">Número de Cuotas</label>
+                  <input type="number" id="new-client-installments" placeholder="Ej. 30" required min="1">
+                </div>
+
+                <div class="form-group">
+                  <label for="new-client-installment-val">Valor de la Cuota</label>
+                  <input type="number" id="new-client-installment-val" readonly style="background-color: var(--bg-secondary); color: var(--color-verde); font-weight: bold;" placeholder="Calculado automáticamente">
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.6rem;">
@@ -709,6 +725,11 @@
           </div>
         </div>
 
+        <!-- Espacio Publicitario Disponible (Arriba del Cartón) -->
+        <div class="ad-banner-placeholder" id="customer-ad-top" style="display: none;">
+          Espacio Publicitario Disponible
+        </div>
+
         <!-- Cartón de Pagos Digital (Oculto por defecto) -->
         <div class="card digital-ledger-container" id="customer-statement-ledger" style="display: none; margin-bottom: 2rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
@@ -728,10 +749,15 @@
           </div>
         </div>
 
+        <!-- Espacio Publicitario Disponible (Abajo del Cartón) -->
+        <div class="ad-banner-placeholder" id="customer-ad-bottom" style="display: none;">
+          Espacio Publicitario Disponible
+        </div>
+
         <!-- Directorio de Gestores de Cartera (Sección B) -->
         <div class="card directory-section">
           <h3>
-            <span>📍</span> Encuentra un Gestor en tu Zona
+            <span>📍</span> Solicitar Nuevo Crédito
           </h3>
           <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
             ¿Necesita gestionar un pago, solicitar un nuevo crédito o comunicarse con un supervisor? Filtre los gestores de BulaPay autorizados que operan en su área.

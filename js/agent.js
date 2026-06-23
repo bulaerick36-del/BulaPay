@@ -72,6 +72,7 @@ const agentModule = {
 
     this.bindEvents();
     await this.updateAgentHeader();
+    this.initCalculator();
 
     // Geolocalización del agente (inicial y periódico cada 5 min)
     this.captureAndSendLocation();
@@ -136,8 +137,17 @@ const agentModule = {
     this.btnOpenLinkWa.addEventListener('click', () => {
       if (this.currentClient) {
         this.shareModal.classList.remove('active');
-        // Navegar a la vista del cliente dentro de la SPA
-        window.app.router.navigate('customer', this.currentClient.cedula);
+        
+        // URL dinámica del portal del cliente
+        const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${this.currentClient.cedula}`;
+        
+        // Mensaje pre-armado
+        const message = `👋 ¡Hola ${this.currentClient.name}! Le damos la bienvenida a BulaPay. Hemos registrado su venta a plazos. Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado aquí: ${appUrl}`;
+        
+        // Enlace click-to-chat de WhatsApp
+        const waUrl = `https://wa.me/${this.currentClient.phone.replace(/[\s+]/g, '')}?text=${encodeURIComponent(message)}`;
+        
+        window.open(waUrl, '_blank');
       }
     });
   },
@@ -587,6 +597,9 @@ const agentModule = {
       await window.BulaPayDB.saveClient(newClient);
       this.currentClient = newClient;
 
+      // Envío de email de bienvenida (Resend placeholder)
+      this.sendWelcomeEmail(newClient);
+
       // Resetear formulario
       this.formRegisterClient.reset();
 
@@ -632,6 +645,37 @@ const agentModule = {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  },
+
+  initCalculator() {
+    const capitalInput = document.getElementById('new-client-capital');
+    const interestInput = document.getElementById('new-client-interest-percent');
+    const debtInput = document.getElementById('new-client-debt');
+    const installmentsInput = document.getElementById('new-client-installments');
+    const installmentValInput = document.getElementById('new-client-installment-val');
+
+    if (!capitalInput || !interestInput || !debtInput || !installmentsInput || !installmentValInput) return;
+
+    const calculate = () => {
+      const capital = parseFloat(capitalInput.value) || 0;
+      const interest = parseFloat(interestInput.value) || 0;
+      const installments = parseInt(installmentsInput.value) || 1;
+
+      const totalDebt = Math.round(capital + (capital * (interest / 100)));
+      const installmentVal = Math.round(totalDebt / installments);
+
+      debtInput.value = totalDebt;
+      installmentValInput.value = installmentVal;
+    };
+
+    capitalInput.addEventListener('input', calculate);
+    interestInput.addEventListener('input', calculate);
+    installmentsInput.addEventListener('input', calculate);
+  },
+
+  sendWelcomeEmail(clientData) {
+    console.log("[EMAIL SENDER PLACEHOLDER - RESEND INTEGRATION FUTURE]");
+    console.log("Datos de bienvenida del cliente:", clientData);
   },
 
   destroy() {
