@@ -801,7 +801,13 @@ const agentModule = {
         alert('✅ Correo enviado exitosamente a ' + clientData.email);
       } else {
         const errorText = await response.text();
-        console.error('[DEBUG ERROR] Error en respuesta de /api/send-email:', errorText);
+        console.error('[DEBUG ERROR] Error en respuesta de /api/send-email (Raw):', errorText);
+        try {
+          const errorJson = JSON.parse(errorText);
+          console.error('[DEBUG ERROR] Error en respuesta de /api/send-email (Parsed JSON):', errorJson);
+        } catch (e) {
+          // No es JSON válido o falla el parseo
+        }
         alert('❌ Hubo un error enviando el correo.');
       }
     } catch (err) {

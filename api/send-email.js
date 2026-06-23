@@ -87,11 +87,24 @@ module.exports = async (req, res) => {
       res.status(200).json({ success: true });
     } else {
       const errorText = await response.text();
-      console.error('[DEBUG BACKEND ERROR] MailerSend Response Error:', errorText);
-      res.status(response.status).json({ error: errorText });
+      console.error('[DEBUG BACKEND ERROR] MailerSend Response Error (Raw):', errorText);
+      try {
+        const errorJson = JSON.parse(errorText);
+        console.error('[DEBUG BACKEND ERROR] MailerSend Response Error (Parsed JSON):', errorJson);
+        res.status(response.status).json({ error: errorJson });
+      } catch (e) {
+        res.status(response.status).json({ error: errorText });
+      }
     }
   } catch (err) {
     console.error('[DEBUG BACKEND ERROR] Excepción al enviar por MailerSend:', err);
-    res.status(500).json({ error: err.message, stack: err.stack });
+    if (err.response && err.response.data) {
+      console.error('[DEBUG BACKEND ERROR] err.response.data:', err.response.data);
+    }
+    res.status(500).json({ 
+      error: err.message, 
+      stack: err.stack,
+      responseData: err.response?.data || null
+    });
   }
 };
