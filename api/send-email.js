@@ -1,4 +1,4 @@
-// Vercel Serverless Function (servido en /api/send-email)
+// Vercel Serverless Function (servido en /api/send-email) - Comentario para disparar redeploy en Vercel con nuevas variables de entorno
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');

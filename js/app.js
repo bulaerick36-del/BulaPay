@@ -220,15 +220,63 @@ const app = {
 
   startPhoneClock() {
     const clockElement = document.getElementById('phone-time');
-    if (clockElement) {
-      const updateClock = () => {
-        const now = new Date();
+    const batteryElement = document.getElementById('phone-battery');
+    const routeStatusElement = document.getElementById('phone-route-status');
+
+    const updateClockAndTime = () => {
+      const now = new Date();
+      
+      // 1. Actualizar Reloj
+      if (clockElement) {
         const hrs = String(now.getHours()).padStart(2, '0');
         const mins = String(now.getMinutes()).padStart(2, '0');
         clockElement.textContent = `${hrs}:${mins}`;
-      };
-      updateClock();
-      setInterval(updateClock, 60000); // Actualizar cada minuto
+      }
+
+      // 2. Actualizar Temporizador de Ruta (06:00 AM a 06:00 PM)
+      if (routeStatusElement) {
+        const openingTime = new Date(now);
+        openingTime.setHours(6, 0, 0, 0);
+
+        const closingTime = new Date(now);
+        closingTime.setHours(18, 0, 0, 0);
+
+        if (now >= openingTime && now < closingTime) {
+          const diffMs = closingTime - now;
+          const diffMinutesTotal = Math.ceil(diffMs / 60000);
+          const hours = Math.floor(diffMinutesTotal / 60);
+          const minutes = diffMinutesTotal % 60;
+          routeStatusElement.textContent = `Cierra en: ${hours}h ${minutes}m`;
+          routeStatusElement.style.color = 'var(--color-verde)';
+        } else {
+          routeStatusElement.textContent = 'Ruta Cerrada';
+          routeStatusElement.style.color = 'var(--color-rojo)';
+        }
+      }
+    };
+
+    // Inicializar reloj y temporizador de inmediato y actualizar cada minuto
+    updateClockAndTime();
+    setInterval(updateClockAndTime, 60000);
+
+    // 3. Obtener y escuchar nivel de batería en tiempo real
+    if (batteryElement) {
+      if (navigator.getBattery) {
+        navigator.getBattery().then(battery => {
+          const updateBattery = () => {
+            const level = Math.round(battery.level * 100);
+            batteryElement.textContent = `🔋 ${level}%`;
+          };
+          updateBattery();
+          // Registrar listener del evento de cambio de nivel
+          battery.addEventListener('levelchange', updateBattery);
+        }).catch(err => {
+          console.warn("Fallo al acceder a la API de batería:", err);
+          batteryElement.textContent = '🔋 --%';
+        });
+      } else {
+        batteryElement.textContent = '🔋 --%';
+      }
     }
   }
 };
