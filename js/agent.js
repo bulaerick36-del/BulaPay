@@ -58,7 +58,6 @@ const agentModule = {
     // Recaudo
     this.inputCollectAmount = document.getElementById('collect-amount');
     this.btnSubmitCollect = document.getElementById('btn-submit-collect');
-    this.btnSubmitNoPago = document.getElementById('btn-submit-nopago');
 
     // Registro
     this.formRegisterClient = document.getElementById('form-register-client');
@@ -108,9 +107,6 @@ const agentModule = {
 
     // Registrar Pago
     this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
-    if (this.btnSubmitNoPago) {
-      this.btnSubmitNoPago.addEventListener('click', () => this.registerNoPayment());
-    }
 
     // Cartón de Pagos
     if (this.btnOpenPaymentCard) {

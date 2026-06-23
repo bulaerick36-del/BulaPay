@@ -430,14 +430,9 @@
                     <label for="collect-amount" style="font-size: 0.7rem;">Monto Recibido</label>
                     <input type="number" id="collect-amount" placeholder="Ej. 100000" min="1">
                   </div>
-                  <div style="display: flex; gap: 0.5rem; width: 100%;">
-                    <button type="button" class="btn btn-accent" id="btn-submit-collect" style="padding: 0.5rem; flex: 1;">
-                      Confirmar Transacción
-                    </button>
-                    <button type="button" class="btn btn-danger" id="btn-submit-nopago" style="padding: 0.5rem; background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--color-rojo); flex: 1;">
-                      Registrar No Pago
-                    </button>
-                  </div>
+                  <button type="button" class="btn btn-accent" id="btn-submit-collect" style="width: 100%; padding: 0.5rem; margin-top: 0.5rem;">
+                    Confirmar Transacción
+                  </button>
                 </div>
 
               </div>
@@ -566,17 +561,7 @@
 
           </div>
 
-          <!-- Barra de navegación inferior móvil -->
-          <div style="height: 50px; border-top: 1px solid var(--border-color); background-color: var(--bg-secondary); display: flex; align-items: center; justify-content: space-around; font-size: 0.75rem; color: var(--text-secondary);">
-            <div style="display: flex; flex-direction: column; align-items: center; color: var(--accent); cursor: pointer;" onclick="agentView.switchTab('collect')">
-              <span>🔍</span>
-              <span>Buscador</span>
-            </div>
-            <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer;" onclick="agentView.switchTab('register')">
-              <span>➕</span>
-              <span>Nuevo</span>
-            </div>
-          </div>
+
 
           <!-- MODAL SIMULADO DE WHATSAPP / NOTIFICACIÓN AUTOMÁTICA -->
           <div class="overlay-modal" id="notification-share-modal">
