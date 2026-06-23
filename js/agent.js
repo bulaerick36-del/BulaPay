@@ -104,6 +104,7 @@ const agentModule = {
     this.waLinkUrl = document.getElementById('wa-link-url');
     this.btnCloseWaModal = document.getElementById('btn-close-wa-modal');
     this.btnOpenLinkWa = document.getElementById('btn-open-link-wa');
+    this.btnSendEmailWa = document.getElementById('btn-send-email-wa');
 
     this.bindEvents();
     await this.updateAgentHeader();
@@ -166,26 +167,43 @@ const agentModule = {
     });
 
     // Acciones del modal WhatsApp
-    this.btnCloseWaModal.addEventListener('click', () => {
-      this.shareModal.classList.remove('active');
-    });
-
-    this.btnOpenLinkWa.addEventListener('click', () => {
-      if (this.currentClient) {
+    if (this.btnCloseWaModal) {
+      this.btnCloseWaModal.addEventListener('click', () => {
         this.shareModal.classList.remove('active');
-        
-        // URL dinámica del portal del cliente
-        const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${this.currentClient.cedula}`;
-        
-        // Mensaje pre-armado
-        const message = `👋 ¡Hola ${this.currentClient.name}! Le damos la bienvenida a BulaPay. Hemos registrado su venta a plazos. Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado aquí: ${appUrl}`;
-        
-        // Enlace click-to-chat de WhatsApp
-        const waUrl = `https://wa.me/${this.currentClient.phone.replace(/[\s+]/g, '')}?text=${encodeURIComponent(message)}`;
-        
-        window.open(waUrl, '_blank');
-      }
-    });
+      });
+    }
+
+    if (this.btnOpenLinkWa) {
+      this.btnOpenLinkWa.addEventListener('click', () => {
+        if (this.currentClient) {
+          this.shareModal.classList.remove('active');
+          
+          // URL dinámica del portal del cliente
+          const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${this.currentClient.cedula}`;
+          
+          // Mensaje pre-armado
+          const message = `👋 ¡Hola ${this.currentClient.name}! Le damos la bienvenida a BulaPay. Hemos registrado su venta a plazos. Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado aquí: ${appUrl}`;
+          
+          // Enlace click-to-chat de WhatsApp armando la URL (https://wa.me/+57...) con el teléfono limpio
+          let rawPhone = this.currentClient.phone.replace(/[\s+]/g, '');
+          if (rawPhone.startsWith('57')) {
+            rawPhone = rawPhone.substring(2);
+          }
+          const waUrl = `https://wa.me/+57${rawPhone}?text=${encodeURIComponent(message)}`;
+          
+          window.open(waUrl, '_blank');
+        }
+      });
+    }
+
+    if (this.btnSendEmailWa) {
+      this.btnSendEmailWa.addEventListener('click', () => {
+        if (this.currentClient) {
+          this.shareModal.classList.remove('active');
+          this.sendWelcomeEmail(this.currentClient);
+        }
+      });
+    }
   },
 
   async updateAgentHeader() {
@@ -751,8 +769,28 @@ const agentModule = {
   },
 
   sendWelcomeEmail(clientData) {
+    alert(`Simulación: Correo de bienvenida enviado a ${clientData.email}`);
     console.log("[EMAIL SENDER PLACEHOLDER - RESEND INTEGRATION FUTURE]");
     console.log("Datos de bienvenida del cliente:", clientData);
+    /*
+    // Código de integración futura con Resend (Envío de correo gratuito)
+    fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer YOUR_RESEND_API_KEY',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'onboarding@resend.dev',
+        to: clientData.email,
+        subject: '¡Bienvenido a BulaPay!',
+        html: `<p>Hola ${clientData.name}, tu crédito ha sido registrado con éxito. Puedes ver tu cartón de pagos en el siguiente enlace: ${window.location.origin}?view=customer&id=${clientData.cedula}</p>`
+      })
+    })
+    .then(res => res.json())
+    .then(data => console.log('Email sent successfully:', data))
+    .catch(err => console.error('Error sending email:', err));
+    */
   },
 
   destroy() {

@@ -586,7 +586,9 @@
 
           <!-- MODAL SIMULADO DE WHATSAPP / NOTIFICACIÓN AUTOMÁTICA -->
           <div class="overlay-modal" id="notification-share-modal">
-            <div class="whatsapp-mockup">
+            <div class="whatsapp-mockup" style="position: relative;">
+              <!-- Botón X de cerrar en la esquina superior derecha -->
+              <span id="btn-close-wa-modal" style="position: absolute; top: 10px; right: 15px; font-size: 1.5rem; font-weight: bold; color: white; cursor: pointer; z-index: 10;">&times;</span>
               <!-- Encabezado Chat -->
               <div class="whatsapp-header">
                 <div class="whatsapp-avatar" id="wa-avatar">C</div>
@@ -609,12 +611,12 @@
               </div>
 
               <!-- Acciones del Modal -->
-              <div class="whatsapp-actions">
-                <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; flex: 1;" id="btn-close-wa-modal">
-                  Cerrar Simulación
+              <div class="whatsapp-actions" style="display: flex; gap: 0.5rem; padding: 0.75rem;">
+                <button class="btn" style="padding: 0.6rem; font-size: 0.85rem; flex: 1; background-color: #25D366; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.3rem;" id="btn-open-link-wa">
+                  Enviar por WhatsApp
                 </button>
-                <button class="btn btn-accent" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; flex: 1;" id="btn-open-link-wa">
-                  Abrir Enlace Público
+                <button class="btn" style="padding: 0.6rem; font-size: 0.85rem; flex: 1; background-color: #1e293b; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.3rem;" id="btn-send-email-wa">
+                  Enviar por Correo
                 </button>
               </div>
             </div>
