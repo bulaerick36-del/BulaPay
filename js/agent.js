@@ -768,29 +768,47 @@ const agentModule = {
     installmentsInput.addEventListener('input', calculate);
   },
 
-  sendWelcomeEmail(clientData) {
-    alert(`Simulación: Correo de bienvenida enviado a ${clientData.email}`);
-    console.log("[EMAIL SENDER PLACEHOLDER - RESEND INTEGRATION FUTURE]");
-    console.log("Datos de bienvenida del cliente:", clientData);
-    /*
-    // Código de integración futura con Resend (Envío de correo gratuito)
-    fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer YOUR_RESEND_API_KEY',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'onboarding@resend.dev',
-        to: clientData.email,
-        subject: '¡Bienvenido a BulaPay!',
-        html: `<p>Hola ${clientData.name}, tu crédito ha sido registrado con éxito. Puedes ver tu cartón de pagos en el siguiente enlace: ${window.location.origin}?view=customer&id=${clientData.cedula}</p>`
-      })
-    })
-    .then(res => res.json())
-    .then(data => console.log('Email sent successfully:', data))
-    .catch(err => console.error('Error sending email:', err));
-    */
+  async sendWelcomeEmail(clientData) {
+    const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${clientData.cedula}`;
+    const emailHtml = "¡Hola, " + clientData.name + "!<br><br>" +
+      "Le damos la bienvenida a BulaPay.<br><br>" +
+      "Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado haciendo clic en el siguiente enlace:<br><br>" +
+      "<a href=\"" + appUrl + "\" style=\"background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;\">Ver mi Cartón Digital</a>";
+
+    try {
+      const response = await fetch('https://api.mailersend.com/v1/email', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer mlsn.e298e4729e83708e2e038dc88f552427e1a4517b4b4c3ca082a4f6ab02981350',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: {
+            email: "MS_QpWXYt@test-65qngkdzj8jlwr12.mlsender.net",
+            name: "BulaPay"
+          },
+          to: [
+            {
+              email: clientData.email,
+              name: clientData.name
+            }
+          ],
+          subject: "Bienvenido a BulaPay - Tu Cartón Digital",
+          html: emailHtml
+        })
+      });
+
+      if (response.ok) {
+        alert('✅ Correo enviado exitosamente a ' + clientData.email);
+      } else {
+        const errorText = await response.text();
+        console.error('Error de MailerSend:', errorText);
+        alert('❌ Hubo un error enviando el correo.');
+      }
+    } catch (err) {
+      console.error('Error al realizar fetch a MailerSend:', err);
+      alert('❌ Hubo un error enviando el correo.');
+    }
   },
 
   destroy() {
