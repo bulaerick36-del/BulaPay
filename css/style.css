@@ -53,6 +53,10 @@
 .h-24 { height: 6rem !important; }
 .h-auto { height: auto !important; }
 .w-auto { width: auto !important; }
+.mx-auto { margin-left: auto !important; margin-right: auto !important; }
+.mb-4 { margin-bottom: 1rem !important; }
+.d-block { display: block !important; }
+
 
 /* Reset de Estilos */
 * {
