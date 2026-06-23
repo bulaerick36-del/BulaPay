@@ -418,6 +418,11 @@
                   </div>
                 </div>
 
+                <!-- Botón destacado Registrar Cuota -->
+                <button type="button" class="btn btn-accent" id="btn-agent-register-installment" style="width: 100%; padding: 0.75rem; font-size: 0.95rem; font-weight: 700; margin-bottom: 1.25rem;">
+                  📅 Registrar Cuota (Cartón de Pagos)
+                </button>
+
                 <!-- Formulario de Cobro -->
                 <div class="collect-money-form" id="form-collect-container">
                   <h4>Registrar Recaudo de Cuota</h4>
@@ -606,6 +611,45 @@
                   Abrir Enlace Público
                 </button>
               </div>
+            </div>
+          </div>
+
+          <!-- MODAL SIMULADO DE CARTÓN DE PAGOS -->
+          <div class="overlay-modal" id="agent-payment-card-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.85); z-index: 100;">
+            <div class="payment-card-mockup" style="background-color: var(--bg-primary); border-radius: 16px; padding: 1.25rem; width: 90%; max-height: 90%; overflow-y: auto; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+              
+              <!-- Encabezado del Cartón -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                <h4 style="font-size: 1rem; color: var(--text-primary); margin: 0;">📋 Cartón de Pagos Digital</h4>
+                <button type="button" id="btn-close-payment-card" style="background: transparent; border: none; font-size: 1.25rem; color: var(--text-secondary); cursor: pointer;">✕</button>
+              </div>
+
+              <!-- Info Cliente en Modal -->
+              <div style="background-color: var(--bg-secondary); border-radius: 8px; padding: 0.5rem 0.75rem; margin-bottom: 1rem; font-size: 0.75rem;">
+                <div><strong>Cliente:</strong> <span id="payment-card-client-name">-</span></div>
+                <div><strong>Cédula:</strong> <span id="payment-card-client-cedula">-</span></div>
+                <div><strong>Saldo Deuda:</strong> <span id="payment-card-client-outstanding">-</span></div>
+              </div>
+
+              <!-- Instrucciones / Convenciones -->
+              <div style="display: flex; justify-content: space-around; font-size: 0.65rem; margin-bottom: 1rem; padding: 0.25rem; background: rgba(255,255,255,0.03); border-radius: 6px;">
+                <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-verde); display: inline-block;"></span> Pagado</span>
+                <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-rojo); display: inline-block;"></span> Atrasado</span>
+                <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: #6c757d; display: inline-block;"></span> Pendiente</span>
+              </div>
+
+              <!-- Cuadrícula Grid del Cartón -->
+              <div id="payment-card-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
+                <!-- Dinámico en JS -->
+              </div>
+
+              <!-- Botón inferior para Registrar No Pago -->
+              <div style="display: flex; gap: 0.5rem; margin-top: auto;">
+                <button type="button" class="btn btn-secondary" id="btn-payment-card-nopago" style="padding: 0.5rem; font-size: 0.75rem; flex: 1;">
+                  🚫 Registrar No Pago General
+                </button>
+              </div>
+
             </div>
           </div>
 

@@ -34,6 +34,16 @@ const agentModule = {
     this.historyClientNote = document.getElementById('history-client-note');
     this.historyActiveCreditsAlert = document.getElementById('history-active-credits-alert');
 
+    // Cartón de Pagos Modal
+    this.btnOpenPaymentCard = document.getElementById('btn-agent-register-installment');
+    this.paymentCardModal = document.getElementById('agent-payment-card-modal');
+    this.btnClosePaymentCard = document.getElementById('btn-close-payment-card');
+    this.paymentCardGrid = document.getElementById('payment-card-grid');
+    this.paymentCardClientName = document.getElementById('payment-card-client-name');
+    this.paymentCardClientCedula = document.getElementById('payment-card-client-cedula');
+    this.paymentCardClientOutstanding = document.getElementById('payment-card-client-outstanding');
+    this.btnPaymentCardNoPago = document.getElementById('btn-payment-card-nopago');
+
     // Detalles Cliente
     this.riskHeader = document.getElementById('client-traffic-light');
     this.riskStatus = document.getElementById('client-risk-status');
@@ -100,6 +110,20 @@ const agentModule = {
     this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
     if (this.btnSubmitNoPago) {
       this.btnSubmitNoPago.addEventListener('click', () => this.registerNoPayment());
+    }
+
+    // Cartón de Pagos
+    if (this.btnOpenPaymentCard) {
+      this.btnOpenPaymentCard.addEventListener('click', () => this.openPaymentCard());
+    }
+    if (this.btnClosePaymentCard) {
+      this.btnClosePaymentCard.addEventListener('click', () => this.closePaymentCard());
+    }
+    if (this.btnPaymentCardNoPago) {
+      this.btnPaymentCardNoPago.addEventListener('click', () => {
+        this.closePaymentCard();
+        this.registerNoPayment();
+      });
     }
 
     // Registrar Cliente Nuevo
@@ -251,6 +275,133 @@ const agentModule = {
       this.historyPlaceholder.style.display = 'block';
       this.historyResults.style.display = 'none';
       this.historyError.style.display = 'none';
+    }
+  },
+
+  async openPaymentCard() {
+    if (!this.currentClient) {
+      alert('⚠️ Por favor busque un cliente primero.');
+      return;
+    }
+
+    // Rellenar datos del cliente en el modal
+    this.paymentCardClientName.textContent = this.currentClient.name;
+    this.paymentCardClientCedula.textContent = this.currentClient.cedula;
+    this.paymentCardClientOutstanding.textContent = `$${Number(this.currentClient.outstanding).toLocaleString('es-CO')}`;
+
+    // Renderizar la cuadrícula
+    await this.renderPaymentCardGrid();
+
+    // Mostrar el modal overlay
+    this.paymentCardModal.style.display = 'flex';
+  },
+
+  closePaymentCard() {
+    this.paymentCardModal.style.display = 'none';
+  },
+
+  async renderPaymentCardGrid() {
+    this.paymentCardGrid.innerHTML = '';
+    
+    const client = this.currentClient;
+    const totalInstallments = client.installmentsCount || 5;
+    const installmentAmount = client.installmentAmount || 100000;
+    
+    // Obtener los pagos reales desde Supabase
+    const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+    
+    // Mapear los números de cuotas que ya han sido pagadas
+    const paidInstallments = payments
+      .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0)
+      .map(p => p.installmentNumber);
+
+    // Ajustar fecha de creación del crédito para estimar los atrasos
+    let creditDate = new Date(client.created_at || Date.now());
+    if (payments.length > 0) {
+      const earliestPayDate = new Date(Math.min(...payments.map(p => new Date(p.date))));
+      if (earliestPayDate < creditDate) {
+        creditDate = new Date(earliestPayDate.getTime() - (7 * 24 * 60 * 60 * 1000));
+      }
+    }
+
+    const today = new Date();
+    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    for (let i = 1; i <= totalInstallments; i++) {
+      const cell = document.createElement('div');
+      cell.classList.add('payment-card-cell');
+      
+      // Calcular fecha de vencimiento (una cuota por semana)
+      const dueDate = new Date(creditDate);
+      dueDate.setDate(creditDate.getDate() + (i * 7));
+      const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      
+      const isPaid = paidInstallments.includes(i);
+      
+      if (isPaid) {
+        cell.classList.add('pagado');
+        cell.innerHTML = `Cuota ${i}<br>✔`;
+      } else {
+        // ¿Vencida? Si la fecha de vencimiento es anterior a hoy
+        const isOverdue = dueDateOnly < todayDateOnly;
+        if (isOverdue) {
+          cell.classList.add('atrasado');
+          cell.innerHTML = `Cuota ${i}<br>⚠️`;
+        } else {
+          cell.classList.add('pendiente');
+          cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
+        }
+
+        // Registrar acción al hacer click
+        cell.addEventListener('click', async () => {
+          if (confirm(`¿Confirmar pago de cuota ${i} por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
+            await this.payInstallmentFromCard(i, installmentAmount);
+          }
+        });
+      }
+      
+      this.paymentCardGrid.appendChild(cell);
+    }
+  },
+
+  async payInstallmentFromCard(installmentNumber, amount) {
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+
+    try {
+      const newPayment = {
+        clientCedula: this.currentClient.cedula,
+        installmentNumber: installmentNumber,
+        amount: amount,
+        date: new Date().toISOString().split('T')[0],
+        agentName: currentUser.name,
+        status: 'Pagado'
+      };
+
+      // Registrar el pago en Supabase y actualizar el saldo del cliente
+      const savedPayment = await window.BulaPayDB.addPayment(newPayment);
+
+      // Reportar geolocalización
+      this.captureAndSendLocation();
+
+      // Mostrar recibo digital
+      window.showBulaPayReceipt(savedPayment, this.currentClient);
+
+      // Re-consultar los datos del cliente actualizados
+      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      this.currentClient = updatedClient;
+      
+      // Actualizar la interfaz principal del cobrador
+      this.renderClientInfo(updatedClient);
+
+      // Refrescar el Cartón de Pagos
+      await this.renderPaymentCardGrid();
+      
+      // Actualizar saldo mostrado en el modal
+      this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      
+    } catch (err) {
+      console.error("Error al pagar cuota desde cartón:", err);
+      alert('❌ Error al registrar el pago de la cuota.');
     }
   },
 

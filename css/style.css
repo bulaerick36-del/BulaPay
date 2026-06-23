@@ -815,6 +815,57 @@ main {
   color: var(--color-amarillo);
 }
 
+/* Celda del Cartón de Pagos */
+.payment-card-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  user-select: none;
+}
+
+.payment-card-cell:hover:not(.pagado) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+  border-color: var(--accent);
+}
+
+.payment-card-cell.pagado {
+  background-color: var(--color-verde-bg) !important;
+  color: var(--color-verde) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  cursor: not-allowed;
+}
+
+.payment-card-cell.atrasado {
+  background-color: var(--color-rojo-bg) !important;
+  color: var(--color-rojo) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.payment-card-cell.pendiente {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+
 
 /* Modal Simulado de SMS/WhatsApp */
 .overlay-modal {
