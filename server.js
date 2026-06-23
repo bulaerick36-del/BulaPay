@@ -32,6 +32,35 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.url.split('?')[0] === '/api/send-email') {
+    try {
+      const sendEmailFn = require('./api/send-email.js');
+      // Extender res con helpers de Express/Vercel (status, json)
+      res.status = (code) => {
+        res.statusCode = code;
+        res.setHeader('Content-Type', 'application/json');
+        return res;
+      };
+      res.json = (data) => {
+        res.end(JSON.stringify(data));
+      };
+
+      // Leer body
+      let bodyData = '';
+      req.on('data', chunk => {
+        bodyData += chunk.toString();
+      });
+      req.on('end', () => {
+        req.body = bodyData;
+        sendEmailFn(req, res);
+      });
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Error interno: ' + e.message }));
+    }
+    return;
+  }
+
   // Normalizar la URL de la solicitud
   let filePath = req.url === '/' || req.url === '' ? '/index.html' : req.url;
   

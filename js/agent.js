@@ -769,44 +769,24 @@ const agentModule = {
   },
 
   async sendWelcomeEmail(clientData) {
-    const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${clientData.cedula}`;
-    const emailHtml = "¡Hola, " + clientData.name + "!<br><br>" +
-      "Le damos la bienvenida a BulaPay.<br><br>" +
-      "Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado haciendo clic en el siguiente enlace:<br><br>" +
-      "<a href=\"" + appUrl + "\" style=\"background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;\">Ver mi Cartón Digital</a>";
-
     try {
-      const response = await fetch('https://api.mailersend.com/v1/email', {
+      const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer mlsn.e298e4729e83708e2e038dc88f552427e1a4517b4b4c3ca082a4f6ab02981350',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          from: {
-            email: "MS_QpWXYt@test-65qngkdzj8jlwr12.mlsender.net",
-            name: "BulaPay"
-          },
-          to: [
-            {
-              email: clientData.email,
-              name: clientData.name
-            }
-          ],
-          subject: "Bienvenido a BulaPay - Tu Cartón Digital",
-          html: emailHtml
-        })
+        body: JSON.stringify({ clientData })
       });
 
       if (response.ok) {
         alert('✅ Correo enviado exitosamente a ' + clientData.email);
       } else {
         const errorText = await response.text();
-        console.error('Error de MailerSend:', errorText);
+        console.error('Error del endpoint /api/send-email:', errorText);
         alert('❌ Hubo un error enviando el correo.');
       }
     } catch (err) {
-      console.error('Error al realizar fetch a MailerSend:', err);
+      console.error('Error al realizar fetch al backend /api/send-email:', err);
       alert('❌ Hubo un error enviando el correo.');
     }
   },
