@@ -60,8 +60,8 @@ const db = {
     
     // Insertar Rutas Semilla
     const { error: routesErr } = await supabase.from('routes').insert([
-      { id: 'route_1', name: 'Ruta Centro - Norte', agentUsername: 'agente1', agentName: 'Juan Pérez', capital: 500000, collected: 180000, status: 'En Ruta', date: '2026-06-18', supervisor_id: 'admin' },
-      { id: 'route_2', name: 'Ruta Zona Sur', agentUsername: 'agente2', agentName: 'María López', capital: 300000, collected: 150000, status: 'Completado', date: '2026-06-18', supervisor_id: 'admin' }
+      { id: 'route_1', name: 'Ruta Centro - Norte', agentUsername: 'agente1', agentName: 'Juan Pérez', capital: 500000, collected: 180000, status: 'En Ruta', date: '2026-06-18', supervisor_id: 'admin', opening_time: '06:00', closing_time: '18:00', has_extension: false },
+      { id: 'route_2', name: 'Ruta Zona Sur', agentUsername: 'agente2', agentName: 'María López', capital: 300000, collected: 150000, status: 'Completado', date: '2026-06-18', supervisor_id: 'admin', opening_time: '06:00', closing_time: '18:00', has_extension: false }
     ]);
     if (routesErr) console.error("Error al sembrar rutas semilla:", routesErr);
     
@@ -218,6 +218,24 @@ const db = {
     if (supId) {
       route.supervisor_id = supId;
     }
+    
+    // Heredar horas de apertura/cierre de rutas existentes del supervisor para mantener consistencia
+    try {
+      const existingRoutes = await this.getRoutes();
+      if (existingRoutes && existingRoutes.length > 0) {
+        route.opening_time = existingRoutes[0].opening_time || '06:00';
+        route.closing_time = existingRoutes[0].closing_time || '18:00';
+      } else {
+        route.opening_time = '06:00';
+        route.closing_time = '18:00';
+      }
+    } catch (e) {
+      console.warn("Error al heredar horario para nueva ruta:", e);
+      route.opening_time = '06:00';
+      route.closing_time = '18:00';
+    }
+    route.has_extension = false;
+
     const { data, error } = await supabase
       .from('routes')
       .insert([route])
@@ -282,6 +300,32 @@ const db = {
       .eq('id', routeId);
     if (error) {
       console.error(`Error al actualizar agentes de la ruta "${routeId}" en Supabase:`, error);
+      throw error;
+    }
+  },
+
+  async updateRoutesSchedule(openingTime, closingTime) {
+    const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (!supId) return;
+    const { error } = await supabase
+      .from('routes')
+      .update({ opening_time: openingTime, closing_time: closingTime })
+      .eq('supervisor_id', supId);
+    if (error) {
+      console.error("Error al actualizar horario de rutas:", error);
+      throw error;
+    }
+  },
+
+  async toggleRouteExtension(routeId, hasExtension) {
+    const supabase = await initSupabase();
+    const { error } = await supabase
+      .from('routes')
+      .update({ has_extension: hasExtension })
+      .eq('id', routeId);
+    if (error) {
+      console.error(`Error al cambiar prórroga de la ruta "${routeId}":`, error);
       throw error;
     }
   },
@@ -429,6 +473,44 @@ const db = {
 
   async addPayment(payment) {
     const supabase = await initSupabase();
+    
+    // 0. Validar en tiempo real contra la base de datos si la ruta está abierta
+    const client = await this.getGlobalClientByCedula(payment.clientCedula);
+    if (!client) {
+      throw new Error("Cliente no encontrado.");
+    }
+
+    if (client.routeId) {
+      const { data: route, error: routeErr } = await supabase
+        .from('routes')
+        .select('*')
+        .eq('id', client.routeId)
+        .maybeSingle();
+
+      if (routeErr) {
+        console.error("Error al verificar horario de la ruta:", routeErr);
+      } else if (route) {
+        const now = new Date();
+        const openingStr = route.opening_time || '06:00';
+        const closingStr = route.closing_time || '18:00';
+        const hasExtension = !!route.has_extension;
+
+        const [openHrs, openMins] = openingStr.split(':').map(Number);
+        const [closeHrs, closeMins] = closingStr.split(':').map(Number);
+
+        const openingTime = new Date(now);
+        openingTime.setHours(openHrs, openMins, 0, 0);
+
+        const closingTime = new Date(now);
+        closingTime.setHours(closeHrs, closeMins, 0, 0);
+
+        const isOpen = (now >= openingTime && now < closingTime) || hasExtension;
+
+        if (!isOpen) {
+          throw new Error("Ruta Cerrada: No se permiten recaudos fuera del horario establecido.");
+        }
+      }
+    }
     
     // Obtener total de pagos históricos del cliente para calcular el correlativo de cuota
     const clientPayments = await this.getPaymentsByClient(payment.clientCedula);

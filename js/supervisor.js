@@ -1694,6 +1694,116 @@ const supervisorModule = {
     }
   },
 
+  async openScheduleModal() {
+    const modal = document.getElementById('modal-route-schedule');
+    if (!modal) return;
+    
+    modal.classList.add('active');
+    
+    try {
+      const routes = await window.BulaPayDB.getRoutes();
+      
+      let openingTime = '06:00';
+      let closingTime = '18:00';
+      if (routes && routes.length > 0) {
+        if (routes[0].opening_time) openingTime = routes[0].opening_time;
+        if (routes[0].closing_time) closingTime = routes[0].closing_time;
+      }
+      
+      document.getElementById('schedule-opening-time').value = openingTime;
+      document.getElementById('schedule-closing-time').value = closingTime;
+      
+      this.renderScheduleExtensions(routes);
+    } catch (err) {
+      console.error("Error al abrir modal de horario:", err);
+    }
+  },
+  
+  closeScheduleModal() {
+    const modal = document.getElementById('modal-route-schedule');
+    if (modal) modal.classList.remove('active');
+  },
+  
+  renderScheduleExtensions(routes) {
+    const listContainer = document.getElementById('schedule-extensions-list');
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = '';
+    if (!routes || routes.length === 0) {
+      listContainer.innerHTML = `
+        <div style="color: var(--text-secondary); text-align: center; font-size: 0.8rem; padding: 1rem;">
+          No hay rutas activas para habilitar prórrogas.
+        </div>
+      `;
+      return;
+    }
+    
+    routes.forEach(route => {
+      const item = document.createElement('div');
+      item.style.display = 'flex';
+      item.style.justifyContent = 'space-between';
+      item.style.alignItems = 'center';
+      item.style.background = 'rgba(255, 255, 255, 0.02)';
+      item.style.border = '1px solid var(--border-color)';
+      item.style.borderRadius = '8px';
+      item.style.padding = '0.75rem';
+      
+      const hasExtension = !!route.has_extension;
+      
+      item.innerHTML = `
+        <div>
+          <h5 style="margin: 0; color: white; font-size: 0.85rem;">Ruta: ${route.name}</h5>
+          <span style="font-size: 0.75rem; color: var(--text-secondary);">Agente: ${route.agentName || 'Sin asignar'}</span>
+        </div>
+        <button class="btn ${hasExtension ? 'btn-accent' : 'btn-secondary'}" 
+                onclick="supervisorModule.toggleExtension('${route.id}', ${hasExtension})" 
+                style="width: auto; padding: 0.35rem 0.75rem; font-size: 0.75rem; border-color: ${hasExtension ? 'rgba(0, 245, 212, 0.3)' : 'rgba(255,255,255,0.1)'}; color: ${hasExtension ? 'var(--accent)' : 'var(--text-secondary)'};">
+          ${hasExtension ? '🔴 Deshabilitar' : '🟢 Prórroga'}
+        </button>
+      `;
+      listContainer.appendChild(item);
+    });
+  },
+  
+  async saveRouteSchedule(event) {
+    event.preventDefault();
+    const openingTime = document.getElementById('schedule-opening-time').value;
+    const closingTime = document.getElementById('schedule-closing-time').value;
+    
+    try {
+      await window.BulaPayDB.updateRoutesSchedule(openingTime, closingTime);
+      alert("✅ Horario de rutas actualizado con éxito.");
+      
+      // Forzar actualización inmediata del reloj si el agente comparte sesión
+      if (window.app && typeof window.app.updateClockAndTime === 'function') {
+        await window.app.updateClockAndTime();
+      }
+      
+      this.closeScheduleModal();
+    } catch (err) {
+      console.error("Error al guardar horario:", err);
+      alert("❌ Error al guardar el horario.");
+    }
+  },
+  
+  async toggleExtension(routeId, currentStatus) {
+    try {
+      await window.BulaPayDB.toggleRouteExtension(routeId, !currentStatus);
+      
+      // Recargar lista del modal
+      const routes = await window.BulaPayDB.getRoutes();
+      this.renderScheduleExtensions(routes);
+      
+      // Forzar actualización inmediata del reloj si el agente comparte sesión
+      if (window.app && typeof window.app.updateClockAndTime === 'function') {
+        await window.app.updateClockAndTime();
+      }
+    } catch (err) {
+      console.error("Error al cambiar prórroga:", err);
+      alert("❌ Error al actualizar la prórroga.");
+    }
+  },
+
   destroy() {
     if (this.mapAnimationInterval) {
       clearInterval(this.mapAnimationInterval);

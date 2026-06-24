@@ -17,7 +17,10 @@ CREATE TABLE routes (
   "status" TEXT NOT NULL DEFAULT 'En Ruta',
   "date" DATE NOT NULL DEFAULT CURRENT_DATE,
   "supervisor_id" TEXT,
-  "created_at" TIMESTAMPTZ DEFAULT NOW()
+  "created_at" TIMESTAMPTZ DEFAULT NOW(),
+  "opening_time" TEXT DEFAULT '06:00',
+  "closing_time" TEXT DEFAULT '18:00',
+  "has_extension" BOOLEAN DEFAULT false
 );
 
 -- 2. Tabla de Usuarios
@@ -125,3 +128,8 @@ INSERT INTO payments ("id", "clientCedula", "installmentNumber", "amount", "date
 ('pay_5', '67890', 2, 80000, '2026-06-12', 'Juan Pérez', 'Pagado', 'BulaPay-SIG-67890-02'),
 ('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'Pagado', 'BulaPay-SIG-11223-01'),
 ('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'Abonado', 'BulaPay-SIG-11223-02');
+
+-- Migraciones seguras para bases de datos existentes:
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "opening_time" TEXT DEFAULT '06:00';
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "closing_time" TEXT DEFAULT '18:00';
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "has_extension" BOOLEAN DEFAULT false;

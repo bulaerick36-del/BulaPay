@@ -164,11 +164,14 @@
 
     <!-- 2. PANEL DE CONTROL DEL USUARIO SUPERVISOR (DASHBOARD) -->
     <section id="view-supervisor" class="view-section">
-      <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+      <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div>
           <h1 class="title-gradient" style="margin-bottom: 0.25rem;">Gestión de Cartera</h1>
           <p style="color: var(--text-secondary);" id="supervisor-welcome-msg">Bienvenido, Usuario Supervisor</p>
         </div>
+        <button class="btn btn-secondary" onclick="supervisorModule.openScheduleModal()" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); display: flex; align-items: center; gap: 0.5rem;">
+          ⚙️ Configurar Horario de Rutas
+        </button>
       </div>
 
       <!-- KPIs Dashboard -->
@@ -1127,6 +1130,44 @@
 
       <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
         <button type="button" class="btn btn-primary" onclick="supervisorModule.closeAgentAuditModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; width: auto;">Cerrar Auditoría</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIGURAR HORARIO DE RUTAS -->
+  <div class="supervisor-modal-overlay" id="modal-route-schedule">
+    <div class="supervisor-modal-card" style="max-width: 500px; max-height: 90vh; overflow-y: auto;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeScheduleModal()">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">🕒 Configurar Horario de Rutas</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Define el horario de apertura y cierre para todas las rutas y gestiona prórrogas.</p>
+      
+      <form id="form-route-schedule" onsubmit="supervisorModule.saveRouteSchedule(event)">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label for="schedule-opening-time" style="font-size: 0.75rem;">Hora de Apertura</label>
+            <input type="time" id="schedule-opening-time" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
+          </div>
+          <div class="form-group">
+            <label for="schedule-closing-time" style="font-size: 0.75rem;">Hora de Cierre</label>
+            <input type="time" id="schedule-closing-time" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
+          </div>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 0.85rem; padding: 0.6rem; margin-bottom: 1.5rem;">
+          💾 Guardar Horario General
+        </button>
+      </form>
+      
+      <!-- Habilitar Prórrogas -->
+      <h4 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.5rem; text-transform: uppercase;">Prórrogas de Emergencia</h4>
+      <p style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 1rem;">Habilita prórrogas temporales para que agentes específicos puedan operar fuera de horario.</p>
+      
+      <div id="schedule-extensions-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+      
+      <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
+        <button type="button" class="btn btn-secondary" onclick="supervisorModule.closeScheduleModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; width: auto;">Cerrar</button>
       </div>
     </div>
   </div>

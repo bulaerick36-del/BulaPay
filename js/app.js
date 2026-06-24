@@ -223,7 +223,7 @@ const app = {
     const batteryElement = document.getElementById('phone-battery');
     const routeStatusElement = document.getElementById('phone-route-status');
 
-    const updateClockAndTime = () => {
+    const updateClockAndTime = async () => {
       const now = new Date();
       
       // 1. Actualizar Reloj
@@ -233,31 +233,80 @@ const app = {
         clockElement.textContent = `${hrs}:${mins}`;
       }
 
-      // 2. Actualizar Temporizador de Ruta (06:00 AM a 06:00 PM)
+      // 2. Actualizar Temporizador de Ruta (Sincronizado con Supabase en tiempo real)
       if (routeStatusElement) {
-        const openingTime = new Date(now);
-        openingTime.setHours(6, 0, 0, 0);
-
-        const closingTime = new Date(now);
-        closingTime.setHours(18, 0, 0, 0);
-
-        if (now >= openingTime && now < closingTime) {
-          const diffMs = closingTime - now;
-          const diffMinutesTotal = Math.ceil(diffMs / 60000);
-          const hours = Math.floor(diffMinutesTotal / 60);
-          const minutes = diffMinutesTotal % 60;
-          routeStatusElement.textContent = `Cierra en: ${hours}h ${minutes}m`;
-          routeStatusElement.style.color = 'var(--color-verde)';
+        const currentUser = window.BulaPayDB.getCurrentUser();
+        
+        if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
+          const routeId = currentUser.routeId;
+          if (routeId) {
+            try {
+              const route = await window.BulaPayDB.getRouteById(routeId);
+              if (route) {
+                const openingStr = route.opening_time || '06:00';
+                const closingStr = route.closing_time || '18:00';
+                const hasExtension = !!route.has_extension;
+                
+                const [openHrs, openMins] = openingStr.split(':').map(Number);
+                const [closeHrs, closeMins] = closingStr.split(':').map(Number);
+                
+                const openingTime = new Date(now);
+                openingTime.setHours(openHrs, openMins, 0, 0);
+                
+                const closingTime = new Date(now);
+                closingTime.setHours(closeHrs, closeMins, 0, 0);
+                
+                const isOpen = (now >= openingTime && now < closingTime) || hasExtension;
+                
+                const registerBtn = document.getElementById('btn-agent-register-installment');
+                const submitCollectBtn = document.getElementById('btn-submit-collect');
+                const noPagoBtn = document.getElementById('btn-payment-card-nopago');
+                
+                if (isOpen) {
+                  if (hasExtension) {
+                    routeStatusElement.textContent = `Prórroga Activa`;
+                    routeStatusElement.style.color = 'var(--accent)';
+                  } else {
+                    const diffMs = closingTime - now;
+                    const diffMinutesTotal = Math.ceil(diffMs / 60000);
+                    const hours = Math.floor(diffMinutesTotal / 60);
+                    const minutes = diffMinutesTotal % 60;
+                    routeStatusElement.textContent = `Cierra en: ${hours}h ${minutes}m`;
+                    routeStatusElement.style.color = 'var(--color-verde)';
+                  }
+                  
+                  if (registerBtn) registerBtn.disabled = false;
+                  if (submitCollectBtn) submitCollectBtn.disabled = false;
+                  if (noPagoBtn) noPagoBtn.disabled = false;
+                } else {
+                  routeStatusElement.textContent = 'Ruta Cerrada';
+                  routeStatusElement.style.color = 'var(--color-rojo)';
+                  
+                  if (registerBtn) registerBtn.disabled = true;
+                  if (submitCollectBtn) submitCollectBtn.disabled = true;
+                  if (noPagoBtn) noPagoBtn.disabled = true;
+                }
+              }
+            } catch (err) {
+              console.warn("Fallo al obtener estado de ruta de agente en tiempo real:", err);
+            }
+          } else {
+            routeStatusElement.textContent = 'Sin Ruta';
+            routeStatusElement.style.color = 'var(--color-rojo)';
+          }
         } else {
-          routeStatusElement.textContent = 'Ruta Cerrada';
-          routeStatusElement.style.color = 'var(--color-rojo)';
+          // Si no es un agente de ruta, limpiamos el temporizador
+          routeStatusElement.textContent = '';
         }
       }
     };
 
+    // Exponer el actualizador para llamadas manuales inmediatas tras el login
+    this.updateClockAndTime = updateClockAndTime;
+
     // Inicializar reloj y temporizador de inmediato y actualizar cada minuto
-    updateClockAndTime();
-    setInterval(updateClockAndTime, 60000);
+    this.updateClockAndTime();
+    setInterval(() => this.updateClockAndTime(), 60000);
 
     // 3. Obtener y escuchar nivel de batería en tiempo real
     if (batteryElement) {

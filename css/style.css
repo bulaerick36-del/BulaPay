@@ -1770,3 +1770,14 @@ main {
 .terms-scroll-body::-webkit-scrollbar-thumb:hover {
   background: var(--accent);
 }
+
+/* Botones deshabilitados por control de horario y ruta cerrada */
+.btn:disabled, .btn-accent:disabled, .btn-secondary:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-muted) !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+}
