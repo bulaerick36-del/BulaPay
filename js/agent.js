@@ -111,10 +111,15 @@ const agentModule = {
     this.initGeography();
     this.initCalculator();
 
-    // Geolocalización del agente (inicial y periódico cada 5 min)
-    this.captureAndSendLocation();
-    if (this.locationInterval) clearInterval(this.locationInterval);
-    this.locationInterval = setInterval(() => this.captureAndSendLocation(), 5 * 60 * 1000);
+    // Geolocalización y monitoreo constante en tiempo real (cada 30 segundos con watchPosition)
+    this.startLocationMonitoring();
+
+    // Si el acceso está bloqueado, aplicar el bloqueo visual de inmediato
+    if (window.gpsBlocked) {
+      if (this.panelCollect) this.panelCollect.style.setProperty('display', 'none', 'important');
+      const blockedPanel = document.getElementById('gps-blocked-panel');
+      if (blockedPanel) blockedPanel.style.display = 'flex';
+    }
   },
 
   bindEvents() {
@@ -237,19 +242,30 @@ const agentModule = {
     this.panelHistory.style.display = 'none';
     this.panelRegister.style.display = 'none';
 
+    const blockedPanel = document.getElementById('gps-blocked-panel');
+
     if (tab === 'collect') {
       this.tabCollect.classList.add('active');
-      this.panelCollect.style.display = 'block';
-    } else if (tab === 'history') {
-      this.tabHistory.classList.add('active');
-      this.panelHistory.style.display = 'block';
-      this.historyResults.style.display = 'none';
-      this.historyError.style.display = 'none';
-      this.historyPlaceholder.style.display = 'block';
-      this.inputHistoryCedula.value = '';
-    } else if (tab === 'register') {
-      this.tabRegister.classList.add('active');
-      this.panelRegister.style.display = 'block';
+      if (window.gpsBlocked) {
+        this.panelCollect.style.setProperty('display', 'none', 'important');
+        if (blockedPanel) blockedPanel.style.display = 'flex';
+      } else {
+        this.panelCollect.style.display = 'block';
+        if (blockedPanel) blockedPanel.style.display = 'none';
+      }
+    } else {
+      if (blockedPanel) blockedPanel.style.display = 'none';
+      if (tab === 'history') {
+        this.tabHistory.classList.add('active');
+        this.panelHistory.style.display = 'block';
+        this.historyResults.style.display = 'none';
+        this.historyError.style.display = 'none';
+        this.historyPlaceholder.style.display = 'block';
+        this.inputHistoryCedula.value = '';
+      } else if (tab === 'register') {
+        this.tabRegister.classList.add('active');
+        this.panelRegister.style.display = 'block';
+      }
     }
   },
 
@@ -706,16 +722,79 @@ const agentModule = {
         const { latitude, longitude } = position.coords;
         try {
           await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
-          console.log(`[GPS] Ubicación reportada: ${latitude}, ${longitude}`);
+          console.log(`[GPS] Ubicación crítica reportada: ${latitude}, ${longitude}`);
         } catch (e) {
-          console.warn("Fallo al actualizar geolocalización en Supabase:", e);
+          console.warn("Fallo al actualizar geolocalización crítica en Supabase:", e);
         }
       },
       (error) => {
-        console.warn("Permiso de geolocalización denegado o error de lectura:", error);
+        console.warn("Error al capturar ubicación crítica:", error);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 5000 }
     );
+  },
+
+  startLocationMonitoring() {
+    if (!navigator.geolocation) return;
+
+    // Detener cualquier monitoreo anterior
+    this.stopLocationMonitoring();
+
+    let lastPosition = null;
+
+    // Iniciar watchPosition con alta precisión y sin caché
+    this.locationWatchId = navigator.geolocation.watchPosition(
+      (position) => {
+        lastPosition = position;
+        // Al recibir la primera posición, la enviamos de inmediato
+        if (!this.hasSentInitialLocation) {
+          this.hasSentInitialLocation = true;
+          this.sendWatchPosition(position);
+        }
+      },
+      (error) => {
+        console.warn("[GPS Watch] Error al rastrear ubicación:", error);
+        if (error.code === error.PERMISSION_DENIED) {
+          window.gpsBlocked = true;
+          if (window.app && typeof window.app.handleGPSPermissionStatus === 'function') {
+            window.app.handleGPSPermissionStatus('denied');
+          }
+        }
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+    );
+
+    // Enviar a Supabase cada 30 segundos
+    this.locationInterval = setInterval(() => {
+      if (lastPosition) {
+        this.sendWatchPosition(lastPosition);
+      }
+    }, 30000);
+  },
+
+  async sendWatchPosition(position) {
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser) return;
+
+    const { latitude, longitude } = position.coords;
+    try {
+      await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
+      console.log(`[GPS Watch] Ubicación reportada a Supabase cada 30s: ${latitude}, ${longitude}`);
+    } catch (e) {
+      console.warn("[GPS Watch] Fallo al actualizar geolocalización en Supabase:", e);
+    }
+  },
+
+  stopLocationMonitoring() {
+    if (this.locationWatchId !== undefined && this.locationWatchId !== null) {
+      navigator.geolocation.clearWatch(this.locationWatchId);
+      this.locationWatchId = null;
+    }
+    if (this.locationInterval) {
+      clearInterval(this.locationInterval);
+      this.locationInterval = null;
+    }
+    this.hasSentInitialLocation = false;
   },
 
   initGeography() {
@@ -818,10 +897,7 @@ const agentModule = {
   },
 
   destroy() {
-    if (this.locationInterval) {
-      clearInterval(this.locationInterval);
-      this.locationInterval = null;
-    }
+    this.stopLocationMonitoring();
   }
 };
 

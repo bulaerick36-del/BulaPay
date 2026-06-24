@@ -376,6 +376,17 @@
               <button class="agent-tab-btn" id="tab-agent-register">Registrar Cliente</button>
             </div>
 
+            <!-- PANEL DE GPS BLOQUEADO -->
+            <div id="gps-blocked-panel" style="display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2rem 1.5rem; color: var(--text-primary); min-height: 250px; background: rgba(239, 68, 68, 0.05); border: 1.5px dashed rgba(239, 68, 68, 0.4); border-radius: 12px; margin: 1rem;">
+              <span style="font-size: 3rem; margin-bottom: 1rem;">⚠️</span>
+              <p style="font-size: 1rem; font-weight: bold; line-height: 1.5; margin-bottom: 1.5rem; color: #f87171; max-width: 280px;">
+                Para continuar, por favor activa la ubicación en el candado del navegador
+              </p>
+              <button type="button" id="btn-gps-instructions" class="btn btn-accent" style="padding: 0.75rem 1.25rem; font-size: 0.85rem; font-weight: 700; width: auto; box-shadow: var(--shadow-md); background-color: #ef4444; border-color: #ef4444;">
+                ¿Cómo activar la ubicación?
+              </button>
+            </div>
+
             <!-- PESTAÑA COBRAR CUOTA / BUSCADOR -->
             <div id="panel-agent-collect">
               
@@ -665,6 +676,23 @@
                 </button>
               </div>
 
+            </div>
+          </div>
+
+          <!-- MODAL DE INSTRUCCIONES DE GPS -->
+          <div class="overlay-modal" id="gps-instructions-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.85); z-index: 210;">
+            <div class="payment-card-mockup" style="background-color: var(--bg-primary); border-radius: 16px; padding: 1.5rem; width: 90%; max-width: 320px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); display: flex; flex-direction: column; position: relative;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                <h4 style="font-size: 1rem; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">📍 Habilitar Ubicación</h4>
+                <button type="button" id="btn-close-gps-modal" style="background: transparent; border: none; font-size: 1.25rem; color: var(--text-secondary); cursor: pointer;">✕</button>
+              </div>
+              <ol style="margin: 0 0 1.5rem 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: var(--text-secondary);">
+                <li style="margin-bottom: 0.5rem;">Toca el icono del <b>candado</b> en la barra de direcciones del navegador (arriba a la izquierda).</li>
+                <li style="margin-bottom: 0.5rem;">Busca la opción de <b>Ubicación</b> o <b>Permisos</b>.</li>
+                <li style="margin-bottom: 0.5rem;">Cambia el estado a <b>"Permitir"</b> o <b>"Activar"</b>.</li>
+                <li style="margin-bottom: 0.5rem;">Vuelve a cargar la página si el navegador lo solicita para aplicar los cambios.</li>
+              </ol>
+              <button type="button" id="btn-close-gps-modal-ok" class="btn btn-accent" style="width: 100%; padding: 0.6rem; font-weight: bold; font-size: 0.85rem; background-color: var(--accent); border-color: var(--accent); color: var(--bg-primary);">Entendido</button>
             </div>
           </div>
 

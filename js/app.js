@@ -211,11 +211,103 @@ const app = {
 
   // Inicialización global
   async init() {
+    // Capa de validación de GPS (primera en ejecutarse)
+    await this.checkGPSPermission();
+    this.setupGPSInstructionsEvents();
+
     this.pwa.init();
     await this.router.init();
     
     // Inicializar reloj del teléfono móvil simulado
     this.startPhoneClock();
+  },
+
+  // Capa de validación de GPS
+  async checkGPSPermission() {
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const result = await navigator.permissions.query({ name: 'geolocation' });
+        this.handleGPSPermissionStatus(result.state);
+        
+        // Escuchar cambios de estado del permiso
+        result.onchange = () => {
+          this.handleGPSPermissionStatus(result.state);
+        };
+      } catch (err) {
+        console.warn("Fallo al consultar navigator.permissions:", err);
+        await this.detectGPSPermissionFallback();
+      }
+    } else {
+      await this.detectGPSPermissionFallback();
+    }
+  },
+
+  async detectGPSPermissionFallback() {
+    if (!navigator.geolocation) {
+      this.handleGPSPermissionStatus('denied');
+      return;
+    }
+    
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          this.handleGPSPermissionStatus('granted');
+          resolve();
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            this.handleGPSPermissionStatus('denied');
+          } else {
+            this.handleGPSPermissionStatus('granted');
+          }
+          resolve();
+        },
+        { enableHighAccuracy: false, timeout: 3000 }
+      );
+    });
+  },
+
+  handleGPSPermissionStatus(state) {
+    const panelCollect = document.getElementById('panel-agent-collect');
+    const blockedPanel = document.getElementById('gps-blocked-panel');
+    
+    if (state === 'denied') {
+      window.gpsBlocked = true;
+      if (panelCollect) panelCollect.style.setProperty('display', 'none', 'important');
+      if (blockedPanel) blockedPanel.style.display = 'flex';
+    } else {
+      window.gpsBlocked = false;
+      if (blockedPanel) blockedPanel.style.display = 'none';
+      
+      const tabCollect = document.getElementById('tab-agent-collect');
+      if (panelCollect && tabCollect && tabCollect.classList.contains('active')) {
+        panelCollect.style.display = 'block';
+      }
+    }
+  },
+
+  setupGPSInstructionsEvents() {
+    const btnInstructions = document.getElementById('btn-gps-instructions');
+    const modal = document.getElementById('gps-instructions-modal');
+    const btnCloseX = document.getElementById('btn-close-gps-modal');
+    const btnCloseOk = document.getElementById('btn-close-gps-modal-ok');
+
+    if (btnInstructions && modal) {
+      btnInstructions.addEventListener('click', () => {
+        modal.style.display = 'flex';
+        modal.classList.add('active');
+      });
+    }
+
+    const closeModal = () => {
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    };
+
+    if (btnCloseX) btnCloseX.addEventListener('click', closeModal);
+    if (btnCloseOk) btnCloseOk.addEventListener('click', closeModal);
   },
 
   startPhoneClock() {
