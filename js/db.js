@@ -547,7 +547,6 @@ const db = {
     await this.updateClientOutstanding(payment.clientCedula, payment.amount);
 
     // 3. Registrar abono a la ruta del cliente
-    const client = await this.getClientByCedula(payment.clientCedula);
     if (client && client.routeId) {
       await this.updateRouteCollected(client.routeId, payment.amount);
     }
