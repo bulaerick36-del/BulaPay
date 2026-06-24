@@ -33,6 +33,10 @@ const supervisorModule = {
     // Actualizar marcadores periódicamente (cada 30 segundos)
     if (this.mapUpdateInterval) clearInterval(this.mapUpdateInterval);
     this.mapUpdateInterval = setInterval(() => this.updateMapMarkers(), 30 * 1000);
+
+    // Actualizar tiempos de operación periódicamente (cada 30 segundos)
+    if (this.operatingTimeInterval) clearInterval(this.operatingTimeInterval);
+    this.operatingTimeInterval = setInterval(() => this.updateOperatingTimes(), 30 * 1000);
   },
 
   bindEvents() {
@@ -1220,7 +1224,7 @@ const supervisorModule = {
     this.routesTbody.innerHTML = '';
 
     if (routes.length === 0) {
-      this.routesTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No hay rutas creadas en el sistema.</td></tr>`;
+      this.routesTbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No hay rutas creadas en el sistema.</td></tr>`;
       return;
     }
 
@@ -1239,7 +1243,8 @@ const supervisorModule = {
           routeIds: [],
           agentNames: new Set(),
           capital: 0,
-          status: route.status
+          status: route.status,
+          openingTime: route.opening_time || '06:00'
         };
       }
       groupedRoutes[name].routeIds.push(route.id);
@@ -1295,6 +1300,9 @@ const supervisorModule = {
         <td>
           <span class="status-badge ${statusClass}">${gRoute.status}</span>
         </td>
+        <td class="operating-time-cell" data-opening-time="${gRoute.openingTime}" data-status="${gRoute.status}">
+          <!-- Calculado dinámicamente -->
+        </td>
         <td>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <span style="font-size: 0.8rem; font-weight: 600; min-width: 30px;">${progress}%</span>
@@ -1306,6 +1314,53 @@ const supervisorModule = {
       `;
       this.routesTbody.appendChild(tr);
     }
+
+    this.updateOperatingTimes();
+  },
+
+  updateOperatingTimes() {
+    const cells = document.querySelectorAll('.operating-time-cell');
+    if (cells.length === 0) return;
+
+    const now = new Date();
+
+    cells.forEach(cell => {
+      const openingTimeStr = cell.getAttribute('data-opening-time') || '06:00';
+      const [openHrs, openMins] = openingTimeStr.split(':').map(Number);
+      
+      const openingTime = new Date(now);
+      openingTime.setHours(openHrs, openMins, 0, 0);
+
+      let diffMs = now - openingTime;
+      if (diffMs < 0) {
+        diffMs = 0; // Si es antes de la hora de apertura, el tiempo transcurrido es 0
+      }
+
+      const diffMinutesTotal = Math.floor(diffMs / 60000);
+      const hours = Math.floor(diffMinutesTotal / 60);
+      const minutes = diffMinutesTotal % 60;
+      const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} horas`;
+
+      let bgColor = 'rgba(59, 130, 246, 0.15)';
+      let textColor = '#60a5fa';
+      let borderColor = 'rgba(59, 130, 246, 0.3)';
+
+      if (hours >= 12) {
+        bgColor = 'rgba(245, 158, 11, 0.15)';
+        textColor = 'var(--color-amarillo)';
+        borderColor = 'rgba(245, 158, 11, 0.3)';
+      } else if (hours >= 2) {
+        bgColor = 'rgba(16, 185, 129, 0.15)';
+        textColor = 'var(--color-verde)';
+        borderColor = 'rgba(16, 185, 129, 0.3)';
+      }
+
+      cell.innerHTML = `
+        <span style="padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; background-color: ${bgColor}; color: ${textColor}; border: 1px solid ${borderColor}; display: inline-flex; align-items: center; gap: 0.25rem;">
+          🕒 ${formattedTime}
+        </span>
+      `;
+    });
   },
 
   async startMapSimulation() {
@@ -1814,6 +1869,10 @@ const supervisorModule = {
     if (this.mapUpdateInterval) {
       clearInterval(this.mapUpdateInterval);
       this.mapUpdateInterval = null;
+    }
+    if (this.operatingTimeInterval) {
+      clearInterval(this.operatingTimeInterval);
+      this.operatingTimeInterval = null;
     }
     if (this.handlePaymentRegistered) {
       window.removeEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
