@@ -1074,19 +1074,36 @@ const supervisorModule = {
         ? new Date(agent.last_location_time).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
         : 'N/A';
 
+      const markerColor = this.getAgentColor(agent.username);
       const popupContent = `
-        <div style="font-family: var(--font-sans); font-size: 0.8rem; color: #000;">
-          <strong style="color: var(--primary); font-size: 0.85rem;">👤 ${agent.name}</strong><br>
-          <span style="color: #666;">Ruta: ${routeName}</span><br>
-          <span style="color: #999; font-size: 0.7rem;">Último reporte: ${timeStr}</span>
+        <div style="font-family: var(--font-sans); font-size: 0.8rem; color: #000; min-width: 150px;">
+          <strong style="color: ${markerColor}; font-size: 0.85rem;">👤 ${agent.name}</strong><br>
+          <span style="color: #4b5563; font-weight: 600;">Ruta: ${routeName}</span><br>
+          <span style="color: #6b7280; font-size: 0.75rem;">Último reporte: ${timeStr}</span>
         </div>
       `;
 
+      // Crear divIcon personalizado para soportar múltiples agentes visualmente con colores y nombres
+      const customIcon = L.divIcon({
+        className: 'custom-agent-marker',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div style="background-color: ${markerColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3); border: 2px solid white; display: flex; align-items: center; gap: 4px;">
+              👤 ${agent.name}
+            </div>
+            <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid ${markerColor}; margin-top: -1px;"></div>
+          </div>
+        `,
+        iconSize: [120, 40],
+        iconAnchor: [60, 40]
+      });
+
       if (this.mapMarkers[agent.username]) {
         this.mapMarkers[agent.username].setLatLng([lat, lng]);
+        this.mapMarkers[agent.username].setIcon(customIcon);
         this.mapMarkers[agent.username].getPopup().setContent(popupContent);
       } else {
-        const marker = L.marker([lat, lng]).addTo(this.mapInstance);
+        const marker = L.marker([lat, lng], { icon: customIcon }).addTo(this.mapInstance);
         marker.bindPopup(popupContent);
         this.mapMarkers[agent.username] = marker;
       }
@@ -1097,6 +1114,50 @@ const supervisorModule = {
     if (markerGroup.length > 0) {
       this.mapInstance.fitBounds(markerGroup, { padding: [50, 50], maxZoom: 14 });
     }
+
+    // Actualizar dinámicamente el Panel Inferior de Agentes
+    const panel = document.getElementById('supervisor-agents-panel');
+    const list = document.getElementById('supervisor-agents-list');
+    
+    if (panel && list) {
+      if (agents.length === 0) {
+        panel.style.display = 'none';
+        list.innerHTML = '';
+      } else {
+        panel.style.display = 'block';
+        list.innerHTML = '';
+        agents.forEach(agent => {
+          const isOnline = agent.last_location_time && (new Date() - new Date(agent.last_location_time) < 3 * 60 * 1000);
+          const statusText = isOnline ? '🟢 En línea' : '🔴 Desconectado';
+          const statusColor = isOnline ? 'var(--color-verde)' : 'var(--color-rojo)';
+          const statusBg = isOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+          const agentColor = this.getAgentColor(agent.username);
+          
+          const cardHtml = `
+            <div class="card" style="padding: 1rem; border: 1px solid var(--border-color); background-color: var(--bg-primary); border-radius: 10px; display: flex; flex-direction: column; gap: 0.5rem; border-left: 4px solid ${agentColor}; transition: transform 0.2s, box-shadow 0.2s;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <h5 style="margin: 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">${agent.name}</h5>
+                <span style="font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 12px; background-color: ${statusBg}; color: ${statusColor}; border: 1px solid ${isOnline ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
+                  ${statusText}
+                </span>
+              </div>
+              <p style="margin: 0; font-size: 0.75rem; color: var(--text-secondary);">
+                Ruta: ${routes.find(r => r.id === agent.routeId)?.name || 'Sin Ruta'}
+              </p>
+              <p style="margin: 0; font-size: 0.7rem; color: var(--text-muted);">
+                Último reporte: ${agent.last_location_time ? new Date(agent.last_location_time).toLocaleTimeString('es-CO') : 'Nunca'}
+              </p>
+              <button type="button" class="btn btn-secondary" onclick="supervisorModule.centerMapOnAgent('${agent.username}', ${agent.last_lat}, ${agent.last_lng})" 
+                      style="padding: 0.4rem; font-size: 0.75rem; margin-top: 0.5rem; width: 100%; border-color: rgba(255,255,255,0.1); cursor: pointer;" 
+                      ${(!agent.last_lat || !agent.last_lng) ? 'disabled' : ''}>
+                📍 Centrar Mapa
+              </button>
+            </div>
+          `;
+          list.innerHTML += cardHtml;
+        });
+      }
+    }
   },
 
   centerMapOnRoute() {
@@ -1104,6 +1165,25 @@ const supervisorModule = {
       this.mapInstance.invalidateSize();
     }
     this.updateMapMarkers();
+  },
+
+  getAgentColor(username) {
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+      hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#14b8a6', '#f43f5e'];
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+  },
+
+  centerMapOnAgent(username, lat, lng) {
+    if (!this.mapInstance || !lat || !lng) return;
+    this.mapInstance.setView([lat, lng], 15);
+    
+    if (this.mapMarkers[username]) {
+      this.mapMarkers[username].openPopup();
+    }
   },
 
   // 6. FEED EN VIVO REAL DE PAGOS

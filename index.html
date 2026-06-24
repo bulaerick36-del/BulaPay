@@ -303,6 +303,14 @@
             <!-- Mapa GPS Real Leaflet -->
             <div id="live-gps-map" style="height: 400px; width: 100%; border-radius: 12px; border: 1px solid var(--border-color); background-color: var(--bg-secondary); margin-bottom: 1.5rem; position: relative; z-index: 1;"></div>
 
+            <!-- Panel Inferior de Agentes (Filtro por Ruta) -->
+            <div id="supervisor-agents-panel" style="margin-bottom: 1.5rem; display: none;">
+              <h4 style="font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.75rem;">Agentes en esta Ruta</h4>
+              <div id="supervisor-agents-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+                <!-- Tarjetas dinámicas -->
+              </div>
+            </div>
+
             <!-- Feed de Progreso en Vivo -->
             <div class="live-feed-container" style="background-color: rgba(11, 17, 30, 0.45); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
