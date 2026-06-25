@@ -8,8 +8,17 @@ const supervisorModule = {
   mapInstance: null,
   mapMarkers: {},
   mapUpdateInterval: null,
+  cachedUsers: null,
+
+  async getCachedUsers(forceRefresh = false) {
+    if (!this.cachedUsers || forceRefresh) {
+      this.cachedUsers = await window.BulaPayDB.getUsers();
+    }
+    return this.cachedUsers;
+  },
 
   async init() {
+    this.cachedUsers = null; // Limpiar caché al inicializar
     this.formCreateRoute = document.getElementById('form-create-route');
     this.routesTbody = document.getElementById('routes-tbody');
     this.welcomeMsg = document.getElementById('supervisor-welcome-msg');
@@ -344,7 +353,7 @@ const supervisorModule = {
     if (!routeFilterInput || !listContainer) return;
 
     const filterText = routeFilterInput.value.trim().toLowerCase();
-    const allUsers = await window.BulaPayDB.getUsers();
+    const allUsers = await this.getCachedUsers();
     let agents = allUsers.filter(u => u.role === 'Agente de Ruta');
     const routes = await window.BulaPayDB.getRoutes();
 
@@ -409,7 +418,7 @@ const supervisorModule = {
     
     if (!detailSection) return;
 
-    const allUsers = await window.BulaPayDB.getUsers();
+    const allUsers = await this.getCachedUsers();
     const agent = allUsers.find(u => u.username === username);
     if (!agent) return;
 
@@ -484,7 +493,7 @@ const supervisorModule = {
     overlay.classList.add('active');
 
     try {
-      const allUsers = await window.BulaPayDB.getUsers();
+      const allUsers = await this.getCachedUsers();
       const agent = allUsers.find(u => u.username === username);
       if (!agent) {
         alert('❌ No se encontró la información del agente.');
@@ -525,6 +534,10 @@ const supervisorModule = {
         const bgLight = madePaymentToday ? 'rgba(16, 185, 129, 0.04)' : 'rgba(239, 68, 68, 0.04)';
         const borderLight = madePaymentToday ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
 
+        // Buscar nombre del agente por agent_id
+        const associatedAgent = allUsers.find(u => u.username === client.agent_id);
+        const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+
         const item = document.createElement('div');
         item.style.padding = '0.75rem 1rem';
         item.style.background = bgLight;
@@ -540,7 +553,7 @@ const supervisorModule = {
           <div>
             <span style="font-size: 1.1rem; margin-right: 0.5rem; vertical-align: middle;">${statusIcon}</span>
             <strong style="color: ${statusColor}; font-size: 0.9rem; font-weight: 700; transition: color 0.3s ease; vertical-align: middle;">${client.name}</strong>
-            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.15rem; padding-left: 1.7rem;">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
+            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.15rem; padding-left: 1.7rem;">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')} | Agente: ${agentNameLabel}</div>
           </div>
           <span style="font-size: 0.65rem; background-color: ${madePaymentToday ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'}; color: ${statusColor}; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${statusLabel}</span>
         `;
@@ -576,8 +589,12 @@ const supervisorModule = {
       const client = await window.BulaPayDB.getClientByCedula(cedula);
       if (!client) return;
 
+      const allUsers = await this.getCachedUsers();
+      const associatedAgent = allUsers.find(u => u.username === client.agent_id);
+      const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+
       nameEl.textContent = client.name;
-      metaEl.textContent = `Cédula: ${client.cedula} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
+      metaEl.textContent = `Cédula: ${client.cedula} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
 
       const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
 
@@ -874,6 +891,7 @@ const supervisorModule = {
 
     // Calcular métricas
     const metrics = await this.calculateAuditMetrics(selectedRouteId, selectedDate);
+    const allUsers = await this.getCachedUsers();
 
     // Actualizar KPIs del modal
     const expectedEl = document.getElementById('modal-audit-kpi-expected');
@@ -891,6 +909,9 @@ const supervisorModule = {
     }
 
     metrics.unpaidClients.forEach(client => {
+      const associatedAgent = allUsers.find(u => u.username === client.agent_id);
+      const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+
       const item = document.createElement('div');
       item.style.padding = '0.5rem 0.75rem';
       item.style.background = 'rgba(239, 68, 68, 0.02)';
@@ -906,7 +927,7 @@ const supervisorModule = {
       item.innerHTML = `
         <div>
           <strong style="color: var(--color-rojo);">${client.name}</strong>
-          <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')}</div>
+          <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} | Agente: ${agentNameLabel}</div>
         </div>
         <span style="font-size: 0.75rem; color: var(--color-rojo); font-weight: 600;">Cuota: $${Number(client.dueToday).toLocaleString('es-CO')}</span>
       `;
@@ -936,8 +957,12 @@ const supervisorModule = {
     const client = await window.BulaPayDB.getClientByCedula(cedula);
     if (!client) return;
 
+    const allUsers = await this.getCachedUsers();
+    const associatedAgent = allUsers.find(u => u.username === client.agent_id);
+    const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+
     nameEl.textContent = client.name;
-    metaEl.textContent = `Cédula: ${client.cedula} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
+    metaEl.textContent = `Cédula: ${client.cedula} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
 
     const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
 
@@ -1685,7 +1710,7 @@ const supervisorModule = {
         subtitle.textContent = `Gestión de agentes para la ruta: ${route.name}`;
       }
 
-      const allUsers = await window.BulaPayDB.getUsers();
+      const allUsers = await this.getCachedUsers();
       const routeAgents = allUsers.filter(u => u.routeId === routeId && u.role === 'Agente de Ruta');
 
       container.innerHTML = '';
@@ -1743,7 +1768,7 @@ const supervisorModule = {
       await window.BulaPayDB.deleteUser(username);
       
       // Sincronizar campos concatenados en la tabla routes
-      const allUsers = await window.BulaPayDB.getUsers();
+      const allUsers = await this.getCachedUsers(true); // Force refresh cache!
       const remainingAgents = allUsers.filter(u => u.routeId === routeId && u.role === 'Agente de Ruta');
       
       const usernames = remainingAgents.map(a => a.username).join(', ');
@@ -1804,7 +1829,7 @@ const supervisorModule = {
       await window.BulaPayDB.saveUser(newAgent);
 
       // Sincronizar campos concatenados en la tabla routes
-      const allUsers = await window.BulaPayDB.getUsers();
+      const allUsers = await this.getCachedUsers(true); // Force refresh cache!
       const allRouteAgents = allUsers.filter(u => u.routeId === routeId && u.role === 'Agente de Ruta');
       
       const usernames = allRouteAgents.map(a => a.username).join(', ');
