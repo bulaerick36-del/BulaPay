@@ -330,15 +330,58 @@ const db = {
     }
   },
 
+  async getAgents() {
+    const supabase = await initSupabase();
+    
+    // Intentar consultar la tabla 'agents' primero
+    try {
+      const { data, error } = await supabase
+        .from('agents')
+        .select('*');
+      if (!error && data && data.length > 0) {
+        return data;
+      }
+    } catch (e) {
+      console.warn("No se pudo consultar la tabla 'agents', usando fallback a 'users':", e);
+    }
+
+    // Fallback: Consultar la tabla 'users' filtrando por rol de Agente
+    const supId = this.getSupervisorId();
+    let query = supabase.from('users').select('*').in('role', ['Agente de Ruta', 'agent']);
+    if (supId) {
+      query = query.eq('supervisor_id', supId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.error("Error al obtener agentes en Supabase:", error);
+      return [];
+    }
+    return data || [];
+  },
+
   // CLIENTS
   async getClients() {
     const supabase = await initSupabase();
-    const supId = this.getSupervisorId();
-    if (!supId) return [];
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('supervisor_id', supId);
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) return [];
+
+    let query = supabase.from('clients').select('*');
+
+    // Si es un Agente de Ruta, filtrar por su agent_id (su propio ID/username)
+    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+      const supId = this.getSupervisorId();
+      if (supId) {
+        query = query.eq('supervisor_id', supId);
+      }
+      query = query.eq('agent_id', currentUser.username);
+    } else {
+      // Supervisor o Comercio
+      const supId = this.getSupervisorId();
+      if (!supId) return [];
+      query = query.eq('supervisor_id', supId);
+    }
+
+    const { data, error } = await query;
     if (error) {
       console.error("Error al obtener clientes en Supabase:", error);
       return [];
@@ -348,14 +391,25 @@ const db = {
 
   async getClientByCedula(cedula) {
     const supabase = await initSupabase();
-    const supId = this.getSupervisorId();
-    if (!supId) return null;
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('cedula', String(cedula))
-      .eq('supervisor_id', supId)
-      .maybeSingle();
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) return null;
+
+    let query = supabase.from('clients').select('*').eq('cedula', String(cedula));
+
+    // Si es un Agente de Ruta, filtrar por su agent_id
+    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+      const supId = this.getSupervisorId();
+      if (supId) {
+        query = query.eq('supervisor_id', supId);
+      }
+      query = query.eq('agent_id', currentUser.username);
+    } else {
+      const supId = this.getSupervisorId();
+      if (!supId) return null;
+      query = query.eq('supervisor_id', supId);
+    }
+
+    const { data, error } = await query.maybeSingle();
     if (error) {
       console.error(`Error al obtener cliente por cédula "${cedula}":`, error);
       return null;

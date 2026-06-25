@@ -110,6 +110,7 @@ const agentModule = {
     await this.updateAgentHeader();
     this.initGeography();
     this.initCalculator();
+    await this.populateAgentSelector();
 
     // Geolocalización y monitoreo constante en tiempo real (cada 30 segundos con watchPosition)
     this.startLocationMonitoring();
@@ -629,6 +630,14 @@ const agentModule = {
 
   async registerNewClient() {
     const name = document.getElementById('new-client-name').value.trim();
+    const agentSelector = document.getElementById('agent-selector');
+    const agentId = agentSelector ? agentSelector.value : '';
+
+    if (!agentId) {
+      alert('⚠️ Debe seleccionar un agente. Este campo es obligatorio.');
+      return;
+    }
+
     const cedula = document.getElementById('new-client-cedula').value.trim();
     const phone = document.getElementById('new-client-phone').value.trim();
     const email = document.getElementById('new-client-email').value.trim();
@@ -641,7 +650,7 @@ const agentModule = {
     const installments = parseInt(document.getElementById('new-client-installments').value);
 
     console.log('[DEBUG] Intentando registrar nuevo cliente. Datos del formulario:', {
-      name, cedula, phone, email, department, cityVal, city, zone, debt, installments
+      name, agentId, cedula, phone, email, department, cityVal, city, zone, debt, installments
     });
 
     try {
@@ -669,7 +678,8 @@ const agentModule = {
         outstanding: debt,
         installmentsCount: installments,
         installmentAmount: Math.round(debt / installments),
-        routeId
+        routeId,
+        agent_id: agentId
       };
 
       console.log('[DEBUG] Objeto cliente a guardar:', newClient);
@@ -893,6 +903,31 @@ const agentModule = {
     } catch (err) {
       console.error('[DEBUG ERROR] Error atrapado al enviar correo en sendWelcomeEmail:', err);
       alert('Error técnico: ' + err.message + ' - Detalles: ' + JSON.stringify(data.details));
+    }
+  },
+
+  async populateAgentSelector() {
+    const selector = document.getElementById('agent-selector');
+    if (!selector) return;
+
+    selector.innerHTML = '<option value="" disabled selected>Seleccione Agente...</option>';
+
+    try {
+      const agents = await window.BulaPayDB.getAgents();
+      if (agents.length === 0) {
+        selector.innerHTML = '<option value="" disabled selected>No hay agentes registrados</option>';
+        return;
+      }
+
+      agents.forEach(agent => {
+        const opt = document.createElement('option');
+        opt.value = agent.username;
+        opt.textContent = agent.name;
+        selector.appendChild(opt);
+      });
+    } catch (err) {
+      console.error("Error al cargar selector de agentes:", err);
+      selector.innerHTML = '<option value="" disabled selected>Error al cargar agentes</option>';
     }
   },
 

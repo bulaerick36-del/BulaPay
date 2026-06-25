@@ -61,6 +61,7 @@ CREATE TABLE clients (
   "installmentsCount" INTEGER NOT NULL DEFAULT 1,
   "installmentAmount" NUMERIC NOT NULL DEFAULT 0,
   "routeId" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL,
   "supervisor_id" TEXT,
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
@@ -133,3 +134,4 @@ INSERT INTO payments ("id", "clientCedula", "installmentNumber", "amount", "date
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "opening_time" TEXT DEFAULT '06:00';
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "closing_time" TEXT DEFAULT '18:00';
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "has_extension" BOOLEAN DEFAULT false;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL;

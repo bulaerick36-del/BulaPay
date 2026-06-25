@@ -538,6 +538,13 @@
                   <label for="new-client-name">Nombre Completo del Cliente</label>
                   <input type="text" id="new-client-name" placeholder="Nombre completo" required>
                 </div>
+
+                <div class="form-group">
+                  <label for="agent-selector">Agente Asignado</label>
+                  <select id="agent-selector" required>
+                    <option value="" disabled selected>Cargando agentes...</option>
+                  </select>
+                </div>
                 
                 <div class="form-group">
                   <label for="new-client-cedula">Cédula (ID Único)</label>
@@ -601,7 +608,7 @@
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.6rem;">
-                  Crear Cliente y Generar Enlace
+                  Guardar Cliente
                 </button>
               </form>
             </div>
