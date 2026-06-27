@@ -79,15 +79,60 @@ const customerModule = {
       const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
       const totalPaid = payments.reduce((acc, curr) => acc + Number(curr.amount), 0);
 
-      // Actualizar Resumen en el DOM
-      if (this.custName) this.custName.textContent = client.name;
+      // Actualizar Resumen en el DOM con capitalización en JavaScript
+      if (this.custName) {
+        this.custName.textContent = client.name
+          .split(' ')
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ');
+      }
       
-      const routes = await window.BulaPayDB.getRoutes();
-      const clientRoute = routes.find(r => r.id === client.routeId) || { agentName: 'No Asignado', name: 'General' };
+      let assignedEntityLabel = 'No Asignado';
+      const isCommerceClient = !!client.product_name || client.city === 'Comercio';
+
+      if (isCommerceClient) {
+        // Obtener el nombre del comercio (desde el supervisor_id)
+        if (client.supervisor_id) {
+          try {
+            const commerceUser = await window.BulaPayDB.getUserByUsername(client.supervisor_id);
+            if (commerceUser) {
+              assignedEntityLabel = commerceUser.company || commerceUser.name;
+            }
+          } catch (dbErr) {
+            console.warn("Fallo al obtener nombre del comercio:", dbErr);
+          }
+        }
+      } else {
+        // Obtener el nombre del agente de cobro
+        if (client.routeId) {
+          try {
+            const routes = await window.BulaPayDB.getRoutes();
+            const clientRoute = routes.find(r => r.id === client.routeId);
+            if (clientRoute && clientRoute.agentName) {
+              assignedEntityLabel = clientRoute.agentName;
+            }
+          } catch (dbErr) {
+            console.warn("Fallo al obtener ruta del agente:", dbErr);
+          }
+        }
+        
+        // Si no se encuentra por ruta pero tiene agent_id
+        if (assignedEntityLabel === 'No Asignado' && client.agent_id) {
+          try {
+            const agentUser = await window.BulaPayDB.getUserByUsername(client.agent_id);
+            if (agentUser) {
+              assignedEntityLabel = agentUser.name;
+            }
+          } catch (dbErr) {
+            console.warn("Fallo al obtener usuario del agente:", dbErr);
+          }
+        }
+      }
       
       if (this.custMeta) {
         const productLabel = client.product_name ? `Producto: ${client.product_name}` : 'Tipo: Préstamo Estándar';
-        this.custMeta.textContent = `Cédula: ${client.cedula} | ${productLabel} | Agente de Ruta: ${clientRoute.agentName} (${clientRoute.name})`;
+        const entityPrefix = isCommerceClient ? 'Comercio' : 'Agente Asignado';
+        this.custMeta.textContent = `Cédula: ${client.cedula} | ${productLabel} | ${entityPrefix}: ${assignedEntityLabel}`;
       }
 
       // Mapear los conceptos financieros con separación de capital e intereses
