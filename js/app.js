@@ -15,13 +15,13 @@ const app = {
       const btnCommerce = document.getElementById('nav-btn-commerce');
 
       if (btnSupervisor) {
-        btnSupervisor.addEventListener('click', () => window.openLoginSection());
+        btnSupervisor.addEventListener('click', () => window.setCurrentView('auth'));
       }
       if (btnIndependent) {
-        btnIndependent.addEventListener('click', () => window.openLoginSection());
+        btnIndependent.addEventListener('click', () => window.setCurrentView('auth'));
       }
       if (btnCommerce) {
-        btnCommerce.addEventListener('click', () => window.openLoginSection());
+        btnCommerce.addEventListener('click', () => window.setCurrentView('auth'));
       }
 
       // Manejar carga inicial
@@ -512,5 +512,14 @@ window.openLoginSection = function() {
   // Actualizar el enrutador SPA para estar en la ruta 'auth'
   if (window.app && window.app.router) {
     window.app.router.navigate('auth');
+  }
+};
+
+// Compatibilidad con navegación basada en estado (React-like/global)
+window.setCurrentView = function(view) {
+  if (view === 'auth') {
+    window.openLoginSection();
+  } else if (window.app && window.app.router) {
+    window.app.router.navigate(view);
   }
 };
