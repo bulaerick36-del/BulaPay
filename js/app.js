@@ -15,13 +15,13 @@ const app = {
       const btnCommerce = document.getElementById('nav-btn-commerce');
 
       if (btnSupervisor) {
-        btnSupervisor.addEventListener('click', () => window.setCurrentView('auth'));
+        btnSupervisor.addEventListener('click', () => window.setCurrentView('Supervisor'));
       }
       if (btnIndependent) {
-        btnIndependent.addEventListener('click', () => window.setCurrentView('auth'));
+        btnIndependent.addEventListener('click', () => window.setCurrentView('Agente Independiente'));
       }
       if (btnCommerce) {
-        btnCommerce.addEventListener('click', () => window.setCurrentView('auth'));
+        btnCommerce.addEventListener('click', () => window.setCurrentView('Otro Comercio o Tienda'));
       }
 
       // Manejar carga inicial
@@ -517,7 +517,7 @@ window.openLoginSection = function() {
 
 // Compatibilidad con navegación basada en estado (React-like/global)
 window.setCurrentView = function(view) {
-  if (view === 'auth') {
+  if (view === 'auth' || view === 'Supervisor' || view === 'Agente Independiente' || view === 'Otro Comercio o Tienda') {
     window.openLoginSection();
   } else if (window.app && window.app.router) {
     window.app.router.navigate(view);
