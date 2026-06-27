@@ -2306,84 +2306,56 @@ const supervisorModule = {
       const clients = await window.BulaPayDB.getClients();
       
       if (type === 'clients') {
-        title.textContent = '👥 Listado de Clientes';
+        title.textContent = '👥 Clientes Registrados';
         
         if (clients.length === 0) {
           content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay clientes registrados.</p>';
         } else {
-          let html = `
-            <div style="display: grid; grid-template-columns: 280px 1fr; gap: 1.5rem; align-items: start;">
-              <!-- Columna izquierda: Lista -->
-              <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.5rem;">
-          `;
-          
+          let html = `<div class="commerce-list">`;
           clients.forEach(c => {
+            const outstandingValue = Number(c.outstanding);
+            const isSaldado = outstandingValue <= 0;
+            const badgeClass = isSaldado ? 'commerce-badge-pagado' : 'commerce-badge-proceso';
+            const badgeText = isSaldado ? '✔ Pagado' : '⏳ En Proceso';
             html += `
-              <div class="card kpi-card-clickable" onclick="supervisorModule.showCommerceClientDetails('${c.cedula}')" style="padding: 0.75rem; border: 1px solid var(--border-color); background-color: var(--bg-secondary); border-radius: 8px; cursor: pointer;">
-                <div style="font-weight: 700; color: var(--accent); font-size: 0.85rem;">${c.name}</div>
-                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">Cédula: ${c.cedula}</div>
+              <div class="commerce-card-item" onclick="supervisorModule.showCommerceClientDetails('${c.cedula}')">
+                <div class="commerce-card-left">
+                  <div class="commerce-card-name">${c.name}</div>
+                  <div class="commerce-card-sub">Cédula: ${c.cedula}</div>
+                </div>
+                <div class="commerce-card-right">
+                  <div class="commerce-card-value">$${Number(c.totalDebt).toLocaleString('es-CO')}</div>
+                  <span class="commerce-badge ${badgeClass}">${badgeText}</span>
+                </div>
               </div>
             `;
           });
-          
-          html += `
-              </div>
-              <!-- Columna derecha: Detalles Cartón -->
-              <div id="commerce-modal-client-details" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; min-height: 250px;">
-                <p style="color: var(--text-muted); text-align: center; padding-top: 4rem;">Seleccione un cliente para ver su Cartón Digital.</p>
-              </div>
-            </div>
-          `;
-          
+          html += `</div>`;
           content.innerHTML = html;
         }
       } else if (type === 'products') {
-        title.textContent = '📦 Productos Financiados';
+        title.textContent = '📦 Productos Vendidos';
         const products = clients.filter(c => c.product_name);
         
         if (products.length === 0) {
-          content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay productos financiados actualmente.</p>';
+          content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay productos registrados.</p>';
         } else {
-          const productsWithPayments = [];
-          for (const p of products) {
-            const payments = await window.BulaPayDB.getPaymentsByClient(p.cedula);
-            const paidCount = payments.filter(pay => pay.status === 'Pagado').length;
-            const remaining = Math.max(0, p.installmentsCount - paidCount);
-            productsWithPayments.push({ ...p, remaining });
-          }
-
-          let html = `
-            <div class="table-wrapper">
-              <table class="route-table" style="width: 100%;">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Categoría</th>
-                    <th>Valor</th>
-                    <th>Cliente</th>
-                    <th>Cuotas Faltantes</th>
-                  </tr>
-                </thead>
-                <tbody>
-          `;
-          
-          productsWithPayments.forEach(p => {
+          let html = `<div class="commerce-list">`;
+          products.forEach(p => {
             html += `
-              <tr>
-                <td style="font-weight: bold; color: var(--accent);">${p.product_name}</td>
-                <td>${p.product_category || 'Otros'}</td>
-                <td>$${Number(p.totalDebt).toLocaleString('es-CO')}</td>
-                <td>${p.name}</td>
-                <td style="font-weight: bold; text-align: center;">${p.remaining} / ${p.installmentsCount}</td>
-              </tr>
+              <div class="commerce-card-item" onclick="supervisorModule.showCommerceProductDetails('${p.cedula}')">
+                <div class="commerce-card-left">
+                  <div class="commerce-card-name">${p.product_name}</div>
+                  <div class="commerce-card-sub">Comprador: ${p.name} | Cat: ${p.product_category || 'Otros'}</div>
+                </div>
+                <div class="commerce-card-right">
+                  <div class="commerce-card-value">$${Number(p.totalDebt).toLocaleString('es-CO')}</div>
+                  <div class="commerce-card-sub">${p.installmentsCount} cuotas</div>
+                </div>
+              </div>
             `;
           });
-          
-          html += `
-                </tbody>
-              </table>
-            </div>
-          `;
+          html += `</div>`;
           content.innerHTML = html;
         }
       }
@@ -2401,26 +2373,104 @@ const supervisorModule = {
   },
   
   async showCommerceClientDetails(cedula) {
-    const clientDetailsDiv = document.getElementById('commerce-modal-client-details');
-    if (!clientDetailsDiv) return;
+    const title = document.getElementById('commerce-modal-title');
+    const content = document.getElementById('commerce-modal-content');
+    if (!content) return;
     
     try {
       const client = await window.BulaPayDB.getClientByCedula(cedula);
       if (!client) return;
       
-      clientDetailsDiv.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <h4 style="color: var(--text-primary); margin: 0; font-size: 1.1rem; font-weight: 700;">${client.name}</h4>
-          <span class="read-only-badge" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-verde); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600;">
-            Cartón Digital
-          </span>
+      title.textContent = '👥 Detalle de Cliente';
+      
+      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+      const totalAbonado = payments.reduce((acc, pay) => acc + Number(pay.amount), 0);
+      
+      const isSaldado = Number(client.outstanding) <= 0;
+      const badgeClass = isSaldado ? 'commerce-badge-pagado' : 'commerce-badge-proceso';
+      const badgeText = isSaldado ? '✔ Pagado' : '⏳ En Proceso';
+      
+      let html = `
+        <button class="commerce-btn-back" onclick="supervisorModule.openCommerceModal('clients')">
+          ← Volver al Listado de Clientes
+        </button>
+        
+        <div class="commerce-detail-box">
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Nombre del Cliente</span>
+            <span class="commerce-detail-value">${client.name}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Cédula</span>
+            <span class="commerce-detail-value">${client.cedula}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Teléfono</span>
+            <span class="commerce-detail-value">${client.phone || 'N/A'}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Estado de la Cuenta</span>
+            <div><span class="commerce-badge ${badgeClass}" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">${badgeText}</span></div>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Total Financiado</span>
+            <span class="commerce-detail-value" style="color: var(--text-primary);">$${Number(client.totalDebt).toLocaleString('es-CO')}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Total Abonado</span>
+            <span class="commerce-detail-value" style="color: var(--color-verde);">$${totalAbonado.toLocaleString('es-CO')}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Saldo Pendiente</span>
+            <span class="commerce-detail-value" style="color: var(--color-rojo);">$${Number(client.outstanding).toLocaleString('es-CO')}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Plan de Cuotas</span>
+            <span class="commerce-detail-value">${client.installmentsCount} cuotas de $${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
+          </div>
         </div>
-        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
-          Cédula: ${client.cedula} | Producto: ${client.product_name || 'N/A'} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')}
-        </p>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.5rem;" id="modal-commerce-ledger-grid">
+
+        <button class="btn btn-primary" onclick="supervisorModule.showCommerceClientCarton('${client.cedula}')" style="width: 100%; font-size: 0.9rem; padding: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 600;">
+          🎴 Ver Cartón Digital
+        </button>
+      `;
+      
+      content.innerHTML = html;
+    } catch (e) {
+      console.error(e);
+      content.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar los detalles del cliente.</p>';
+    }
+  },
+
+  async showCommerceClientCarton(cedula) {
+    const title = document.getElementById('commerce-modal-title');
+    const content = document.getElementById('commerce-modal-content');
+    if (!content) return;
+    
+    try {
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
+      if (!client) return;
+      
+      title.textContent = '🎴 Cartón Digital';
+      
+      let html = `
+        <button class="commerce-btn-back" onclick="supervisorModule.showCommerceClientDetails('${client.cedula}')">
+          ← Volver al Detalle del Cliente
+        </button>
+        
+        <div style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
+          <div style="font-weight: 700; font-size: 1.05rem; color: var(--text-primary); margin-bottom: 0.25rem;">${client.name}</div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">
+            Producto: <span style="font-weight: 600; color: var(--accent);">${client.product_name || 'N/A'}</span> | 
+            Saldo Pendiente: <span style="font-weight: 600; color: var(--color-rojo);">$${Number(client.outstanding).toLocaleString('es-CO')}</span>
+          </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;" id="modal-commerce-ledger-grid">
         </div>
       `;
+      
+      content.innerHTML = html;
       
       const grid = document.getElementById('modal-commerce-ledger-grid');
       const totalInstallments = client.installmentsCount || 5;
@@ -2441,26 +2491,146 @@ const supervisorModule = {
           cell.classList.add('pagado');
           cell.style.backgroundColor = 'var(--color-verde)';
           cell.style.color = 'var(--bg-primary)';
-          cell.style.padding = '0.5rem';
-          cell.style.borderRadius = '6px';
+          cell.style.padding = '0.75rem 0.5rem';
+          cell.style.borderRadius = '8px';
           cell.style.fontSize = '0.75rem';
           cell.style.textAlign = 'center';
-          cell.innerHTML = `Cuota ${i}<br>✔`;
+          cell.style.fontWeight = '600';
+          cell.innerHTML = `Cuota ${i}<br>✔ Pagada`;
         } else {
           cell.classList.add('pendiente');
           cell.style.backgroundColor = 'var(--bg-secondary)';
           cell.style.border = '1px solid var(--border-color)';
-          cell.style.padding = '0.5rem';
-          cell.style.borderRadius = '6px';
+          cell.style.padding = '0.75rem 0.5rem';
+          cell.style.borderRadius = '8px';
           cell.style.fontSize = '0.75rem';
           cell.style.textAlign = 'center';
+          cell.style.cursor = 'pointer';
           cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
+          
+          cell.addEventListener('click', async () => {
+            if (confirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
+              await this.payCommerceInstallment(client, i, installmentAmount);
+              // Recargar la vista del cartón digital con los nuevos datos
+              await this.showCommerceClientCarton(client.cedula);
+            }
+          });
         }
         grid.appendChild(cell);
       }
     } catch (e) {
       console.error(e);
-      clientDetailsDiv.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar el cartón digital.</p>';
+      content.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar el cartón digital.</p>';
+    }
+  },
+
+  async showCommerceProductDetails(cedula) {
+    const title = document.getElementById('commerce-modal-title');
+    const content = document.getElementById('commerce-modal-content');
+    if (!content) return;
+    
+    try {
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
+      if (!client) return;
+      
+      title.textContent = '📦 Detalle de Producto';
+      
+      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+      const paidCount = payments.filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0).length;
+      const remaining = Math.max(0, client.installmentsCount - paidCount);
+      const progressPercent = Math.min(100, Math.round((paidCount / client.installmentsCount) * 100));
+      
+      let html = `
+        <button class="commerce-btn-back" onclick="supervisorModule.openCommerceModal('products')">
+          ← Volver al Listado de Productos
+        </button>
+        
+        <div class="commerce-detail-box">
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Nombre del Producto</span>
+            <span class="commerce-detail-value" style="color: var(--accent);">${client.product_name || 'N/A'}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Categoría</span>
+            <span class="commerce-detail-value">${client.product_category || 'Otros'}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Comprador</span>
+            <span class="commerce-detail-value">${client.name}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Cédula Comprador</span>
+            <span class="commerce-detail-value">${client.cedula}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Precio Financiado</span>
+            <span class="commerce-detail-value">$${Number(client.totalDebt).toLocaleString('es-CO')}</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Total de Cuotas</span>
+            <span class="commerce-detail-value">${client.installmentsCount} cuotas</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Cuotas Pagadas</span>
+            <span class="commerce-detail-value" style="color: var(--color-verde);">${paidCount} ✔</span>
+          </div>
+          <div class="commerce-detail-group">
+            <span class="commerce-detail-label">Cuotas Faltantes</span>
+            <span class="commerce-detail-value" style="color: ${remaining > 0 ? 'var(--color-amarillo)' : 'var(--color-verde)'};">${remaining}</span>
+          </div>
+        </div>
+
+        <div class="commerce-progress-container" style="margin-bottom: 1.5rem;">
+          <span class="commerce-detail-label">Progreso de Pago (${progressPercent}%)</span>
+          <div class="commerce-progress-track">
+            <div class="commerce-progress-fill" style="width: ${progressPercent}%;"></div>
+          </div>
+        </div>
+      `;
+      
+      if (payments.length > 0) {
+        html += `
+          <div class="commerce-history-title">Historial de Cuotas Pagadas</div>
+          <div class="table-wrapper" style="margin-bottom: 1rem;">
+            <table class="route-table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th style="text-align: center;">Cuota N°</th>
+                  <th>Fecha</th>
+                  <th>Valor</th>
+                  <th>Registrado Por</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+        payments.forEach(pay => {
+          html += `
+            <tr>
+              <td style="font-weight: bold; text-align: center;">${pay.installmentNumber}</td>
+              <td>${pay.date}</td>
+              <td style="color: var(--color-verde); font-weight: bold;">$${Number(pay.amount).toLocaleString('es-CO')}</td>
+              <td>${pay.agentName}</td>
+            </tr>
+          `;
+        });
+        html += `
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="commerce-history-title">Historial de Cuotas Pagadas</div>
+          <p style="color: var(--text-muted); font-size: 0.8rem; text-align: center; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+            No se han registrado pagos para este producto aún.
+          </p>
+        `;
+      }
+      
+      content.innerHTML = html;
+    } catch (e) {
+      console.error(e);
+      content.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar los detalles del producto.</p>';
     }
   },
 
