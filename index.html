@@ -89,22 +89,51 @@
               <option value="Otros (Comercios, Compraventas, Mercados)">Otros (Comercios, Compraventas, Mercados)</option>
             </select>
           </div>
+          <!-- Campo de Correo Electrónico Global (Obligatorio para todos) -->
           <div class="form-group">
-            <label for="register-name">Nombre Completo / Razón Social</label>
-            <input type="text" id="register-name" placeholder="Ej. Carlos Mendoza o Almacén Central" required>
+            <label for="register-email">Correo Electrónico</label>
+            <input type="email" id="register-email" placeholder="ejemplo@correo.com" required autocomplete="email">
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+
+          <!-- Campos Dinámicos para Administrador de Rutas / Agente Independiente -->
+          <div id="register-fields-standard">
             <div class="form-group">
-              <label for="register-doc-type">Tipo de Documento</label>
-              <select id="register-doc-type" required>
-                <option value="Cédula de Ciudadanía (CC)" selected>Cédula de Ciudadanía (CC)</option>
-                <option value="Cédula de Extranjería (CE)">Cédula de Extranjería (CE)</option>
-                <option value="NIT">NIT</option>
-              </select>
+              <label for="register-name">Nombre Completo</label>
+              <input type="text" id="register-name" placeholder="Ej. Carlos Mendoza" required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <div class="form-group">
+                <label for="register-doc-type">Tipo de Documento</label>
+                <select id="register-doc-type" required>
+                  <option value="Cédula de Ciudadanía (CC)" selected>Cédula de Ciudadanía (CC)</option>
+                  <option value="Cédula de Extranjería (CE)">Cédula de Extranjería (CE)</option>
+                  <option value="NIT">NIT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="register-doc-num">Número de Documento</label>
+                <input type="number" id="register-doc-num" placeholder="Ingresa el documento" required>
+              </div>
+            </div>
+          </div>
+
+          <!-- Campos Dinámicos para Otros (Comercios, Compraventas, Mercados) -->
+          <div id="register-fields-others" style="display: none;">
+            <div class="form-group">
+              <label for="register-company-name">Razón Social / Nombre del Comercio</label>
+              <input type="text" id="register-company-name" placeholder="Ej. Almacén Central S.A.S.">
             </div>
             <div class="form-group">
-              <label for="register-doc-num">Número de Documento</label>
-              <input type="number" id="register-doc-num" placeholder="Ingresa el documento" required>
+              <label for="register-nit">NIT o Documento del Comercio</label>
+              <input type="text" id="register-nit" placeholder="Ej. 900.123.456-7">
+            </div>
+            <div class="form-group">
+              <label for="register-rep-name">Nombre del Representante Legal</label>
+              <input type="text" id="register-rep-name" placeholder="Ej. Juan Pérez">
+            </div>
+            <div class="form-group">
+              <label for="register-rep-doc">Cédula del Representante</label>
+              <input type="number" id="register-rep-doc" placeholder="Ej. 12345678">
             </div>
           </div>
           <div class="form-group">

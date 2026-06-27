@@ -123,14 +123,33 @@ const db = {
          user.role === 'Agente Independiente') && !user.supervisor_id) {
       user.supervisor_id = user.username;
     }
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('users')
       .insert([user])
       .select();
-    if (error) {
+
+    if (error && (error.message.includes('representante_legal') || error.message.includes('cedula_representante') || error.code === '42703')) {
+      console.warn("Columnas de representante no encontradas en Supabase, reintentando sin ellas...");
+      const fallbackUser = { ...user };
+      delete fallbackUser.representante_legal;
+      delete fallbackUser.cedula_representante;
+      
+      const retryResult = await supabase
+        .from('users')
+        .insert([fallbackUser])
+        .select();
+      
+      if (retryResult.error) {
+        console.error("Error al guardar usuario en Supabase (reintento fallido):", retryResult.error);
+        throw retryResult.error;
+      }
+      data = retryResult.data;
+      error = null;
+    } else if (error) {
       console.error("Error al guardar usuario en Supabase:", error);
       throw error;
     }
+
     return data ? data[0] : user;
   },
 

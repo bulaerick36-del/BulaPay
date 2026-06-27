@@ -104,11 +104,9 @@ const authModule = {
     this.formRegister.addEventListener('submit', async (e) => {
       e.preventDefault();
       const type = document.getElementById('register-type').value;
-      const name = document.getElementById('register-name').value.trim();
+      const email = document.getElementById('register-email').value.trim();
       const username = document.getElementById('register-username').value.trim().toLowerCase();
       const password = document.getElementById('register-password').value;
-      const docType = document.getElementById('register-doc-type').value;
-      const docNum = document.getElementById('register-doc-num').value.trim();
       const legalChecked = document.getElementById('register-legal').checked;
 
       if (!legalChecked) {
@@ -124,18 +122,42 @@ const authModule = {
           return;
         }
 
+        let name = '';
+        let docType = '';
+        let docNum = '';
+        let company = '';
+        let representanteLegal = null;
+        let cedulaRepresentante = null;
+
+        if (type === 'Otros (Comercios, Compraventas, Mercados)') {
+          company = document.getElementById('register-company-name').value.trim();
+          name = company;
+          docType = 'NIT';
+          docNum = document.getElementById('register-nit').value.trim();
+          representanteLegal = document.getElementById('register-rep-name').value.trim();
+          cedulaRepresentante = document.getElementById('register-rep-doc').value.trim();
+        } else {
+          name = document.getElementById('register-name').value.trim();
+          company = name;
+          docType = document.getElementById('register-doc-type').value;
+          docNum = document.getElementById('register-doc-num').value.trim();
+        }
+
         const newUser = {
           username,
           password,
           name,
           role: type,
-          company: name,
+          company,
+          email,
           documentType: docType,
           documentNumber: docNum,
           estado_suscripcion: 'activa_prueba',
           id_metodo_pago: null,
           routeId: type === 'Agente Independiente' ? 'route_' + username : null,
-          supervisor_id: (type === 'Usuario Supervisor' || type === 'Administrador de Rutas' || type === 'Otros (Comercios, Compraventas, Mercados)' || type === 'Agente Independiente') ? username : null
+          supervisor_id: (type === 'Usuario Supervisor' || type === 'Administrador de Rutas' || type === 'Otros (Comercios, Compraventas, Mercados)' || type === 'Agente Independiente') ? username : null,
+          representante_legal: representanteLegal,
+          cedula_representante: cedulaRepresentante
         };
 
         if (type === 'Agente Independiente') {
@@ -176,6 +198,12 @@ const authModule = {
       
       window.app.router.navigate('auth');
     });
+
+    // Listener de Tipo de Cuenta en Registro
+    const registerTypeSelect = document.getElementById('register-type');
+    if (registerTypeSelect) {
+      registerTypeSelect.addEventListener('change', () => this.handleRegisterTypeChange());
+    }
   },
 
   switchTab(tab) {
@@ -204,6 +232,31 @@ const authModule = {
           this.switchTab('login');
         });
       }
+    }
+  },
+
+  handleRegisterTypeChange() {
+    const type = document.getElementById('register-type').value;
+    const stdFields = document.getElementById('register-fields-standard');
+    const otherFields = document.getElementById('register-fields-others');
+    
+    if (!stdFields || !otherFields) return;
+    
+    const stdInputs = stdFields.querySelectorAll('input, select');
+    const otherInputs = otherFields.querySelectorAll('input');
+
+    if (type === 'Otros (Comercios, Compraventas, Mercados)') {
+      stdFields.style.display = 'none';
+      otherFields.style.display = 'block';
+      
+      stdInputs.forEach(i => i.removeAttribute('required'));
+      otherInputs.forEach(i => i.setAttribute('required', ''));
+    } else {
+      stdFields.style.display = 'block';
+      otherFields.style.display = 'none';
+      
+      stdInputs.forEach(i => i.setAttribute('required', ''));
+      otherInputs.forEach(i => i.removeAttribute('required'));
     }
   },
 
