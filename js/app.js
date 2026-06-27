@@ -9,19 +9,10 @@ const app = {
       // Escuchar cambios de hash
       window.addEventListener('hashchange', () => this.handleRouteFromHash());
       
-      // Vincular eventos de la barra de navegación para accesos rápidos
       const btnSupervisor = document.getElementById('nav-btn-supervisor');
-      const btnIndependent = document.getElementById('nav-btn-independent');
-      const btnCommerce = document.getElementById('nav-btn-commerce');
 
       if (btnSupervisor) {
         btnSupervisor.addEventListener('click', () => window.setCurrentView('Supervisor'));
-      }
-      if (btnIndependent) {
-        btnIndependent.addEventListener('click', () => window.setCurrentView('Agente Independiente'));
-      }
-      if (btnCommerce) {
-        btnCommerce.addEventListener('click', () => window.setCurrentView('Otro Comercio o Tienda'));
       }
 
       // Manejar carga inicial
