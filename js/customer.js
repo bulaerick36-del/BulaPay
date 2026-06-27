@@ -136,7 +136,6 @@ const customerModule = {
       }
 
       // Mapear los conceptos financieros con separación de capital e intereses
-      const isCommerceClient = !!client.product_name;
       const interestRate = isCommerceClient ? 0 : 20; // 20% para rutas estándar, 0% para comercios
       const capitalPrestado = Math.round(Number(client.totalDebt) / (1 + (interestRate / 100)));
       const totalAPagar = Number(client.totalDebt);
