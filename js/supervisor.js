@@ -30,7 +30,7 @@ const supervisorModule = {
     this.kpiRouteProgress = document.getElementById('kpi-route-progress');
 
     const currentUser = window.BulaPayDB.getCurrentUser();
-    const isCommerce = currentUser && currentUser.role === 'Otros (Comercios, Compraventas, Mercados)';
+    const isCommerce = currentUser && (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente');
 
     this.bindEvents();
     await this.renderDashboard();
@@ -1314,7 +1314,7 @@ const supervisorModule = {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
     
     // Check if the user is a commerce role
-    if (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)') {
+    if (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente') {
       if (this.welcomeMsg) {
         this.welcomeMsg.textContent = `Bienvenido, ${currentUser.name} | ${currentUser.company || 'Comercio'}`;
       }
@@ -1334,7 +1334,7 @@ const supervisorModule = {
       // Load commerce KPIs
       const clients = await window.BulaPayDB.getClients();
       // Total clients is simply clients.length
-      const products = clients.filter(c => c.product_name);
+      const products = clients.filter(c => c.product_name || c.city === 'Comercio');
       
       const kpiCommerceClients = document.getElementById('kpi-commerce-clients');
       if (kpiCommerceClients) kpiCommerceClients.textContent = clients.length;
@@ -2352,17 +2352,18 @@ const supervisorModule = {
         }
       } else if (type === 'products') {
         title.textContent = '📦 Productos Vendidos';
-        const products = clients ? clients.filter(c => c.product_name) : [];
+        const products = clients ? clients.filter(c => c.product_name || c.city === 'Comercio') : [];
         
         if (products.length === 0) {
           content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay productos registrados.</p>';
         } else {
           let html = `<div class="commerce-list">`;
           products.forEach(p => {
+            const productName = p.product_name || 'Producto General';
             html += `
               <div class="commerce-card-item" onclick="supervisorModule.showCommerceProductDetails('${p.cedula}')">
                 <div class="commerce-card-left">
-                  <div class="commerce-card-name">${p.product_name}</div>
+                  <div class="commerce-card-name">${productName}</div>
                   <div class="commerce-card-sub">Comprador: ${p.name} | Cat: ${p.product_category || 'Otros'}</div>
                 </div>
                 <div class="commerce-card-right">
@@ -2519,6 +2520,8 @@ const supervisorModule = {
         return;
       }
       
+      const productName = client.product_name || 'Producto General';
+      
       let html = `
         <button class="commerce-btn-back" onclick="supervisorModule.showCommerceClientDetails('${client.cedula}')">
           ← Volver al Detalle del Cliente
@@ -2527,7 +2530,7 @@ const supervisorModule = {
         <div style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
           <div style="font-weight: 700; font-size: 1.05rem; color: var(--text-primary); margin-bottom: 0.25rem;">${client.name}</div>
           <div style="font-size: 0.8rem; color: var(--text-secondary);">
-            Producto: <span style="font-weight: 600; color: var(--accent);">${client.product_name || 'N/A'}</span> | 
+            Producto: <span style="font-weight: 600; color: var(--accent);">${productName}</span> | 
             Saldo Pendiente: <span style="font-weight: 600; color: var(--color-rojo);">$${Number(client.outstanding).toLocaleString('es-CO')}</span>
           </div>
         </div>
@@ -2636,6 +2639,19 @@ const supervisorModule = {
       const remaining = Math.max(0, client.installmentsCount - paidCount);
       const progressPercent = Math.min(100, Math.round((paidCount / client.installmentsCount) * 100));
       
+      // Determine Product Status
+      let productStatus = 'En proceso';
+      let statusBadgeClass = 'commerce-badge-proceso'; // orange
+      if (Number(client.outstanding) <= 0) {
+        productStatus = 'Pagado';
+        statusBadgeClass = 'commerce-badge-pagado'; // green
+      } else if (remaining <= 2) {
+        productStatus = 'Casi pagado';
+        statusBadgeClass = 'commerce-badge-casi-pagado'; // blue
+      }
+      
+      const productName = client.product_name || 'Producto General';
+      
       let html = `
         <button class="commerce-btn-back" onclick="supervisorModule.openCommerceModal('products')">
           ← Volver al Listado de Productos
@@ -2644,7 +2660,7 @@ const supervisorModule = {
         <div class="commerce-detail-box">
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Nombre del Producto</span>
-            <span class="commerce-detail-value" style="color: var(--accent);">${client.product_name || 'N/A'}</span>
+            <span class="commerce-detail-value" style="color: var(--accent);">${productName}</span>
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Categoría</span>
@@ -2663,12 +2679,12 @@ const supervisorModule = {
             <span class="commerce-detail-value">$${Number(client.totalDebt).toLocaleString('es-CO')}</span>
           </div>
           <div class="commerce-detail-group">
-            <span class="commerce-detail-label">Total de Cuotas</span>
-            <span class="commerce-detail-value">${client.installmentsCount} cuotas</span>
+            <span class="commerce-detail-label">Estado del Producto</span>
+            <div><span class="commerce-badge ${statusBadgeClass}" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">${productStatus}</span></div>
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Cuotas Pagadas</span>
-            <span class="commerce-detail-value" style="color: var(--color-verde);">${paidCount} ✔</span>
+            <span class="commerce-detail-value" style="color: var(--color-verde);">${paidCount} de ${client.installmentsCount} ✔</span>
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Cuotas Faltantes</span>
