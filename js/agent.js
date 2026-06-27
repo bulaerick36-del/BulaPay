@@ -630,13 +630,14 @@ const agentModule = {
 
   async registerNewClient() {
     const name = document.getElementById('new-client-name').value.trim();
-    const agentSelector = document.getElementById('agent-selector');
-    const agentId = agentSelector ? agentSelector.value : '';
-
-    if (!agentId) {
-      alert('⚠️ Debe seleccionar un agente. Este campo es obligatorio.');
+    
+    // Obtener agentId de forma segura desde la sesión activa
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser) {
+      alert('❌ Error de seguridad: No hay sesión activa.');
       return;
     }
+    const agentId = currentUser.username;
 
     const cedula = document.getElementById('new-client-cedula').value.trim();
     const phone = document.getElementById('new-client-phone').value.trim();
@@ -910,24 +911,11 @@ const agentModule = {
     const selector = document.getElementById('agent-selector');
     if (!selector) return;
 
-    selector.innerHTML = '<option value="" disabled selected>Seleccione Agente...</option>';
-
-    try {
-      const agents = await window.BulaPayDB.getAgents();
-      if (agents.length === 0) {
-        selector.innerHTML = '<option value="" disabled selected>No hay agentes registrados</option>';
-        return;
-      }
-
-      agents.forEach(agent => {
-        const opt = document.createElement('option');
-        opt.value = agent.username;
-        opt.textContent = agent.name;
-        selector.appendChild(opt);
-      });
-    } catch (err) {
-      console.error("Error al cargar selector de agentes:", err);
-      selector.innerHTML = '<option value="" disabled selected>Error al cargar agentes</option>';
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (currentUser) {
+      selector.innerHTML = `<option value="${currentUser.username}" selected>${currentUser.name}</option>`;
+    } else {
+      selector.innerHTML = '<option value="" disabled selected>No hay sesión activa</option>';
     }
   },
 
