@@ -1575,12 +1575,14 @@ main {
   padding: 1.5rem;
   z-index: 2000;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.3s ease;
 }
 
 .supervisor-modal-overlay.active {
   display: flex;
   opacity: 1;
+  pointer-events: auto;
 }
 
 .supervisor-modal-card {
@@ -1953,4 +1955,9 @@ main {
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 0.25rem;
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 

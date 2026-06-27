@@ -2296,19 +2296,36 @@ const supervisorModule = {
   },
 
   async openCommerceModal(type) {
-    const modal = document.getElementById('modal-commerce-details');
-    const title = document.getElementById('commerce-modal-title');
-    const content = document.getElementById('commerce-modal-content');
-    
-    if (!modal || !title || !content) return;
-    
     try {
-      const clients = await window.BulaPayDB.getClients();
+      const modal = document.getElementById('modal-commerce-details');
+      const title = document.getElementById('commerce-modal-title');
+      const content = document.getElementById('commerce-modal-content');
+      
+      if (!modal || !title || !content) return;
+      
+      // Abrir modal e inyectar spinner de carga inmediatamente para evitar lag visual
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      
+      content.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; gap: 1rem;">
+          <div style="border: 4px solid rgba(16, 185, 129, 0.1); border-left-color: var(--primary); border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite;"></div>
+          <p style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 500;">Cargando información...</p>
+        </div>
+      `;
+
+      let clients = [];
+      try {
+        clients = await window.BulaPayDB.getClients();
+      } catch (dbErr) {
+        console.error("Error al obtener clientes desde la base de datos:", dbErr);
+        clients = [];
+      }
       
       if (type === 'clients') {
         title.textContent = '👥 Clientes Registrados';
         
-        if (clients.length === 0) {
+        if (!clients || clients.length === 0) {
           content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay clientes registrados.</p>';
         } else {
           let html = `<div class="commerce-list">`;
@@ -2335,7 +2352,7 @@ const supervisorModule = {
         }
       } else if (type === 'products') {
         title.textContent = '📦 Productos Vendidos';
-        const products = clients.filter(c => c.product_name);
+        const products = clients ? clients.filter(c => c.product_name) : [];
         
         if (products.length === 0) {
           content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay productos registrados.</p>';
@@ -2359,33 +2376,59 @@ const supervisorModule = {
           content.innerHTML = html;
         }
       }
-      
-      modal.style.display = 'flex';
     } catch (e) {
-      console.error(e);
-      alert('❌ Error al cargar métricas.');
+      console.error("Error en openCommerceModal:", e);
+      const content = document.getElementById('commerce-modal-content');
+      if (content) {
+        content.innerHTML = '<p style="color: var(--color-rojo); text-align: center; padding: 2rem;">❌ Ocurrió un error al cargar las métricas.</p>';
+      }
     }
   },
   
   closeCommerceModal() {
-    const modal = document.getElementById('modal-commerce-details');
-    if (modal) modal.style.display = 'none';
+    try {
+      const modal = document.getElementById('modal-commerce-details');
+      if (modal) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+      }
+    } catch (e) {
+      console.error("Error en closeCommerceModal:", e);
+    }
   },
   
   async showCommerceClientDetails(cedula) {
-    const title = document.getElementById('commerce-modal-title');
-    const content = document.getElementById('commerce-modal-content');
-    if (!content) return;
-    
     try {
-      const client = await window.BulaPayDB.getClientByCedula(cedula);
-      if (!client) return;
+      const title = document.getElementById('commerce-modal-title');
+      const content = document.getElementById('commerce-modal-content');
+      if (!title || !content) return;
       
       title.textContent = '👥 Detalle de Cliente';
       
-      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
-      const totalAbonado = payments.reduce((acc, pay) => acc + Number(pay.amount), 0);
+      content.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; gap: 1rem;">
+          <div style="border: 4px solid rgba(16, 185, 129, 0.1); border-left-color: var(--primary); border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite;"></div>
+          <p style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 500;">Cargando detalles...</p>
+        </div>
+      `;
       
+      let client = null;
+      let payments = [];
+      try {
+        client = await window.BulaPayDB.getClientByCedula(cedula);
+        if (client) {
+          payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+        }
+      } catch (dbErr) {
+        console.error("Error al obtener datos del cliente:", dbErr);
+      }
+      
+      if (!client) {
+        content.innerHTML = '<p style="color: var(--color-rojo); text-align: center; padding: 2rem;">❌ No se pudieron cargar los detalles del cliente.</p>';
+        return;
+      }
+      
+      const totalAbonado = payments ? payments.reduce((acc, pay) => acc + Number(pay.amount), 0) : 0;
       const isSaldado = Number(client.outstanding) <= 0;
       const badgeClass = isSaldado ? 'commerce-badge-pagado' : 'commerce-badge-proceso';
       const badgeText = isSaldado ? '✔ Pagado' : '⏳ En Proceso';
@@ -2437,21 +2480,44 @@ const supervisorModule = {
       
       content.innerHTML = html;
     } catch (e) {
-      console.error(e);
-      content.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar los detalles del cliente.</p>';
+      console.error("Error en showCommerceClientDetails:", e);
+      const content = document.getElementById('commerce-modal-content');
+      if (content) {
+        content.innerHTML = '<p style="color: var(--color-rojo); text-align: center; padding: 2rem;">❌ Ocurrió un error al cargar el detalle del cliente.</p>';
+      }
     }
   },
 
   async showCommerceClientCarton(cedula) {
-    const title = document.getElementById('commerce-modal-title');
-    const content = document.getElementById('commerce-modal-content');
-    if (!content) return;
-    
     try {
-      const client = await window.BulaPayDB.getClientByCedula(cedula);
-      if (!client) return;
+      const title = document.getElementById('commerce-modal-title');
+      const content = document.getElementById('commerce-modal-content');
+      if (!title || !content) return;
       
       title.textContent = '🎴 Cartón Digital';
+      
+      content.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; gap: 1rem;">
+          <div style="border: 4px solid rgba(16, 185, 129, 0.1); border-left-color: var(--primary); border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite;"></div>
+          <p style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 500;">Cargando cartón digital...</p>
+        </div>
+      `;
+      
+      let client = null;
+      let payments = [];
+      try {
+        client = await window.BulaPayDB.getClientByCedula(cedula);
+        if (client) {
+          payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        }
+      } catch (dbErr) {
+        console.error("Error al obtener datos para el cartón digital:", dbErr);
+      }
+      
+      if (!client) {
+        content.innerHTML = '<p style="color: var(--color-rojo); text-align: center; padding: 2rem;">❌ No se pudo cargar el cartón digital del cliente.</p>';
+        return;
+      }
       
       let html = `
         <button class="commerce-btn-back" onclick="supervisorModule.showCommerceClientDetails('${client.cedula}')">
@@ -2473,13 +2539,16 @@ const supervisorModule = {
       content.innerHTML = html;
       
       const grid = document.getElementById('modal-commerce-ledger-grid');
+      if (!grid) return;
+      
       const totalInstallments = client.installmentsCount || 5;
       const installmentAmount = client.installmentAmount || 100000;
       
-      const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
       const paidInstallments = payments
-        .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0)
-        .map(p => p.installmentNumber);
+        ? payments
+            .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0)
+            .map(p => p.installmentNumber)
+        : [];
         
       for (let i = 1; i <= totalInstallments; i++) {
         const cell = document.createElement('div');
@@ -2509,34 +2578,61 @@ const supervisorModule = {
           cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
           
           cell.addEventListener('click', async () => {
-            if (confirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
-              await this.payCommerceInstallment(client, i, installmentAmount);
-              // Recargar la vista del cartón digital con los nuevos datos
-              await this.showCommerceClientCarton(client.cedula);
+            try {
+              if (confirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
+                await this.payCommerceInstallment(client, i, installmentAmount);
+                // Recargar el cartón
+                await this.showCommerceClientCarton(client.cedula);
+              }
+            } catch (clickErr) {
+              console.error("Error al registrar pago de cuota:", clickErr);
+              alert("❌ Error al procesar el pago.");
             }
           });
         }
         grid.appendChild(cell);
       }
     } catch (e) {
-      console.error(e);
-      content.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar el cartón digital.</p>';
+      console.error("Error en showCommerceClientCarton:", e);
+      const content = document.getElementById('commerce-modal-content');
+      if (content) {
+        content.innerHTML = '<p style="color: var(--color-rojo); text-align: center; padding: 2rem;">❌ Ocurrió un error al cargar el cartón digital.</p>';
+      }
     }
   },
 
   async showCommerceProductDetails(cedula) {
-    const title = document.getElementById('commerce-modal-title');
-    const content = document.getElementById('commerce-modal-content');
-    if (!content) return;
-    
     try {
-      const client = await window.BulaPayDB.getClientByCedula(cedula);
-      if (!client) return;
+      const title = document.getElementById('commerce-modal-title');
+      const content = document.getElementById('commerce-modal-content');
+      if (!title || !content) return;
       
       title.textContent = '📦 Detalle de Producto';
       
-      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
-      const paidCount = payments.filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0).length;
+      content.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; gap: 1rem;">
+          <div style="border: 4px solid rgba(16, 185, 129, 0.1); border-left-color: var(--primary); border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite;"></div>
+          <p style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 500;">Cargando detalles...</p>
+        </div>
+      `;
+      
+      let client = null;
+      let payments = [];
+      try {
+        client = await window.BulaPayDB.getClientByCedula(cedula);
+        if (client) {
+          payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+        }
+      } catch (dbErr) {
+        console.error("Error al obtener detalles del producto:", dbErr);
+      }
+      
+      if (!client) {
+        content.innerHTML = '<p style="color: var(--color-rojo); text-align: center; padding: 2rem;">❌ No se pudo cargar el detalle del producto.</p>';
+        return;
+      }
+      
+      const paidCount = payments ? payments.filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0).length : 0;
       const remaining = Math.max(0, client.installmentsCount - paidCount);
       const progressPercent = Math.min(100, Math.round((paidCount / client.installmentsCount) * 100));
       
@@ -2588,7 +2684,7 @@ const supervisorModule = {
         </div>
       `;
       
-      if (payments.length > 0) {
+      if (payments && payments.length > 0) {
         html += `
           <div class="commerce-history-title">Historial de Cuotas Pagadas</div>
           <div class="table-wrapper" style="margin-bottom: 1rem;">
@@ -2629,10 +2725,14 @@ const supervisorModule = {
       
       content.innerHTML = html;
     } catch (e) {
-      console.error(e);
-      content.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar los detalles del producto.</p>';
+      console.error("Error en showCommerceProductDetails:", e);
+      const content = document.getElementById('commerce-modal-content');
+      if (content) {
+        content.innerHTML = '<p style="color: var(--color-rojo); text-align: center; padding: 2rem;">❌ Ocurrió un error al cargar el detalle del producto.</p>';
+      }
     }
   },
+
 
   destroy() {
     if (this.mapAnimationInterval) {
