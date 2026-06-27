@@ -85,7 +85,8 @@ const customerModule = {
       const clientRoute = routes.find(r => r.id === client.routeId) || { agentName: 'No Asignado', name: 'General' };
       
       if (this.custMeta) {
-        this.custMeta.textContent = `Cédula: ${client.cedula} | Agente de Ruta: ${clientRoute.agentName} (${clientRoute.name})`;
+        const productLabel = client.product_name ? `Producto: ${client.product_name}` : 'Tipo: Préstamo Estándar';
+        this.custMeta.textContent = `Cédula: ${client.cedula} | ${productLabel} | Agente de Ruta: ${clientRoute.agentName} (${clientRoute.name})`;
       }
 
       if (this.custTotalDebt) this.custTotalDebt.textContent = `$${Number(client.totalDebt).toLocaleString('es-CO')}`;

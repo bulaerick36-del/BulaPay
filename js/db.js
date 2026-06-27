@@ -412,31 +412,23 @@ const db = {
   },
 
   async getClientByCedula(cedula) {
-    const supabase = await initSupabase();
-    const currentUser = this.getCurrentUser();
-    if (!currentUser) return null;
+    try {
+      const supabase = await initSupabase();
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('cedula', String(cedula))
+        .maybeSingle();
 
-    let query = supabase.from('clients').select('*').eq('cedula', String(cedula));
-
-    // Si es un Agente de Ruta, filtrar por su agent_id
-    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
-      const supId = this.getSupervisorId();
-      if (supId) {
-        query = query.eq('supervisor_id', supId);
+      if (error) {
+        console.error(`Error al obtener cliente por cédula "${cedula}":`, error);
+        return null;
       }
-      query = query.eq('agent_id', currentUser.username);
-    } else {
-      const supId = this.getSupervisorId();
-      if (!supId) return null;
-      query = query.eq('supervisor_id', supId);
-    }
-
-    const { data, error } = await query.maybeSingle();
-    if (error) {
-      console.error(`Error al obtener cliente por cédula "${cedula}":`, error);
+      return data;
+    } catch (err) {
+      console.error(`Excepción en getClientByCedula para cédula "${cedula}":`, err);
       return null;
     }
-    return data;
   },
 
   async getGlobalClientByCedula(cedula) {
