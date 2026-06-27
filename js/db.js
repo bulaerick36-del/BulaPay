@@ -117,7 +117,10 @@ const db = {
     if (supId && !user.supervisor_id) {
       user.supervisor_id = supId;
     }
-    if (user.role === 'Usuario Supervisor' && !user.supervisor_id) {
+    if ((user.role === 'Usuario Supervisor' || 
+         user.role === 'Administrador de Rutas' || 
+         user.role === 'Otros (Comercios, Compraventas, Mercados)' || 
+         user.role === 'Agente Independiente') && !user.supervisor_id) {
       user.supervisor_id = user.username;
     }
     const { data, error } = await supabase
@@ -347,7 +350,7 @@ const db = {
 
     // Fallback: Consultar la tabla 'users' filtrando por rol de Agente
     const supId = this.getSupervisorId();
-    let query = supabase.from('users').select('*').in('role', ['Agente de Ruta', 'agent']);
+    let query = supabase.from('users').select('*').in('role', ['Agente de Ruta', 'agent', 'Agente Independiente']);
     if (supId) {
       query = query.eq('supervisor_id', supId);
     }
@@ -368,7 +371,7 @@ const db = {
     let query = supabase.from('clients').select('*');
 
     // Si es un Agente de Ruta, filtrar por su agent_id (su propio ID/username)
-    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
       const supId = this.getSupervisorId();
       if (supId) {
         query = query.eq('supervisor_id', supId);
@@ -397,7 +400,7 @@ const db = {
     let query = supabase.from('clients').select('*').eq('cedula', String(cedula));
 
     // Si es un Agente de Ruta, filtrar por su agent_id
-    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
       const supId = this.getSupervisorId();
       if (supId) {
         query = query.eq('supervisor_id', supId);

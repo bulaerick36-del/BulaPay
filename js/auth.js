@@ -86,10 +86,10 @@ const authModule = {
         try {
           const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-          if (user && user.password === passwordInput && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
+          if (user && user.password === passwordInput && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente')) {
             this.loginUser(user);
           } else if (user && user.password === passwordInput) {
-            alert('❌ Acceso denegado. Este portal es exclusivo para Agentes de Ruta.');
+            alert('❌ Acceso denegado. Este portal es exclusivo para Agentes.');
           } else {
             alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
           }
@@ -133,8 +133,27 @@ const authModule = {
           documentType: docType,
           documentNumber: docNum,
           estado_suscripcion: 'activa_prueba',
-          id_metodo_pago: null
+          id_metodo_pago: null,
+          routeId: type === 'Agente Independiente' ? 'route_' + username : null,
+          supervisor_id: (type === 'Usuario Supervisor' || type === 'Administrador de Rutas' || type === 'Otros (Comercios, Compraventas, Mercados)' || type === 'Agente Independiente') ? username : null
         };
+
+        if (type === 'Agente Independiente') {
+          const defaultRoute = {
+            id: 'route_' + username,
+            name: 'Ruta ' + name,
+            agentUsername: username,
+            agentName: name,
+            capital: 0,
+            collected: 0,
+            status: 'En Ruta',
+            supervisor_id: username,
+            opening_time: '06:00',
+            closing_time: '18:00',
+            has_extension: false
+          };
+          await window.BulaPayDB.saveRoute(defaultRoute);
+        }
 
         // Guardar en base de datos
         await window.BulaPayDB.saveUser(newUser);
@@ -197,9 +216,9 @@ const authModule = {
     if (devLinks) devLinks.style.display = 'none';
 
     // Redirigir según el rol del usuario
-    if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor') {
+    if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor' || user.role === 'Administrador de Rutas' || user.role === 'Otros (Comercios, Compraventas, Mercados)') {
       window.app.router.navigate('supervisor');
-    } else if (user.role === 'Agente de Ruta' || user.role === 'agent') {
+    } else if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
       window.app.router.navigate('agent');
     }
   },

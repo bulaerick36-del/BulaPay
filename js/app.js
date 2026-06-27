@@ -65,9 +65,9 @@ const app = {
       }
 
       if (user) {
-        if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor') {
+        if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor' || user.role === 'Administrador de Rutas' || user.role === 'Otros (Comercios, Compraventas, Mercados)') {
           this.navigate('supervisor');
-        } else if (user.role === 'Agente de Ruta' || user.role === 'agent') {
+        } else if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
           this.navigate('agent');
         }
       } else {
@@ -112,7 +112,7 @@ const app = {
       const user = window.BulaPayDB.getCurrentUser();
 
       if (route === 'supervisor') {
-        if (!user || (user.role !== 'Usuario Supervisor' && user.role !== 'Comercio Independiente' && user.role !== 'supervisor')) {
+        if (!user || (user.role !== 'Usuario Supervisor' && user.role !== 'Comercio Independiente' && user.role !== 'supervisor' && user.role !== 'Administrador de Rutas' && user.role !== 'Otros (Comercios, Compraventas, Mercados)')) {
           console.warn('Acceso denegado a panel de supervisor. Redirigiendo.');
           this.navigate('auth');
           return;
@@ -121,7 +121,7 @@ const app = {
       } 
       
       else if (route === 'agent') {
-        if (!user || (user.role !== 'Agente de Ruta' && user.role !== 'agent')) {
+        if (!user || (user.role !== 'Agente de Ruta' && user.role !== 'agent' && user.role !== 'Agente Independiente')) {
           console.warn('Acceso denegado a terminal de agente. Redirigiendo.');
           this.navigate('agent-login');
           return;
@@ -130,7 +130,7 @@ const app = {
       } 
       
       else if (route === 'agent-login') {
-        if (user && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
+        if (user && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente')) {
           this.navigate('agent');
           return;
         }
@@ -329,7 +329,7 @@ const app = {
       if (routeStatusElement) {
         const currentUser = window.BulaPayDB.getCurrentUser();
         
-        if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
+        if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
           const routeId = currentUser.routeId;
           if (routeId) {
             try {

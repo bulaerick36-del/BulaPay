@@ -205,7 +205,7 @@ const customerModule = {
     try {
       // Filtrar gestores de cartera y supervisores
       const allUsers = await window.BulaPayDB.getUsers();
-      let managers = allUsers.filter(u => u.role === 'Usuario Supervisor' || u.role === 'Comercio Independiente');
+      let managers = allUsers.filter(u => u.role === 'Usuario Supervisor' || u.role === 'Comercio Independiente' || u.role === 'supervisor' || u.role === 'Administrador de Rutas' || u.role === 'Otros (Comercios, Compraventas, Mercados)' || u.role === 'Agente Independiente');
 
       // Aplicar Filtro de Zona/Ciudad
       if (this.activeFilter !== 'Todos') {
