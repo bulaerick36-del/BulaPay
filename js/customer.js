@@ -22,9 +22,10 @@ const customerModule = {
     // Elementos de resumen cliente
     this.custName = document.getElementById('cust-client-name');
     this.custMeta = document.getElementById('cust-client-meta');
-    this.custTotalDebt = document.getElementById('cust-total-debt');
-    this.custTotalPaid = document.getElementById('cust-total-paid');
-    this.custOutstanding = document.getElementById('cust-outstanding');
+    this.custCapitalPrestado = document.getElementById('cust-capital-prestado');
+    this.custTotalPagar = document.getElementById('cust-total-pagar');
+    this.custTotalAbonado = document.getElementById('cust-total-abonado');
+    this.custSaldoPendiente = document.getElementById('cust-saldo-pendiente');
 
     this.bindEvents();
     
@@ -89,9 +90,18 @@ const customerModule = {
         this.custMeta.textContent = `Cédula: ${client.cedula} | ${productLabel} | Agente de Ruta: ${clientRoute.agentName} (${clientRoute.name})`;
       }
 
-      if (this.custTotalDebt) this.custTotalDebt.textContent = `$${Number(client.totalDebt).toLocaleString('es-CO')}`;
-      if (this.custTotalPaid) this.custTotalPaid.textContent = `$${totalPaid.toLocaleString('es-CO')}`;
-      if (this.custOutstanding) this.custOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
+      // Mapear los conceptos financieros con separación de capital e intereses
+      const isCommerceClient = !!client.product_name;
+      const interestRate = isCommerceClient ? 0 : 20; // 20% para rutas estándar, 0% para comercios
+      const capitalPrestado = Math.round(Number(client.totalDebt) / (1 + (interestRate / 100)));
+      const totalAPagar = Number(client.totalDebt);
+      const totalAbonado = totalPaid;
+      const saldoPendiente = Number(client.outstanding);
+
+      if (this.custCapitalPrestado) this.custCapitalPrestado.textContent = `$${capitalPrestado.toLocaleString('es-CO')}`;
+      if (this.custTotalPagar) this.custTotalPagar.textContent = `$${totalAPagar.toLocaleString('es-CO')}`;
+      if (this.custTotalAbonado) this.custTotalAbonado.textContent = `$${totalAbonado.toLocaleString('es-CO')}`;
+      if (this.custSaldoPendiente) this.custSaldoPendiente.textContent = `$${saldoPendiente.toLocaleString('es-CO')}`;
 
       // Actualizar barra de progreso
       const progressPercent = Number(client.totalDebt) > 0 ? Math.round((totalPaid / Number(client.totalDebt)) * 100) : 0;
