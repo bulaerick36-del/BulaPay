@@ -199,185 +199,311 @@
           <h1 class="title-gradient" style="margin-bottom: 0.25rem;">Gestión de Cartera</h1>
           <p style="color: var(--text-secondary);" id="supervisor-welcome-msg">Bienvenido, Usuario Supervisor</p>
         </div>
-        <button class="btn btn-secondary" onclick="supervisorModule.openScheduleModal()" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); display: flex; align-items: center; gap: 0.5rem;">
+        <button id="btn-schedule-config" class="btn btn-secondary" onclick="supervisorModule.openScheduleModal()" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); display: flex; align-items: center; gap: 0.5rem;">
           ⚙️ Configurar Horario de Rutas
         </button>
       </div>
 
-      <!-- KPIs Dashboard -->
-      <div class="dashboard-grid">
-        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('agents')">
-          <div class="kpi-icon">📋</div>
-          <div class="kpi-info">
-            <h4>Agentes Activos</h4>
-            <p id="kpi-active-agents">0</p>
-          </div>
-        </div>
-        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('capital')">
-          <div class="kpi-icon">💰</div>
-          <div class="kpi-info">
-            <h4>Capital Asignado</h4>
-            <p id="kpi-total-capital">$0</p>
-          </div>
-        </div>
-        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('collected')">
-          <div class="kpi-icon">📈</div>
-          <div class="kpi-info">
-            <h4>Recaudado Hoy</h4>
-            <p id="kpi-total-collected">$0</p>
-          </div>
-        </div>
-        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('progress')">
-          <div class="kpi-icon">📊</div>
-          <div class="kpi-info" style="width: 100%;">
-            <h4>Progreso de Cobros</h4>
-            <p id="kpi-route-progress">0%</p>
-            <div class="progress-bar-container" style="margin-top: 0.5rem; background-color: rgba(255,255,255,0.05); height: 6px; border-radius: 10px; overflow: hidden; width: 100%;">
-              <div id="kpi-route-progress-bar" class="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.5s ease; border-radius: 10px;"></div>
+      <!-- VISTA ESTÁNDAR SUPERVISOR -->
+      <div id="supervisor-dashboard-standard">
+        <!-- KPIs Dashboard -->
+        <div class="dashboard-grid">
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('agents')">
+            <div class="kpi-icon">📋</div>
+            <div class="kpi-info">
+              <h4>Agentes Activos</h4>
+              <p id="kpi-active-agents">0</p>
             </div>
+          </div>
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('capital')">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-info">
+              <h4>Capital Asignado</h4>
+              <p id="kpi-total-capital">$0</p>
+            </div>
+          </div>
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('collected')">
+            <div class="kpi-icon">📈</div>
+            <div class="kpi-info">
+              <h4>Recaudado Hoy</h4>
+              <p id="kpi-total-collected">$0</p>
+            </div>
+          </div>
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('progress')">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-info" style="width: 100%;">
+              <h4>Progreso de Cobros</h4>
+              <p id="kpi-route-progress">0%</p>
+              <div class="progress-bar-container" style="margin-top: 0.5rem; background-color: rgba(255,255,255,0.05); height: 6px; border-radius: 10px; overflow: hidden; width: 100%;">
+                <div id="kpi-route-progress-bar" class="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.5s ease; border-radius: 10px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vista Principal: Rutas y Monitoreo (Fija y Única) -->
+        <div class="supervisor-tab-panel active" id="panel-sup-routes" style="display: block;">
+          <!-- Acciones de Supervisor -->
+          <div class="supervisor-actions">
+          
+            <!-- Crear Ruta Logística con Múltiples Agentes y Calculadora -->
+            <div class="card route-form-container">
+              <div class="sub-tabs-container" style="display: flex; background-color: var(--bg-secondary); padding: 0.25rem; border-radius: 8px; margin-bottom: 1.25rem; border: 1px solid var(--border-color);">
+                <button type="button" id="btn-route-tab-create" class="sub-tab active" style="flex: 1; padding: 0.5rem; background: var(--bg-primary); border: none; color: var(--accent); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Crear Ruta</button>
+                <button type="button" id="btn-route-tab-manage" class="sub-tab" style="flex: 1; padding: 0.5rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Gestionar Rutas</button>
+              </div>
+
+              <!-- Contenedor de Crear Ruta -->
+              <div id="route-tab-content-create" style="display: block;">
+                <h3>Crear Nueva Ruta Logística</h3>
+                <form id="form-create-route">
+                  <div class="form-group">
+                    <label for="route-name">Nombre de la Ruta</label>
+                    <input type="text" id="route-name" placeholder="Ej. Maicao" required>
+                  </div>
+                  
+                  <!-- Campos de capital y porcentaje -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div class="form-group">
+                      <label for="route-capital">Capital Asignado</label>
+                      <input type="number" id="route-capital" placeholder="Ej. 150000" required min="0">
+                    </div>
+                    <div class="form-group">
+                      <label for="route-margin">Porcentaje (%)</label>
+                      <input type="number" id="route-margin" placeholder="Ej. 20" required min="0" value="20">
+                    </div>
+                  </div>
+
+                  <!-- Registro Múltiple de Agentes -->
+                  <h4 style="font-size: 0.85rem; color: var(--accent); margin: 1.5rem 0 0.5rem 0; text-transform: uppercase;">
+                    Asignación de Agentes de Ruta
+                  </h4>
+
+                  <div id="route-agents-list" style="margin-bottom: 1rem;">
+                    <div class="agent-fields-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
+                      <h5 style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.5rem;">Agente Principal</h5>
+                      <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
+                        <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
+                      </div>
+                      <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label style="font-size: 0.7rem;">Número de Cédula</label>
+                        <input type="text" class="route-agent-cedula" placeholder="Ej. 12345678" required style="padding: 0.5rem; font-size: 0.85rem;">
+                      </div>
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                          <label style="font-size: 0.7rem;">Usuario (Login)</label>
+                          <input type="text" class="route-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                          <label style="font-size: 0.7rem;">Contraseña</label>
+                          <input type="password" class="route-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem;">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button type="button" class="btn btn-secondary" onclick="supervisorModule.addAgentFieldGroup()" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; width: auto; margin-bottom: 1.5rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); align-self: flex-start; display: block;">
+                    ➕ Agregar otro agente
+                  </button>
+
+                  <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Crear Ruta y Agentes</button>
+                </form>
+              </div>
+
+              <!-- Contenedor de Gestionar Rutas -->
+              <div id="route-tab-content-manage" style="display: none;">
+                <h3>Gestionar Rutas Logísticas</h3>
+                <div id="manage-routes-list" style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; padding-right: 0.25rem;">
+                  <!-- Se poblará dinámicamente -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Consultar Ruta en Vivo con Filtro de Mapa y Feed de Progreso -->
+            <div class="card route-query-container">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 0;">Consulta de Rutas en Tiempo Real</h3>
+                <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; width: auto;">
+                  <label for="map-route-filter" style="margin-bottom: 0; font-size: 0.75rem; white-space: nowrap; color: var(--text-secondary);">Filtro:</label>
+                  <select id="map-route-filter" onchange="supervisorModule.centerMapOnRoute()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; width: 160px; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px;">
+                    <option value="Todos">Todas las Rutas</option>
+                  </select>
+                </div>
+              </div>
+              
+              <!-- Mapa GPS Real Leaflet -->
+              <div id="live-gps-map" style="height: 400px; width: 100%; border-radius: 12px; border: 1px solid var(--border-color); background-color: var(--bg-secondary); margin-bottom: 1.5rem; position: relative; z-index: 1;"></div>
+
+              <!-- Panel Inferior de Agentes (Filtro por Ruta) -->
+              <div id="supervisor-agents-panel" style="margin-bottom: 1.5rem; display: none;">
+                <h4 style="font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.75rem;">Agentes en esta Ruta</h4>
+                <div id="supervisor-agents-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+                  <!-- Tarjetas dinámicas -->
+                </div>
+              </div>
+
+              <!-- Feed de Progreso en Vivo -->
+              <div class="live-feed-container" style="background-color: rgba(11, 17, 30, 0.45); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.35rem;">
+                    <span class="live-feed-pulse-dot" style="display: inline-block; width: 6px; height: 6px; background-color: var(--accent); border-radius: 50%; box-shadow: 0 0 6px var(--accent);"></span>
+                    Progreso en Vivo
+                  </span>
+                  <span style="font-size: 0.65rem; color: var(--text-muted);" id="live-feed-time">Iniciando...</span>
+                </div>
+                <div id="live-feed-content" style="font-size: 0.8rem; color: var(--text-secondary); max-height: 85px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; padding-right: 0.5rem;">
+                  <!-- logs de simulación se inyectan aquí -->
+                </div>
+              </div>
+
+              <!-- Tabla de Estado de Cobradores -->
+              <div class="table-wrapper">
+                <table class="route-table" id="table-routes-progress">
+                  <thead>
+                    <tr>
+                      <th>Nombre de Ruta</th>
+                      <th>Agente(s) Asignado(s)</th>
+                      <th>Capital de Trabajo</th>
+                      <th>Recaudo Recibido</th>
+                      <th>Estado del Agente</th>
+                      <th>Tiempo de Operación</th>
+                      <th>Eficiencia</th>
+                    </tr>
+                  </thead>
+                  <tbody id="routes-tbody">
+                    <!-- Se inyecta dinámicamente con JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div> <!-- Cierra supervisor-actions -->
+        </div> <!-- Cierra panel-sup-routes -->
+      </div> <!-- Cierra supervisor-dashboard-standard -->
+
+      <!-- VISTA DE COMERCIO (OTROS) -->
+      <!-- KPIs Dashboard de Comercio -->
+      <div class="dashboard-grid" id="commerce-kpis" style="display: none;">
+        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openCommerceModal('clients')">
+          <div class="kpi-icon">👥</div>
+          <div class="kpi-info">
+            <h4>Clientes</h4>
+            <p id="kpi-commerce-clients">0</p>
+          </div>
+        </div>
+        <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openCommerceModal('products')">
+          <div class="kpi-icon">📦</div>
+          <div class="kpi-info">
+            <h4>Productos</h4>
+            <p id="kpi-commerce-products">0</p>
           </div>
         </div>
       </div>
 
-      <!-- Vista Principal: Rutas y Monitoreo (Fija y Única) -->
-      <div class="supervisor-tab-panel active" id="panel-sup-routes" style="display: block;">
-        <!-- Acciones de Supervisor -->
-        <div class="supervisor-actions">
-        
-          <!-- Crear Ruta Logística con Múltiples Agentes y Calculadora -->
-          <div class="card route-form-container">
-            <div class="sub-tabs-container" style="display: flex; background-color: var(--bg-secondary); padding: 0.25rem; border-radius: 8px; margin-bottom: 1.25rem; border: 1px solid var(--border-color);">
-              <button type="button" id="btn-route-tab-create" class="sub-tab active" style="flex: 1; padding: 0.5rem; background: var(--bg-primary); border: none; color: var(--accent); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Crear Ruta</button>
-              <button type="button" id="btn-route-tab-manage" class="sub-tab" style="flex: 1; padding: 0.5rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Gestionar Rutas</button>
+      <!-- Sección Central de Comercio -->
+      <div class="card" id="commerce-main-section" style="margin-top: 1.5rem; display: none;">
+        <div class="sub-tabs-container" style="display: flex; background-color: var(--bg-secondary); padding: 0.25rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
+          <button type="button" id="btn-commerce-tab-sale" class="sub-tab active" onclick="supervisorModule.switchCommerceTab('sale')" style="flex: 1; padding: 0.75rem; background: var(--bg-primary); border: none; color: var(--accent); font-weight: 600; font-size: 0.9rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">🛒 Registrar Venta</button>
+          <button type="button" id="btn-commerce-tab-payment" class="sub-tab" onclick="supervisorModule.switchCommerceTab('payment')" style="flex: 1; padding: 0.75rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 600; font-size: 0.9rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">💳 Registrar Pago</button>
+        </div>
+
+        <!-- FORMULARIO REGISTRAR VENTA -->
+        <div id="commerce-tab-sale" style="display: block;">
+          <h3 style="margin-bottom: 1.5rem; color: var(--text-primary);">Registrar Venta de Producto</h3>
+          <form id="form-commerce-sale" onsubmit="supervisorModule.registerCommerceSale(event)">
+            
+            <h4 style="font-size: 0.85rem; color: var(--accent); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Datos del Producto</h4>
+            <div class="form-group">
+              <label for="sale-product-name">Nombre del Producto</label>
+              <input type="text" id="sale-product-name" placeholder="Ej. Smart TV Samsung 43\" required>
             </div>
-
-            <!-- Contenedor de Crear Ruta -->
-            <div id="route-tab-content-create" style="display: block;">
-              <h3>Crear Nueva Ruta Logística</h3>
-              <form id="form-create-route">
-                <div class="form-group">
-                  <label for="route-name">Nombre de la Ruta</label>
-                  <input type="text" id="route-name" placeholder="Ej. Maicao" required>
-                </div>
-                
-                <!-- Campos de capital y porcentaje -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                  <div class="form-group">
-                    <label for="route-capital">Capital Asignado</label>
-                    <input type="number" id="route-capital" placeholder="Ej. 150000" required min="0">
-                  </div>
-                  <div class="form-group">
-                    <label for="route-margin">Porcentaje (%)</label>
-                    <input type="number" id="route-margin" placeholder="Ej. 20" required min="0" value="20">
-                  </div>
-                </div>
-
-                <!-- Registro Múltiple de Agentes -->
-                <h4 style="font-size: 0.85rem; color: var(--accent); margin: 1.5rem 0 0.5rem 0; text-transform: uppercase;">
-                  Asignación de Agentes de Ruta
-                </h4>
-
-                <div id="route-agents-list" style="margin-bottom: 1rem;">
-                  <div class="agent-fields-group" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
-                    <h5 style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.5rem;">Agente Principal</h5>
-                    <div class="form-group" style="margin-bottom: 0.75rem;">
-                      <label style="font-size: 0.7rem;">Nombre Completo del Agente</label>
-                      <input type="text" class="route-agent-name" placeholder="Ej. Juan Pérez" required style="padding: 0.5rem; font-size: 0.85rem;">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0.75rem;">
-                      <label style="font-size: 0.7rem;">Número de Cédula</label>
-                      <input type="text" class="route-agent-cedula" placeholder="Ej. 12345678" required style="padding: 0.5rem; font-size: 0.85rem;">
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                      <div class="form-group" style="margin-bottom: 0;">
-                        <label style="font-size: 0.7rem;">Usuario (Login)</label>
-                        <input type="text" class="route-agent-username" placeholder="Usuario" required autocomplete="username" style="padding: 0.5rem; font-size: 0.85rem;">
-                      </div>
-                      <div class="form-group" style="margin-bottom: 0;">
-                        <label style="font-size: 0.7rem;">Contraseña</label>
-                        <input type="password" class="route-agent-password" placeholder="Contraseña" required autocomplete="new-password" style="padding: 0.5rem; font-size: 0.85rem;">
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <button type="button" class="btn btn-secondary" onclick="supervisorModule.addAgentFieldGroup()" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; width: auto; margin-bottom: 1.5rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); align-self: flex-start; display: block;">
-                  ➕ Agregar otro agente
-                </button>
-
-                <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Crear Ruta y Agentes</button>
-              </form>
-            </div>
-
-            <!-- Contenedor de Gestionar Rutas -->
-            <div id="route-tab-content-manage" style="display: none;">
-              <h3>Gestionar Rutas Logísticas</h3>
-              <div id="manage-routes-list" style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; padding-right: 0.25rem;">
-                <!-- Se poblará dinámicamente -->
-              </div>
-            </div>
-          </div>
-
-          <!-- Consultar Ruta en Vivo con Filtro de Mapa y Feed de Progreso -->
-          <div class="card route-query-container">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
-              <h3 style="margin-bottom: 0;">Consulta de Rutas en Tiempo Real</h3>
-              <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; width: auto;">
-                <label for="map-route-filter" style="margin-bottom: 0; font-size: 0.75rem; white-space: nowrap; color: var(--text-secondary);">Filtro:</label>
-                <select id="map-route-filter" onchange="supervisorModule.centerMapOnRoute()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; width: 160px; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px;">
-                  <option value="Todos">Todas las Rutas</option>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <div class="form-group">
+                <label for="sale-product-category">Categoría</label>
+                <select id="sale-product-category" onchange="supervisorModule.handleCategoryChange()" required>
+                  <option value="" disabled selected>Seleccione...</option>
+                  <option value="Tecnología">Tecnología</option>
+                  <option value="Cosmético">Cosmético</option>
+                  <option value="Otros">Otros</option>
                 </select>
+              </div>
+              <div class="form-group">
+                <label for="sale-product-price">Valor del Producto</label>
+                <input type="text" id="sale-product-price" placeholder="Ej. 1.200.000" oninput="supervisorModule.formatPriceInput(this)" required>
               </div>
             </div>
             
-            <!-- Mapa GPS Real Leaflet -->
-            <div id="live-gps-map" style="height: 400px; width: 100%; border-radius: 12px; border: 1px solid var(--border-color); background-color: var(--bg-secondary); margin-bottom: 1.5rem; position: relative; z-index: 1;"></div>
+            <!-- Campo dinámico para 'Otros' categoría -->
+            <div class="form-group" id="sale-product-category-other-wrapper" style="display: none; margin-top: 0.5rem;">
+              <label for="sale-product-category-other">Escriba la Categoría</label>
+              <input type="text" id="sale-product-category-other" placeholder="Ej. Electrodomésticos">
+            </div>
 
-            <!-- Panel Inferior de Agentes (Filtro por Ruta) -->
-            <div id="supervisor-agents-panel" style="margin-bottom: 1.5rem; display: none;">
-              <h4 style="font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.75rem;">Agentes en esta Ruta</h4>
-              <div id="supervisor-agents-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
-                <!-- Tarjetas dinámicas -->
+            <h4 style="font-size: 0.85rem; color: var(--accent); margin: 1.5rem 0 0.75rem 0; text-transform: uppercase; letter-spacing: 0.05em;">Condiciones de Pago</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <div class="form-group">
+                <label for="sale-installments">Cantidad de Cuotas</label>
+                <input type="number" id="sale-installments" placeholder="Ej. 6" required min="1">
+              </div>
+              <div class="form-group">
+                <label for="sale-periodicity">Periodicidad</label>
+                <select id="sale-periodicity" required>
+                  <option value="Días">Días</option>
+                  <option value="Meses" selected>Meses</option>
+                </select>
               </div>
             </div>
 
-            <!-- Feed de Progreso en Vivo -->
-            <div class="live-feed-container" style="background-color: rgba(11, 17, 30, 0.45); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.35rem;">
-                  <span class="live-feed-pulse-dot" style="display: inline-block; width: 6px; height: 6px; background-color: var(--accent); border-radius: 50%; box-shadow: 0 0 6px var(--accent);"></span>
-                  Progreso en Vivo
-                </span>
-                <span style="font-size: 0.65rem; color: var(--text-muted);" id="live-feed-time">Iniciando...</span>
+            <h4 style="font-size: 0.85rem; color: var(--accent); margin: 1.5rem 0 0.75rem 0; text-transform: uppercase; letter-spacing: 0.05em;">Datos del Comprador(a)</h4>
+            <div class="form-group">
+              <label for="sale-client-name">Nombre Completo</label>
+              <input type="text" id="sale-client-name" placeholder="Ej. Ana Gómez" required>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+              <div class="form-group">
+                <label for="sale-client-cedula">Cédula</label>
+                <input type="number" id="sale-client-cedula" placeholder="Ej. 1098765432" required>
               </div>
-              <div id="live-feed-content" style="font-size: 0.8rem; color: var(--text-secondary); max-height: 85px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; padding-right: 0.5rem;">
-                <!-- logs de simulación se inyectan aquí -->
+              <div class="form-group">
+                <label for="sale-client-email">Correo Electrónico</label>
+                <input type="email" id="sale-client-email" placeholder="comprador@gmail.com" required autocomplete="email">
               </div>
             </div>
 
-            <!-- Tabla de Estado de Cobradores -->
-            <div class="table-wrapper">
-              <table class="route-table" id="table-routes-progress">
-                <thead>
-                  <tr>
-                    <th>Nombre de Ruta</th>
-                    <th>Agente(s) Asignado(s)</th>
-                    <th>Capital de Trabajo</th>
-                    <th>Recaudo Recibido</th>
-                    <th>Estado del Agente</th>
-                    <th>Tiempo de Operación</th>
-                    <th>Eficiencia</th>
-                  </tr>
-                </thead>
-                <tbody id="routes-tbody">
-                  <!-- Se inyecta dinámicamente con JavaScript -->
-                </tbody>
-              </table>
+            <div class="form-group">
+              <label for="sale-client-phone">Teléfono</label>
+              <input type="tel" id="sale-client-phone" placeholder="Ej. 3123456789" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">💾 Guardar Venta y Generar Cartón</button>
+          </form>
+        </div>
+
+        <!-- FORMULARIO REGISTRAR PAGO -->
+        <div id="commerce-tab-payment" style="display: none;">
+          <h3 style="margin-bottom: 1.5rem; color: var(--text-primary);">Registrar Pago de Cuota</h3>
+          <div class="search-box" style="margin-bottom: 1.5rem;">
+            <label style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Buscar por Cédula del Cliente</label>
+            <div class="search-input-wrapper">
+              <input type="number" id="commerce-search-cedula" placeholder="Ingresar Cédula (Ej. 1098765432)">
+              <button type="button" class="btn-search-icon" onclick="supervisorModule.searchCommerceClientPayment()">🔍</button>
             </div>
           </div>
 
-        </div> <!-- Cierra supervisor-actions -->
-      </div> <!-- Cierra panel-sup-routes -->
+          <div id="commerce-payment-results" style="display: none;">
+            <!-- Cartón Digital del cliente con la lista de cuotas -->
+          </div>
+          
+          <div id="commerce-payment-placeholder" style="text-align: center; padding: 2rem 1rem; color: var(--text-muted);">
+            <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem;">💳</span>
+            Busca la cédula del comprador para registrar cobros en su cartón de pagos.
+          </div>
+        </div>
+
+      </div>
     </section>
 
 
@@ -1242,6 +1368,22 @@
       
       <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
         <button type="button" class="btn btn-secondary" onclick="supervisorModule.closeScheduleModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; width: auto;">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DETALLES DE COMERCIO (CLIENTES / PRODUCTOS) -->
+  <div class="supervisor-modal-overlay" id="modal-commerce-details" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.85); z-index: 200;">
+    <div class="supervisor-modal-card" style="max-width: 800px; width: 100%; max-height: 90vh; overflow-y: auto;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeCommerceModal()">&times;</button>
+      <h3 class="title-gradient" id="commerce-modal-title" style="margin-bottom: 1rem; font-size: 1.4rem;">Métricas de Comercio</h3>
+      
+      <div id="commerce-modal-content">
+        <!-- Contenido dinámico -->
+      </div>
+      
+      <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: right;">
+        <button type="button" class="btn btn-secondary" onclick="supervisorModule.closeCommerceModal()" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; width: auto;">Cerrar</button>
       </div>
     </div>
   </div>

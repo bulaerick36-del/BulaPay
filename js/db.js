@@ -472,18 +472,37 @@ const db = {
     try {
       const supabase = await initSupabase();
       const supId = this.getSupervisorId();
-      if (supId) {
+      if (supId && !client.supervisor_id) {
         client.supervisor_id = supId;
       }
       console.log('[DEBUG DB] saveClient - Conectando a Supabase e insertando...');
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('clients')
         .insert([client])
         .select();
-      if (error) {
+
+      if (error && (error.message.includes('product_name') || error.message.includes('product_category') || error.code === '42703')) {
+        console.warn("Columnas de producto no encontradas en Supabase, reintentando sin ellas...");
+        const fallbackClient = { ...client };
+        delete fallbackClient.product_name;
+        delete fallbackClient.product_category;
+
+        const retryResult = await supabase
+          .from('clients')
+          .insert([fallbackClient])
+          .select();
+
+        if (retryResult.error) {
+          console.error("[DEBUG DB ERROR] Error en reintento de saveClient:", retryResult.error);
+          throw retryResult.error;
+        }
+        data = retryResult.data;
+        error = null;
+      } else if (error) {
         console.error("[DEBUG DB ERROR] Error devuelto por Supabase al registrar cliente:", error);
         throw error;
       }
+
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
       return data ? data[0] : client;
     } catch (err) {

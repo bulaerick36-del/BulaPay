@@ -29,8 +29,17 @@ const supervisorModule = {
     this.kpiTotalCollected = document.getElementById('kpi-total-collected');
     this.kpiRouteProgress = document.getElementById('kpi-route-progress');
 
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    const isCommerce = currentUser && currentUser.role === 'Otros (Comercios, Compraventas, Mercados)';
+
     this.bindEvents();
     await this.renderDashboard();
+    
+    if (isCommerce) {
+      if (this.mapUpdateInterval) clearInterval(this.mapUpdateInterval);
+      if (this.operatingTimeInterval) clearInterval(this.operatingTimeInterval);
+      return;
+    }
     
     // Inicializar el mapa GPS Leaflet
     this.initGpsMap();
@@ -1275,6 +1284,51 @@ const supervisorModule = {
   // RENDERIZAR DASHBOARD KPIs Y TABLA
   async renderDashboard() {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
+    
+    // Check if the user is a commerce role
+    if (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)') {
+      if (this.welcomeMsg) {
+        this.welcomeMsg.textContent = `Bienvenido, ${currentUser.name} | ${currentUser.company || 'Comercio'}`;
+      }
+      
+      const btnSchedule = document.getElementById('btn-schedule-config');
+      if (btnSchedule) btnSchedule.style.display = 'none';
+      
+      const stdDashboard = document.getElementById('supervisor-dashboard-standard');
+      if (stdDashboard) stdDashboard.style.display = 'none';
+      
+      const commerceKpis = document.getElementById('commerce-kpis');
+      if (commerceKpis) commerceKpis.style.display = 'grid';
+      
+      const commerceMainSection = document.getElementById('commerce-main-section');
+      if (commerceMainSection) commerceMainSection.style.display = 'block';
+      
+      // Load commerce KPIs
+      const clients = await window.BulaPayDB.getClients();
+      // Total clients is simply clients.length
+      const products = clients.filter(c => c.product_name);
+      
+      const kpiCommerceClients = document.getElementById('kpi-commerce-clients');
+      if (kpiCommerceClients) kpiCommerceClients.textContent = clients.length;
+      
+      const kpiCommerceProducts = document.getElementById('kpi-commerce-products');
+      if (kpiCommerceProducts) kpiCommerceProducts.textContent = products.length;
+      
+      return;
+    } else {
+      const btnSchedule = document.getElementById('btn-schedule-config');
+      if (btnSchedule) btnSchedule.style.display = 'flex';
+      
+      const stdDashboard = document.getElementById('supervisor-dashboard-standard');
+      if (stdDashboard) stdDashboard.style.display = 'block';
+      
+      const commerceKpis = document.getElementById('commerce-kpis');
+      if (commerceKpis) commerceKpis.style.display = 'none';
+      
+      const commerceMainSection = document.getElementById('commerce-main-section');
+      if (commerceMainSection) commerceMainSection.style.display = 'none';
+    }
+
     if (this.welcomeMsg) {
       this.welcomeMsg.textContent = `Bienvenido, ${currentUser.name} | ${currentUser.company || 'BulaPay'}`;
     }
@@ -1961,6 +2015,424 @@ const supervisorModule = {
     } catch (err) {
       console.error("Error al cambiar prórroga:", err);
       alert("❌ Error al actualizar la prórroga.");
+    }
+  },
+
+  switchCommerceTab(tab) {
+    const btnSale = document.getElementById('btn-commerce-tab-sale');
+    const btnPayment = document.getElementById('btn-commerce-tab-payment');
+    const panelSale = document.getElementById('commerce-tab-sale');
+    const panelPayment = document.getElementById('commerce-tab-payment');
+    
+    if (tab === 'sale') {
+      btnSale.classList.add('active');
+      btnSale.style.backgroundColor = 'var(--bg-primary)';
+      btnSale.style.color = 'var(--accent)';
+      
+      btnPayment.classList.remove('active');
+      btnPayment.style.backgroundColor = 'transparent';
+      btnPayment.style.color = 'var(--text-secondary)';
+      
+      panelSale.style.display = 'block';
+      panelPayment.style.display = 'none';
+    } else {
+      btnPayment.classList.add('active');
+      btnPayment.style.backgroundColor = 'var(--bg-primary)';
+      btnPayment.style.color = 'var(--accent)';
+      
+      btnSale.classList.remove('active');
+      btnSale.style.backgroundColor = 'transparent';
+      btnSale.style.color = 'var(--text-secondary)';
+      
+      panelSale.style.display = 'none';
+      panelPayment.style.display = 'block';
+    }
+  },
+
+  handleCategoryChange() {
+    const category = document.getElementById('sale-product-category').value;
+    const otherWrapper = document.getElementById('sale-product-category-other-wrapper');
+    const otherInput = document.getElementById('sale-product-category-other');
+    if (category === 'Otros') {
+      otherWrapper.style.display = 'block';
+      otherInput.setAttribute('required', '');
+    } else {
+      otherWrapper.style.display = 'none';
+      otherInput.removeAttribute('required');
+    }
+  },
+
+  formatPriceInput(input) {
+    let value = input.value.replace(/\D/g, '');
+    if (value) {
+      value = Number(value).toLocaleString('es-CO');
+    }
+    input.value = value;
+  },
+
+  async registerCommerceSale(event) {
+    event.preventDefault();
+    
+    const productName = document.getElementById('sale-product-name').value.trim();
+    const categorySelect = document.getElementById('sale-product-category').value;
+    const categoryOther = document.getElementById('sale-product-category-other').value.trim();
+    const category = categorySelect === 'Otros' ? categoryOther : categorySelect;
+    
+    const priceRaw = document.getElementById('sale-product-price').value.replace(/\./g, '');
+    const price = parseFloat(priceRaw) || 0;
+    
+    const installments = parseInt(document.getElementById('sale-installments').value);
+    const periodicity = document.getElementById('sale-periodicity').value;
+    
+    const name = document.getElementById('sale-client-name').value.trim();
+    const cedula = document.getElementById('sale-client-cedula').value.trim();
+    const email = document.getElementById('sale-client-email').value.trim();
+    const phone = document.getElementById('sale-client-phone').value.trim();
+    
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    const supervisor_id = currentUser ? currentUser.username : 'admin';
+    
+    const newClient = {
+      cedula: String(cedula),
+      name,
+      phone,
+      email,
+      city: 'Comercio',
+      zone: periodicity,
+      risk: 'Verde',
+      totalDebt: price,
+      outstanding: price,
+      installmentsCount: installments,
+      installmentAmount: Math.round(price / installments),
+      routeId: null,
+      agent_id: null,
+      supervisor_id: supervisor_id,
+      product_name: productName,
+      product_category: category
+    };
+    
+    try {
+      const existing = await window.BulaPayDB.getClientByCedula(cedula);
+      if (existing) {
+        alert('❌ Ya existe un cliente registrado con esta Cédula.');
+        return;
+      }
+      
+      await window.BulaPayDB.saveClient(newClient);
+      
+      const cardLink = `${window.location.origin}${window.location.pathname}?view=customer&id=${cedula}`;
+      
+      // Llamada comentada/vacía para futura integración
+      this.sendDigitalCardEmail(email, cardLink);
+      
+      alert('🎉 Venta registrada con éxito y Cartón Digital generado!');
+      document.getElementById('form-commerce-sale').reset();
+      const otherWrapper = document.getElementById('sale-product-category-other-wrapper');
+      if (otherWrapper) otherWrapper.style.display = 'none';
+      
+      await this.renderDashboard();
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al registrar la venta.');
+    }
+  },
+  
+  sendDigitalCardEmail(clientEmail, cardLink) {
+    // Función vacía para futura integración de correos de cartón digital
+    // console.log(`[Email Integration] Enviando cartón digital a ${clientEmail}: ${cardLink}`);
+  },
+
+  async searchCommerceClientPayment() {
+    const cedula = document.getElementById('commerce-search-cedula').value.trim();
+    if (!cedula) {
+      alert('⚠️ Ingrese una cédula.');
+      return;
+    }
+    
+    try {
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
+      const resultsDiv = document.getElementById('commerce-payment-results');
+      const placeholderDiv = document.getElementById('commerce-payment-placeholder');
+      
+      if (!client) {
+        alert('❌ Comprador no encontrado.');
+        if (resultsDiv) resultsDiv.style.display = 'none';
+        if (placeholderDiv) placeholderDiv.style.display = 'block';
+        return;
+      }
+      
+      if (placeholderDiv) placeholderDiv.style.display = 'none';
+      if (resultsDiv) {
+        resultsDiv.style.display = 'block';
+        await this.renderCommerceLedgerGrid(client, resultsDiv);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al buscar comprador.');
+    }
+  },
+
+  async renderCommerceLedgerGrid(client, container) {
+    container.innerHTML = `
+      <div style="background-color: var(--bg-secondary); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem; border: 1px solid var(--border-color);">
+        <div><strong>Comprador:</strong> ${client.name}</div>
+        <div><strong>Producto:</strong> ${client.product_name || 'N/A'}</div>
+        <div><strong>Saldo Pendiente:</strong> $${Number(client.outstanding).toLocaleString('es-CO')}</div>
+        <div><strong>Cuota Regular:</strong> $${Number(client.installmentAmount).toLocaleString('es-CO')}</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;" id="commerce-ledger-cells">
+      </div>
+    `;
+    
+    const cellsGrid = document.getElementById('commerce-ledger-cells');
+    const totalInstallments = client.installmentsCount || 5;
+    const installmentAmount = client.installmentAmount || 100000;
+    
+    const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+    const paidInstallments = payments
+      .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0)
+      .map(p => p.installmentNumber);
+      
+    for (let i = 1; i <= totalInstallments; i++) {
+      const cell = document.createElement('div');
+      cell.classList.add('payment-card-cell');
+      
+      const isPaid = paidInstallments.includes(i);
+      
+      if (isPaid) {
+        cell.classList.add('pagado');
+        cell.style.backgroundColor = 'var(--color-verde)';
+        cell.style.color = 'var(--bg-primary)';
+        cell.style.padding = '0.5rem';
+        cell.style.borderRadius = '6px';
+        cell.style.fontSize = '0.75rem';
+        cell.style.textAlign = 'center';
+        cell.innerHTML = `Cuota ${i}<br>✔`;
+      } else {
+        cell.classList.add('pendiente');
+        cell.style.backgroundColor = 'var(--bg-secondary)';
+        cell.style.border = '1px solid var(--border-color)';
+        cell.style.padding = '0.5rem';
+        cell.style.borderRadius = '6px';
+        cell.style.fontSize = '0.75rem';
+        cell.style.textAlign = 'center';
+        cell.style.cursor = 'pointer';
+        cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
+        
+        cell.addEventListener('click', async () => {
+          if (confirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
+            await this.payCommerceInstallment(client, i, installmentAmount);
+            await this.renderCommerceLedgerGrid(client, container);
+          }
+        });
+      }
+      cellsGrid.appendChild(cell);
+    }
+  },
+  
+  async payCommerceInstallment(client, installmentNumber, amount) {
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Comercio' };
+    
+    try {
+      const newPayment = {
+        clientCedula: client.cedula,
+        installmentNumber: installmentNumber,
+        amount: amount,
+        date: new Date().toISOString().split('T')[0],
+        agentName: currentUser.name,
+        status: 'Pagado'
+      };
+      
+      await window.BulaPayDB.addPayment(newPayment);
+      
+      this.sendPaymentReceiptEmail(client.email, {
+        clientName: client.name,
+        productName: client.product_name,
+        installmentNumber: installmentNumber,
+        amount: amount
+      });
+      
+      alert(`✅ Pago de la cuota ${installmentNumber} registrado con éxito.`);
+      client.outstanding = Math.max(0, Number(client.outstanding) - Number(amount));
+      
+      await this.renderDashboard();
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al registrar el pago.');
+    }
+  },
+  
+  sendPaymentReceiptEmail(clientEmail, paymentDetails) {
+    // Función vacía para futura integración de correos de recibo de pago
+    // console.log(`[Email Integration] Enviando recibo a ${clientEmail}:`, paymentDetails);
+  },
+
+  async openCommerceModal(type) {
+    const modal = document.getElementById('modal-commerce-details');
+    const title = document.getElementById('commerce-modal-title');
+    const content = document.getElementById('commerce-modal-content');
+    
+    if (!modal || !title || !content) return;
+    
+    try {
+      const clients = await window.BulaPayDB.getClients();
+      
+      if (type === 'clients') {
+        title.textContent = '👥 Listado de Clientes';
+        
+        if (clients.length === 0) {
+          content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay clientes registrados.</p>';
+        } else {
+          let html = `
+            <div style="display: grid; grid-template-columns: 280px 1fr; gap: 1.5rem; align-items: start;">
+              <!-- Columna izquierda: Lista -->
+              <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 0.5rem;">
+          `;
+          
+          clients.forEach(c => {
+            html += `
+              <div class="card kpi-card-clickable" onclick="supervisorModule.showCommerceClientDetails('${c.cedula}')" style="padding: 0.75rem; border: 1px solid var(--border-color); background-color: var(--bg-secondary); border-radius: 8px; cursor: pointer;">
+                <div style="font-weight: 700; color: var(--accent); font-size: 0.85rem;">${c.name}</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">Cédula: ${c.cedula}</div>
+              </div>
+            `;
+          });
+          
+          html += `
+              </div>
+              <!-- Columna derecha: Detalles Cartón -->
+              <div id="commerce-modal-client-details" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; min-height: 250px;">
+                <p style="color: var(--text-muted); text-align: center; padding-top: 4rem;">Seleccione un cliente para ver su Cartón Digital.</p>
+              </div>
+            </div>
+          `;
+          
+          content.innerHTML = html;
+        }
+      } else if (type === 'products') {
+        title.textContent = '📦 Productos Financiados';
+        const products = clients.filter(c => c.product_name);
+        
+        if (products.length === 0) {
+          content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay productos financiados actualmente.</p>';
+        } else {
+          const productsWithPayments = [];
+          for (const p of products) {
+            const payments = await window.BulaPayDB.getPaymentsByClient(p.cedula);
+            const paidCount = payments.filter(pay => pay.status === 'Pagado').length;
+            const remaining = Math.max(0, p.installmentsCount - paidCount);
+            productsWithPayments.push({ ...p, remaining });
+          }
+
+          let html = `
+            <div class="table-wrapper">
+              <table class="route-table" style="width: 100%;">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th>Valor</th>
+                    <th>Cliente</th>
+                    <th>Cuotas Faltantes</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+          
+          productsWithPayments.forEach(p => {
+            html += `
+              <tr>
+                <td style="font-weight: bold; color: var(--accent);">${p.product_name}</td>
+                <td>${p.product_category || 'Otros'}</td>
+                <td>$${Number(p.totalDebt).toLocaleString('es-CO')}</td>
+                <td>${p.name}</td>
+                <td style="font-weight: bold; text-align: center;">${p.remaining} / ${p.installmentsCount}</td>
+              </tr>
+            `;
+          });
+          
+          html += `
+                </tbody>
+              </table>
+            </div>
+          `;
+          content.innerHTML = html;
+        }
+      }
+      
+      modal.style.display = 'flex';
+    } catch (e) {
+      console.error(e);
+      alert('❌ Error al cargar métricas.');
+    }
+  },
+  
+  closeCommerceModal() {
+    const modal = document.getElementById('modal-commerce-details');
+    if (modal) modal.style.display = 'none';
+  },
+  
+  async showCommerceClientDetails(cedula) {
+    const clientDetailsDiv = document.getElementById('commerce-modal-client-details');
+    if (!clientDetailsDiv) return;
+    
+    try {
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
+      if (!client) return;
+      
+      clientDetailsDiv.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h4 style="color: var(--text-primary); margin: 0; font-size: 1.1rem; font-weight: 700;">${client.name}</h4>
+          <span class="read-only-badge" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-verde); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600;">
+            Cartón Digital
+          </span>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+          Cédula: ${client.cedula} | Producto: ${client.product_name || 'N/A'} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')}
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.5rem;" id="modal-commerce-ledger-grid">
+        </div>
+      `;
+      
+      const grid = document.getElementById('modal-commerce-ledger-grid');
+      const totalInstallments = client.installmentsCount || 5;
+      const installmentAmount = client.installmentAmount || 100000;
+      
+      const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+      const paidInstallments = payments
+        .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0)
+        .map(p => p.installmentNumber);
+        
+      for (let i = 1; i <= totalInstallments; i++) {
+        const cell = document.createElement('div');
+        cell.classList.add('payment-card-cell');
+        
+        const isPaid = paidInstallments.includes(i);
+        
+        if (isPaid) {
+          cell.classList.add('pagado');
+          cell.style.backgroundColor = 'var(--color-verde)';
+          cell.style.color = 'var(--bg-primary)';
+          cell.style.padding = '0.5rem';
+          cell.style.borderRadius = '6px';
+          cell.style.fontSize = '0.75rem';
+          cell.style.textAlign = 'center';
+          cell.innerHTML = `Cuota ${i}<br>✔`;
+        } else {
+          cell.classList.add('pendiente');
+          cell.style.backgroundColor = 'var(--bg-secondary)';
+          cell.style.border = '1px solid var(--border-color)';
+          cell.style.padding = '0.5rem';
+          cell.style.borderRadius = '6px';
+          cell.style.fontSize = '0.75rem';
+          cell.style.textAlign = 'center';
+          cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
+        }
+        grid.appendChild(cell);
+      }
+    } catch (e) {
+      console.error(e);
+      clientDetailsDiv.innerHTML = '<p style="color: var(--color-rojo);">Error al cargar el cartón digital.</p>';
     }
   },
 

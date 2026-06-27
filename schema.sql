@@ -137,3 +137,5 @@ ALTER TABLE routes ADD COLUMN IF NOT EXISTS "has_extension" BOOLEAN DEFAULT fals
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "representante_legal" TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "cedula_representante" TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_name" TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_category" TEXT;
