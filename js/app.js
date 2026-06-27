@@ -9,6 +9,23 @@ const app = {
       // Escuchar cambios de hash
       window.addEventListener('hashchange', () => this.handleRouteFromHash());
       
+      // Vincular eventos de la barra de navegación para accesos rápidos
+      const btnSupervisor = document.getElementById('nav-btn-supervisor');
+      const btnIndependent = document.getElementById('nav-btn-independent');
+      const btnCommerce = document.getElementById('nav-btn-commerce');
+
+      const navigateToAuth = () => this.navigate('auth');
+
+      if (btnSupervisor) {
+        btnSupervisor.addEventListener('click', navigateToAuth);
+      }
+      if (btnIndependent) {
+        btnIndependent.addEventListener('click', navigateToAuth);
+      }
+      if (btnCommerce) {
+        btnCommerce.addEventListener('click', navigateToAuth);
+      }
+
       // Manejar carga inicial
       await this.handleInitialLoad();
     },

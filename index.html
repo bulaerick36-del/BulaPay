@@ -41,9 +41,9 @@
       <div id="demo-quick-links" style="display: flex; gap: 10px; flex-wrap: wrap; flex-direction: row; align-items: center;">
         <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('customer')">💳 Cliente</button>
         <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('agent-login')">📱 Agente de Ruta</button>
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('auth')">👔 Supervisor</button>
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('auth')">💼 Agente Independiente</button>
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('auth')">🏪 Otro Comercio o Tienda</button>
+        <button id="nav-btn-supervisor" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('auth')">👔 Supervisor</button>
+        <button id="nav-btn-independent" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('auth')">💼 Agente Independiente</button>
+        <button id="nav-btn-commerce" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="app.router.navigate('auth')">🏪 Otro Comercio o Tienda</button>
       </div>
     </div>
   </header>
