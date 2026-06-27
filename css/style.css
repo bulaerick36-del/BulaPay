@@ -115,6 +115,14 @@ header {
   align-items: center;
 }
 
+#demo-quick-links {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -246,6 +254,10 @@ main {
   border: none;
   cursor: pointer;
   transition: var(--transition-smooth);
+}
+
+/* Ancho completo para botones de formulario por defecto */
+form .btn:not([style*="width: auto"]):not([style*="width:auto"]) {
   width: 100%;
 }
 
