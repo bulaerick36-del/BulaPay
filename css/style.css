@@ -121,6 +121,14 @@ header {
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+  position: relative;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+#demo-quick-links button {
+  pointer-events: auto !important;
+  cursor: pointer !important;
 }
 
 .brand {

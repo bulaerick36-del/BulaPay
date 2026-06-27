@@ -14,16 +14,14 @@ const app = {
       const btnIndependent = document.getElementById('nav-btn-independent');
       const btnCommerce = document.getElementById('nav-btn-commerce');
 
-      const navigateToAuth = () => this.navigate('auth');
-
       if (btnSupervisor) {
-        btnSupervisor.addEventListener('click', navigateToAuth);
+        btnSupervisor.addEventListener('click', () => window.openLoginSection());
       }
       if (btnIndependent) {
-        btnIndependent.addEventListener('click', navigateToAuth);
+        btnIndependent.addEventListener('click', () => window.openLoginSection());
       }
       if (btnCommerce) {
-        btnCommerce.addEventListener('click', navigateToAuth);
+        btnCommerce.addEventListener('click', () => window.openLoginSection());
       }
 
       // Manejar carga inicial
@@ -483,5 +481,36 @@ window.showBulaPayReceipt = function(payment, client) {
       btnClose.removeEventListener('click', handleClose);
     };
     btnClose.addEventListener('click', handleClose);
+  }
+};
+
+// Función global para forzar la visualización de la sección de login/registro
+window.openLoginSection = function() {
+  // Ocultar todas las secciones de vista para evitar solapamientos
+  const sections = document.querySelectorAll('.view-section');
+  if (sections) {
+    sections.forEach(s => {
+      s.classList.remove('active');
+      s.style.display = 'none'; // Asegurar el ocultamiento explícito
+    });
+  }
+
+  // Mostrar explícitamente el contenedor de Autenticación / Login
+  const authSection = document.getElementById('view-auth');
+  if (authSection) {
+    authSection.classList.add('active');
+    authSection.style.display = 'block';
+  }
+
+  // Ocultar buscador de clientes si existe y se solapa
+  const clientPortal = document.getElementById('view-customer');
+  if (clientPortal) {
+    clientPortal.classList.remove('active');
+    clientPortal.style.display = 'none';
+  }
+
+  // Actualizar el enrutador SPA para estar en la ruta 'auth'
+  if (window.app && window.app.router) {
+    window.app.router.navigate('auth');
   }
 };
