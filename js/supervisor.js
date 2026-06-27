@@ -230,6 +230,34 @@ const supervisorModule = {
       await this.updateMapMarkers();
     };
     window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
+
+    // Calculadora en tiempo real para el valor de cuota en el registro de venta del comercio
+    const salePriceInput = document.getElementById('sale-product-price');
+    const saleInstallmentsInput = document.getElementById('sale-installments');
+    if (salePriceInput && saleInstallmentsInput) {
+      const calcFn = () => this.calculateCommerceInstallmentValue();
+      salePriceInput.addEventListener('input', calcFn);
+      saleInstallmentsInput.addEventListener('input', calcFn);
+    }
+  },
+
+  calculateCommerceInstallmentValue() {
+    const priceInput = document.getElementById('sale-product-price');
+    const installmentsInput = document.getElementById('sale-installments');
+    const resultInput = document.getElementById('sale-installment-value');
+
+    if (!priceInput || !installmentsInput || !resultInput) return;
+
+    const priceRaw = priceInput.value.replace(/\./g, '');
+    const price = parseFloat(priceRaw) || 0;
+    const installments = parseInt(installmentsInput.value) || 0;
+
+    if (price > 0 && installments > 0) {
+      const installmentVal = Math.round(price / installments);
+      resultInput.value = installmentVal.toLocaleString('es-CO');
+    } else {
+      resultInput.value = '';
+    }
   },
 
   // CALCULADORA AUTOMÁTICA
