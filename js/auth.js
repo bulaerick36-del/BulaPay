@@ -192,6 +192,12 @@ const authModule = {
       window.BulaPayDB.logout();
       this.userNavInfo.style.display = 'none';
       
+      // Resetear rol y aplicar tema por defecto
+      localStorage.removeItem('bulaRole');
+      if (typeof window.applyDynamicTheme === 'function') {
+        window.applyDynamicTheme();
+      }
+      
       // Mostrar accesos rápidos de nuevo por comodidad
       const devLinks = document.getElementById('demo-quick-links');
       if (devLinks) devLinks.style.display = 'flex';
@@ -263,6 +269,22 @@ const authModule = {
   loginUser(user) {
     window.BulaPayDB.setCurrentUser(user);
     this.updateNavBar(user);
+
+    // Sincronizar el rol del usuario con el tema de colores dinámico
+    let targetRole = 'supervisor';
+    if (user.role === 'Usuario Supervisor' || user.role === 'supervisor' || user.role === 'Administrador de Rutas') {
+      targetRole = 'supervisor';
+    } else if (user.role === 'Agente de Ruta' || user.role === 'agent') {
+      targetRole = 'route';
+    } else if (user.role === 'Agente Independiente') {
+      targetRole = 'independent';
+    } else if (user.role === 'Otros (Comercios, Compraventas, Mercados)') {
+      targetRole = 'commerce';
+    }
+    localStorage.setItem('bulaRole', targetRole);
+    if (typeof window.applyDynamicTheme === 'function') {
+      window.applyDynamicTheme();
+    }
 
     // Ocultar accesos rápidos para simular una experiencia limpia
     const devLinks = document.getElementById('demo-quick-links');

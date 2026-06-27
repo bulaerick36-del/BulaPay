@@ -9,10 +9,9 @@ const app = {
       // Escuchar cambios de hash
       window.addEventListener('hashchange', () => this.handleRouteFromHash());
       
-      const btnSupervisor = document.getElementById('nav-btn-supervisor');
-
-      if (btnSupervisor) {
-        btnSupervisor.addEventListener('click', () => window.setCurrentView('Supervisor'));
+      // Aplicar el tema dinámico inicial
+      if (typeof window.applyDynamicTheme === 'function') {
+        window.applyDynamicTheme();
       }
 
       // Manejar carga inicial
@@ -30,6 +29,11 @@ const app = {
     async handleInitialLoad() {
       // 1. Prioridad: Verificar si hay parámetros de consulta URL (ej. ?view=customer&id=12345)
       // Esto es crucial para simular el click de WhatsApp/SMS
+      // Aplicar el tema dinámico al cargar
+      if (typeof window.applyDynamicTheme === 'function') {
+        window.applyDynamicTheme();
+      }
+
       const urlParams = new URLSearchParams(window.location.search);
       const queryView = urlParams.get('view');
       const queryId = urlParams.get('id');
@@ -86,6 +90,11 @@ const app = {
       const parts = hash.split('/');
       const route = parts[0];
       const param = parts[1] || null;
+
+      // Aplicar el tema dinámico al cambiar de ruta
+      if (typeof window.applyDynamicTheme === 'function') {
+        window.applyDynamicTheme();
+      }
 
       this.currentRoute = route;
       this.renderView(route, param);
@@ -504,5 +513,67 @@ window.setCurrentView = function(view) {
       });
     }
     window.app.router.navigate(view);
+  }
+};
+
+// Función para aplicar el tema de color dinámico según el rol seleccionado
+window.applyDynamicTheme = function() {
+  const role = localStorage.getItem('bulaRole') || 'supervisor';
+  
+  // Paleta de colores por rol
+  let primaryColor = '#10b981'; // supervisor: verde esmeralda original
+  let primaryHover = '#059669';
+  let accentColor = '#10b981';
+  let borderColorFocus = 'rgba(16, 185, 129, 0.4)';
+  let roleLabel = 'Supervisor';
+
+  if (role === 'route') {
+    primaryColor = '#2563eb'; // azul (blue-600)
+    primaryHover = '#1d4ed8'; // blue-700
+    accentColor = '#2563eb';
+    borderColorFocus = 'rgba(37, 99, 235, 0.4)';
+    roleLabel = 'Agente de Ruta';
+  } else if (role === 'client') {
+    primaryColor = '#4ade80'; // verde claro (green-400)
+    primaryHover = '#22c55e'; // green-500
+    accentColor = '#22c55e'; // green-500
+    borderColorFocus = 'rgba(74, 222, 128, 0.4)';
+    roleLabel = 'Cliente';
+  } else if (role === 'commerce') {
+    primaryColor = '#f97316'; // naranja (orange-500)
+    primaryHover = '#ea580c'; // orange-600
+    accentColor = '#f97316';
+    borderColorFocus = 'rgba(249, 115, 22, 0.4)';
+    roleLabel = 'Otro Comercio o Tienda';
+  } else if (role === 'independent') {
+    primaryColor = '#eab308'; // amarillo (yellow-500)
+    primaryHover = '#ca8a04'; // yellow-600
+    accentColor = '#eab308';
+    borderColorFocus = 'rgba(234, 179, 8, 0.4)';
+    roleLabel = 'Agente Independiente';
+  }
+
+  // Configurar las variables CSS a nivel del elemento raíz (documentElement)
+  document.documentElement.style.setProperty('--primary', primaryColor);
+  document.documentElement.style.setProperty('--primary-hover', primaryHover);
+  document.documentElement.style.setProperty('--accent', accentColor);
+  document.documentElement.style.setProperty('--border-color-focus', borderColorFocus);
+
+  // Actualizar títulos e indicaciones dinámicamente si los elementos existen
+  const authTitleBrand = document.getElementById('auth-title-brand');
+  const authSubtitle = document.getElementById('auth-subtitle');
+  
+  if (authSubtitle) {
+    if (role === 'supervisor') {
+      authSubtitle.innerText = 'Administración de Cartera y Logística de Rutas';
+    } else {
+      authSubtitle.innerText = `Ingreso - ${roleLabel}`;
+    }
+  }
+
+  // Soporte para el subtítulo del Portal de Agentes
+  const agentLoginSubtitle = document.querySelector('#view-agent-login .auth-header p');
+  if (agentLoginSubtitle) {
+    agentLoginSubtitle.innerText = `Inicio de Sesión Autorizado - ${roleLabel}`;
   }
 };
