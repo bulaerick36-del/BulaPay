@@ -486,27 +486,12 @@ window.showBulaPayReceipt = function(payment, client) {
 
 // Función global para forzar la visualización de la sección de login/registro
 window.openLoginSection = function() {
-  // Ocultar todas las secciones de vista para evitar solapamientos
+  // Limpiar cualquier estilo inline residual para permitir que las clases CSS funcionen
   const sections = document.querySelectorAll('.view-section');
   if (sections) {
     sections.forEach(s => {
-      s.classList.remove('active');
-      s.style.display = 'none'; // Asegurar el ocultamiento explícito
+      s.style.display = '';
     });
-  }
-
-  // Mostrar explícitamente el contenedor de Autenticación / Login
-  const authSection = document.getElementById('view-auth');
-  if (authSection) {
-    authSection.classList.add('active');
-    authSection.style.display = 'block';
-  }
-
-  // Ocultar buscador de clientes si existe y se solapa
-  const clientPortal = document.getElementById('view-customer');
-  if (clientPortal) {
-    clientPortal.classList.remove('active');
-    clientPortal.style.display = 'none';
   }
 
   // Actualizar el enrutador SPA para estar en la ruta 'auth'
@@ -520,6 +505,13 @@ window.setCurrentView = function(view) {
   if (view === 'auth' || view === 'Supervisor' || view === 'Agente Independiente' || view === 'Otro Comercio o Tienda') {
     window.openLoginSection();
   } else if (window.app && window.app.router) {
+    // Limpiar estilos inline residuales por seguridad al navegar
+    const sections = document.querySelectorAll('.view-section');
+    if (sections) {
+      sections.forEach(s => {
+        s.style.display = '';
+      });
+    }
     window.app.router.navigate(view);
   }
 };
