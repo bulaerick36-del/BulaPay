@@ -874,10 +874,20 @@ const supervisorModule = {
     let totalRecaudado = 0;
     const unpaidClients = [];
 
+    // Calcular ventana de 24 horas: de 6 AM del día seleccionado a 6 AM del día siguiente
+    const startRange = new Date(selectedDate + 'T06:00:00');
+    const endRange = new Date(startRange);
+    endRange.setDate(endRange.getDate() + 1);
+
     for (const client of routeClients) {
       // Calcular abonos hechos antes de la fecha seleccionada
       const clientPayments = payments.filter(p => p.clientCedula === client.cedula);
-      const paymentsBefore = clientPayments.filter(p => p.date < selectedDate);
+      
+      // Pagos creados antes del inicio de la ventana
+      const paymentsBefore = clientPayments.filter(p => {
+        const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
+        return pDate < startRange;
+      });
       const totalPaidBefore = paymentsBefore.reduce((sum, p) => sum + Number(p.amount), 0);
 
       // Si ya estaba saldado antes de la fecha seleccionada, no se esperaba cuota
@@ -888,8 +898,11 @@ const supervisorModule = {
       const expectedAmount = Number(client.installmentAmount);
       capitalEsperado += expectedAmount;
 
-      // Pagos realizados en la fecha seleccionada
-      const paymentsOnDate = clientPayments.filter(p => p.date === selectedDate);
+      // Pagos realizados dentro del rango de 6 AM a 6 AM
+      const paymentsOnDate = clientPayments.filter(p => {
+        const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
+        return pDate >= startRange && pDate < endRange;
+      });
       const amountPaidOnDate = paymentsOnDate.reduce((sum, p) => sum + Number(p.amount), 0);
       totalRecaudado += amountPaidOnDate;
 
@@ -925,10 +938,13 @@ const supervisorModule = {
     const selectedDate = dateInput.value || new Date().toISOString().split('T')[0];
 
     if (ledgerContainer) ledgerContainer.style.display = 'none';
+    const paymentsContainer = document.getElementById('modal-audit-payments-container');
+    if (paymentsContainer) paymentsContainer.style.display = 'block';
 
     // Calcular métricas
     const metrics = await this.calculateAuditMetrics(selectedRouteId, selectedDate);
     const allUsers = await this.getCachedUsers();
+    const clients = await window.BulaPayDB.getClients();
 
     // Actualizar KPIs del modal
     const expectedEl = document.getElementById('modal-audit-kpi-expected');
@@ -939,48 +955,104 @@ const supervisorModule = {
     if (collectedEl) collectedEl.textContent = `$${metrics.totalRecaudado.toLocaleString('es-CO')}`;
     if (deficitEl) deficitEl.textContent = `$${metrics.deficit.toLocaleString('es-CO')}`;
 
+    // Renderizar clientes que NO pagaron
     clientsList.innerHTML = '';
     if (metrics.unpaidClients.length === 0) {
       clientsList.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 1rem;">No hay registros de déficit para esta fecha.</div>`;
-      return;
+    } else {
+      metrics.unpaidClients.forEach(client => {
+        const associatedAgent = allUsers.find(u => u.username === client.agent_id);
+        const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+
+        const item = document.createElement('div');
+        item.style.padding = '0.5rem 0.75rem';
+        item.style.background = 'rgba(239, 68, 68, 0.02)';
+        item.style.border = '1px solid rgba(239, 68, 68, 0.15)';
+        item.style.borderRadius = '6px';
+        item.style.cursor = 'pointer';
+        item.style.display = 'flex';
+        item.style.justifyContent = 'space-between';
+        item.style.alignItems = 'center';
+        item.style.fontSize = '0.8rem';
+        item.style.transition = 'var(--transition-smooth)';
+
+        item.innerHTML = `
+          <div>
+            <strong style="color: var(--color-rojo);">${client.name}</strong>
+            <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} | Agente: ${agentNameLabel}</div>
+          </div>
+          <span style="font-size: 0.75rem; color: var(--color-rojo); font-weight: 600;">Cuota: $${Number(client.dueToday).toLocaleString('es-CO')}</span>
+        `;
+
+        item.addEventListener('mouseenter', () => {
+          item.style.borderColor = 'var(--color-rojo)';
+          item.style.backgroundColor = 'rgba(239, 68, 68, 0.05)';
+        });
+        item.addEventListener('mouseleave', () => {
+          item.style.borderColor = 'rgba(239, 68, 68, 0.15)';
+          item.style.backgroundColor = 'rgba(239, 68, 68, 0.02)';
+        });
+
+        item.addEventListener('click', () => this.showAuditClientLedger(client.cedula));
+        clientsList.appendChild(item);
+      });
     }
 
-    metrics.unpaidClients.forEach(client => {
-      const associatedAgent = allUsers.find(u => u.username === client.agent_id);
-      const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+    // Renderizar movimientos del día seleccionado (ventana de 6 AM a 6 AM)
+    const paymentsList = document.getElementById('modal-audit-payments-list');
+    if (paymentsList) {
+      paymentsList.innerHTML = '';
+      
+      const startRange = new Date(selectedDate + 'T06:00:00');
+      const endRange = new Date(startRange);
+      endRange.setDate(endRange.getDate() + 1);
 
-      const item = document.createElement('div');
-      item.style.padding = '0.5rem 0.75rem';
-      item.style.background = 'rgba(239, 68, 68, 0.02)';
-      item.style.border = '1px solid rgba(239, 68, 68, 0.15)';
-      item.style.borderRadius = '6px';
-      item.style.cursor = 'pointer';
-      item.style.display = 'flex';
-      item.style.justifyContent = 'space-between';
-      item.style.alignItems = 'center';
-      item.style.fontSize = '0.8rem';
-      item.style.transition = 'var(--transition-smooth)';
-
-      item.innerHTML = `
-        <div>
-          <strong style="color: var(--color-rojo);">${client.name}</strong>
-          <div style="font-size: 0.7rem; color: var(--text-secondary);">Deuda Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} | Agente: ${agentNameLabel}</div>
-        </div>
-        <span style="font-size: 0.75rem; color: var(--color-rojo); font-weight: 600;">Cuota: $${Number(client.dueToday).toLocaleString('es-CO')}</span>
-      `;
-
-      item.addEventListener('mouseenter', () => {
-        item.style.borderColor = 'var(--color-rojo)';
-        item.style.backgroundColor = 'rgba(239, 68, 68, 0.05)';
-      });
-      item.addEventListener('mouseleave', () => {
-        item.style.borderColor = 'rgba(239, 68, 68, 0.15)';
-        item.style.backgroundColor = 'rgba(239, 68, 68, 0.02)';
+      const allPayments = await window.BulaPayDB.getPayments();
+      const routePayments = allPayments.filter(p => {
+        if (selectedRouteId !== 'Todos') {
+          const client = clients.find(c => c.cedula === p.clientCedula);
+          if (!client || client.routeId !== selectedRouteId) return false;
+        }
+        const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
+        return pDate >= startRange && pDate < endRange;
       });
 
-      item.addEventListener('click', () => this.showAuditClientLedger(client.cedula));
-      clientsList.appendChild(item);
-    });
+      if (routePayments.length === 0) {
+        paymentsList.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.8rem; text-align: center; padding: 2rem;">No se registraron cobros en esta fecha.</div>`;
+      } else {
+        routePayments.forEach(pay => {
+          const client = clients.find(c => c.cedula === pay.clientCedula);
+          const clientName = client ? client.name : `Cédula: ${pay.clientCedula}`;
+          
+          const payItem = document.createElement('div');
+          payItem.style.padding = '0.5rem 0.75rem';
+          payItem.style.background = 'rgba(16, 185, 129, 0.02)';
+          payItem.style.border = '1px solid rgba(16, 185, 129, 0.15)';
+          payItem.style.borderRadius = '6px';
+          payItem.style.display = 'flex';
+          payItem.style.justifyContent = 'space-between';
+          payItem.style.alignItems = 'center';
+          payItem.style.fontSize = '0.8rem';
+
+          let timeLabel = '';
+          if (pay.created_at) {
+            const timeObj = new Date(pay.created_at);
+            timeLabel = timeObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+          } else {
+            timeLabel = 'Pago registrado';
+          }
+
+          payItem.innerHTML = `
+            <div>
+              <strong style="color: var(--color-verde);">${clientName}</strong>
+              <div style="font-size: 0.7rem; color: var(--text-secondary);">Cuota N° ${pay.installmentNumber} | Hora: ${timeLabel}</div>
+            </div>
+            <span style="font-size: 0.75rem; color: var(--color-verde); font-weight: 600;">$${Number(pay.amount).toLocaleString('es-CO')}</span>
+          `;
+          paymentsList.appendChild(payItem);
+        });
+      }
+    }
   },
 
   async showAuditClientLedger(cedula) {
@@ -1047,6 +1119,9 @@ const supervisorModule = {
 
       gridEl.appendChild(slotCard);
     }
+
+    const paymentsContainer = document.getElementById('modal-audit-payments-container');
+    if (paymentsContainer) paymentsContainer.style.display = 'none';
 
     ledgerContainer.style.display = 'block';
   },
@@ -1368,15 +1443,26 @@ const supervisorModule = {
     // Calcular KPIs
     const totalAgentsCount = agents.length;
     const totalCapital = routes.reduce((acc, curr) => acc + Number(curr.capital), 0);
-    const totalCollected = routes.reduce((acc, curr) => acc + Number(curr.collected), 0);
     
-    // Calcular Progreso de Cobros con la nueva fórmula dinámica y en tiempo real
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Calcular Progreso de Cobros con la nueva fórmula dinámica y en tiempo real (con corte a las 6:00 AM)
     const payments = await window.BulaPayDB.getPayments();
     const clients = await window.BulaPayDB.getClients();
     const routeIds = new Set(routes.map(r => r.id));
 
-    const paymentsToday = payments.filter(p => p.date === todayStr);
+    // Determinar la ventana de 24 horas para "Hoy" (con corte a las 6:00 AM)
+    const now = new Date();
+    const start6AM = new Date(now);
+    start6AM.setHours(6, 0, 0, 0);
+    if (now < start6AM) {
+      start6AM.setDate(start6AM.getDate() - 1);
+    }
+    const end6AM = new Date(start6AM);
+    end6AM.setDate(end6AM.getDate() + 1);
+
+    const paymentsToday = payments.filter(p => {
+      const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
+      return pDate >= start6AM && pDate < end6AM;
+    });
     const totalCollectedToday = paymentsToday.reduce((sum, p) => sum + Number(p.amount), 0);
 
     const expectedClients = clients.filter(c => {
@@ -1394,7 +1480,7 @@ const supervisorModule = {
     // Inyectar KPIs
     if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
     if (this.kpiTotalCapital) this.kpiTotalCapital.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
-    if (this.kpiTotalCollected) this.kpiTotalCollected.textContent = `$${totalCollected.toLocaleString('es-CO')}`;
+    if (this.kpiTotalCollected) this.kpiTotalCollected.textContent = `$${totalCollectedToday.toLocaleString('es-CO')}`;
     
     if (this.kpiRouteProgress) this.kpiRouteProgress.textContent = `${progressPercent}%`;
     const mainProgressBar = document.getElementById('kpi-route-progress-bar');
@@ -1415,7 +1501,6 @@ const supervisorModule = {
       return;
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
     const payments = await window.BulaPayDB.getPayments();
     const clients = await window.BulaPayDB.getClients();
 
@@ -1449,7 +1534,20 @@ const supervisorModule = {
       }
     });
 
-    const paymentsToday = payments.filter(p => p.date === todayStr);
+    // Rango de corte a las 6:00 AM para Recaudado Hoy
+    const now = new Date();
+    const start6AM = new Date(now);
+    start6AM.setHours(6, 0, 0, 0);
+    if (now < start6AM) {
+      start6AM.setDate(start6AM.getDate() - 1);
+    }
+    const end6AM = new Date(start6AM);
+    end6AM.setDate(end6AM.getDate() + 1);
+
+    const paymentsToday = payments.filter(p => {
+      const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
+      return pDate >= start6AM && pDate < end6AM;
+    });
 
     for (const name in groupedRoutes) {
       const gRoute = groupedRoutes[name];

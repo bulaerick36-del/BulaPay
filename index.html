@@ -1221,12 +1221,23 @@
         <div id="modal-audit-ledger-container" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; display: none; min-height: 250px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
             <h4 id="modal-audit-client-name" style="color: var(--text-primary); margin: 0; font-size: 1rem;">Roberto Gómez</h4>
-            <span class="read-only-badge" style="background-color: rgba(79, 70, 229, 0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(79, 70, 229, 0.3); font-weight: 600;">🔒 SOLO LECTURA</span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button onclick="document.getElementById('modal-audit-ledger-container').style.display='none'; document.getElementById('modal-audit-payments-container').style.display='block';" style="background: none; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; cursor: pointer; transition: var(--transition-smooth);">⬅ Ver Movimientos</button>
+              <span class="read-only-badge" style="background-color: rgba(79, 70, 229, 0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(79, 70, 229, 0.3); font-weight: 600;">🔒 SOLO LECTURA</span>
+            </div>
           </div>
           <p id="modal-audit-client-meta" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1.25rem;">Cédula: 12345 | Saldo Pendiente: $150,000</p>
           
           <div class="digital-ledger-grid" id="modal-audit-ledger-grid" style="grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 0.5rem; max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
             <!-- Cuadrícula del cartón digital inyectada dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Lista de Movimientos / Pagos en esta Fecha -->
+        <div id="modal-audit-payments-container" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; min-height: 250px;">
+          <h4 style="font-size: 0.85rem; color: var(--accent); margin: 0 0 0.75rem 0;">Movimientos de Recaudo Realizados</h4>
+          <div id="modal-audit-payments-list" style="display: grid; gap: 0.5rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem;">
+            <!-- Se inyecta dinámicamente -->
           </div>
         </div>
       </div>
