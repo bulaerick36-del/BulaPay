@@ -345,16 +345,72 @@ const authModule = {
 
   populateProfileFields(user) {
     const fields = {
-      'profile-name': user.name,
-      'profile-doc': user.documentNumber || user.cedula || 'No registrado',
-      'profile-phone': user.phone || 'No registrado',
-      'profile-email': user.email || 'No registrado',
-      'profile-role': user.role
+      'profile-input-name': user.name || '',
+      'profile-input-doc': user.documentNumber || user.cedula || '',
+      'profile-input-phone': user.phone || '',
+      'profile-input-email': user.email || '',
+      'profile-input-role': user.role || ''
     };
 
     for (const [id, value] of Object.entries(fields)) {
       const el = document.getElementById(id);
-      if (el) el.textContent = value || '-';
+      if (el) el.value = value;
+    }
+  },
+
+  async handleUserProfileUpdate(event) {
+    if (event) event.preventDefault();
+
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser) return;
+
+    const nameVal = document.getElementById('profile-input-name').value.trim();
+    const docVal = document.getElementById('profile-input-doc').value.trim();
+    const phoneVal = document.getElementById('profile-input-phone').value.trim();
+    const emailVal = document.getElementById('profile-input-email').value.trim();
+
+    if (!nameVal || !docVal || !phoneVal || !emailVal) {
+      alert('⚠️ Por favor complete todos los campos obligatorios.');
+      return;
+    }
+
+    try {
+      const updatedData = {
+        name: nameVal,
+        documentNumber: docVal,
+        phone: phoneVal,
+        email: emailVal
+      };
+
+      await window.BulaPayDB.updateUserProfile(currentUser.username, updatedData);
+      
+      // Construir el objeto de usuario actualizado para la sesión
+      const updatedUser = {
+        ...currentUser,
+        ...updatedData
+      };
+
+      // Guardar en la sesión local
+      window.BulaPayDB.setCurrentUser(updatedUser);
+
+      // Sincronizar UI
+      this.updateNavBar(updatedUser);
+
+      // Sincronizar Supervisor Dashboard reactivamente si está activo
+      if (window.location.hash === '#supervisor' && window.supervisorModule && typeof window.supervisorModule.renderDashboard === 'function') {
+        await window.supervisorModule.renderDashboard();
+      }
+
+      // Sincronizar Agente Dashboard reactivamente si está activo
+      if (window.location.hash === '#agent' && window.agentModule && typeof window.agentModule.updateAgentHeader === 'function') {
+        await window.agentModule.updateAgentHeader();
+      }
+
+      alert('✔ Datos actualizados correctamente.');
+      this.closeUserProfileModal();
+    } catch (e) {
+      console.error("Error al guardar cambios de perfil:", e);
+      alert('❌ Error al actualizar los datos en el servidor.');
     }
   },
 

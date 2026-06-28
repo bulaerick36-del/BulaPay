@@ -668,6 +668,20 @@ const db = {
     return newPayment;
   },
 
+  async updateUserProfile(username, updatedData) {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase
+      .from('users')
+      .update(updatedData)
+      .eq('username', username)
+      .select();
+    if (error) {
+      console.error(`Error al actualizar perfil de usuario "${username}":`, error);
+      throw error;
+    }
+    return data && data[0] ? data[0] : null;
+  },
+
   async updateUserLocation(username, lat, lng) {
     const supabase = await initSupabase();
     const { error } = await supabase
