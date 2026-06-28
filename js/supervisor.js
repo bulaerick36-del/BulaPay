@@ -2049,7 +2049,13 @@ const supervisorModule = {
       if (routes && routes.length > 0) {
         if (routes[0].opening_time) openingTime = routes[0].opening_time;
         if (routes[0].closing_time) closingTime = routes[0].closing_time;
-        if (routes[0].workingDays) workingDays = routes[0].workingDays;
+        if (routes[0].workingDays) {
+          workingDays = routes[0].workingDays;
+        } else {
+          const supId = window.BulaPayDB.getSupervisorId();
+          const localVal = localStorage.getItem(`workingDays_${supId}`);
+          if (localVal) workingDays = localVal;
+        }
       }
       
       document.getElementById('schedule-opening-time').value = openingTime;
@@ -2130,7 +2136,7 @@ const supervisorModule = {
     
     try {
       await window.BulaPayDB.updateRoutesSchedule(openingTime, closingTime, workingDays);
-      alert("✅ Horario de rutas actualizado con éxito.");
+      alert("Horario guardado correctamente");
       
       // Forzar actualización inmediata del reloj si el agente comparte sesión
       if (window.app && typeof window.app.updateClockAndTime === 'function') {
@@ -2139,7 +2145,7 @@ const supervisorModule = {
       
       this.closeScheduleModal();
     } catch (err) {
-      console.error("Error al guardar horario:", err);
+      console.error("Error al guardar horario en base de datos:", err);
       alert("❌ Error al guardar el horario.");
     }
   },

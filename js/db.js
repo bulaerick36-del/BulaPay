@@ -330,13 +330,42 @@ const db = {
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();
     if (!supId) return;
-    const { error } = await supabase
-      .from('routes')
-      .update({ opening_time: openingTime, closing_time: closingTime, workingDays: workingDays })
-      .eq('supervisor_id', supId);
-    if (error) {
-      console.error("Error al actualizar horario de rutas:", error);
-      throw error;
+
+    // Guardar fallback en localStorage
+    localStorage.setItem(`workingDays_${supId}`, workingDays);
+
+    try {
+      const { error } = await supabase
+        .from('routes')
+        .update({ opening_time: openingTime, closing_time: closingTime, workingDays: workingDays })
+        .eq('supervisor_id', supId);
+
+      if (error) {
+        // Si el error indica columna inexistente, reintentar sin ella
+        if (error.code === 'PGRST204' || (error.message && (error.message.includes('column') || error.message.includes('does not exist')))) {
+          console.warn("La columna 'workingDays' no existe en Supabase. Guardando solo horarios y usando localStorage como fallback.", error);
+          const { error: retryError } = await supabase
+            .from('routes')
+            .update({ opening_time: openingTime, closing_time: closingTime })
+            .eq('supervisor_id', supId);
+          if (retryError) throw retryError;
+        } else {
+          throw error;
+        }
+      }
+    } catch (e) {
+      console.error("Error detallado al actualizar horario de rutas en Supabase:", e);
+      // Reintentar sin la columna workingDays en caso de cualquier error
+      try {
+        const { error: fallbackError } = await supabase
+          .from('routes')
+          .update({ opening_time: openingTime, closing_time: closingTime })
+          .eq('supervisor_id', supId);
+        if (fallbackError) throw fallbackError;
+      } catch (err2) {
+        console.error("Error en el fallback de actualización de horario:", err2);
+        throw err2;
+      }
     }
   },
 
