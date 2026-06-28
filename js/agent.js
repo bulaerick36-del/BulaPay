@@ -35,6 +35,93 @@ const COLOMBIA_GEOGRAPHY = {
   "Vichada": ["Puerto Carreño"]
 };
 
+let activeGeography = null;
+
+function normalizeName(str) {
+  return str.trim()
+            .toLowerCase()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+}
+
+async function fetchColombiaGeography() {
+  if (activeGeography) return activeGeography;
+
+  const cached = localStorage.getItem('colombia_geography_cached');
+  if (cached) {
+    try {
+      activeGeography = JSON.parse(cached);
+      return activeGeography;
+    } catch (e) {}
+  }
+
+  // Lista de APIs oficiales y de respaldo
+  const urls = [
+    'https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json',
+    'https://www.datos.gov.co/resource/gdxc-w37w.json?$limit=5000',
+    'https://www.datos.gov.co/resource/xdk5-pm3f.json?$limit=5000'
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        const map = {};
+
+        if (Array.isArray(data) && data.length > 0) {
+          // Formato marcovega: [{"departamento": "...", "ciudades": [...]}]
+          if (data[0].ciudades && Array.isArray(data[0].ciudades)) {
+            data.forEach(item => {
+              if (item.departamento && item.ciudades) {
+                const dptoNorm = normalizeName(item.departamento);
+                map[dptoNorm] = item.ciudades.map(city => normalizeName(city));
+              }
+            });
+          } 
+          // Formato DIVIPOLA / Datos Abiertos: [{"dpto": "...", "nom_mpio": "..."}]
+          else {
+            const firstRow = data[0];
+            const deptKey = firstRow.dpto ? 'dpto' : (firstRow.departamento ? 'departamento' : null);
+            const mpioKey = firstRow.nom_mpio ? 'nom_mpio' : (firstRow.municipio ? 'municipio' : null);
+
+            if (deptKey && mpioKey) {
+              data.forEach(item => {
+                let dpto = item[deptKey];
+                let mpio = item[mpioKey];
+                if (dpto && mpio) {
+                  dpto = normalizeName(dpto);
+                  mpio = normalizeName(mpio);
+
+                  if (!map[dpto]) {
+                    map[dpto] = [];
+                  }
+                  if (!map[dpto].includes(mpio)) {
+                    map[dpto].push(mpio);
+                  }
+                }
+              });
+            }
+          }
+
+          if (Object.keys(map).length > 20) {
+            activeGeography = map;
+            localStorage.setItem('colombia_geography_cached', JSON.stringify(map));
+            return map;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`Error al obtener geografía colombiana desde ${url}:`, err);
+    }
+  }
+
+  // Fallback
+  activeGeography = COLOMBIA_GEOGRAPHY;
+  return activeGeography;
+}
+
 const agentModule = {
   currentClient: null,
 
@@ -808,32 +895,58 @@ const agentModule = {
     this.hasSentInitialLocation = false;
   },
 
-  initGeography() {
+  async initGeography() {
     const deptSelect = document.getElementById('new-client-department');
     const citySelect = document.getElementById('new-client-city');
     if (!deptSelect || !citySelect) return;
 
-    // Llenar departamentos
-    deptSelect.innerHTML = '<option value="" disabled selected>Seleccione Departamento...</option>';
-    Object.keys(COLOMBIA_GEOGRAPHY).sort().forEach(dept => {
-      const opt = document.createElement('option');
-      opt.value = dept;
-      opt.textContent = dept;
-      deptSelect.appendChild(opt);
-    });
+    // Poblar departamentos inicialmente con el fallback estático local
+    const populateDepts = (geography) => {
+      const currentSelected = deptSelect.value;
+      deptSelect.innerHTML = '<option value="" disabled selected>Seleccione Departamento...</option>';
+      Object.keys(geography).sort().forEach(dept => {
+        const opt = document.createElement('option');
+        opt.value = dept;
+        opt.textContent = dept;
+        if (dept === currentSelected) {
+          opt.selected = true;
+        }
+        deptSelect.appendChild(opt);
+      });
+    };
 
-    // Llenar ciudades cuando cambie departamento
-    deptSelect.addEventListener('change', () => {
+    populateDepts(COLOMBIA_GEOGRAPHY);
+
+    // Poblar municipios dependientes
+    const updateCities = (geography) => {
       const selectedDept = deptSelect.value;
       citySelect.innerHTML = '<option value="" disabled selected>Seleccione Municipio / Ciudad...</option>';
-      const cities = COLOMBIA_GEOGRAPHY[selectedDept] || [];
+      const cities = geography[selectedDept] || [];
       cities.sort().forEach(city => {
         const opt = document.createElement('option');
         opt.value = city;
         opt.textContent = city;
         citySelect.appendChild(opt);
       });
+    };
+
+    deptSelect.addEventListener('change', () => {
+      const currentGeo = activeGeography || COLOMBIA_GEOGRAPHY;
+      updateCities(currentGeo);
     });
+
+    // Cargar la base de datos completa de geografía desde la API
+    try {
+      const fullGeography = await fetchColombiaGeography();
+      if (fullGeography) {
+        populateDepts(fullGeography);
+        if (deptSelect.value) {
+          updateCities(fullGeography);
+        }
+      }
+    } catch (err) {
+      console.warn("No se pudo cargar la geografía remota. Se usará el listado estático local.", err);
+    }
   },
 
   initCalculator() {
