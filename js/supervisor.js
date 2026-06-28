@@ -1409,15 +1409,13 @@ const supervisorModule = {
       if (commerceMainSection) commerceMainSection.style.display = 'block';
       
       // Load commerce KPIs
-      const clients = await window.BulaPayDB.getClients();
-      // Total clients is simply clients.length
-      const products = clients.filter(c => c.product_name || c.city === 'Comercio');
+      const buyers = await window.BulaPayDB.getCommerceBuyers();
       
       const kpiCommerceClients = document.getElementById('kpi-commerce-clients');
-      if (kpiCommerceClients) kpiCommerceClients.textContent = clients.length;
+      if (kpiCommerceClients) kpiCommerceClients.textContent = buyers.length;
       
       const kpiCommerceProducts = document.getElementById('kpi-commerce-products');
-      if (kpiCommerceProducts) kpiCommerceProducts.textContent = products.length;
+      if (kpiCommerceProducts) kpiCommerceProducts.textContent = buyers.length;
       
       return;
     } else {

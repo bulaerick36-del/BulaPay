@@ -554,6 +554,18 @@ const db = {
     }
   },
 
+  async getCommerceBuyers() {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase
+      .from('commerce_buyers')
+      .select('*');
+    if (error) {
+      console.error("Error al obtener todos los compradores de comercio:", error);
+      return [];
+    }
+    return data || [];
+  },
+
   async getCommerceBuyerByCedula(cedula) {
     const supabase = await initSupabase();
     const { data, error } = await supabase
