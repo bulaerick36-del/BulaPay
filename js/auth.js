@@ -1,7 +1,14 @@
 // Módulo de Autenticación y Sesiones de BulaPay
 
 const authModule = {
+  initialized: false,
+  isProfileModalOpen: false,
+
   init() {
+    if (this.initialized) {
+      this.checkCurrentSession();
+      return;
+    }
     this.formLogin = document.getElementById('form-login');
     this.formRegister = document.getElementById('form-register');
     this.formAgentLogin = document.getElementById('form-agent-login');
@@ -21,6 +28,7 @@ const authModule = {
     this.btnCloseTerms = document.getElementById('btn-close-terms');
 
     this.bindEvents();
+    this.initialized = true;
     this.checkCurrentSession();
   },
 
@@ -317,9 +325,12 @@ const authModule = {
     const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser) return;
 
+    // Sincronizar estado de apertura
+    this.isProfileModalOpen = true;
+
     // Mostrar el modal inmediatamente con los datos locales mientras carga
     this.populateProfileFields(currentUser);
-    modal.style.display = 'flex';
+    modal.classList.add('active');
 
     try {
       // Fetch rápido a la base de datos Supabase
@@ -350,7 +361,8 @@ const authModule = {
   closeUserProfileModal() {
     const modal = document.getElementById('modal-user-profile');
     if (modal) {
-      modal.style.display = 'none';
+      modal.classList.remove('active');
+      this.isProfileModalOpen = false;
     }
   }
 };

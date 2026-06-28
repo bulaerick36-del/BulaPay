@@ -101,6 +101,11 @@ const app = {
     },
 
     async renderView(route, param) {
+      // Sincronizar sesión y header en cada cambio de vista
+      if (window.authModule && typeof window.authModule.init === 'function') {
+        window.authModule.init();
+      }
+
       // Ocultar todas las secciones
       const sections = document.querySelectorAll('.view-section');
       sections.forEach(s => s.classList.remove('active'));
