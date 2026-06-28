@@ -106,6 +106,18 @@ const app = {
         window.authModule.init();
       }
 
+      // Ocultar/mostrar enlaces rápidos de desarrollo condicionalmente (Solo ocultar para Supervisor)
+      const devLinks = document.getElementById('demo-quick-links');
+      if (devLinks) {
+        const currentUser = window.BulaPayDB.getCurrentUser();
+        const isSupervisorRole = currentUser && (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor' || currentUser.role === 'Administrador de Rutas' || currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente');
+        if (route === 'supervisor' || isSupervisorRole) {
+          devLinks.style.display = 'none';
+        } else {
+          devLinks.style.display = 'flex';
+        }
+      }
+
       // Ocultar todas las secciones
       const sections = document.querySelectorAll('.view-section');
       sections.forEach(s => s.classList.remove('active'));

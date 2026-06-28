@@ -325,6 +325,18 @@ const authModule = {
     } else {
       this.userNavInfo.style.display = 'none';
     }
+
+    // Sincronizar visibilidad de enlaces rápidos condicionalmente (Ocultar solo para Supervisor)
+    const devLinks = document.getElementById('demo-quick-links');
+    if (devLinks) {
+      const currentRoute = window.app.router ? window.app.router.currentRoute : 'auth';
+      const isSupervisorRole = user && (user.role === 'Usuario Supervisor' || user.role === 'supervisor' || user.role === 'Administrador de Rutas' || user.role === 'Otros (Comercios, Compraventas, Mercados)' || user.role === 'Comercio Independiente');
+      if (currentRoute === 'supervisor' || isSupervisorRole) {
+        devLinks.style.display = 'none';
+      } else {
+        devLinks.style.display = 'flex';
+      }
+    }
   },
 
   // Modal de perfil de usuario con fetch en tiempo real

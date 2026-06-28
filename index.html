@@ -35,6 +35,15 @@
         <span id="nav-user-role" style="display: none;">Rol</span>
         <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
       </div>
+
+      <!-- Accesos Rápidos para Desarrollo (Sin la palabra Demo) -->
+      <div id="demo-quick-links" style="display: flex; gap: 10px; flex-wrap: wrap; flex-direction: row; align-items: center;">
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'client'); event.preventDefault(); window.location.hash = '#customer'; window.dispatchEvent(new HashChangeEvent('hashchange'));">💳 Cliente</button>
+        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'route'); event.preventDefault(); window.location.hash = '#agent-login'; window.dispatchEvent(new HashChangeEvent('hashchange'));">📱 Agente de Ruta</button>
+        <button type="button" id="nav-btn-supervisor" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'supervisor'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">👔 Supervisor</button>
+        <button type="button" id="nav-btn-independent" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'independent'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">💼 Agente Independiente</button>
+        <button type="button" id="nav-btn-commerce" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'commerce'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">🏪 Otro Comercio o Tienda</button>
+      </div>
     </div>
   </header>
 
