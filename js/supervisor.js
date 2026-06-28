@@ -1393,7 +1393,7 @@ const supervisorModule = {
     // Check if the user is a commerce role
     if (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente') {
       if (this.welcomeMsg) {
-        this.welcomeMsg.textContent = `Bienvenido, ${currentUser.name} | ${currentUser.company || 'Comercio'}`;
+        this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'Comercio'}</span>`;
       }
       
       const btnSchedule = document.getElementById('btn-schedule-config');
@@ -1435,7 +1435,7 @@ const supervisorModule = {
     }
 
     if (this.welcomeMsg) {
-      this.welcomeMsg.textContent = `Bienvenido, ${currentUser.name} | ${currentUser.company || 'BulaPay'}`;
+      this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'BulaPay'}</span>`;
     }
 
     const routes = await window.BulaPayDB.getRoutes();

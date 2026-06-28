@@ -30,20 +30,10 @@
 
       <!-- Información del usuario logueado -->
       <div class="user-nav-info" id="user-nav-info" style="display: none;">
-        <div class="user-profile-badge">
-          <span id="nav-user-name">Usuario</span>
-          <span class="role-tag" id="nav-user-role">Rol</span>
-        </div>
+        <!-- Elementos ocultos para mantener compatibilidad con scripts existentes -->
+        <span id="nav-user-name" style="display: none;">Usuario</span>
+        <span id="nav-user-role" style="display: none;">Rol</span>
         <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
-      </div>
-
-      <!-- Accesos Rápidos para Desarrollo (Sin la palabra Demo) -->
-      <div id="demo-quick-links" style="display: flex; gap: 10px; flex-wrap: wrap; flex-direction: row; align-items: center;">
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'client'); event.preventDefault(); window.location.hash = '#customer'; window.dispatchEvent(new HashChangeEvent('hashchange'));">💳 Cliente</button>
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'route'); event.preventDefault(); window.location.hash = '#agent-login'; window.dispatchEvent(new HashChangeEvent('hashchange'));">📱 Agente de Ruta</button>
-        <button type="button" id="nav-btn-supervisor" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'supervisor'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">👔 Supervisor</button>
-        <button type="button" id="nav-btn-independent" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'independent'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">💼 Agente Independiente</button>
-        <button type="button" id="nav-btn-commerce" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'commerce'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">🏪 Otro Comercio o Tienda</button>
       </div>
     </div>
   </header>
@@ -198,7 +188,11 @@
       <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div>
           <h1 class="title-gradient" style="margin-bottom: 0.25rem;">Gestión de Cartera</h1>
-          <p style="color: var(--text-secondary);" id="supervisor-welcome-msg">Bienvenido, Usuario Supervisor</p>
+          <div id="supervisor-profile-trigger" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; width: fit-content; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1" onclick="authModule.openUserProfileModal()">
+            <!-- Ícono de Usuario (Avatar SVG) -->
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <p style="color: var(--text-secondary); margin: 0; font-size: 0.9rem;" id="supervisor-welcome-msg">Bienvenido, Usuario Supervisor</p>
+          </div>
         </div>
         <button id="btn-schedule-config" class="btn btn-secondary" onclick="supervisorModule.openScheduleModal()" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); display: flex; align-items: center; gap: 0.5rem;">
           ⚙️ Configurar Horario de Rutas
@@ -530,12 +524,16 @@
           <!-- Contenido de Pantalla -->
           <div class="phone-screen-content">
             
-            <div class="agent-title-bar">
-              <div>
-                <h3 id="agent-welcome-name">Cargando Agente...</h3>
-                <span id="agent-active-route">Ruta no asignada</span>
+            <div class="agent-title-bar" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%;">
+              <div id="agent-profile-trigger" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1" onclick="authModule.openUserProfileModal()">
+                <!-- Ícono de Usuario (Avatar SVG) -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <div>
+                  <h3 id="agent-welcome-name" style="margin: 0; font-size: 0.85rem; font-weight: 700;">Cargando Agente...</h3>
+                  <span id="agent-active-route" style="font-size: 0.65rem; color: var(--text-secondary); display: block;">Ruta no asignada</span>
+                </div>
               </div>
-              <span class="role-tag">Agente de Ruta</span>
+              <span class="role-tag" style="margin-left: auto;">Agente de Ruta</span>
             </div>
 
             <!-- Pestañas internas de la terminal del agente -->
@@ -1409,6 +1407,40 @@
   </div>
 
   <!-- MODAL DE TÉRMINOS Y CONDICIONES (REGISTRO) -->
+  <!-- Modal de Perfil de Usuario -->
+  <div class="supervisor-modal-overlay" id="modal-user-profile" style="display: none; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; transition: opacity 0.3s ease;">
+    <div class="card" style="width: 90%; max-width: 450px; background-color: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; padding: 2rem; position: relative;">
+      <h3 style="margin-bottom: 1.5rem; text-align: center; color: var(--accent); font-size: 1.4rem;">👤 Mi Perfil</h3>
+      
+      <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; gap: 10px;">
+          <span style="color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap;">Nombre Completo:</span>
+          <span id="profile-name" style="color: var(--text-primary); font-weight: 600; font-size: 0.9rem; text-align: right;">-</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; gap: 10px;">
+          <span style="color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap;">Cédula / Documento:</span>
+          <span id="profile-doc" style="color: var(--text-primary); font-weight: 600; font-size: 0.9rem; text-align: right;">-</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; gap: 10px;">
+          <span style="color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap;">Teléfono:</span>
+          <span id="profile-phone" style="color: var(--text-primary); font-weight: 600; font-size: 0.9rem; text-align: right;">-</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; gap: 10px;">
+          <span style="color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap;">Correo Electrónico:</span>
+          <span id="profile-email" style="color: var(--text-primary); font-weight: 600; font-size: 0.9rem; text-align: right;">-</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; gap: 10px; align-items: center;">
+          <span style="color: var(--text-secondary); font-size: 0.9rem; white-space: nowrap;">Rol de Usuario:</span>
+          <span id="profile-role" class="role-tag" style="background-color: var(--primary); color: white; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 600; font-size: 0.8rem; width: fit-content; text-align: right;">-</span>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: center;">
+        <button type="button" class="btn btn-secondary" onclick="authModule.closeUserProfileModal()" style="width: auto; padding: 0.6rem 1.5rem;">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="terms-overlay" id="terms-modal">
     <div class="terms-card">
       <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">📄 Términos y Condiciones de Uso</h3>
