@@ -554,6 +554,39 @@ const db = {
     }
   },
 
+  async getCommerceBuyerByCedula(cedula) {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase
+      .from('commerce_buyers')
+      .select('*')
+      .eq('cedula', String(cedula))
+      .maybeSingle();
+    if (error) {
+      console.error(`Error al obtener comprador de comercio "${cedula}":`, error);
+      return null;
+    }
+    return data;
+  },
+
+  async saveCommerceBuyer(buyer) {
+    const supabase = await initSupabase();
+    const payload = {
+      name: buyer.name,
+      cedula: String(buyer.cedula),
+      email: buyer.email,
+      phone: buyer.phone
+    };
+    const { data, error } = await supabase
+      .from('commerce_buyers')
+      .insert([payload])
+      .select();
+    if (error) {
+      console.error("[DEBUG DB ERROR] Error al guardar comprador de comercio:", error);
+      throw error;
+    }
+    return data ? data[0] : payload;
+  },
+
   async updateClientOutstanding(cedula, amountPaid) {
     const supabase = await initSupabase();
     const client = await this.getClientByCedula(cedula);

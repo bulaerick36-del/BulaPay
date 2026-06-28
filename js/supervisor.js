@@ -2386,13 +2386,13 @@ const supervisorModule = {
     };
     
     try {
-      const existing = await window.BulaPayDB.getClientByCedula(cedula);
+      const existing = await window.BulaPayDB.getCommerceBuyerByCedula(cedula);
       if (existing) {
-        alert('❌ Ya existe un cliente registrado con esta Cédula.');
+        alert('Error: Esta cédula o correo ya está registrado como comprador en el comercio.');
         return;
       }
       
-      await window.BulaPayDB.saveClient(newClient);
+      await window.BulaPayDB.saveCommerceBuyer(newClient);
       
       const cardLink = `${window.location.origin}${window.location.pathname}?view=customer&id=${cedula}`;
       
@@ -2407,9 +2407,14 @@ const supervisorModule = {
       await this.renderDashboard();
     } catch (err) {
       console.error(err);
-      const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
-      if (dupMsg) {
-        alert(dupMsg);
+      const isUniqueViolation = err && (
+        err.code === '23505' || 
+        (err.message && err.message.includes('23505')) ||
+        (err.details && err.details.includes('already exists'))
+      );
+      
+      if (isUniqueViolation) {
+        alert('Error: Esta cédula o correo ya está registrado como comprador en el comercio.');
       } else {
         alert('❌ Error al registrar la venta.');
       }
