@@ -214,6 +214,16 @@ const authModule = {
     if (registerTypeSelect) {
       registerTypeSelect.addEventListener('change', () => this.handleRegisterTypeChange());
     }
+
+    // Triggers de Perfil de Usuario
+    const supTrigger = document.getElementById('supervisor-profile-trigger');
+    if (supTrigger) {
+      supTrigger.addEventListener('click', () => this.openUserProfileModal());
+    }
+    const agentTrigger = document.getElementById('agent-profile-trigger');
+    if (agentTrigger) {
+      agentTrigger.addEventListener('click', () => this.openUserProfileModal());
+    }
   },
 
   switchTab(tab) {
