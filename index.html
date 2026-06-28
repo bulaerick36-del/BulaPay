@@ -242,6 +242,12 @@
           </div>
         </div>
 
+        <!-- Pestañas Principales del Supervisor -->
+        <div class="main-tabs-container" style="display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+          <button type="button" id="btn-sup-tab-routes" class="btn btn-primary" onclick="supervisorModule.switchMainTab('routes')" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-radius: 8px;">🗺️ Monitoreo de Rutas</button>
+          <button type="button" id="btn-sup-tab-clients" class="btn btn-secondary" onclick="supervisorModule.switchMainTab('clients')" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-radius: 8px;">👥 Panel de Clientes</button>
+        </div>
+
         <!-- Vista Principal: Rutas y Monitoreo (Fija y Única) -->
         <div class="supervisor-tab-panel active" id="panel-sup-routes" style="display: block;">
           <!-- Acciones de Supervisor -->
@@ -381,6 +387,102 @@
 
           </div> <!-- Cierra supervisor-actions -->
         </div> <!-- Cierra panel-sup-routes -->
+
+        <!-- Panel de Clientes (Pestañas por rol de creador) -->
+        <div class="supervisor-tab-panel" id="panel-sup-clients" style="display: none;">
+          <div class="card">
+            <h3 class="title-gradient" style="margin-bottom: 1rem; font-size: 1.4rem;">👥 Panel de Clientes</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Lista de clientes categorizada por el rol del usuario que los creó en el sistema.</p>
+            
+            <!-- Interfaz de Pestañas (Sub-Tabs) -->
+            <div class="sub-tabs-container" style="display: flex; background-color: var(--bg-secondary); padding: 0.25rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.25rem;">
+              <button type="button" id="btn-client-tab-supervisores" class="sub-tab active" onclick="supervisorModule.switchClientTab('supervisores')" style="flex: 1; min-width: 120px; padding: 0.5rem; background: var(--bg-primary); border: none; color: var(--accent); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Supervisores</button>
+              <button type="button" id="btn-client-tab-agentes-ruta" class="sub-tab" onclick="supervisorModule.switchClientTab('agentes-ruta')" style="flex: 1; min-width: 120px; padding: 0.5rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Agentes de Ruta</button>
+              <button type="button" id="btn-client-tab-independientes" class="sub-tab" onclick="supervisorModule.switchClientTab('independientes')" style="flex: 1; min-width: 120px; padding: 0.5rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Agentes Independientes</button>
+              <button type="button" id="btn-client-tab-comercios" class="sub-tab" onclick="supervisorModule.switchClientTab('comercios')" style="flex: 1; min-width: 120px; padding: 0.5rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; border-radius: 6px; cursor: pointer; transition: var(--transition-smooth);">Otros Comercios y Tiendas</button>
+            </div>
+
+            <!-- Contenedor Pestaña: Supervisores -->
+            <div id="client-tab-content-supervisores" class="client-tab-content" style="display: block;">
+              <div class="table-wrapper">
+                <table class="route-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre del Cliente</th>
+                      <th>Cédula</th>
+                      <th>Teléfono</th>
+                      <th>Ciudad / Zona</th>
+                      <th>Saldo Pendiente</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-clients-supervisores">
+                    <!-- Inyectado dinámicamente -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Contenedor Pestaña: Agentes de Ruta -->
+            <div id="client-tab-content-agentes-ruta" class="client-tab-content" style="display: none;">
+              <div class="table-wrapper">
+                <table class="route-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre del Cliente</th>
+                      <th>Agente Asignado</th>
+                      <th>Ruta Correspondiente</th>
+                      <th>Supervisor a Cargo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-clients-agentes-ruta">
+                    <!-- Inyectado dinámicamente -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Contenedor Pestaña: Agentes Independientes -->
+            <div id="client-tab-content-independientes" class="client-tab-content" style="display: none;">
+              <div class="table-wrapper">
+                <table class="route-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre del Cliente</th>
+                      <th>Cédula</th>
+                      <th>Teléfono</th>
+                      <th>Ciudad / Zona</th>
+                      <th>Saldo Pendiente</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-clients-independientes">
+                    <!-- Inyectado dinámicamente -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Contenedor Pestaña: Otros Comercios y Tiendas -->
+            <div id="client-tab-content-comercios" class="client-tab-content" style="display: none;">
+              <div class="table-wrapper">
+                <table class="route-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre del Cliente</th>
+                      <th>Cédula</th>
+                      <th>Teléfono</th>
+                      <th>Ciudad / Zona</th>
+                      <th>Saldo Pendiente</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-clients-comercios">
+                    <!-- Inyectado dinámicamente -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+          </div>
+        </div>
       </div> <!-- Cierra supervisor-dashboard-standard -->
 
       <!-- VISTA DE COMERCIO (OTROS) -->
