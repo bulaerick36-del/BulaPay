@@ -2570,9 +2570,9 @@ const supervisorModule = {
 
       let clients = [];
       try {
-        clients = await window.BulaPayDB.getClients();
+        clients = await window.BulaPayDB.getCommerceBuyers();
       } catch (dbErr) {
-        console.error("Error al obtener clientes desde la base de datos:", dbErr);
+        console.error("Error al obtener clientes de comercio:", dbErr);
         clients = [];
       }
       
@@ -2584,7 +2584,7 @@ const supervisorModule = {
         } else {
           let html = `<div class="commerce-list">`;
           clients.forEach(c => {
-            const outstandingValue = Number(c.outstanding);
+            const outstandingValue = Number(c.outstanding || 0);
             const isSaldado = outstandingValue <= 0;
             const badgeClass = isSaldado ? 'commerce-badge-pagado' : 'commerce-badge-proceso';
             const badgeText = isSaldado ? '✔ Pagado' : '⏳ En Proceso';
@@ -2595,7 +2595,7 @@ const supervisorModule = {
                   <div class="commerce-card-sub">Cédula: ${c.cedula}</div>
                 </div>
                 <div class="commerce-card-right">
-                  <div class="commerce-card-value">$${Number(c.totalDebt).toLocaleString('es-CO')}</div>
+                  <div class="commerce-card-value">$${Number(c.totalDebt || 0).toLocaleString('es-CO')}</div>
                   <span class="commerce-badge ${badgeClass}">${badgeText}</span>
                 </div>
               </div>
@@ -2606,7 +2606,7 @@ const supervisorModule = {
         }
       } else if (type === 'products') {
         title.textContent = '📦 Productos Vendidos';
-        const products = clients ? clients.filter(c => c.product_name || c.city === 'Comercio') : [];
+        const products = clients || [];
         
         if (products.length === 0) {
           content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 2rem;">No hay productos registrados.</p>';
@@ -2621,8 +2621,8 @@ const supervisorModule = {
                   <div class="commerce-card-sub">Comprador: ${p.name} | Cat: ${p.product_category || 'Otros'}</div>
                 </div>
                 <div class="commerce-card-right">
-                  <div class="commerce-card-value">$${Number(p.totalDebt).toLocaleString('es-CO')}</div>
-                  <div class="commerce-card-sub">${p.installmentsCount} cuotas</div>
+                  <div class="commerce-card-value">$${Number(p.totalDebt || 0).toLocaleString('es-CO')}</div>
+                  <div class="commerce-card-sub">${p.installmentsCount || 1} cuotas</div>
                 </div>
               </div>
             `;
@@ -2670,7 +2670,7 @@ const supervisorModule = {
       let client = null;
       let payments = [];
       try {
-        client = await window.BulaPayDB.getClientByCedula(cedula);
+        client = await window.BulaPayDB.getCommerceBuyerByCedula(cedula);
         if (client) {
           payments = await window.BulaPayDB.getPaymentsByClient(cedula);
         }
@@ -2684,7 +2684,12 @@ const supervisorModule = {
       }
       
       const totalAbonado = payments ? payments.reduce((acc, pay) => acc + Number(pay.amount), 0) : 0;
-      const isSaldado = Number(client.outstanding) <= 0;
+      const outstandingVal = Number(client.outstanding || 0);
+      const totalDebtVal = Number(client.totalDebt || 0);
+      const installmentsCountVal = Number(client.installmentsCount || 1);
+      const installmentAmountVal = Number(client.installmentAmount || 0);
+      
+      const isSaldado = outstandingVal <= 0;
       const badgeClass = isSaldado ? 'commerce-badge-pagado' : 'commerce-badge-proceso';
       const badgeText = isSaldado ? '✔ Pagado' : '⏳ En Proceso';
       
@@ -2712,7 +2717,7 @@ const supervisorModule = {
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Total Financiado</span>
-            <span class="commerce-detail-value" style="color: var(--text-primary);">$${Number(client.totalDebt).toLocaleString('es-CO')}</span>
+            <span class="commerce-detail-value" style="color: var(--text-primary);">$${totalDebtVal.toLocaleString('es-CO')}</span>
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Total Abonado</span>
@@ -2720,11 +2725,11 @@ const supervisorModule = {
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Saldo Pendiente</span>
-            <span class="commerce-detail-value" style="color: var(--color-rojo);">$${Number(client.outstanding).toLocaleString('es-CO')}</span>
+            <span class="commerce-detail-value" style="color: var(--color-rojo);">$${outstandingVal.toLocaleString('es-CO')}</span>
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Plan de Cuotas</span>
-            <span class="commerce-detail-value">${client.installmentsCount} cuotas de $${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
+            <span class="commerce-detail-value">${installmentsCountVal} cuotas de $${installmentAmountVal.toLocaleString('es-CO')}</span>
           </div>
         </div>
 
@@ -2876,7 +2881,7 @@ const supervisorModule = {
       let client = null;
       let payments = [];
       try {
-        client = await window.BulaPayDB.getClientByCedula(cedula);
+        client = await window.BulaPayDB.getCommerceBuyerByCedula(cedula);
         if (client) {
           payments = await window.BulaPayDB.getPaymentsByClient(cedula);
         }
@@ -2889,14 +2894,19 @@ const supervisorModule = {
         return;
       }
       
+      const totalDebtVal = Number(client.totalDebt || 0);
+      const installmentsCountVal = Number(client.installmentsCount || 1);
+      const outstandingVal = Number(client.outstanding || 0);
+      const installmentAmountVal = Number(client.installmentAmount || 0);
+      
       const paidCount = payments ? payments.filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0).length : 0;
-      const remaining = Math.max(0, client.installmentsCount - paidCount);
-      const progressPercent = Math.min(100, Math.round((paidCount / client.installmentsCount) * 100));
+      const remaining = Math.max(0, installmentsCountVal - paidCount);
+      const progressPercent = Math.min(100, Math.round((paidCount / installmentsCountVal) * 100));
       
       // Determine Product Status
       let productStatus = 'En proceso';
       let statusBadgeClass = 'commerce-badge-proceso'; // orange
-      if (Number(client.outstanding) <= 0) {
+      if (outstandingVal <= 0) {
         productStatus = 'Pagado';
         statusBadgeClass = 'commerce-badge-pagado'; // green
       } else if (remaining <= 2) {
@@ -2930,7 +2940,7 @@ const supervisorModule = {
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Precio Financiado</span>
-            <span class="commerce-detail-value">$${Number(client.totalDebt).toLocaleString('es-CO')}</span>
+            <span class="commerce-detail-value">$${totalDebtVal.toLocaleString('es-CO')}</span>
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Estado del Producto</span>
@@ -2938,7 +2948,7 @@ const supervisorModule = {
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Cuotas Pagadas</span>
-            <span class="commerce-detail-value" style="color: var(--color-verde);">${paidCount} de ${client.installmentsCount} ✔</span>
+            <span class="commerce-detail-value" style="color: var(--color-verde);">${paidCount} de ${installmentsCountVal} ✔</span>
           </div>
           <div class="commerce-detail-group">
             <span class="commerce-detail-label">Cuotas Faltantes</span>
