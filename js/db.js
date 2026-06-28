@@ -615,20 +615,7 @@ const db = {
         console.error("Error al verificar horario de la ruta:", routeErr);
       } else if (route) {
         const now = new Date();
-        const openingStr = route.opening_time || '06:00';
-        const closingStr = route.closing_time || '18:00';
-        const hasExtension = !!route.has_extension;
-
-        const [openHrs, openMins] = openingStr.split(':').map(Number);
-        const [closeHrs, closeMins] = closingStr.split(':').map(Number);
-
-        const openingTime = new Date(now);
-        openingTime.setHours(openHrs, openMins, 0, 0);
-
-        const closingTime = new Date(now);
-        closingTime.setHours(closeHrs, closeMins, 0, 0);
-
-        const isOpen = (now >= openingTime && now < closingTime) || hasExtension;
+        const isOpen = this.isRouteOpen(route, now);
 
         if (!isOpen) {
           throw new Error("Ruta Cerrada: No se permiten recaudos fuera del horario establecido.");
@@ -694,6 +681,94 @@ const db = {
     if (error) {
       console.warn(`Error al actualizar ubicación de usuario "${username}":`, error);
       throw error;
+    }
+  },
+
+  isRouteOpen(route, dateObj = new Date()) {
+    if (!route) return false;
+    if (route.has_extension) return true; // La prórroga ignora el horario general
+    
+    // Validar hora
+    const openingStr = route.opening_time || '06:00';
+    const closingStr = route.closing_time || '18:00';
+    
+    const [openHrs, openMins] = openingStr.split(':').map(Number);
+    const [closeHrs, closeMins] = closingStr.split(':').map(Number);
+    
+    const openingTime = new Date(dateObj);
+    openingTime.setHours(openHrs, openMins, 0, 0);
+    
+    const closingTime = new Date(dateObj);
+    closingTime.setHours(closeHrs, closeMins, 0, 0);
+    
+    const isTimeOpen = dateObj >= openingTime && dateObj < closingTime;
+    if (!isTimeOpen) return false;
+
+    // Validar día de la semana
+    let workingDays = route.workingDays || 'Mon-Sat';
+    
+    const mapDaysToSpanish = {
+      'Mon': 'Lunes', 'Tue': 'Martes', 'Wed': 'Miércoles', 'Thu': 'Jueves', 'Fri': 'Viernes', 'Sat': 'Sábado', 'Sun': 'Domingo',
+      'Lunes': 'Lunes', 'Martes': 'Martes', 'Miércoles': 'Miércoles', 'Jueves': 'Jueves', 'Viernes': 'Viernes', 'Sábado': 'Sábado', 'Domingo': 'Domingo'
+    };
+
+    let startDay = 'Lunes';
+    let endDay = 'Sábado';
+
+    if (workingDays) {
+      try {
+        const parsed = JSON.parse(workingDays);
+        if (parsed && parsed.startDay && parsed.endDay) {
+          startDay = parsed.startDay;
+          endDay = parsed.endDay;
+        }
+      } catch (e) {
+        let parts = [];
+        if (workingDays.includes('-')) {
+          parts = workingDays.split('-');
+        } else if (workingDays.includes(' a ')) {
+          parts = workingDays.split(' a ');
+        }
+        if (parts.length === 2) {
+          const s = parts[0].trim();
+          const e = parts[1].trim();
+          startDay = mapDaysToSpanish[s] || s;
+          endDay = mapDaysToSpanish[e] || e;
+        } else {
+          const mapped = mapDaysToSpanish[workingDays.trim()];
+          if (mapped) {
+            startDay = mapped;
+            endDay = mapped;
+          }
+        }
+      }
+    }
+
+    const getDayIndex = (dayName) => {
+      const normalized = dayName ? dayName.trim().toLowerCase() : '';
+      const mapping = {
+        'domingo': 0, 'sun': 0, 'dom': 0,
+        'lunes': 1, 'mon': 1, 'lun': 1,
+        'martes': 2, 'tue': 2, 'mar': 2,
+        'miércoles': 3, 'miercoles': 3, 'wed': 3, 'mie': 3,
+        'jueves': 4, 'thu': 4, 'jue': 4,
+        'viernes': 5, 'fri': 5, 'vie': 5,
+        'sábado': 6, 'sabado': 6, 'sat': 6, 'sab': 6
+      };
+      return mapping[normalized] !== undefined ? mapping[normalized] : -1;
+    };
+
+    const currentDayIdx = dateObj.getDay();
+    const startIdx = getDayIndex(startDay);
+    const endIdx = getDayIndex(endDay);
+
+    if (startIdx === -1 || endIdx === -1) return true; // fallback por seguridad si los datos son inválidos
+
+    if (startIdx <= endIdx) {
+      return currentDayIdx >= startIdx && currentDayIdx <= endIdx;
+    } else {
+      // Cruzando fin de semana
+      return currentDayIdx >= startIdx || currentDayIdx <= endIdx;
     }
   }
 };

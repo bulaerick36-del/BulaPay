@@ -1518,7 +1518,10 @@ const supervisorModule = {
           agentNames: new Set(),
           capital: 0,
           status: route.status,
-          openingTime: route.opening_time || '06:00'
+          openingTime: route.opening_time || '06:00',
+          closingTime: route.closing_time || '18:00',
+          workingDays: route.workingDays || 'Mon-Sat',
+          hasExtension: !!route.has_extension
         };
       }
       groupedRoutes[name].routeIds.push(route.id);
@@ -1573,8 +1576,23 @@ const supervisorModule = {
       }
 
       let statusClass = 'en-ruta';
-      if (gRoute.status === 'Completado') statusClass = 'completado';
-      if (gRoute.status === 'Incidencia') statusClass = 'incidencia';
+      let displayStatus = gRoute.status;
+
+      // Validar si la ruta está abierta actualmente
+      const isOpen = window.BulaPayDB.isRouteOpen({
+        opening_time: gRoute.openingTime,
+        closing_time: gRoute.closingTime,
+        workingDays: gRoute.workingDays,
+        has_extension: gRoute.hasExtension
+      }, now);
+
+      if (!isOpen && displayStatus === 'En Ruta') {
+        displayStatus = 'Fuera de Horario';
+        statusClass = 'incidencia'; // color rojo
+      } else {
+        if (gRoute.status === 'Completado') statusClass = 'completado';
+        if (gRoute.status === 'Incidencia') statusClass = 'incidencia';
+      }
 
       const agentsList = Array.from(gRoute.agentNames).join(', ') || 'Sin Agente';
 
@@ -1585,9 +1603,14 @@ const supervisorModule = {
         <td>$${Number(gRoute.capital).toLocaleString('es-CO')}</td>
         <td style="color: var(--accent); font-weight: 600;">$${totalCollectedToday.toLocaleString('es-CO')}</td>
         <td>
-          <span class="status-badge ${statusClass}">${gRoute.status}</span>
+          <span class="status-badge ${statusClass}">${displayStatus}</span>
         </td>
-        <td class="operating-time-cell" data-opening-time="${gRoute.openingTime}" data-status="${gRoute.status}">
+        <td class="operating-time-cell" 
+            data-opening-time="${gRoute.openingTime}" 
+            data-closing-time="${gRoute.closingTime}"
+            data-working-days='${typeof gRoute.workingDays === 'string' ? gRoute.workingDays : JSON.stringify(gRoute.workingDays)}'
+            data-has-extension="${gRoute.hasExtension}"
+            data-status="${gRoute.status}">
           <!-- Calculado dinámicamente -->
         </td>
         <td>
@@ -1613,33 +1636,61 @@ const supervisorModule = {
 
     cells.forEach(cell => {
       const openingTimeStr = cell.getAttribute('data-opening-time') || '06:00';
-      const [openHrs, openMins] = openingTimeStr.split(':').map(Number);
+      const closingTimeStr = cell.getAttribute('data-closing-time') || '18:00';
+      let workingDays = cell.getAttribute('data-working-days') || 'Mon-Sat';
       
-      const openingTime = new Date(now);
-      openingTime.setHours(openHrs, openMins, 0, 0);
+      // Intentar decodificar si es que viene serializado
+      try {
+        if (workingDays.startsWith('"') && workingDays.endsWith('"')) {
+          workingDays = JSON.parse(workingDays);
+        }
+      } catch(e) {}
 
-      let diffMs = now - openingTime;
-      if (diffMs < 0) {
-        diffMs = 0; // Si es antes de la hora de apertura, el tiempo transcurrido es 0
-      }
+      const hasExtension = cell.getAttribute('data-has-extension') === 'true';
+      const status = cell.getAttribute('data-status');
 
-      const diffMinutesTotal = Math.floor(diffMs / 60000);
-      const hours = Math.floor(diffMinutesTotal / 60);
-      const minutes = diffMinutesTotal % 60;
-      const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} horas`;
+      const routeMock = {
+        opening_time: openingTimeStr,
+        closing_time: closingTimeStr,
+        workingDays: workingDays,
+        has_extension: hasExtension
+      };
 
-      let bgColor = 'rgba(59, 130, 246, 0.15)';
-      let textColor = '#60a5fa';
-      let borderColor = 'rgba(59, 130, 246, 0.3)';
+      const isOpen = window.BulaPayDB.isRouteOpen(routeMock, now);
 
-      if (hours >= 12) {
-        bgColor = 'rgba(245, 158, 11, 0.15)';
-        textColor = 'var(--color-amarillo)';
-        borderColor = 'rgba(245, 158, 11, 0.3)';
-      } else if (hours >= 2) {
-        bgColor = 'rgba(16, 185, 129, 0.15)';
-        textColor = 'var(--color-verde)';
-        borderColor = 'rgba(16, 185, 129, 0.3)';
+      let formattedTime = '00:00 horas';
+      let bgColor = 'rgba(239, 68, 68, 0.1)';
+      let textColor = 'var(--color-rojo)';
+      let borderColor = 'rgba(239, 68, 68, 0.2)';
+
+      if (isOpen) {
+        const [openHrs, openMins] = openingTimeStr.split(':').map(Number);
+        const openingTime = new Date(now);
+        openingTime.setHours(openHrs, openMins, 0, 0);
+
+        let diffMs = now - openingTime;
+        if (diffMs < 0) diffMs = 0;
+
+        const diffMinutesTotal = Math.floor(diffMs / 60000);
+        const hours = Math.floor(diffMinutesTotal / 60);
+        const minutes = diffMinutesTotal % 60;
+        formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} horas`;
+
+        bgColor = 'rgba(59, 130, 246, 0.15)';
+        textColor = '#60a5fa';
+        borderColor = 'rgba(59, 130, 246, 0.3)';
+
+        if (hours >= 12) {
+          bgColor = 'rgba(245, 158, 11, 0.15)';
+          textColor = 'var(--color-amarillo)';
+          borderColor = 'rgba(245, 158, 11, 0.3)';
+        } else if (hours >= 2) {
+          bgColor = 'rgba(16, 185, 129, 0.15)';
+          textColor = 'var(--color-verde)';
+          borderColor = 'rgba(16, 185, 129, 0.3)';
+        }
+      } else {
+        formattedTime = 'Fuera de Horario';
       }
 
       cell.innerHTML = `
@@ -1647,6 +1698,25 @@ const supervisorModule = {
           🕒 ${formattedTime}
         </span>
       `;
+
+      // Actualizar dinámicamente el badge de estado en la fila correspondiente
+      const row = cell.closest('tr');
+      if (row) {
+        const badge = row.querySelector('.status-badge');
+        if (badge) {
+          if (!isOpen && status === 'En Ruta') {
+            badge.textContent = 'Fuera de Horario';
+            badge.className = 'status-badge'; 
+            badge.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+            badge.style.color = 'var(--color-rojo)';
+          } else if (isOpen && status === 'En Ruta') {
+            badge.textContent = 'En Ruta';
+            badge.className = 'status-badge en-ruta';
+            badge.style.backgroundColor = '';
+            badge.style.color = '';
+          }
+        }
+      }
     });
   },
 

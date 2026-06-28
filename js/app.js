@@ -350,20 +350,8 @@ const app = {
             try {
               const route = await window.BulaPayDB.getRouteById(routeId);
               if (route) {
-                const openingStr = route.opening_time || '06:00';
-                const closingStr = route.closing_time || '18:00';
+                const isOpen = window.BulaPayDB.isRouteOpen(route, now);
                 const hasExtension = !!route.has_extension;
-                
-                const [openHrs, openMins] = openingStr.split(':').map(Number);
-                const [closeHrs, closeMins] = closingStr.split(':').map(Number);
-                
-                const openingTime = new Date(now);
-                openingTime.setHours(openHrs, openMins, 0, 0);
-                
-                const closingTime = new Date(now);
-                closingTime.setHours(closeHrs, closeMins, 0, 0);
-                
-                const isOpen = (now >= openingTime && now < closingTime) || hasExtension;
                 
                 const registerBtn = document.getElementById('btn-agent-register-installment');
                 const submitCollectBtn = document.getElementById('btn-submit-collect');
