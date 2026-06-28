@@ -1350,15 +1350,26 @@
         <!-- Nueva Sección Días Operativos -->
         <div class="form-group" style="margin-bottom: 1.5rem;">
           <label style="font-size: 0.75rem; display: block; margin-bottom: 0.5rem;">Días Operativos</label>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <label class="dias-operativos-card" style="display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; cursor: pointer; transition: var(--transition-smooth); background-color: var(--bg-secondary); text-align: center;">
-              <input type="radio" name="schedule-working-days" value="Mon-Fri" required style="display: none;">
-              <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary);">Lunes a Viernes (L - V)</span>
-            </label>
-            <label class="dias-operativos-card" style="display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; cursor: pointer; transition: var(--transition-smooth); background-color: var(--bg-secondary); text-align: center;">
-              <input type="radio" name="schedule-working-days" value="Mon-Sat" required checked style="display: none;">
-              <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary);">Lunes a Sábado (L - S)</span>
-            </label>
+          <div class="flex items-center gap-2" style="display: flex; align-items: center; gap: 0.5rem; width: 100%;">
+            <select id="schedule-start-day" style="flex: 1; padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; outline: none; cursor: pointer;">
+              <option value="Lunes">Lunes</option>
+              <option value="Martes">Martes</option>
+              <option value="Miércoles">Miércoles</option>
+              <option value="Jueves">Jueves</option>
+              <option value="Viernes">Viernes</option>
+              <option value="Sábado">Sábado</option>
+              <option value="Domingo">Domingo</option>
+            </select>
+            <span style="color: var(--text-primary); font-weight: 500; font-size: 0.85rem;"> A </span>
+            <select id="schedule-end-day" style="flex: 1; padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; outline: none; cursor: pointer;">
+              <option value="Lunes">Lunes</option>
+              <option value="Martes">Martes</option>
+              <option value="Miércoles">Miércoles</option>
+              <option value="Jueves">Jueves</option>
+              <option value="Viernes">Viernes</option>
+              <option value="Sábado">Sábado</option>
+              <option value="Domingo">Domingo</option>
+            </select>
           </div>
         </div>
         

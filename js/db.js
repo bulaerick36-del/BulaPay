@@ -326,21 +326,29 @@ const db = {
     }
   },
 
-  async updateRoutesSchedule(openingTime, closingTime, workingDays) {
+  async updateRoutesSchedule(openingTime, closingTime, startDay, endDay) {
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();
     if (!supId) return;
 
+    // Serializar ambos valores como un JSON en la columna 'workingDays'
+    const workingDaysJSON = JSON.stringify({ startDay, endDay });
+
     // Guardar fallback en localStorage
-    localStorage.setItem(`workingDays_${supId}`, workingDays);
+    localStorage.setItem(`workingDays_${supId}`, workingDaysJSON);
 
     try {
       const { error } = await supabase
         .from('routes')
-        .update({ opening_time: openingTime, closing_time: closingTime, workingDays: workingDays })
+        .update({ 
+          opening_time: openingTime, 
+          closing_time: closingTime, 
+          workingDays: workingDaysJSON 
+        })
         .eq('supervisor_id', supId);
 
       if (error) {
+        console.error("Error al actualizar horario de rutas con workingDays:", error);
         // Si el error indica columna inexistente, reintentar sin ella
         if (error.code === 'PGRST204' || (error.message && (error.message.includes('column') || error.message.includes('does not exist')))) {
           console.warn("La columna 'workingDays' no existe en Supabase. Guardando solo horarios y usando localStorage como fallback.", error);

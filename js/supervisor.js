@@ -9,6 +9,8 @@ const supervisorModule = {
   mapMarkers: {},
   mapUpdateInterval: null,
   cachedUsers: null,
+  startDay: 'Lunes',
+  endDay: 'Sábado',
 
   async getCachedUsers(forceRefresh = false) {
     if (!this.cachedUsers || forceRefresh) {
@@ -2061,12 +2063,63 @@ const supervisorModule = {
       document.getElementById('schedule-opening-time').value = openingTime;
       document.getElementById('schedule-closing-time').value = closingTime;
       
-      const radios = document.getElementsByName('schedule-working-days');
-      radios.forEach(radio => {
-        if (radio.value === workingDays) {
-          radio.checked = true;
+      // Mapear días a español
+      const mapDaysToSpanish = {
+        'Mon': 'Lunes', 'Tue': 'Martes', 'Wed': 'Miércoles', 'Thu': 'Jueves', 'Fri': 'Viernes', 'Sat': 'Sábado', 'Sun': 'Domingo',
+        'Lunes': 'Lunes', 'Martes': 'Martes', 'Miércoles': 'Miércoles', 'Jueves': 'Jueves', 'Viernes': 'Viernes', 'Sábado': 'Sábado', 'Domingo': 'Domingo'
+      };
+
+      let startDay = 'Lunes';
+      let endDay = 'Sábado';
+
+      if (workingDays) {
+        try {
+          const parsed = JSON.parse(workingDays);
+          if (parsed && parsed.startDay && parsed.endDay) {
+            startDay = parsed.startDay;
+            endDay = parsed.endDay;
+          }
+        } catch (e) {
+          // Si no es JSON (ej. "Mon-Sat" o "Lunes-Sábado"), procesarlo como rango
+          let parts = [];
+          if (workingDays.includes('-')) {
+            parts = workingDays.split('-');
+          } else if (workingDays.includes(' a ')) {
+            parts = workingDays.split(' a ');
+          }
+          if (parts.length === 2) {
+            const s = parts[0].trim();
+            const e = parts[1].trim();
+            startDay = mapDaysToSpanish[s] || s;
+            endDay = mapDaysToSpanish[e] || e;
+          } else {
+            const mapped = mapDaysToSpanish[workingDays.trim()];
+            if (mapped) {
+              startDay = mapped;
+              endDay = mapped;
+            }
+          }
         }
-      });
+      }
+
+      this.startDay = startDay;
+      this.endDay = endDay;
+
+      const startSelect = document.getElementById('schedule-start-day');
+      const endSelect = document.getElementById('schedule-end-day');
+
+      if (startSelect) {
+        startSelect.value = this.startDay;
+        startSelect.onchange = (e) => {
+          this.startDay = e.target.value;
+        };
+      }
+      if (endSelect) {
+        endSelect.value = this.endDay;
+        endSelect.onchange = (e) => {
+          this.endDay = e.target.value;
+        };
+      }
       
       this.renderScheduleExtensions(routes);
     } catch (err) {
@@ -2125,17 +2178,18 @@ const supervisorModule = {
     const openingTime = document.getElementById('schedule-opening-time').value;
     const closingTime = document.getElementById('schedule-closing-time').value;
     
-    const radios = document.getElementsByName('schedule-working-days');
-    let workingDays = 'Mon-Sat';
-    for (const radio of radios) {
-      if (radio.checked) {
-        workingDays = radio.value;
-        break;
-      }
-    }
+    const startSelect = document.getElementById('schedule-start-day');
+    const endSelect = document.getElementById('schedule-end-day');
+    
+    const startDay = startSelect ? startSelect.value : (this.startDay || 'Lunes');
+    const endDay = endSelect ? endSelect.value : (this.endDay || 'Sábado');
+    
+    // Guardar en el estado local
+    this.startDay = startDay;
+    this.endDay = endDay;
     
     try {
-      await window.BulaPayDB.updateRoutesSchedule(openingTime, closingTime, workingDays);
+      await window.BulaPayDB.updateRoutesSchedule(openingTime, closingTime, startDay, endDay);
       alert("Horario guardado correctamente");
       
       // Forzar actualización inmediata del reloj si el agente comparte sesión
