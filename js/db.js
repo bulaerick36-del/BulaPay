@@ -657,13 +657,15 @@ const db = {
   async addPayment(payment) {
     const supabase = await initSupabase();
     
-    // 0. Validar en tiempo real contra la base de datos si la ruta está abierta
     const client = await this.getGlobalClientByCedula(payment.clientCedula);
     if (!client) {
       throw new Error("Cliente no encontrado.");
     }
+    
+    const currentUser = this.getCurrentUser();
+    const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
 
-    if (client.routeId) {
+    if (client.routeId && !isIndependent) {
       const { data: route, error: routeErr } = await supabase
         .from('routes')
         .select('*')

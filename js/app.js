@@ -361,7 +361,19 @@ const app = {
       if (routeStatusElement) {
         const currentUser = window.BulaPayDB.getCurrentUser();
         
-        if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
+        if (currentUser && currentUser.role === 'Agente Independiente') {
+          // Los Agentes Independientes no tienen indicador de ruta ni restricciones horarias
+          routeStatusElement.textContent = '';
+          routeStatusElement.style.display = 'none';
+          
+          const registerBtn = document.getElementById('btn-agent-register-installment');
+          const submitCollectBtn = document.getElementById('btn-submit-collect');
+          const noPagoBtn = document.getElementById('btn-payment-card-nopago');
+          if (registerBtn) registerBtn.disabled = false;
+          if (submitCollectBtn) submitCollectBtn.disabled = false;
+          if (noPagoBtn) noPagoBtn.disabled = false;
+        } else if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
+          routeStatusElement.style.display = 'inline';
           const routeId = currentUser.routeId;
           if (routeId) {
             try {
@@ -374,6 +386,12 @@ const app = {
                 const submitCollectBtn = document.getElementById('btn-submit-collect');
                 const noPagoBtn = document.getElementById('btn-payment-card-nopago');
                 
+                // Configurar límites de hora según Supabase
+                const closingTimeStr = route.closing_time || '18:00';
+                const [closeH, closeM] = closingTimeStr.split(':').map(Number);
+                const closingTime = new Date(now);
+                closingTime.setHours(closeH, closeM, 0, 0);
+
                 if (isOpen) {
                   if (hasExtension) {
                     routeStatusElement.textContent = `Prórroga Activa`;
