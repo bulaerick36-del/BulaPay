@@ -326,13 +326,13 @@ const db = {
     }
   },
 
-  async updateRoutesSchedule(openingTime, closingTime) {
+  async updateRoutesSchedule(openingTime, closingTime, workingDays) {
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();
     if (!supId) return;
     const { error } = await supabase
       .from('routes')
-      .update({ opening_time: openingTime, closing_time: closingTime })
+      .update({ opening_time: openingTime, closing_time: closingTime, workingDays: workingDays })
       .eq('supervisor_id', supId);
     if (error) {
       console.error("Error al actualizar horario de rutas:", error);

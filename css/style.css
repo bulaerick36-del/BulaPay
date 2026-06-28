@@ -1992,5 +1992,15 @@ form .btn:not([style*="width: auto"]):not([style*="width:auto"]) {
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
+/* Selector de Días Operativos */
+label.dias-operativos-card:has(input[type="radio"]:checked) {
+  border-color: var(--primary) !important;
+  background-color: rgba(16, 185, 129, 0.08) !important;
+  box-shadow: 0 0 0 2px var(--border-color-focus);
+}
+label.dias-operativos-card:hover {
+  border-color: var(--primary);
+}
+
 
 

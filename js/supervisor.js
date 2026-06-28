@@ -2045,13 +2045,22 @@ const supervisorModule = {
       
       let openingTime = '06:00';
       let closingTime = '18:00';
+      let workingDays = 'Mon-Sat';
       if (routes && routes.length > 0) {
         if (routes[0].opening_time) openingTime = routes[0].opening_time;
         if (routes[0].closing_time) closingTime = routes[0].closing_time;
+        if (routes[0].workingDays) workingDays = routes[0].workingDays;
       }
       
       document.getElementById('schedule-opening-time').value = openingTime;
       document.getElementById('schedule-closing-time').value = closingTime;
+      
+      const radios = document.getElementsByName('schedule-working-days');
+      radios.forEach(radio => {
+        if (radio.value === workingDays) {
+          radio.checked = true;
+        }
+      });
       
       this.renderScheduleExtensions(routes);
     } catch (err) {
@@ -2110,8 +2119,17 @@ const supervisorModule = {
     const openingTime = document.getElementById('schedule-opening-time').value;
     const closingTime = document.getElementById('schedule-closing-time').value;
     
+    const radios = document.getElementsByName('schedule-working-days');
+    let workingDays = 'Mon-Sat';
+    for (const radio of radios) {
+      if (radio.checked) {
+        workingDays = radio.value;
+        break;
+      }
+    }
+    
     try {
-      await window.BulaPayDB.updateRoutesSchedule(openingTime, closingTime);
+      await window.BulaPayDB.updateRoutesSchedule(openingTime, closingTime, workingDays);
       alert("✅ Horario de rutas actualizado con éxito.");
       
       // Forzar actualización inmediata del reloj si el agente comparte sesión

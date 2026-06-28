@@ -19,8 +19,8 @@ CREATE TABLE routes (
   "supervisor_id" TEXT,
   "created_at" TIMESTAMPTZ DEFAULT NOW(),
   "opening_time" TEXT DEFAULT '06:00',
-  "closing_time" TEXT DEFAULT '18:00',
-  "has_extension" BOOLEAN DEFAULT false
+  "has_extension" BOOLEAN DEFAULT false,
+  "workingDays" TEXT DEFAULT 'Mon-Sat'
 );
 
 -- 2. Tabla de Usuarios
@@ -139,3 +139,4 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS "representante_legal" TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "cedula_representante" TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_name" TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_category" TEXT;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "workingDays" TEXT DEFAULT 'Mon-Sat';

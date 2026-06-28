@@ -1336,7 +1336,7 @@
       <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Define el horario de apertura y cierre para todas las rutas y gestiona prórrogas.</p>
       
       <form id="form-route-schedule" onsubmit="supervisorModule.saveRouteSchedule(event)">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
           <div class="form-group">
             <label for="schedule-opening-time" style="font-size: 0.75rem;">Hora de Apertura</label>
             <input type="time" id="schedule-opening-time" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
@@ -1344,6 +1344,21 @@
           <div class="form-group">
             <label for="schedule-closing-time" style="font-size: 0.75rem;">Hora de Cierre</label>
             <input type="time" id="schedule-closing-time" required style="padding: 0.5rem; font-size: 0.85rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; width: 100%;">
+          </div>
+        </div>
+
+        <!-- Nueva Sección Días Operativos -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label style="font-size: 0.75rem; display: block; margin-bottom: 0.5rem;">Días Operativos</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <label class="dias-operativos-card" style="display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; cursor: pointer; transition: var(--transition-smooth); background-color: var(--bg-secondary); text-align: center;">
+              <input type="radio" name="schedule-working-days" value="Mon-Fri" required style="display: none;">
+              <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary);">Lunes a Viernes (L - V)</span>
+            </label>
+            <label class="dias-operativos-card" style="display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; cursor: pointer; transition: var(--transition-smooth); background-color: var(--bg-secondary); text-align: center;">
+              <input type="radio" name="schedule-working-days" value="Mon-Sat" required checked style="display: none;">
+              <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary);">Lunes a Sábado (L - S)</span>
+            </label>
           </div>
         </div>
         
