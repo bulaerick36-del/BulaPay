@@ -504,22 +504,7 @@ const db = {
                               (error.details && error.details.includes('already exists'));
                               
     if (isUniqueViolation) {
-      const fullText = `${error.message || ''} ${error.details || ''}`.toLowerCase();
-      
-      if (fullText.includes('cedula') || fullText.includes('unique_cedula')) {
-        return 'Error: Esta cédula ya está registrada en otro cliente.';
-      }
-      if (fullText.includes('email') || fullText.includes('unique_email')) {
-        return 'Error: Este correo electrónico ya está en uso.';
-      }
-      if (fullText.includes('phone') || fullText.includes('unique_phone')) {
-        return 'Error: Este número de teléfono ya está registrado.';
-      }
-      if (fullText.includes('zone') || fullText.includes('unique_zone')) {
-        return 'Error: Esta dirección o zona ya está asignada a otro registro.';
-      }
-      
-      return 'Error: Ya existe un registro con datos duplicados.';
+      return 'ERROR: El correo, cédula, teléfono o dirección ya está registrado en la base de datos. Por favor, verifica los datos.';
     }
     
     return null;

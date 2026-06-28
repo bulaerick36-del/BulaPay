@@ -2409,7 +2409,7 @@ const supervisorModule = {
       console.error(err);
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
       if (dupMsg) {
-        alert('❌ ' + dupMsg);
+        alert(dupMsg);
       } else {
         alert('❌ Error al registrar la venta.');
       }

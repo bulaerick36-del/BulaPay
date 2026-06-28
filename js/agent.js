@@ -794,7 +794,7 @@ const agentModule = {
       }
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
       if (dupMsg) {
-        alert('❌ ' + dupMsg);
+        alert(dupMsg);
       } else {
         alert('❌ Error al registrar el cliente. Detalles técnicos en la consola.');
       }
