@@ -496,6 +496,35 @@ const db = {
     return data;
   },
 
+  getClientDuplicationMessage(error) {
+    if (!error) return null;
+    
+    const isUniqueViolation = error.code === '23505' || 
+                              (error.message && error.message.includes('23505')) ||
+                              (error.details && error.details.includes('already exists'));
+                              
+    if (isUniqueViolation) {
+      const fullText = `${error.message || ''} ${error.details || ''}`.toLowerCase();
+      
+      if (fullText.includes('cedula') || fullText.includes('unique_cedula')) {
+        return 'Error: Esta cédula ya está registrada en otro cliente.';
+      }
+      if (fullText.includes('email') || fullText.includes('unique_email')) {
+        return 'Error: Este correo electrónico ya está en uso.';
+      }
+      if (fullText.includes('phone') || fullText.includes('unique_phone')) {
+        return 'Error: Este número de teléfono ya está registrado.';
+      }
+      if (fullText.includes('zone') || fullText.includes('unique_zone')) {
+        return 'Error: Esta dirección o zona ya está asignada a otro registro.';
+      }
+      
+      return 'Error: Ya existe un registro con datos duplicados.';
+    }
+    
+    return null;
+  },
+
   async saveClient(client) {
     console.log('[DEBUG DB] saveClient - Preparando inserción de cliente en Supabase:', client);
     try {

@@ -2407,7 +2407,12 @@ const supervisorModule = {
       await this.renderDashboard();
     } catch (err) {
       console.error(err);
-      alert('❌ Error al registrar la venta.');
+      const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
+      if (dupMsg) {
+        alert('❌ ' + dupMsg);
+      } else {
+        alert('❌ Error al registrar la venta.');
+      }
     }
   },
   

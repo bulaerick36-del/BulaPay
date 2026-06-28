@@ -792,7 +792,12 @@ const agentModule = {
         console.error('[DEBUG ERROR] Detalles del error (claves):', Object.keys(err));
         console.error('[DEBUG ERROR] Error stringificado:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
       }
-      alert('❌ Error al registrar el cliente. Detalles técnicos en la consola.');
+      const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
+      if (dupMsg) {
+        alert('❌ ' + dupMsg);
+      } else {
+        alert('❌ Error al registrar el cliente. Detalles técnicos en la consola.');
+      }
     }
   },
 
