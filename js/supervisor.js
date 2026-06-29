@@ -3021,6 +3021,7 @@ const supervisorModule = {
   },
 
   async openGlobalReportModal() {
+    console.log('Clic detectado en Consultar Reporte de Pago');
     try {
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
