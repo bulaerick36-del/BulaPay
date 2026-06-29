@@ -374,55 +374,42 @@ const app = {
           if (noPagoBtn) noPagoBtn.disabled = false;
         } else if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
           routeStatusElement.style.display = 'inline';
-          const routeId = currentUser.routeId;
-          if (routeId) {
-            try {
-              const route = await window.BulaPayDB.getRouteById(routeId);
-              if (route) {
-                const isOpen = window.BulaPayDB.isRouteOpen(route, now);
-                const hasExtension = !!route.has_extension;
-                
-                const registerBtn = document.getElementById('btn-agent-register-installment');
-                const submitCollectBtn = document.getElementById('btn-submit-collect');
-                const noPagoBtn = document.getElementById('btn-payment-card-nopago');
-                
-                // Configurar límites de hora según Supabase
-                const closingTimeStr = route.closing_time || '18:00';
-                const [closeH, closeM] = closingTimeStr.split(':').map(Number);
-                const closingTime = new Date(now);
-                closingTime.setHours(closeH, closeM, 0, 0);
+          
+          // Lógica de Bloqueo Estricto (Hard Lock)
+          const day = now.getDay();
+          const hours = now.getHours();
+          const isClosed = (day === 0 || hours < 6 || hours >= 18);
+          
+          const registerBtn = document.getElementById('btn-agent-register-installment');
+          const submitCollectBtn = document.getElementById('btn-submit-collect');
+          const noPagoBtn = document.getElementById('btn-payment-card-nopago');
+          const saveClientBtn = document.getElementById('btn-agent-save-client');
 
-                if (isOpen) {
-                  if (hasExtension) {
-                    routeStatusElement.textContent = `Prórroga Activa`;
-                    routeStatusElement.style.color = 'var(--accent)';
-                  } else {
-                    const diffMs = closingTime - now;
-                    const diffMinutesTotal = Math.ceil(diffMs / 60000);
-                    const hours = Math.floor(diffMinutesTotal / 60);
-                    const minutes = diffMinutesTotal % 60;
-                    routeStatusElement.textContent = `Cierra en: ${hours}h ${minutes}m`;
-                    routeStatusElement.style.color = 'var(--color-verde)';
-                  }
-                  
-                  if (registerBtn) registerBtn.disabled = false;
-                  if (submitCollectBtn) submitCollectBtn.disabled = false;
-                  if (noPagoBtn) noPagoBtn.disabled = false;
-                } else {
-                  routeStatusElement.textContent = 'Ruta Cerrada';
-                  routeStatusElement.style.color = 'var(--color-rojo)';
-                  
-                  if (registerBtn) registerBtn.disabled = true;
-                  if (submitCollectBtn) submitCollectBtn.disabled = true;
-                  if (noPagoBtn) noPagoBtn.disabled = true;
-                }
-              }
-            } catch (err) {
-              console.warn("Fallo al obtener estado de ruta de agente en tiempo real:", err);
-            }
-          } else {
-            routeStatusElement.textContent = 'Sin Ruta';
+          if (isClosed) {
+            routeStatusElement.textContent = 'Ruta Cerrada';
             routeStatusElement.style.color = 'var(--color-rojo)';
+            
+            if (registerBtn) registerBtn.disabled = true;
+            if (submitCollectBtn) submitCollectBtn.disabled = true;
+            if (noPagoBtn) noPagoBtn.disabled = true;
+            if (saveClientBtn) saveClientBtn.disabled = true;
+          } else {
+            // Operando dentro del horario permitido, mostrar tiempo para el cierre (18:00)
+            const closingTime = new Date(now);
+            closingTime.setHours(18, 0, 0, 0);
+            
+            const diffMs = closingTime - now;
+            const diffMinutesTotal = Math.ceil(diffMs / 60000);
+            const hrsDiff = Math.floor(diffMinutesTotal / 60);
+            const minsDiff = diffMinutesTotal % 60;
+            
+            routeStatusElement.textContent = `Cierra en: ${hrsDiff}h ${minsDiff}m`;
+            routeStatusElement.style.color = 'var(--color-verde)';
+            
+            if (registerBtn) registerBtn.disabled = false;
+            if (submitCollectBtn) submitCollectBtn.disabled = false;
+            if (noPagoBtn) noPagoBtn.disabled = false;
+            if (saveClientBtn) saveClientBtn.disabled = false;
           }
         } else {
           // Si no es un agente de ruta, limpiamos el temporizador

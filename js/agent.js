@@ -632,7 +632,30 @@ const agentModule = {
     this.inputCollectAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
   },
 
+  isRouteClosed() {
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser) return false;
+    
+    // El Agente Independiente está libre de restricciones
+    if (currentUser.role === 'Agente Independiente') return false;
+    
+    // Si es Agente de Ruta estándar o rol general de agente
+    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+      const now = new Date();
+      const day = now.getDay();
+      const hours = now.getHours();
+      if (day === 0 || hours < 6 || hours >= 18) {
+        return true;
+      }
+    }
+    return false;
+  },
+
   async registerPayment() {
+    if (this.isRouteClosed()) {
+      alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
+      return;
+    }
     if (!this.currentClient) return;
 
     const amount = parseFloat(this.inputCollectAmount.value);
@@ -678,6 +701,10 @@ const agentModule = {
   },
 
   async registerNoPayment() {
+    if (this.isRouteClosed()) {
+      alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
+      return;
+    }
     if (!this.currentClient) return;
 
     if (!confirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`)) {
@@ -716,6 +743,10 @@ const agentModule = {
   },
 
   async registerNewClient() {
+    if (this.isRouteClosed()) {
+      alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
+      return;
+    }
     const name = document.getElementById('new-client-name').value.trim();
     
     // Obtener agentId de forma segura desde la sesión activa
