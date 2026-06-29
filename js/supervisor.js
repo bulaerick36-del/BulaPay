@@ -3013,6 +3013,213 @@ const supervisorModule = {
     }
   },
 
+  getLocalDateString(dateObj = new Date()) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  },
+
+  async openGlobalReportModal() {
+    try {
+      const todayStr = this.getLocalDateString();
+      const allPayments = await window.BulaPayDB.getPayments();
+      
+      // Filtrar cobros globales de hoy
+      const todayPayments = allPayments.filter(p => 
+        p.date === todayStr && 
+        Number(p.amount) > 0 && 
+        p.status !== 'No Pago'
+      );
+      const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+      // Obtener clientes creados hoy globalmente
+      const allClients = await window.BulaPayDB.getClients();
+      const todayClients = allClients.filter(c => {
+        if (!c.created_at) return false;
+        const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
+        return clientLocalDate === todayStr;
+      });
+
+      const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.totalDebt) / 1.2), 0);
+      const netGlobal = totalCollected - totalLent;
+
+      // Poblar elementos del Nivel 1
+      document.getElementById('cascade-global-date').textContent = `Fecha: ${todayStr}`;
+      document.getElementById('cascade-global-income').textContent = `+$${totalCollected.toLocaleString('es-CO')}`;
+      document.getElementById('cascade-global-expenses').textContent = `-$${totalLent.toLocaleString('es-CO')}`;
+      
+      const netEl = document.getElementById('cascade-global-net');
+      netEl.textContent = `$${netGlobal.toLocaleString('es-CO')}`;
+      if (netGlobal < 0) {
+        netEl.style.color = '#dc2626';
+      } else {
+        netEl.style.color = 'var(--text-primary)';
+      }
+
+      this.showCascadeStep1();
+      
+      const overlay = document.getElementById('modal-sup-cascade-report');
+      if (overlay) overlay.style.display = 'flex';
+    } catch (e) {
+      console.error("Error al abrir reporte global:", e);
+      alert("❌ Error al generar el reporte de pago global.");
+    }
+  },
+
+  closeCascadeModal() {
+    const overlay = document.getElementById('modal-sup-cascade-report');
+    if (overlay) overlay.style.display = 'none';
+  },
+
+  showCascadeStep1() {
+    document.getElementById('cascade-step-1').style.display = 'block';
+    document.getElementById('cascade-step-2').style.display = 'none';
+    document.getElementById('cascade-step-3').style.display = 'none';
+  },
+
+  async showCascadeStep2() {
+    document.getElementById('cascade-step-1').style.display = 'none';
+    document.getElementById('cascade-step-2').style.display = 'block';
+    document.getElementById('cascade-step-3').style.display = 'none';
+
+    const listContainer = document.getElementById('cascade-routes-list');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">Cargando rutas y agentes...</p>';
+
+    try {
+      const routes = await window.BulaPayDB.getRoutes();
+      const agents = await window.BulaPayDB.getCachedUsers();
+      
+      listContainer.innerHTML = '';
+      
+      if (routes.length === 0) {
+        listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No hay rutas activas registradas.</p>';
+        return;
+      }
+
+      routes.forEach(r => {
+        const routeAgents = agents.filter(a => a.routeId === r.id && (a.role === 'Agente de Ruta' || a.role === 'agent' || a.role === 'Agente Independiente'));
+        
+        let agentsHtml = '';
+        if (routeAgents.length === 0) {
+          agentsHtml = '<p style="color: var(--text-muted); font-size: 0.7rem; padding: 0.5rem; text-align: center; margin: 0;">No hay agentes asignados a esta ruta.</p>';
+        } else {
+          routeAgents.forEach(a => {
+            agentsHtml += `
+              <div class="cascade-agent-item" onclick="supervisorModule.showAgentCascadeInvoice('${a.username}', '${a.name}')" style="padding: 0.55rem 0.75rem; background-color: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; transition: var(--transition-smooth);" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
+                <span style="font-weight: 500; color: var(--text-primary);">${a.name}</span>
+                <span style="font-size: 0.65rem; color: var(--accent); font-weight: bold;">Ver Factura 📄</span>
+              </div>
+            `;
+          });
+        }
+
+        const routeDiv = document.createElement('div');
+        routeDiv.className = 'cascade-route-item';
+        routeDiv.style.border = '1px solid var(--border-color)';
+        routeDiv.style.borderRadius = '8px';
+        routeDiv.style.overflow = 'hidden';
+        routeDiv.style.backgroundColor = 'rgba(255,255,255,0.01)';
+
+        routeDiv.innerHTML = `
+          <div class="cascade-route-header" onclick="supervisorModule.toggleCascadeRoute('${r.id}')" style="padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background-color: var(--bg-secondary); user-select: none;">
+            <span style="font-weight: bold; font-size: 0.8rem; color: var(--text-primary);">${r.name}</span>
+            <span class="route-arrow-${r.id}" style="font-size: 0.75rem; color: var(--text-secondary); transition: transform 0.2s;">▼</span>
+          </div>
+          <div id="cascade-agents-for-${r.id}" style="display: none; padding: 0.5rem; flex-direction: column; gap: 0.35rem; border-top: 1px dashed var(--border-color); background-color: var(--bg-primary);">
+            ${agentsHtml}
+          </div>
+        `;
+        listContainer.appendChild(routeDiv);
+      });
+    } catch (e) {
+      console.error("Error al cargar rutas/agentes en cascada:", e);
+      listContainer.innerHTML = '<p style="text-align: center; color: var(--color-rojo); font-size: 0.8rem; padding: 1rem;">Error al cargar datos.</p>';
+    }
+  },
+
+  toggleCascadeRoute(routeId) {
+    const target = document.getElementById(`cascade-agents-for-${routeId}`);
+    const arrow = document.querySelector(`.route-arrow-${routeId}`);
+    if (!target || !arrow) return;
+
+    const isOpen = target.style.display === 'flex';
+
+    // Cerrar todos los demás contenedores de agentes
+    const listContainer = document.getElementById('cascade-routes-list');
+    listContainer.querySelectorAll('[id^="cascade-agents-for-"]').forEach(d => {
+      d.style.display = 'none';
+    });
+    listContainer.querySelectorAll('[class^="route-arrow-"]').forEach(a => {
+      a.textContent = '▼';
+      a.style.transform = 'rotate(0deg)';
+    });
+
+    if (!isOpen) {
+      target.style.display = 'flex';
+      arrow.textContent = '▲';
+      arrow.style.transform = 'rotate(180deg)';
+    }
+  },
+
+  async showAgentCascadeInvoice(agentUsername, agentName) {
+    document.getElementById('cascade-step-1').style.display = 'none';
+    document.getElementById('cascade-step-2').style.display = 'none';
+    document.getElementById('cascade-step-3').style.display = 'block';
+
+    const incomeEl = document.getElementById('cascade-agent-income');
+    const expensesEl = document.getElementById('cascade-agent-expenses');
+    const netEl = document.getElementById('cascade-agent-net');
+    
+    incomeEl.textContent = 'Cargando...';
+    expensesEl.textContent = 'Cargando...';
+    netEl.textContent = 'Cargando...';
+
+    try {
+      const todayStr = this.getLocalDateString();
+      const allPayments = await window.BulaPayDB.getPayments();
+      
+      // Filtrar cobros del agente específico para hoy
+      const todayPayments = allPayments.filter(p => 
+        p.date === todayStr && 
+        Number(p.amount) > 0 && 
+        p.status !== 'No Pago' &&
+        p.agentName && p.agentName.toLowerCase().trim() === agentName.toLowerCase().trim()
+      );
+      const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+      // Obtener clientes de hoy asociados al ID del agente activo
+      const allClients = await window.BulaPayDB.getClients();
+      const todayClients = allClients.filter(c => {
+        if (!c.created_at) return false;
+        const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
+        return clientLocalDate === todayStr && c.agent_id === agentUsername;
+      });
+
+      const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.totalDebt) / 1.2), 0);
+      const netAgent = totalCollected - totalLent;
+
+      // Rellenar factura del agente (solo lectura)
+      document.getElementById('cascade-agent-date').textContent = `Fecha: ${todayStr}`;
+      document.getElementById('cascade-agent-name').textContent = `Cobrador: ${agentName}`;
+      incomeEl.textContent = `+$${totalCollected.toLocaleString('es-CO')}`;
+      expensesEl.textContent = `-$${totalLent.toLocaleString('es-CO')}`;
+      
+      netEl.textContent = `$${netAgent.toLocaleString('es-CO')}`;
+      if (netAgent < 0) {
+        netEl.style.color = '#dc2626';
+      } else {
+        netEl.style.color = '#111111';
+      }
+    } catch (e) {
+      console.error("Error al cargar factura de agente en cascada:", e);
+      incomeEl.textContent = 'Error';
+      expensesEl.textContent = 'Error';
+      netEl.textContent = 'Error';
+    }
+  },
 
   destroy() {
     if (this.mapAnimationInterval) {

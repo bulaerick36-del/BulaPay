@@ -203,9 +203,14 @@
             <p style="color: var(--text-secondary); margin: 0; font-size: 0.9rem;" id="supervisor-welcome-msg">Bienvenido, Usuario Supervisor</p>
           </div>
         </div>
-        <button id="btn-schedule-config" class="btn btn-secondary" onclick="supervisorModule.openScheduleModal()" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); display: flex; align-items: center; gap: 0.5rem;">
-          ⚙️ Configurar Horario de Rutas
-        </button>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button id="btn-schedule-config" class="btn btn-secondary" onclick="supervisorModule.openScheduleModal()" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-color: rgba(0, 245, 212, 0.3); color: var(--accent); display: flex; align-items: center; gap: 0.5rem;">
+            ⚙️ Configurar Horario de Rutas
+          </button>
+          <button id="btn-supervisor-global-report" class="btn btn-primary" onclick="supervisorModule.openGlobalReportModal()" style="width: auto; padding: 0.6rem 1.2rem; font-size: 0.85rem; background-color: var(--primary); border-color: var(--primary); color: #fff; display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            📊 Consultar Factura Reporte de Pago
+          </button>
+        </div>
       </div>
 
       <!-- VISTA ESTÁNDAR SUPERVISOR -->
@@ -1337,6 +1342,100 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AUDITORÍA EN CASCADA DE REPORTES DE PAGO (GLOBAL > RUTAS > AGENTES) -->
+  <div class="supervisor-modal-overlay" id="modal-sup-cascade-report" style="display: none; z-index: 250;">
+    <div class="supervisor-modal-card" style="max-width: 420px; width: 100%; padding: 1.5rem; background-color: var(--bg-primary); border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; overflow: hidden; max-height: 90vh; position: relative; box-shadow: var(--shadow-xl);">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeCascadeModal()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; color: var(--text-secondary); cursor: pointer;">&times;</button>
+      
+      <!-- NIVEL 1: RESUMEN GLOBAL -->
+      <div id="cascade-step-1" style="display: block;">
+        <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+          🌎 Resumen Global
+        </h3>
+        <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 1.25rem;" id="cascade-global-date">Fecha: -</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
+          <div class="card" style="background-color: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); padding: 0.75rem 1rem; border-radius: 10px; display: flex; flex-direction: column;">
+            <span style="color: var(--color-verde); font-size: 0.75rem; font-weight: 500;">Total Cobrado (Ingresos)</span>
+            <span id="cascade-global-income" style="color: var(--color-verde); font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem;">$0</span>
+          </div>
+          <div class="card" style="background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.75rem 1rem; border-radius: 10px; display: flex; flex-direction: column;">
+            <span style="color: var(--color-rojo); font-size: 0.75rem; font-weight: 500;">Total Prestado (Egresos)</span>
+            <span id="cascade-global-expenses" style="color: var(--color-rojo); font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem;">$0</span>
+          </div>
+          <div class="card" style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 0.75rem 1rem; border-radius: 10px; display: flex; flex-direction: column;">
+            <span style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 500;">Total a Entregar / Recaudar</span>
+            <span id="cascade-global-net" style="color: var(--text-primary); font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem;">$0</span>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" onclick="supervisorModule.showCascadeStep2()" style="width: 100%; padding: 0.6rem; font-weight: bold; font-size: 0.85rem;">
+          Ver más a fondo
+        </button>
+      </div>
+
+      <!-- NIVEL 2: VISTA DE RUTAS Y AGENTES -->
+      <div id="cascade-step-2" style="display: none;">
+        <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+          🗺️ Rutas y Agentes
+        </h3>
+        <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 1rem;">Haz clic en una ruta para ver sus agentes, luego selecciona un agente para ver su factura.</p>
+        
+        <!-- Contenedor de la lista de rutas (acordeones) -->
+        <div id="cascade-routes-list" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 50vh; overflow-y: auto; padding-right: 0.25rem;">
+          <!-- Inyectado dinámicamente -->
+        </div>
+
+        <button type="button" class="btn btn-secondary" onclick="supervisorModule.showCascadeStep1()" style="margin-top: 1.25rem; width: 100%; padding: 0.5rem; font-size: 0.8rem;">
+          ⬅ Volver al Resumen Global
+        </button>
+      </div>
+
+      <!-- NIVEL 3: FACTURA INDIVIDUAL DEL AGENTE (TIRILLA TÉRMICA) -->
+      <div id="cascade-step-3" style="display: none;">
+        <div style="background-color: #ffffff; color: #111111; border-radius: 8px; border: 2px dashed #999999; padding: 1.25rem; font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem;">
+          <!-- Cabecera de la Tirilla -->
+          <div style="text-align: center; border-bottom: 2px dashed #111111; padding-bottom: 0.5rem; margin-bottom: 0.25rem;">
+            <h4 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: bold; color: #111111; letter-spacing: 1px;">CUADRE DE CAJA DIARIO</h4>
+            <div style="font-size: 0.7rem; color: #555555;" id="cascade-agent-date">Fecha: -</div>
+            <div style="font-size: 0.7rem; color: #555555;" id="cascade-agent-name">Cobrador: -</div>
+          </div>
+          
+          <!-- Detalles de Transacción -->
+          <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem; color: #111111;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>(+) Total Recaudado:</span>
+              <span id="cascade-agent-income" style="font-weight: bold; color: #10b981;">+$0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>(-) Total Prestado:</span>
+              <span id="cascade-agent-expenses" style="font-weight: bold; color: #dc2626;">-$0</span>
+            </div>
+          </div>
+          
+          <!-- Línea Divisoria -->
+          <div style="border-top: 2px dashed #111111; margin: 0.4rem 0;"></div>
+          
+          <!-- Total a Entregar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: bold; padding: 0.25rem 0; color: #111111;">
+            <span>TOTAL A ENTREGAR:</span>
+            <span id="cascade-agent-net" style="font-size: 1.05rem; color: #111111; font-weight: 900;">$0</span>
+          </div>
+          
+          <!-- Pie de la Tirilla -->
+          <div style="text-align: center; font-size: 0.65rem; color: #777777; margin-top: 0.4rem; border-top: 1px dashed #cccccc; padding-top: 0.4rem;">
+            BulaPay - Vista Auditoría Supervisor (Solo Lectura)
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-secondary" onclick="supervisorModule.showCascadeStep2()" style="width: 100%; padding: 0.5rem; font-size: 0.8rem;">
+          ⬅ Volver a la Lista
+        </button>
+      </div>
+
     </div>
   </div>
 
