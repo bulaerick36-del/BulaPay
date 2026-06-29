@@ -1259,17 +1259,14 @@ const agentModule = {
           .map(p => p.clientCedula)
       );
 
-      content.innerHTML = '';
-
       if (clients.length === 0) {
         content.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No tiene clientes asignados hoy.</p>';
         return;
       }
 
+      let htmlContent = '';
       clients.forEach(c => {
         const hasPaid = todayPaymentsMap.has(c.cedula);
-        const item = document.createElement('div');
-        item.className = 'tracking-client-item';
         
         const borderStyle = hasPaid ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
         const bgStyle = hasPaid ? 'var(--color-verde-bg)' : 'var(--color-rojo-bg)';
@@ -1278,70 +1275,67 @@ const agentModule = {
         const badgeText = hasPaid ? 'Pagó' : 'Pendiente';
         const dashedBorder = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
         
-        item.style.border = `1px solid ${borderStyle}`;
-        item.style.borderRadius = '10px';
-        item.style.backgroundColor = bgStyle;
-        item.style.overflow = 'hidden';
-        item.style.marginBottom = '0.5rem';
-        item.style.transition = 'var(--transition-smooth)';
-        item.style.minHeight = '44px';
-        
-        item.innerHTML = `
-          <div class="tracking-client-header" style="padding: 0.75rem 1rem !important; display: flex !important; justify-content: space-between !important; align-items: center !important; cursor: pointer !important; user-select: none !important; width: 100% !important; min-height: 44px !important; visibility: visible !important; opacity: 1 !important;">
-            <span style="font-weight: 700 !important; font-size: 0.85rem !important; color: var(--text-primary) !important; text-align: left !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; pointer-events: none !important;">${c.name}</span>
-            <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important; margin-left: auto !important; pointer-events: none !important;">
-              <span class="status-badge" style="font-size: 0.7rem !important; font-weight: bold !important; padding: 0.15rem 0.4rem !important; border-radius: 4px !important; background-color: ${badgeBg} !important; color: ${textColor} !important; border: 1px solid ${borderStyle} !important; display: inline-block !important; pointer-events: none !important;">${badgeText}</span>
-              <span class="accordion-arrow" style="font-size: 0.75rem !important; color: var(--text-secondary) !important; transition: transform 0.2s !important; display: inline-block !important; pointer-events: none !important;">▼</span>
+        htmlContent += `
+          <div class="tracking-client-item" style="border: 1px solid ${borderStyle}; border-radius: 10px; background-color: ${bgStyle}; overflow: hidden; margin-bottom: 0.5rem; transition: var(--transition-smooth); min-height: 44px; width: 100%;">
+            <div class="client-accordion-header" data-client-id="${c.cedula}" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; width: 100%; min-height: 44px;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); text-align: left;">${c.name}</span>
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto;">
+                <span class="status-badge" style="font-size: 0.7rem; font-weight: bold; padding: 0.15rem 0.4rem; border-radius: 4px; background-color: ${badgeBg}; color: ${textColor}; border: 1px solid ${borderStyle}; display: inline-block;">${badgeText}</span>
+                <span class="accordion-arrow" style="font-size: 0.75rem; color: var(--text-secondary); transition: transform 0.2s; display: inline-block;">▼</span>
+              </div>
+            </div>
+            <div id="details-${c.cedula}" class="tracking-client-details" style="display: none; padding: 0.75rem 1rem; font-size: 0.75rem; border-top: 1px dashed ${dashedBorder}; flex-direction: column; gap: 0.35rem; color: var(--text-secondary); width: 100%;">
+              <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.name}</span></div>
+              <div><strong>Cédula:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.cedula}</span></div>
+              <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.phone}</span></div>
+              <div><strong>Dirección:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.zone}, ${c.city}</span></div>
+              <div><strong>Cuota del Día:</strong> <span style="font-weight: 700; color: var(--text-primary);">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
             </div>
           </div>
-          <div class="tracking-client-details" style="padding: 0.75rem 1rem !important; display: none !important; font-size: 0.75rem !important; border-top: 1px dashed ${dashedBorder} !important; flex-direction: column !important; gap: 0.35rem !important; color: var(--text-secondary) !important; margin-top: 0.25rem !important; width: 100% !important;">
-            <!-- Contenido dinámico al expandir -->
-          </div>
         `;
-        
-        content.appendChild(item);
       });
+      content.innerHTML = htmlContent;
 
-      const headers = content.querySelectorAll('.tracking-client-header');
-      headers.forEach((h, index) => {
-        h.addEventListener('click', () => {
-          const c = clients[index];
-          const item = h.parentElement;
-          const details = item.querySelector('.tracking-client-details');
-          const arrow = h.querySelector('.accordion-arrow');
-          
-          const isCurrentlyActive = item.classList.contains('active');
-          
-          // Cerrar todos los demás items
+      // Event Delegation: Asignar un único listener al contenedor padre
+      if (content.dataset.hasListener !== 'true') {
+        content.addEventListener('click', (e) => {
+          const header = e.target.closest('.client-accordion-header');
+          if (!header) return;
+
+          const clientId = header.getAttribute('data-client-id');
+          const details = document.getElementById('details-' + clientId);
+          const arrow = header.querySelector('.accordion-arrow');
+          if (!details || !arrow) return;
+
+          const item = header.parentElement;
+          const isOpen = details.style.display === 'flex';
+
+          // Cerrar todos los demás detalles
+          content.querySelectorAll('.tracking-client-details').forEach(d => {
+            d.style.display = 'none';
+          });
+          content.querySelectorAll('.accordion-arrow').forEach(a => {
+            a.textContent = '▼';
+            a.style.transform = 'rotate(0deg)';
+          });
           content.querySelectorAll('.tracking-client-item').forEach(el => {
             el.classList.remove('active');
-            const det = el.querySelector('.tracking-client-details');
-            if (det) {
-              det.style.setProperty('display', 'none', 'important');
-              det.innerHTML = '';
-            }
-            const arr = el.querySelector('.accordion-arrow');
-            if (arr) {
-              arr.textContent = '▼';
-              arr.style.transform = 'rotate(0deg)';
-            }
           });
-          
-          if (!isCurrentlyActive) {
+
+          // Alternar visibilidad de la tarjeta actual
+          if (!isOpen) {
             item.classList.add('active');
-            details.innerHTML = `
-              <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.name}</span></div>
-              <div><strong>Cédula:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.cedula}</span></div>
-              <div><strong>Teléfono:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.phone}</span></div>
-              <div><strong>Dirección:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.zone}, ${c.city}</span></div>
-              <div><strong>Cuota del Día:</strong> <span style="font-weight: 700 !important; color: var(--text-primary) !important;">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
-            `;
-            details.style.setProperty('display', 'flex', 'important');
+            details.style.display = 'flex';
             arrow.textContent = '▲';
             arrow.style.transform = 'rotate(180deg)';
+          } else {
+            details.style.display = 'none';
+            arrow.textContent = '▼';
+            arrow.style.transform = 'rotate(0deg)';
           }
         });
-      });
+        content.dataset.hasListener = 'true';
+      }
     } catch (e) {
       console.error("Error al abrir modal de seguimiento:", e);
       content.innerHTML = '<p style="text-align: center; color: var(--color-rojo); font-size: 0.8rem; padding: 1rem;">Error al cargar datos.</p>';
