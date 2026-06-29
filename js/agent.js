@@ -1275,21 +1275,28 @@ const agentModule = {
         const badgeText = hasPaid ? 'Pagó' : 'Pendiente';
         const dashedBorder = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
         
+        // Manejo robusto de datos nulos
+        const clientName = c.name || 'N/A';
+        const clientCedula = c.cedula || 'N/A';
+        const clientPhone = c.phone || 'N/A';
+        const clientAddress = (c.zone || c.city) ? `${c.zone || 'N/A'}, ${c.city || 'N/A'}` : 'N/A';
+        const clientInstallment = c.installmentAmount ? `$${Number(c.installmentAmount).toLocaleString('es-CO')}` : 'N/A';
+        
         htmlContent += `
           <div class="tracking-client-item" style="border: 1px solid ${borderStyle}; border-radius: 10px; background-color: ${bgStyle}; overflow: hidden; margin-bottom: 0.5rem; transition: var(--transition-smooth); min-height: 44px; width: 100%;">
-            <div class="client-accordion-header" data-client-id="${c.cedula}" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; width: 100%; min-height: 44px;">
-              <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); text-align: left;">${c.name}</span>
+            <div class="client-accordion-header" data-client-id="${clientCedula}" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; width: 100%; min-height: 44px;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); text-align: left;">${clientName}</span>
               <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto;">
                 <span class="status-badge" style="font-size: 0.7rem; font-weight: bold; padding: 0.15rem 0.4rem; border-radius: 4px; background-color: ${badgeBg}; color: ${textColor}; border: 1px solid ${borderStyle}; display: inline-block;">${badgeText}</span>
                 <span class="accordion-arrow" style="font-size: 0.75rem; color: var(--text-secondary); transition: transform 0.2s; display: inline-block;">▼</span>
               </div>
             </div>
-            <div id="details-${c.cedula}" class="tracking-client-details" style="display: none; padding: 0.75rem 1rem; font-size: 0.75rem; border-top: 1px dashed ${dashedBorder}; flex-direction: column; gap: 0.35rem; color: var(--text-secondary); width: 100%;">
-              <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.name}</span></div>
-              <div><strong>Cédula:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.cedula}</span></div>
-              <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.phone}</span></div>
-              <div><strong>Dirección:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.zone}, ${c.city}</span></div>
-              <div><strong>Cuota del Día:</strong> <span style="font-weight: 700; color: var(--text-primary);">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
+            <div id="details-${clientCedula}" class="tracking-client-details" style="display: none; padding: 0.75rem 1rem; font-size: 0.75rem; border-top: 1px dashed ${dashedBorder}; flex-direction: column; gap: 0.35rem; color: var(--text-secondary); width: 100%;">
+              <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary); font-weight: 500;">${clientName}</span></div>
+              <div><strong>Cédula:</strong> <span style="color: var(--text-primary); font-weight: 500;">${clientCedula}</span></div>
+              <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${clientPhone}</span></div>
+              <div><strong>Dirección:</strong> <span style="color: var(--text-primary); font-weight: 500;">${clientAddress}</span></div>
+              <div><strong>Cuota del Día:</strong> <span style="font-weight: 700; color: var(--text-primary);">${clientInstallment}</span></div>
             </div>
           </div>
         `;
