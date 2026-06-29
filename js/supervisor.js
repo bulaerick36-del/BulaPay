@@ -3022,6 +3022,11 @@ const supervisorModule = {
 
   async openGlobalReportModal() {
     console.log('Clic detectado en Consultar Reporte de Pago');
+    const overlay = document.getElementById('modal-sup-cascade-report');
+    if (overlay) {
+      overlay.classList.add('active');
+      overlay.style.display = 'flex';
+    }
     try {
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
@@ -3059,9 +3064,6 @@ const supervisorModule = {
       }
 
       this.showCascadeStep1();
-      
-      const overlay = document.getElementById('modal-sup-cascade-report');
-      if (overlay) overlay.style.display = 'flex';
     } catch (e) {
       console.error("Error al abrir reporte global:", e);
       alert("❌ Error al generar el reporte de pago global.");
@@ -3070,7 +3072,10 @@ const supervisorModule = {
 
   closeCascadeModal() {
     const overlay = document.getElementById('modal-sup-cascade-report');
-    if (overlay) overlay.style.display = 'none';
+    if (overlay) {
+      overlay.classList.remove('active');
+      overlay.style.display = 'none';
+    }
   },
 
   showCascadeStep1() {
