@@ -1310,18 +1310,25 @@ const agentModule = {
           const details = item.querySelector('.tracking-client-details');
           const arrow = h.querySelector('.accordion-arrow');
           
-          const isOpen = details.style.display === 'flex' || details.style.getPropertyValue('display') === 'flex';
+          const isCurrentlyActive = item.classList.contains('active');
           
-          content.querySelectorAll('.tracking-client-details').forEach(d => {
-            d.style.setProperty('display', 'none', 'important');
-            d.innerHTML = '';
-          });
-          content.querySelectorAll('.accordion-arrow').forEach(a => {
-            a.textContent = '▼';
-            a.style.transform = 'rotate(0deg)';
+          // Cerrar todos los demás items
+          content.querySelectorAll('.tracking-client-item').forEach(el => {
+            el.classList.remove('active');
+            const det = el.querySelector('.tracking-client-details');
+            if (det) {
+              det.style.setProperty('display', 'none', 'important');
+              det.innerHTML = '';
+            }
+            const arr = el.querySelector('.accordion-arrow');
+            if (arr) {
+              arr.textContent = '▼';
+              arr.style.transform = 'rotate(0deg)';
+            }
           });
           
-          if (!isOpen) {
+          if (!isCurrentlyActive) {
+            item.classList.add('active');
             details.innerHTML = `
               <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.name}</span></div>
               <div><strong>Cédula:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.cedula}</span></div>
@@ -1332,11 +1339,6 @@ const agentModule = {
             details.style.setProperty('display', 'flex', 'important');
             arrow.textContent = '▲';
             arrow.style.transform = 'rotate(180deg)';
-          } else {
-            details.style.setProperty('display', 'none', 'important');
-            details.innerHTML = '';
-            arrow.textContent = '▼';
-            arrow.style.transform = 'rotate(0deg)';
           }
         });
       });
