@@ -253,6 +253,13 @@ const agentModule = {
     if (btnReport) {
       btnReport.addEventListener('click', () => this.generateCashReport());
     }
+    const btnCloseReport = document.getElementById('btn-close-cash-report');
+    if (btnCloseReport) {
+      btnCloseReport.addEventListener('click', () => {
+        const modal = document.getElementById('agent-cash-report-modal');
+        if (modal) modal.style.display = 'none';
+      });
+    }
 
     // Cartón de Pagos
     if (this.btnOpenPaymentCard) {
@@ -1279,10 +1286,11 @@ const agentModule = {
             </div>
           </div>
           <div class="tracking-client-details" style="padding: 0.75rem 1rem !important; display: none; font-size: 0.75rem !important; border-top: 1px dashed ${dashedBorder} !important; flex-direction: column !important; gap: 0.35rem !important; color: var(--text-secondary) !important; margin-top: 0.25rem !important; width: 100% !important;">
+            <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.name}</span></div>
             <div><strong>Cédula:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.cedula}</span></div>
             <div><strong>Teléfono:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.phone}</span></div>
             <div><strong>Dirección:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.zone}, ${c.city}</span></div>
-            <div><strong>Valor Cuota:</strong> <span style="font-weight: 700 !important; color: var(--text-primary) !important;">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
+            <div><strong>Cuota del Día:</strong> <span style="font-weight: 700 !important; color: var(--text-primary) !important;">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
           </div>
         `;
         
@@ -1347,14 +1355,26 @@ const agentModule = {
       const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.totalDebt) / 1.2), 0);
       const netCash = totalCollected - totalLent;
 
-      const message = `📋 REPORTE DE CAJA DIARIO\n` +
-                      `-----------------------------------\n` +
-                      `• Total Cobrado en Cuotas: $${totalCollected.toLocaleString('es-CO')}\n` +
-                      `• Total Prestado a Nuevos Clientes: $${totalLent.toLocaleString('es-CO')}\n` +
-                      `-----------------------------------\n` +
-                      `💰 TOTAL EFECTIVO A ENTREGAR: $${netCash.toLocaleString('es-CO')}`;
+      // Poblar el modal tipo tirilla/factura
+      document.getElementById('cash-report-date').textContent = `Fecha: ${todayStr}`;
+      document.getElementById('cash-report-agent').textContent = `Cobrador: ${currentUser.name}`;
+      document.getElementById('cash-report-income').textContent = `+$${totalCollected.toLocaleString('es-CO')}`;
+      document.getElementById('cash-report-expenses').textContent = `-$${totalLent.toLocaleString('es-CO')}`;
       
-      alert(message);
+      const netEl = document.getElementById('cash-report-net');
+      netEl.textContent = `$${netCash.toLocaleString('es-CO')}`;
+      
+      if (netCash < 0) {
+        netEl.style.color = '#dc2626';
+      } else {
+        netEl.style.color = '#111111';
+      }
+
+      // Mostrar el modal de reporte
+      const reportModal = document.getElementById('agent-cash-report-modal');
+      if (reportModal) {
+        reportModal.style.display = 'flex';
+      }
     } catch (e) {
       console.error("Error al generar reporte de caja:", e);
       alert("❌ Error al calcular el reporte de caja.");
