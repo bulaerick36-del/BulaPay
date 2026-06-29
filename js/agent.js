@@ -1255,7 +1255,7 @@ const agentModule = {
         const bgStyle = hasPaid ? 'var(--color-verde-bg)' : 'var(--color-rojo-bg)';
         const textColor = hasPaid ? 'var(--color-verde)' : 'var(--color-rojo)';
         const badgeBg = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
-        const badgeText = hasPaid ? 'Pagado' : 'Pendiente';
+        const badgeText = hasPaid ? 'Pagó' : 'Pendiente';
         const dashedBorder = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
         
         item.style.border = `1px solid ${borderStyle}`;
@@ -1266,14 +1266,14 @@ const agentModule = {
         item.style.transition = 'var(--transition-smooth)';
         
         item.innerHTML = `
-          <div class="tracking-client-header" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;">
-            <span style="font-weight: 700; font-size: 0.8rem; color: ${textColor};">${c.name}</span>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span style="font-size: 0.7rem; font-weight: bold; padding: 0.15rem 0.4rem; border-radius: 4px; background-color: ${badgeBg}; color: ${textColor};">${badgeText}</span>
+          <div class="tracking-client-header" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; width: 100%;">
+            <span style="font-weight: 700; font-size: 0.8rem; color: var(--text-primary); text-align: left;">${c.name}</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto;">
+              <span class="status-badge" style="font-size: 0.7rem; font-weight: bold; padding: 0.15rem 0.4rem; border-radius: 4px; background-color: ${badgeBg}; color: ${textColor}; border: 1px solid ${borderStyle};">${badgeText}</span>
               <span class="accordion-arrow" style="font-size: 0.75rem; color: var(--text-secondary); transition: transform 0.2s;">▼</span>
             </div>
           </div>
-          <div class="tracking-client-details" style="padding: 0 1rem 0.75rem 1rem; display: none; font-size: 0.75rem; border-top: 1px dashed ${dashedBorder}; flex-direction: column; gap: 0.35rem; color: var(--text-secondary); margin-top: 0.25rem; padding-top: 0.5rem;">
+          <div class="tracking-client-details" style="padding: 0 1rem 0.75rem 1rem; display: none; font-size: 0.75rem; border-top: 1px dashed ${dashedBorder}; flex-direction: column; gap: 0.35rem; color: var(--text-secondary); margin-top: 0.25rem; padding-top: 0.5rem; width: 100%;">
             <div><strong>Cédula:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.cedula}</span></div>
             <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.phone}</span></div>
             <div><strong>Dirección:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.zone}, ${c.city}</span></div>
