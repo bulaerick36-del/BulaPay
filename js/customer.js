@@ -161,6 +161,15 @@ const customerModule = {
       // Renderizar Cartón de Pagos
       this.renderLedgerGrid(client, payments);
 
+      // Renderizar Días de Mora en Estado de Cuenta
+      try {
+        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+        const container = document.getElementById('customer-overdue-days-list');
+        window.BulaPayDB.renderOverdueDaysList(container, dailyStatus);
+      } catch (e) {
+        console.error("Error al renderizar días de mora en loadClientStatement:", e);
+      }
+
       // Mostrar el cartón, resumen y publicidad
       if (this.statementHeader) this.statementHeader.style.display = 'block';
       if (this.statementLedger) this.statementLedger.style.display = 'block';
@@ -183,9 +192,8 @@ const customerModule = {
     const totalSlots = client.installmentsCount || 5;
     const installmentAmount = client.installmentAmount || 100000;
     
-    // Mapear los números de cuotas que ya han sido pagadas
-    const paidInstallments = payments
-      .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0);
+    // Calcular el acumulado total pagado por el cliente
+    const totalPaid = payments.reduce((acc, curr) => acc + Number(curr.amount), 0);
 
     // Ajustar fecha de creación del crédito para estimar los atrasos
     let creditDate = new Date(client.created_at || Date.now());
@@ -200,7 +208,6 @@ const customerModule = {
     const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     for (let i = 1; i <= totalSlots; i++) {
-      const payment = payments.find(p => p.installmentNumber === i);
       const slotCard = document.createElement('div');
       slotCard.className = 'ledger-slot-card';
       
@@ -212,18 +219,33 @@ const customerModule = {
       dueDate.setDate(creditDate.getDate() + (i * 7));
       const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
       
-      const isPaid = paidInstallments.some(p => p.installmentNumber === i);
+      const isPaid = totalPaid >= i * installmentAmount;
+      const isPartiallyPaid = !isPaid && totalPaid > (i - 1) * installmentAmount;
       
       if (isPaid) {
+        const payment = payments.find(p => p.installmentNumber === i) || payments[0];
         slotCard.classList.add('paid');
         slotCard.style.backgroundColor = 'var(--color-verde-bg)';
         slotCard.style.borderColor = 'rgba(16, 185, 129, 0.4)';
         slotCard.innerHTML = `
           <span class="slot-num" style="color: var(--color-verde);">CUOTA ${i}</span>
-          <span class="slot-amount" style="color: var(--color-verde); font-weight: bold;">$${Number(payment ? payment.amount : installmentAmount).toLocaleString('es-CO')}</span>
+          <span class="slot-amount" style="color: var(--color-verde); font-weight: bold;">$${Number(installmentAmount).toLocaleString('es-CO')}</span>
           <span class="slot-date" style="color: var(--text-secondary);">${payment ? payment.date : ''}</span>
           <span class="slot-signature" style="font-size: 0.5rem; font-family: monospace; color: var(--text-muted);">${payment ? payment.signature : 'Firmado'}</span>
           <div class="slot-stamp">✔</div>
+        `;
+      } else if (isPartiallyPaid) {
+        const abonoAmount = totalPaid - ((i - 1) * installmentAmount);
+        const payment = payments.find(p => p.installmentNumber === i) || payments[0];
+        slotCard.classList.add('partially-paid');
+        slotCard.style.backgroundColor = 'var(--color-amarillo-bg)';
+        slotCard.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        slotCard.innerHTML = `
+          <span class="slot-num" style="color: var(--color-amarillo);">CUOTA ${i} (Abonada)</span>
+          <span class="slot-amount" style="color: var(--color-amarillo); font-weight: bold;">Abonado: $${Number(abonoAmount).toLocaleString('es-CO')}</span>
+          <span class="slot-date" style="color: var(--text-secondary);">${payment ? payment.date : ''}</span>
+          <span class="slot-signature" style="font-size: 0.5rem; font-family: monospace; color: var(--text-muted);">${payment ? payment.signature : 'Firmado'}</span>
+          <div class="slot-stamp" style="color: var(--color-amarillo); font-size: 1.25rem;">⏳</div>
         `;
       } else {
         const isOverdue = dueDateOnly < todayDateOnly;

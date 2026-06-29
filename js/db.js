@@ -662,6 +662,20 @@ const db = {
       throw new Error("Cliente no encontrado.");
     }
     
+    // CONTROL ANTIFRAUDE: Un solo pago por día
+    const todayStr = new Date().toISOString().split('T')[0];
+    const { data: existingPayments, error: checkError } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('clientCedula', String(payment.clientCedula))
+      .eq('date', todayStr);
+    
+    if (checkError) {
+      console.error("Error al verificar pagos diarios:", checkError);
+    } else if (existingPayments && existingPayments.length > 0) {
+      throw new Error("Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.");
+    }
+    
     const currentUser = this.getCurrentUser();
     const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
 
@@ -845,6 +859,99 @@ const db = {
       // Cruzando fin de semana
       return currentDayIdx >= startIdx || currentDayIdx <= endIdx;
     }
+  },
+
+  getDailyPaymentStatus(client, payments) {
+    if (!client) return [];
+    
+    const startDate = new Date(client.created_at || Date.now());
+    const today = new Date();
+    
+    const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const diffTime = todayZero.getTime() - startZero.getTime();
+    const diffDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
+    
+    const paymentDates = new Set();
+    payments.forEach(p => {
+      if (p.amount > 0 && p.status !== 'No Pago') {
+        paymentDates.add(p.date);
+      }
+    });
+
+    const dailyStatus = [];
+    
+    for (let d = 0; d < diffDays; d++) {
+      const currentDayDate = new Date(startZero);
+      currentDayDate.setDate(startZero.getDate() + d);
+      const dayStr = currentDayDate.toISOString().split('T')[0];
+      
+      const isSunday = currentDayDate.getDay() === 0;
+      if (isSunday) continue;
+      
+      const dayNum = d + 1;
+      const hasPaid = paymentDates.has(dayStr);
+      
+      const isPastDay = currentDayDate < todayZero;
+      const isOverdue = isPastDay && !hasPaid;
+      
+      dailyStatus.push({
+        dayNumber: dayNum,
+        dateStr: dayStr,
+        isToday: dayStr === todayZero.toISOString().split('T')[0],
+        hasPaid: hasPaid,
+        isOverdue: isOverdue
+      });
+    }
+    
+    return dailyStatus;
+  },
+
+  renderOverdueDaysList(container, dailyStatus) {
+    if (!container) return;
+    container.innerHTML = '';
+    
+    if (!dailyStatus || dailyStatus.length === 0) {
+      container.parentElement.style.display = 'none';
+      return;
+    }
+    
+    container.parentElement.style.display = 'flex';
+    
+    dailyStatus.forEach(status => {
+      const badge = document.createElement('div');
+      badge.style.display = 'inline-flex';
+      badge.style.flexDirection = 'column';
+      badge.style.alignItems = 'center';
+      badge.style.padding = '0.35rem 0.5rem';
+      badge.style.borderRadius = '6px';
+      badge.style.fontSize = '0.7rem';
+      badge.style.fontWeight = '600';
+      badge.style.minWidth = '60px';
+      badge.style.border = '1px solid';
+      badge.style.textAlign = 'center';
+      
+      const dateLabel = status.dateStr.slice(5); // MM-DD
+      
+      if (status.hasPaid) {
+        badge.style.backgroundColor = 'var(--color-verde-bg)';
+        badge.style.color = 'var(--color-verde)';
+        badge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: 700; margin-top: 0.15rem;">✔ Pagado</span>`;
+      } else if (status.isOverdue) {
+        badge.style.backgroundColor = 'var(--color-rojo-bg)';
+        badge.style.color = 'var(--color-rojo)';
+        badge.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+        badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: 700; color: var(--color-rojo); margin-top: 0.15rem;">⚠️ Atrasada</span>`;
+      } else {
+        badge.style.backgroundColor = 'var(--bg-secondary)';
+        badge.style.color = 'var(--text-secondary)';
+        badge.style.borderColor = 'var(--border-color)';
+        badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: 400; opacity: 0.7; margin-top: 0.15rem;">Pendiente</span>`;
+      }
+      container.appendChild(badge);
+    });
   }
 };
 

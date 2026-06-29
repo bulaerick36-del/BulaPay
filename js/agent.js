@@ -433,6 +433,16 @@ const agentModule = {
         this.historyClientNote.textContent = 'Cliente puntual, apto para nuevos créditos. Todos los créditos están cancelados.';
         this.historyActiveCreditsAlert.style.display = 'none';
       }
+
+      // Renderizar Días de Mora en Historial / Evaluación de Riesgo
+      try {
+        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+        const container = document.getElementById('history-overdue-days-list');
+        window.BulaPayDB.renderOverdueDaysList(container, dailyStatus);
+      } catch (e) {
+        console.error("Error al renderizar días de mora en verificarHistorialCliente:", e);
+      }
     } catch (err) {
       console.error("Error al consultar Supabase:", err);
       alert('❌ Error al consultar la central de riesgos.');
@@ -474,10 +484,8 @@ const agentModule = {
     // Obtener los pagos reales desde Supabase
     const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
     
-    // Mapear los números de cuotas que ya han sido pagadas
-    const paidInstallments = payments
-      .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0)
-      .map(p => p.installmentNumber);
+    // Calcular el acumulado total pagado por el cliente
+    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
 
     // Ajustar fecha de creación del crédito para estimar los atrasos
     let creditDate = new Date(client.created_at || Date.now());
@@ -500,11 +508,16 @@ const agentModule = {
       dueDate.setDate(creditDate.getDate() + (i * 7));
       const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
       
-      const isPaid = paidInstallments.includes(i);
+      const isPaid = totalPaid >= i * installmentAmount;
+      const isPartiallyPaid = !isPaid && totalPaid > (i - 1) * installmentAmount;
       
       if (isPaid) {
         cell.classList.add('pagado');
         cell.innerHTML = `Cuota ${i}<br>✔`;
+      } else if (isPartiallyPaid) {
+        cell.classList.add('abonado');
+        const abonoAmount = totalPaid - ((i - 1) * installmentAmount);
+        cell.innerHTML = `Cuota ${i}<br>Abonado:<br>$${Number(abonoAmount).toLocaleString('es-CO')}`;
       } else {
         // ¿Vencida? Si la fecha de vencimiento es anterior a hoy
         const isOverdue = dueDateOnly < todayDateOnly;
@@ -532,6 +545,14 @@ const agentModule = {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
+      // Validar si ya pagó hoy
+      const todayStr = new Date().toISOString().split('T')[0];
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      if (payments.some(p => p.date === todayStr)) {
+        alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
+        return;
+      }
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: installmentNumber,
@@ -555,7 +576,7 @@ const agentModule = {
       this.currentClient = updatedClient;
       
       // Actualizar la interfaz principal del cobrador
-      this.renderClientInfo(updatedClient);
+      await this.renderClientInfo(updatedClient);
 
       // Refrescar el Cartón de Pagos
       await this.renderPaymentCardGrid();
@@ -565,7 +586,11 @@ const agentModule = {
       
     } catch (err) {
       console.error("Error al pagar cuota desde cartón:", err);
-      alert('❌ Error al registrar el pago de la cuota.');
+      if (err.message && err.message.includes('Precaución')) {
+        alert(err.message);
+      } else {
+        alert('❌ Error al registrar el pago de la cuota.');
+      }
     }
   },
 
@@ -585,14 +610,14 @@ const agentModule = {
         return;
       }
 
-      this.renderClientInfo(client);
+      await this.renderClientInfo(client);
     } catch (err) {
       console.error(err);
       alert('❌ Error al buscar cliente.');
     }
   },
 
-  renderClientInfo(client) {
+  async renderClientInfo(client) {
     this.currentClient = client;
     
     // Ocultar placeholder y mostrar resultados
@@ -630,6 +655,16 @@ const agentModule = {
 
     // Rellenar campo de monto de abono por defecto
     this.inputCollectAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
+
+    // Renderizar Días de Mora en Detalles del Cliente
+    try {
+      const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+      const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+      const container = document.getElementById('client-overdue-days-list');
+      window.BulaPayDB.renderOverdueDaysList(container, dailyStatus);
+    } catch (e) {
+      console.error("Error al renderizar días de mora en renderClientInfo:", e);
+    }
   },
 
   isRouteClosed() {
@@ -673,6 +708,14 @@ const agentModule = {
 
     try {
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      
+      // Validar si ya pagó hoy
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (payments.some(p => p.date === todayStr)) {
+        alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
+        return;
+      }
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: payments.length + 1,
@@ -693,10 +736,14 @@ const agentModule = {
 
       // Re-buscar el cliente para actualizar pantalla
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
-      this.renderClientInfo(updatedClient);
+      await this.renderClientInfo(updatedClient);
     } catch (err) {
       console.error(err);
-      alert('❌ Error al registrar el pago.');
+      if (err.message && err.message.includes('Precaución')) {
+        alert(err.message);
+      } else {
+        alert('❌ Error al registrar el pago.');
+      }
     }
   },
 
@@ -715,6 +762,14 @@ const agentModule = {
 
     try {
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      
+      // Validar si ya pagó hoy
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (payments.some(p => p.date === todayStr)) {
+        alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
+        return;
+      }
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: payments.length + 1,
@@ -735,10 +790,14 @@ const agentModule = {
 
       // Re-buscar el cliente para actualizar pantalla
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
-      this.renderClientInfo(updatedClient);
+      await this.renderClientInfo(updatedClient);
     } catch (err) {
       console.error(err);
-      alert('❌ Error al registrar el no pago.');
+      if (err.message && err.message.includes('Precaución')) {
+        alert(err.message);
+      } else {
+        alert('❌ Error al registrar el no pago.');
+      }
     }
   },
 

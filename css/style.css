@@ -873,6 +873,17 @@ form .btn:not([style*="width: auto"]):not([style*="width:auto"]) {
   animation: pulse-red 2s infinite;
 }
 
+.payment-card-cell.abonado {
+  background-color: var(--color-amarillo-bg) !important;
+  color: var(--color-amarillo) !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
+.ledger-slot-card.partially-paid {
+  background-color: var(--color-amarillo-bg) !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
 @keyframes pulse-red {
   0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
   70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }

@@ -610,6 +610,10 @@
                     <span class="client-detail-label">Saldo Pendiente:</span>
                     <span class="client-detail-val" id="client-detail-outstanding">$150,000</span>
                   </div>
+                  <div class="client-detail-row" id="client-overdue-days-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; display: none; width: 100%; border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.75rem;">
+                    <span class="client-detail-label" style="font-weight: 700; color: var(--text-primary);">Días de Mora (Calendario de Pagos):</span>
+                    <div id="client-overdue-days-list" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; width: 100%;"></div>
+                  </div>
                 </div>
 
                 <!-- Botón destacado Registrar Cuota -->
@@ -682,6 +686,10 @@
                   <div class="client-detail-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
                     <span class="client-detail-label">Nota de Historial:</span>
                     <span class="client-detail-val" id="history-client-note" style="font-style: italic; color: var(--text-secondary);">Sin datos.</span>
+                  </div>
+                  <div class="client-detail-row" id="history-overdue-days-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; display: none; width: 100%; border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.75rem;">
+                    <span class="client-detail-label" style="font-weight: 700; color: var(--text-primary);">Días de Mora (Calendario de Pagos):</span>
+                    <div id="history-overdue-days-list" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; width: 100%;"></div>
                   </div>
                 </div>
 
@@ -951,6 +959,11 @@
             <div class="cust-progress-bg">
               <div class="cust-progress-fill" id="cust-progress-fill"></div>
             </div>
+          </div>
+          <!-- Días de Mora (Mora control) -->
+          <div class="client-detail-row" id="customer-overdue-days-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; display: none; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem; width: 100%;">
+            <span class="client-detail-label" style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Días de Mora (Calendario de Pagos):</span>
+            <div id="customer-overdue-days-list" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; width: 100%;"></div>
           </div>
         </div>
 
