@@ -249,6 +249,10 @@ const agentModule = {
     if (btnCloseTracking) {
       btnCloseTracking.addEventListener('click', () => this.closeRouteTrackingModal());
     }
+    const btnReport = document.getElementById('btn-generate-cash-report');
+    if (btnReport) {
+      btnReport.addEventListener('click', () => this.generateCashReport());
+    }
 
     // Cartón de Pagos
     if (this.btnOpenPaymentCard) {
@@ -1268,7 +1272,7 @@ const agentModule = {
         
         item.innerHTML = `
           <div class="tracking-client-header" style="padding: 0.75rem 1rem !important; display: flex !important; justify-content: space-between !important; align-items: center !important; cursor: pointer !important; user-select: none !important; width: 100% !important; min-height: 44px !important; visibility: visible !important; opacity: 1 !important;">
-            <span class="client-name-click" style="font-weight: 700 !important; font-size: 0.85rem !important; color: var(--text-primary) !important; text-align: left !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; cursor: pointer !important;">${c.name}</span>
+            <span style="font-weight: 700 !important; font-size: 0.85rem !important; color: var(--text-primary) !important; text-align: left !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important;">${c.name}</span>
             <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important; margin-left: auto !important;">
               <span class="status-badge" style="font-size: 0.7rem !important; font-weight: bold !important; padding: 0.15rem 0.4rem !important; border-radius: 4px !important; background-color: ${badgeBg} !important; color: ${textColor} !important; border: 1px solid ${borderStyle} !important; display: inline-block !important;">${badgeText}</span>
               <span class="accordion-arrow" style="font-size: 0.75rem !important; color: var(--text-secondary) !important; transition: transform 0.2s !important; display: inline-block !important;">▼</span>
@@ -1302,18 +1306,6 @@ const agentModule = {
           }
         });
       });
-
-      // Enlazar clic en el nombre del cliente para cargar su ficha y cobrar cuota
-      const nameClicks = content.querySelectorAll('.client-name-click');
-      nameClicks.forEach((el, index) => {
-        el.addEventListener('click', async (e) => {
-          e.stopPropagation(); // Evitar abrir los detalles del acordeón en el modal
-          const client = clients[index];
-          await this.renderClientInfo(client);
-          this.switchTab('collect');
-          this.closeRouteTrackingModal();
-        });
-      });
     } catch (e) {
       console.error("Error al abrir modal de seguimiento:", e);
       content.innerHTML = '<p style="text-align: center; color: var(--color-rojo); font-size: 0.8rem; padding: 1rem;">Error al cargar datos.</p>';
@@ -1323,6 +1315,50 @@ const agentModule = {
   closeRouteTrackingModal() {
     const modal = document.getElementById('agent-route-tracking-modal');
     if (modal) modal.style.display = 'none';
+  },
+
+  async generateCashReport() {
+    try {
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      if (!currentUser) return;
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const allPayments = await window.BulaPayDB.getPayments();
+      
+      // Filtrar cobros por el cobrador actual y fecha de hoy
+      const todayPayments = allPayments.filter(p => 
+        p.date === todayStr && 
+        Number(p.amount) > 0 && 
+        p.status !== 'No Pago' &&
+        p.agentName && p.agentName.toLowerCase().trim() === currentUser.name.toLowerCase().trim()
+      );
+      const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+      // Obtener clientes creados hoy por este cobrador
+      const allClients = await window.BulaPayDB.getClients();
+      const todayClients = allClients.filter(c => {
+        if (!c.created_at) return false;
+        const createdDateStr = c.created_at.split('T')[0];
+        return createdDateStr === todayStr;
+      });
+
+      // Sumar capital prestado (asumiendo interés comercial estándar de 20%)
+      // capital = totalDebt / 1.2
+      const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.totalDebt) / 1.2), 0);
+      const netCash = totalCollected - totalLent;
+
+      const message = `📋 REPORTE DE CAJA DIARIO\n` +
+                      `-----------------------------------\n` +
+                      `• Total Cobrado en Cuotas: $${totalCollected.toLocaleString('es-CO')}\n` +
+                      `• Total Prestado a Nuevos Clientes: $${totalLent.toLocaleString('es-CO')}\n` +
+                      `-----------------------------------\n` +
+                      `💰 TOTAL EFECTIVO A ENTREGAR: $${netCash.toLocaleString('es-CO')}`;
+      
+      alert(message);
+    } catch (e) {
+      console.error("Error al generar reporte de caja:", e);
+      alert("❌ Error al calcular el reporte de caja.");
+    }
   },
 
   destroy() {
