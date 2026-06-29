@@ -1268,7 +1268,7 @@ const agentModule = {
         
         item.innerHTML = `
           <div class="tracking-client-header" style="padding: 0.75rem 1rem !important; display: flex !important; justify-content: space-between !important; align-items: center !important; cursor: pointer !important; user-select: none !important; width: 100% !important; min-height: 44px !important; visibility: visible !important; opacity: 1 !important;">
-            <span style="font-weight: 700 !important; font-size: 0.85rem !important; color: var(--text-primary) !important; text-align: left !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important;">${c.name}</span>
+            <span class="client-name-click" style="font-weight: 700 !important; font-size: 0.85rem !important; color: var(--text-primary) !important; text-align: left !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; cursor: pointer !important;">${c.name}</span>
             <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important; margin-left: auto !important;">
               <span class="status-badge" style="font-size: 0.7rem !important; font-weight: bold !important; padding: 0.15rem 0.4rem !important; border-radius: 4px !important; background-color: ${badgeBg} !important; color: ${textColor} !important; border: 1px solid ${borderStyle} !important; display: inline-block !important;">${badgeText}</span>
               <span class="accordion-arrow" style="font-size: 0.75rem !important; color: var(--text-secondary) !important; transition: transform 0.2s !important; display: inline-block !important;">▼</span>
@@ -1300,6 +1300,18 @@ const agentModule = {
             details.style.display = 'flex';
             arrow.style.transform = 'rotate(180deg)';
           }
+        });
+      });
+
+      // Enlazar clic en el nombre del cliente para cargar su ficha y cobrar cuota
+      const nameClicks = content.querySelectorAll('.client-name-click');
+      nameClicks.forEach((el, index) => {
+        el.addEventListener('click', async (e) => {
+          e.stopPropagation(); // Evitar abrir los detalles del acordeón en el modal
+          const client = clients[index];
+          await this.renderClientInfo(client);
+          this.switchTab('collect');
+          this.closeRouteTrackingModal();
         });
       });
     } catch (e) {
