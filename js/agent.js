@@ -575,7 +575,7 @@ const agentModule = {
 
     try {
       // Validar si ya pagó hoy
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = this.getLocalDateString();
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       if (payments.some(p => p.date === todayStr)) {
         alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
@@ -586,7 +586,7 @@ const agentModule = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: installmentNumber,
         amount: amount,
-        date: new Date().toISOString().split('T')[0],
+        date: this.getLocalDateString(),
         agentName: currentUser.name,
         status: 'Pagado'
       };
@@ -742,7 +742,7 @@ const agentModule = {
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       
       // Validar si ya pagó hoy
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = this.getLocalDateString();
       if (payments.some(p => p.date === todayStr)) {
         alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
         return;
@@ -752,7 +752,7 @@ const agentModule = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: payments.length + 1,
         amount: amount,
-        date: new Date().toISOString().split('T')[0],
+        date: this.getLocalDateString(),
         agentName: currentUser.name,
         status: amount >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado'
       };
@@ -799,7 +799,7 @@ const agentModule = {
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       
       // Validar si ya pagó hoy
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = this.getLocalDateString();
       if (payments.some(p => p.date === todayStr)) {
         alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
         return;
@@ -809,7 +809,7 @@ const agentModule = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: payments.length + 1,
         amount: 0,
-        date: new Date().toISOString().split('T')[0],
+        date: this.getLocalDateString(),
         agentName: currentUser.name,
         status: 'No Pago'
       };
@@ -1165,6 +1165,13 @@ const agentModule = {
     }
   },
 
+  getLocalDateString(dateObj = new Date()) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  },
+
   async updateRouteTracking() {
     const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser || (currentUser.role !== 'Agente de Ruta' && currentUser.role !== 'agent' && currentUser.role !== 'Agente Independiente')) {
@@ -1180,7 +1187,7 @@ const agentModule = {
 
     try {
       const clients = await window.BulaPayDB.getClients();
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
       const todayPaymentsMap = new Set(
@@ -1233,15 +1240,17 @@ const agentModule = {
 
   async openRouteTrackingModal() {
     const modal = document.getElementById('agent-route-tracking-modal');
+    if (!modal) return;
+    
     const content = document.getElementById('route-tracking-modal-content');
-    if (!modal || !content) return;
+    if (!content) return;
 
-    content.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-size: 0.8rem;">Cargando listado...</p>';
+    content.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">Cargando clientes...</p>';
     modal.style.display = 'flex';
 
     try {
       const clients = await window.BulaPayDB.getClients();
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
       const todayPaymentsMap = new Set(
@@ -1285,12 +1294,8 @@ const agentModule = {
               <span class="accordion-arrow" style="font-size: 0.75rem !important; color: var(--text-secondary) !important; transition: transform 0.2s !important; display: inline-block !important;">▼</span>
             </div>
           </div>
-          <div class="tracking-client-details" style="padding: 0.75rem 1rem !important; display: none; font-size: 0.75rem !important; border-top: 1px dashed ${dashedBorder} !important; flex-direction: column !important; gap: 0.35rem !important; color: var(--text-secondary) !important; margin-top: 0.25rem !important; width: 100% !important;">
-            <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.name}</span></div>
-            <div><strong>Cédula:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.cedula}</span></div>
-            <div><strong>Teléfono:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.phone}</span></div>
-            <div><strong>Dirección:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.zone}, ${c.city}</span></div>
-            <div><strong>Cuota del Día:</strong> <span style="font-weight: 700 !important; color: var(--text-primary) !important;">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
+          <div class="tracking-client-details" style="padding: 0.75rem 1rem !important; display: none !important; font-size: 0.75rem !important; border-top: 1px dashed ${dashedBorder} !important; flex-direction: column !important; gap: 0.35rem !important; color: var(--text-secondary) !important; margin-top: 0.25rem !important; width: 100% !important;">
+            <!-- Contenido dinámico al expandir -->
           </div>
         `;
         
@@ -1298,19 +1303,40 @@ const agentModule = {
       });
 
       const headers = content.querySelectorAll('.tracking-client-header');
-      headers.forEach(h => {
+      headers.forEach((h, index) => {
         h.addEventListener('click', () => {
+          const c = clients[index];
           const item = h.parentElement;
           const details = item.querySelector('.tracking-client-details');
           const arrow = h.querySelector('.accordion-arrow');
-          const isOpen = details.style.display === 'flex';
           
-          content.querySelectorAll('.tracking-client-details').forEach(d => d.style.display = 'none');
-          content.querySelectorAll('.accordion-arrow').forEach(a => a.style.transform = 'rotate(0deg)');
+          const isOpen = details.style.display === 'flex' || details.style.getPropertyValue('display') === 'flex';
+          
+          content.querySelectorAll('.tracking-client-details').forEach(d => {
+            d.style.setProperty('display', 'none', 'important');
+            d.innerHTML = '';
+          });
+          content.querySelectorAll('.accordion-arrow').forEach(a => {
+            a.textContent = '▼';
+            a.style.transform = 'rotate(0deg)';
+          });
           
           if (!isOpen) {
-            details.style.display = 'flex';
+            details.innerHTML = `
+              <div><strong>Nombre Completo:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.name}</span></div>
+              <div><strong>Cédula:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.cedula}</span></div>
+              <div><strong>Teléfono:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.phone}</span></div>
+              <div><strong>Dirección:</strong> <span style="color: var(--text-primary) !important; font-weight: 500 !important;">${c.zone}, ${c.city}</span></div>
+              <div><strong>Cuota del Día:</strong> <span style="font-weight: 700 !important; color: var(--text-primary) !important;">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
+            `;
+            details.style.setProperty('display', 'flex', 'important');
+            arrow.textContent = '▲';
             arrow.style.transform = 'rotate(180deg)';
+          } else {
+            details.style.setProperty('display', 'none', 'important');
+            details.innerHTML = '';
+            arrow.textContent = '▼';
+            arrow.style.transform = 'rotate(0deg)';
           }
         });
       });
@@ -1330,10 +1356,10 @@ const agentModule = {
       const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser) return;
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
-      // Filtrar cobros por el cobrador actual y fecha de hoy
+      // Filtrar cobros por el cobrador actual y fecha de hoy estrictamente en hora local
       const todayPayments = allPayments.filter(p => 
         p.date === todayStr && 
         Number(p.amount) > 0 && 
@@ -1346,8 +1372,9 @@ const agentModule = {
       const allClients = await window.BulaPayDB.getClients();
       const todayClients = allClients.filter(c => {
         if (!c.created_at) return false;
-        const createdDateStr = c.created_at.split('T')[0];
-        return createdDateStr === todayStr;
+        // Filtrado estricto convirtiendo c.created_at a la zona horaria local
+        const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
+        return clientLocalDate === todayStr;
       });
 
       // Sumar capital prestado (asumiendo interés comercial estándar de 20%)
