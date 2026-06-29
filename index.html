@@ -542,7 +542,12 @@
                   <span id="agent-active-route" style="font-size: 0.65rem; color: var(--text-secondary); display: block;">Ruta no asignada</span>
                 </div>
               </div>
-              <span class="role-tag" style="margin-left: auto;">Agente de Ruta</span>
+              <button id="btn-agent-route-tracking" class="btn" style="padding: 0.3rem 0.45rem; font-size: 0.68rem; font-weight: bold; background-color: var(--color-rojo-bg); color: var(--color-rojo); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; display: none; align-items: center; gap: 0.2rem; cursor: pointer; transition: var(--transition-smooth); margin-left: auto; white-space: nowrap;">
+                <span>👥 Clientes:</span>
+                <span id="agent-tracking-progress">0/0</span>
+                <span class="light-dot" id="agent-tracking-dot" style="width: 7px; height: 7px; border-radius: 50%; background-color: var(--color-rojo); display: inline-block;"></span>
+              </button>
+              <span class="role-tag" id="agent-role-tag" style="margin-left: 0.5rem;">Agente de Ruta</span>
             </div>
 
             <!-- Pestañas internas de la terminal del agente -->
@@ -884,6 +889,24 @@
                 <li style="margin-bottom: 0.5rem;">Vuelve a cargar la página si el navegador lo solicita para aplicar los cambios.</li>
               </ol>
               <button type="button" id="btn-close-gps-modal-ok" class="btn btn-accent" style="width: 100%; padding: 0.6rem; font-weight: bold; font-size: 0.85rem; background-color: var(--accent); border-color: var(--accent); color: var(--bg-primary);">Entendido</button>
+            </div>
+          </div>
+
+          <!-- MODAL DE SEGUIMIENTO DE RUTA / CLIENTES DIARIOS -->
+          <div class="overlay-modal" id="agent-route-tracking-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.85); z-index: 100;">
+            <div class="modal-card" style="width: 90%; max-width: 360px; background-color: var(--bg-primary); border-radius: 16px; border: 1px solid var(--border-color); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; max-height: 80vh;">
+              <!-- Header del Modal -->
+              <div style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-secondary);">
+                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                  <span>📋</span> Seguimiento Diario
+                </h4>
+                <span id="btn-close-route-tracking" style="font-size: 1.25rem; font-weight: bold; color: var(--text-secondary); cursor: pointer; line-height: 1;">&times;</span>
+              </div>
+              
+              <!-- Contenido del Modal -->
+              <div id="route-tracking-modal-content" style="padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+                <!-- Lista de clientes inyectada dinámicamente -->
+              </div>
             </div>
           </div>
 

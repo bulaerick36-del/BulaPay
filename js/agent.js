@@ -195,6 +195,7 @@ const agentModule = {
 
     this.bindEvents();
     await this.updateAgentHeader();
+    await this.updateRouteTracking();
     this.initGeography();
     this.initCalculator();
     await this.populateAgentSelector();
@@ -238,6 +239,16 @@ const agentModule = {
 
     // Registrar Pago
     this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
+
+    // Seguimiento de Ruta Diario Modal
+    const btnTracking = document.getElementById('btn-agent-route-tracking');
+    if (btnTracking) {
+      btnTracking.addEventListener('click', () => this.openRouteTrackingModal());
+    }
+    const btnCloseTracking = document.getElementById('btn-close-route-tracking');
+    if (btnCloseTracking) {
+      btnCloseTracking.addEventListener('click', () => this.closeRouteTrackingModal());
+    }
 
     // Cartón de Pagos
     if (this.btnOpenPaymentCard) {
@@ -303,22 +314,29 @@ const agentModule = {
     const currentUser = window.BulaPayDB.getCurrentUser();
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
+    const roleTag = document.getElementById('agent-role-tag');
 
     if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
       if (agentNameElement) agentNameElement.textContent = `Cobrador: ${currentUser.name}`;
+      if (roleTag) roleTag.textContent = currentUser.role;
       
       const routes = await window.BulaPayDB.getRoutes();
       const myRoute = routes.find(r => r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username));
       
       if (agentRouteElement) {
-        agentRouteElement.textContent = myRoute 
-          ? `Ruta: ${myRoute.name} | Capital: $${Number(myRoute.capital).toLocaleString('es-CO')}` 
-          : 'Ruta no asignada';
+        if (currentUser.role === 'Agente Independiente') {
+          agentRouteElement.textContent = 'Cobrador Independiente';
+        } else {
+          agentRouteElement.textContent = myRoute 
+            ? `Ruta: ${myRoute.name} | Capital: $${Number(myRoute.capital).toLocaleString('es-CO')}` 
+            : 'Ruta no asignada';
+        }
       }
     } else {
       // Generic fallback
       if (agentNameElement) agentNameElement.textContent = 'Cobrador: Juan Pérez';
       if (agentRouteElement) agentRouteElement.textContent = 'Ruta Centro - Norte';
+      if (roleTag) roleTag.textContent = 'Agente de Ruta';
     }
   },
 
@@ -584,6 +602,9 @@ const agentModule = {
       // Actualizar saldo mostrado en el modal
       this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
       
+      // Actualizar botón de seguimiento
+      await this.updateRouteTracking();
+      
     } catch (err) {
       console.error("Error al pagar cuota desde cartón:", err);
       if (err.message && err.message.includes('Precaución')) {
@@ -737,6 +758,9 @@ const agentModule = {
       // Re-buscar el cliente para actualizar pantalla
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       await this.renderClientInfo(updatedClient);
+
+      // Actualizar botón de seguimiento
+      await this.updateRouteTracking();
     } catch (err) {
       console.error(err);
       if (err.message && err.message.includes('Precaución')) {
@@ -791,6 +815,9 @@ const agentModule = {
       // Re-buscar el cliente para actualizar pantalla
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       await this.renderClientInfo(updatedClient);
+
+      // Actualizar botón de seguimiento
+      await this.updateRouteTracking();
     } catch (err) {
       console.error(err);
       if (err.message && err.message.includes('Precaución')) {
@@ -1125,6 +1152,164 @@ const agentModule = {
     } else {
       selector.innerHTML = '<option value="" disabled selected>No hay sesión activa</option>';
     }
+  },
+
+  async updateRouteTracking() {
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser || (currentUser.role !== 'Agente de Ruta' && currentUser.role !== 'agent' && currentUser.role !== 'Agente Independiente')) {
+      const btn = document.getElementById('btn-agent-route-tracking');
+      if (btn) btn.style.display = 'none';
+      return;
+    }
+
+    const btn = document.getElementById('btn-agent-route-tracking');
+    if (!btn) return;
+    
+    btn.style.display = 'inline-flex';
+
+    try {
+      const clients = await window.BulaPayDB.getClients();
+      const todayStr = new Date().toISOString().split('T')[0];
+      const allPayments = await window.BulaPayDB.getPayments();
+      
+      const todayPaymentsMap = new Set(
+        allPayments
+          .filter(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago')
+          .map(p => p.clientCedula)
+      );
+
+      const totalClientsCount = clients.length;
+      let paidClientsCount = 0;
+
+      clients.forEach(c => {
+        if (todayPaymentsMap.has(c.cedula)) {
+          paidClientsCount++;
+        }
+      });
+
+      const progressEl = document.getElementById('agent-tracking-progress');
+      if (progressEl) progressEl.textContent = `${paidClientsCount}/${totalClientsCount}`;
+
+      const dotEl = document.getElementById('agent-tracking-dot');
+      
+      btn.style.transition = 'var(--transition-smooth)';
+      
+      if (totalClientsCount === 0) {
+        btn.style.backgroundColor = 'var(--bg-secondary)';
+        btn.style.color = 'var(--text-secondary)';
+        btn.style.borderColor = 'var(--border-color)';
+        if (dotEl) dotEl.style.backgroundColor = 'var(--text-muted)';
+      } else if (paidClientsCount === totalClientsCount) {
+        btn.style.backgroundColor = 'var(--color-verde-bg)';
+        btn.style.color = 'var(--color-verde)';
+        btn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        if (dotEl) dotEl.style.backgroundColor = 'var(--color-verde)';
+      } else if (paidClientsCount > 0) {
+        btn.style.backgroundColor = 'var(--color-amarillo-bg)';
+        btn.style.color = 'var(--color-amarillo)';
+        btn.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        if (dotEl) dotEl.style.backgroundColor = 'var(--color-amarillo)';
+      } else {
+        btn.style.backgroundColor = 'var(--color-rojo-bg)';
+        btn.style.color = 'var(--color-rojo)';
+        btn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+        if (dotEl) dotEl.style.backgroundColor = 'var(--color-rojo)';
+      }
+    } catch (e) {
+      console.error("Error al actualizar seguimiento de ruta:", e);
+    }
+  },
+
+  async openRouteTrackingModal() {
+    const modal = document.getElementById('agent-route-tracking-modal');
+    const content = document.getElementById('route-tracking-modal-content');
+    if (!modal || !content) return;
+
+    content.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-size: 0.8rem;">Cargando listado...</p>';
+    modal.style.display = 'flex';
+
+    try {
+      const clients = await window.BulaPayDB.getClients();
+      const todayStr = new Date().toISOString().split('T')[0];
+      const allPayments = await window.BulaPayDB.getPayments();
+      
+      const todayPaymentsMap = new Set(
+        allPayments
+          .filter(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago')
+          .map(p => p.clientCedula)
+      );
+
+      content.innerHTML = '';
+
+      if (clients.length === 0) {
+        content.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No tiene clientes asignados hoy.</p>';
+        return;
+      }
+
+      clients.forEach(c => {
+        const hasPaid = todayPaymentsMap.has(c.cedula);
+        const item = document.createElement('div');
+        item.className = 'tracking-client-item';
+        
+        const borderStyle = hasPaid ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+        const bgStyle = hasPaid ? 'var(--color-verde-bg)' : 'var(--color-rojo-bg)';
+        const textColor = hasPaid ? 'var(--color-verde)' : 'var(--color-rojo)';
+        const badgeBg = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+        const badgeText = hasPaid ? 'Pagado' : 'Pendiente';
+        const dashedBorder = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+        
+        item.style.border = `1px solid ${borderStyle}`;
+        item.style.borderRadius = '10px';
+        item.style.backgroundColor = bgStyle;
+        item.style.overflow = 'hidden';
+        item.style.marginBottom = '0.5rem';
+        item.style.transition = 'var(--transition-smooth)';
+        
+        item.innerHTML = `
+          <div class="tracking-client-header" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;">
+            <span style="font-weight: 700; font-size: 0.8rem; color: ${textColor};">${c.name}</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 0.7rem; font-weight: bold; padding: 0.15rem 0.4rem; border-radius: 4px; background-color: ${badgeBg}; color: ${textColor};">${badgeText}</span>
+              <span class="accordion-arrow" style="font-size: 0.75rem; color: var(--text-secondary); transition: transform 0.2s;">▼</span>
+            </div>
+          </div>
+          <div class="tracking-client-details" style="padding: 0 1rem 0.75rem 1rem; display: none; font-size: 0.75rem; border-top: 1px dashed ${dashedBorder}; flex-direction: column; gap: 0.35rem; color: var(--text-secondary); margin-top: 0.25rem; padding-top: 0.5rem;">
+            <div><strong>Cédula:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.cedula}</span></div>
+            <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.phone}</span></div>
+            <div><strong>Dirección:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.zone}, ${c.city}</span></div>
+            <div><strong>Valor Cuota:</strong> <span style="font-weight: 700; color: var(--text-primary);">$${Number(c.installmentAmount).toLocaleString('es-CO')}</span></div>
+          </div>
+        `;
+        
+        content.appendChild(item);
+      });
+
+      const headers = content.querySelectorAll('.tracking-client-header');
+      headers.forEach(h => {
+        h.addEventListener('click', () => {
+          const item = h.parentElement;
+          const details = item.querySelector('.tracking-client-details');
+          const arrow = h.querySelector('.accordion-arrow');
+          const isOpen = details.style.display === 'flex';
+          
+          content.querySelectorAll('.tracking-client-details').forEach(d => d.style.display = 'none');
+          content.querySelectorAll('.accordion-arrow').forEach(a => a.style.transform = 'rotate(0deg)');
+          
+          if (!isOpen) {
+            details.style.display = 'flex';
+            arrow.style.transform = 'rotate(180deg)';
+          }
+        });
+      });
+    } catch (e) {
+      console.error("Error al abrir modal de seguimiento:", e);
+      content.innerHTML = '<p style="text-align: center; color: var(--color-rojo); font-size: 0.8rem; padding: 1rem;">Error al cargar datos.</p>';
+    }
+  },
+
+  closeRouteTrackingModal() {
+    const modal = document.getElementById('agent-route-tracking-modal');
+    if (modal) modal.style.display = 'none';
   },
 
   destroy() {
