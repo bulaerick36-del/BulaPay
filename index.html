@@ -235,12 +235,15 @@
           </div>
           <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('progress')">
             <div class="kpi-icon">📊</div>
-            <div class="kpi-info" style="width: 100%;">
+            <div class="kpi-info" style="width: 100%; display: flex; flex-direction: column;">
               <h4>Progreso de Cobros</h4>
               <p id="kpi-route-progress">0%</p>
               <div class="progress-bar-container" style="margin-top: 0.5rem; background-color: rgba(255,255,255,0.05); height: 6px; border-radius: 10px; overflow: hidden; width: 100%;">
                 <div id="kpi-route-progress-bar" class="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.5s ease; border-radius: 10px;"></div>
               </div>
+              <button type="button" class="btn btn-primary" onclick="event.stopPropagation(); supervisorModule.openKpiModal('progress');" style="margin-top: 0.75rem; width: 100%; padding: 0.4rem 0.6rem; font-size: 0.75rem; font-weight: bold; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.35rem; background-color: var(--primary); border: 1px solid var(--primary); color: #fff; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">
+                <span>🔍</span> Consultar Reporte de Pago
+              </button>
             </div>
           </div>
         </div>

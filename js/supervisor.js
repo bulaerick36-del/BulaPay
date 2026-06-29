@@ -1047,7 +1047,7 @@ const supervisorModule = {
           payItem.innerHTML = `
             <div>
               <strong style="color: var(--color-verde);">${clientName}</strong>
-              <div style="font-size: 0.7rem; color: var(--text-secondary);">Cuota N° ${pay.installmentNumber} | Hora: ${timeLabel}</div>
+              <div style="font-size: 0.7rem; color: var(--text-secondary);">Agente: ${pay.agentName || 'N/A'} | Hora: ${timeLabel}</div>
             </div>
             <span style="font-size: 0.75rem; color: var(--color-verde); font-weight: 600;">$${Number(pay.amount).toLocaleString('es-CO')}</span>
           `;
