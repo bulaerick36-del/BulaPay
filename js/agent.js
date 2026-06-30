@@ -1305,7 +1305,7 @@ const agentModule = {
           
           htmlContent += `
             <div class="tracking-client-item ${isExpanded ? 'active' : ''}" style="border: 1px solid ${borderStyle}; border-radius: 10px; background-color: ${bgStyle}; overflow: hidden; margin-bottom: 0.5rem; transition: var(--transition-smooth); min-height: 44px; width: 100%;">
-              <div class="client-accordion-header" onclick="window.toggleTrackingAccordion(event, '${clientCedula}')" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; width: 100%; min-height: 44px;">
+              <div class="client-accordion-header" data-client-id="${clientCedula}" style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; width: 100%; min-height: 44px;">
                 <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); text-align: left; pointer-events: none;">${clientName}</span>
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto; pointer-events: none;">
                   <span class="status-badge" style="font-size: 0.7rem; font-weight: bold; padding: 0.15rem 0.4rem; border-radius: 4px; background-color: ${badgeBg}; color: ${textColor}; border: 1px solid ${borderStyle}; display: inline-block;">${badgeText}</span>
@@ -1326,11 +1326,19 @@ const agentModule = {
         content.innerHTML = htmlContent;
       };
 
-      // Función global para manejar el toggle con estado local (re-renderiza el acordeón)
-      window.toggleTrackingAccordion = (event, clientId) => {
-        event.stopPropagation();
-        expandedClientId = (expandedClientId === clientId) ? null : clientId;
-        renderList();
+      // Asignar el event listener directamente a la propiedad onclick del contenedor.
+      // Esto asegura que siempre estemos usando el closure (estado) más reciente y evita bugs de inline-handlers.
+      content.onclick = (e) => {
+        const header = e.target.closest('.client-accordion-header');
+        if (!header) return;
+        
+        const clientId = header.getAttribute('data-client-id');
+        if (clientId) {
+          // Alternar el estado
+          expandedClientId = (expandedClientId === clientId) ? null : clientId;
+          // Re-renderizar la lista
+          renderList();
+        }
       };
 
       // Primer render
