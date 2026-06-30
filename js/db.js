@@ -717,7 +717,7 @@ const db = {
       throw new Error("Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.");
     }
     
-    const currentUser = this.getCurrentUser();
+    // currentUser ya fue declarado arriba
     const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
 
     if (client.routeId && !isIndependent) {
