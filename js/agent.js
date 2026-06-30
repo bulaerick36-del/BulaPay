@@ -1294,9 +1294,9 @@ const agentModule = {
           const badgeText = hasPaid ? 'Pagó' : 'Pendiente';
           const dashedBorder = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
           
-          // Manejo robusto de datos nulos
+          // Manejo robusto de datos nulos y casteo a string para que la igualdad estricta (===) funcione
           const clientName = c.name || 'N/A';
-          const clientCedula = c.cedula || 'N/A';
+          const clientCedula = String(c.cedula || 'N/A');
           const clientPhone = c.phone || 'N/A';
           const clientAddress = (c.zone || c.city) ? `${c.zone || 'N/A'}, ${c.city || 'N/A'}` : 'N/A';
           const clientInstallment = c.installmentAmount ? `$${Number(c.installmentAmount).toLocaleString('es-CO')}` : 'N/A';
