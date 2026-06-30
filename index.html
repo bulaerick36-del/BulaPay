@@ -1668,5 +1668,42 @@
       </div>
     </div>
   </div>
+  <!-- Bulletproof script para el acordeón, inyectado aquí para saltar problemas de caché de JS en PWAs móviles -->
+  <script>
+    document.addEventListener('click', function(e) {
+      // Intentar encontrar el header del acordeón si se hizo clic en él o en sus hijos
+      const header = e.target.closest('.client-accordion-header');
+      if (!header) return;
+
+      // Buscar el elemento 'details' que está justo después del header
+      const details = header.nextElementSibling;
+      const arrow = header.querySelector('.accordion-arrow');
+      const item = header.closest('.tracking-client-item');
+      
+      if (!details || !details.classList.contains('tracking-client-details')) return;
+      
+      const isOpen = details.style.display === 'flex';
+      
+      // Cerrar todos los detalles en la pantalla
+      document.querySelectorAll('.tracking-client-details').forEach(d => { d.style.display = 'none'; });
+      document.querySelectorAll('.accordion-arrow').forEach(a => { 
+        a.textContent = '▼'; 
+        a.style.transform = 'rotate(0deg)'; 
+      });
+      document.querySelectorAll('.tracking-client-item').forEach(i => { i.classList.remove('active'); });
+      
+      // Si estaba cerrado, abrirlo
+      if (!isOpen) {
+        details.style.display = 'flex';
+        if (arrow) {
+          arrow.textContent = '▲';
+          arrow.style.transform = 'rotate(180deg)';
+        }
+        if (item) {
+          item.classList.add('active');
+        }
+      }
+    });
+  </script>
 </body>
 </html>
