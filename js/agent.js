@@ -138,6 +138,7 @@ const agentModule = {
     this.btnSearch = document.getElementById('btn-agent-search');
     this.searchPlaceholder = document.getElementById('agent-search-placeholder');
     this.searchResults = document.getElementById('agent-search-results');
+    this.searchError = document.getElementById('agent-search-error');
 
     // Búsqueda Historial
     this.inputHistoryCedula = document.getElementById('agent-history-cedula');
@@ -618,7 +619,7 @@ const agentModule = {
       
     } catch (err) {
       console.error("Error al pagar cuota desde cartón:", err);
-      if (err.message && err.message.includes('Precaución')) {
+      if (err.message && (err.message.includes('Precaución') || err.message.includes('Acceso Denegado'))) {
         alert(err.message);
       } else {
         alert('❌ Error al registrar el pago de la cuota.');
@@ -639,13 +640,26 @@ const agentModule = {
         alert('❌ Cliente no registrado en el sistema BulaPay.');
         this.searchResults.style.display = 'none';
         this.searchPlaceholder.style.display = 'block';
+        if (this.searchError) this.searchError.style.display = 'none';
         return;
       }
 
+      if (this.searchError) this.searchError.style.display = 'none';
       await this.renderClientInfo(client);
     } catch (err) {
       console.error(err);
-      alert('❌ Error al buscar cliente.');
+      if (err.message === 'ACCESO_DENEGADO_OTRO_AGENTE') {
+        if (this.searchError) {
+          this.searchError.style.display = 'block';
+          this.searchError.textContent = 'Operación denegada: Este cliente pertenece a la ruta de otro asesor. No puedes gestionar sus cobros.';
+        } else {
+          alert('Operación denegada: Este cliente pertenece a la ruta de otro asesor. No puedes gestionar sus cobros.');
+        }
+        this.searchResults.style.display = 'none';
+        this.searchPlaceholder.style.display = 'none';
+      } else {
+        alert('❌ Error al buscar cliente.');
+      }
     }
   },
 
@@ -774,7 +788,7 @@ const agentModule = {
       await this.updateRouteTracking();
     } catch (err) {
       console.error(err);
-      if (err.message && err.message.includes('Precaución')) {
+      if (err.message && (err.message.includes('Precaución') || err.message.includes('Acceso Denegado'))) {
         alert(err.message);
       } else {
         alert('❌ Error al registrar el pago.');
@@ -831,7 +845,7 @@ const agentModule = {
       await this.updateRouteTracking();
     } catch (err) {
       console.error(err);
-      if (err.message && err.message.includes('Precaución')) {
+      if (err.message && (err.message.includes('Precaución') || err.message.includes('Acceso Denegado'))) {
         alert(err.message);
       } else {
         alert('❌ Error al registrar el no pago.');
@@ -923,6 +937,8 @@ const agentModule = {
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
       if (dupMsg) {
         alert(dupMsg);
+      } else if (err.message === 'ACCESO_DENEGADO_OTRO_AGENTE') {
+        alert('❌ Error: Ya existe un cliente registrado con esta Cédula (cartera de otro cobrador).');
       } else {
         alert('❌ Error al registrar el cliente. Detalles técnicos en la consola.');
       }
