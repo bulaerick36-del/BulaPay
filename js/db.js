@@ -432,7 +432,6 @@ const db = {
       if (supId) {
         query = query.eq('supervisor_id', supId);
       }
-      query = query.eq('agent_id', currentUser.username);
     } else {
       // Supervisor o Comercio
       const supId = this.getSupervisorId();
@@ -452,41 +451,8 @@ const db = {
 
   async getClientByCedula(cedula) {
     try {
-      const supabase = await initSupabase();
-      const currentUser = this.getCurrentUser();
-      
-      // Aislamiento de datos: Si es un Agente de Ruta o Agente Independiente
-      if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
-        const { data, error } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('cedula', String(cedula))
-          .eq('agent_id', currentUser.username)
-          .maybeSingle();
-          
-        if (error) {
-          console.error(`Error al obtener cliente por cédula "${cedula}":`, error);
-          return null;
-        }
-
-        if (!data) {
-          // Verificar si el cliente existe globalmente para dar el mensaje correcto
-          const globalCheck = await this.getGlobalClientByCedula(cedula);
-          if (globalCheck) {
-            throw new Error('ACCESO_DENEGADO_OTRO_AGENTE');
-          }
-          return null;
-        }
-        
-        return data;
-      } else {
-        // Supervisor o Comercio
-        return await this.getGlobalClientByCedula(cedula);
-      }
+      return await this.getGlobalClientByCedula(cedula);
     } catch (err) {
-      if (err.message === 'ACCESO_DENEGADO_OTRO_AGENTE') {
-        throw err;
-      }
       console.error(`Excepción en getClientByCedula para cédula "${cedula}":`, err);
       return null;
     }
@@ -634,11 +600,6 @@ const db = {
     const client = await this.getGlobalClientByCedula(cedula);
     if (client) {
       const currentUser = this.getCurrentUser();
-      if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
-        if (client.agent_id !== currentUser.username) {
-          throw new Error("Acceso Denegado: No se puede actualizar el saldo de un cliente de otro cobrador.");
-        }
-      }
       const newOutstanding = Math.max(0, Number(client.outstanding) - Number(amountPaid));
       
       // Actualizar el semáforo/riesgo del cliente basado en su saldo deudor pendiente
@@ -699,11 +660,6 @@ const db = {
     }
 
     const currentUser = this.getCurrentUser();
-    if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
-      if (client.agent_id !== currentUser.username) {
-        throw new Error("Acceso Denegado: No se permite registrar pagos para clientes de otros cobradores.");
-      }
-    }
     
     // CONTROL ANTIFRAUDE: Un solo pago por día
     const todayStr = new Date().toISOString().split('T')[0];
