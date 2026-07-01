@@ -423,9 +423,10 @@ const db = {
     const supabase = await initSupabase();
     
     // Consulta totalmente global sin filtros de usuario ni supervisor, tal como se solicitó
+    // Usamos select('*') para evitar errores por columnas faltantes
     const { data, error } = await supabase
       .from('clients')
-      .select('id, name, cedula, phone, direccion, zone, city, installmentAmount, totalDebt, outstanding, created_at, agent_id, supervisor_id, routeId');
+      .select('*');
 
     console.log('Payload de Supabase en Seguimiento Diario (getClients):', data);
     
