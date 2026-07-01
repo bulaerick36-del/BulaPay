@@ -1324,22 +1324,6 @@ const agentModule = {
         });
         content.innerHTML = htmlContent;
 
-        // Agregar interactividad al acordeón
-        const headers = content.querySelectorAll('.client-accordion-header');
-        headers.forEach(header => {
-          header.addEventListener('click', () => {
-            const details = header.nextElementSibling;
-            const arrow = header.querySelector('.accordion-arrow');
-            if (details.style.display === 'none' || !details.style.display) {
-              details.style.display = 'flex';
-              if (arrow) arrow.style.transform = 'rotate(180deg)';
-            } else {
-              details.style.display = 'none';
-              if (arrow) arrow.style.transform = 'rotate(0deg)';
-            }
-          });
-        });
-
         // Interacción: Seleccionar cliente para cobrar
         const selectButtons = content.querySelectorAll('.btn-select-client');
         selectButtons.forEach(btn => {
