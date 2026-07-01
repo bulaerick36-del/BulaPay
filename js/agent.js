@@ -251,11 +251,6 @@ const agentModule = {
       btnCloseTracking.addEventListener('click', () => this.closeRouteTrackingModal());
     }
 
-    // Rescate de clientes huérfanos
-    const btnRecover = document.getElementById('btn-recover-clients');
-    if (btnRecover) {
-      btnRecover.addEventListener('click', () => this.recoverOrphanClients());
-    }
     const btnReport = document.getElementById('btn-generate-cash-report');
     if (btnReport) {
       btnReport.addEventListener('click', () => this.generateCashReport());
@@ -1337,52 +1332,6 @@ const agentModule = {
   closeRouteTrackingModal() {
     const modal = document.getElementById('agent-route-tracking-modal');
     if (modal) modal.style.display = 'none';
-  },
-
-  async recoverOrphanClients() {
-    try {
-      const currentUser = window.BulaPayDB.getCurrentUser();
-      if (!currentUser) return;
-      
-      const agentId = currentUser.id || currentUser.username;
-      if (!agentId) {
-        alert('❌ No se encontró un ID de agente válido en tu sesión.');
-        return;
-      }
-      
-      const supabase = await initSupabase();
-      
-      // Mostrar feedback en el botón
-      const btn = document.getElementById('btn-recover-clients');
-      if (btn) btn.textContent = '⏳ Recuperando...';
-
-      // Actualizar clientes donde agent_id es null
-      const { data, error } = await supabase
-        .from('clients')
-        .update({ agent_id: agentId })
-        .is('agent_id', null)
-        .select();
-
-      if (error) {
-        throw error;
-      }
-      
-      if (data && data.length > 0) {
-        alert(`✅ Clientes recuperados y asignados a tu cartera exitosamente. (${data.length} registros).`);
-      } else {
-        alert('ℹ️ No se encontraron clientes huérfanos sin asignar en la base de datos.');
-      }
-      
-      if (btn) btn.innerHTML = '🛠️ Recuperar Clientes Antiguos';
-      
-      // Refrescar lista de clientes si es necesario o actualizar contador
-      this.updateTotalClientsCount();
-    } catch (err) {
-      console.error('Error al recuperar clientes antiguos:', err);
-      alert('❌ Error al intentar recuperar clientes huérfanos.');
-      const btn = document.getElementById('btn-recover-clients');
-      if (btn) btn.innerHTML = '🛠️ Recuperar Clientes Antiguos';
-    }
   },
 
   async generateCashReport() {
