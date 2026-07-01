@@ -421,13 +421,48 @@ const db = {
   // CLIENTS
   async getClients() {
     const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) return [];
     
-    // Consulta totalmente global sin filtros de usuario ni supervisor, tal como se solicitó
-    // Usamos select('*') para evitar errores por columnas faltantes
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*');
+    let query = supabase.from('clients').select('*');
 
+    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
+      const supId = this.getSupervisorId();
+      if (supId) {
+        query = query.eq('supervisor_id', supId);
+      }
+      
+      // Filtrar por Ruta en lugar de agent_id
+      let assignedRouteId = currentUser.routeId;
+      
+      if (!assignedRouteId) {
+        // Fallback: Buscar en la tabla de rutas si el agente está asignado allí
+        const { data: routes } = await supabase.from('routes').select('id, agentUsername').eq('supervisor_id', supId || currentUser.username);
+        if (routes) {
+          const myRoute = routes.find(r => r.agentUsername && r.agentUsername.split(',').map(u => u.trim()).includes(currentUser.username));
+          if (myRoute) {
+            assignedRouteId = myRoute.id;
+          }
+        }
+      }
+
+      if (assignedRouteId) {
+        query = query.eq('routeId', assignedRouteId);
+      } else {
+        // Si no tiene ruta asignada, no mostramos clientes para no mezclar datos
+        return [];
+      }
+    } else {
+      // Supervisor o Comercio
+      const supId = this.getSupervisorId();
+      if (supId) {
+        query = query.eq('supervisor_id', supId);
+      } else {
+        return [];
+      }
+    }
+
+    const { data, error } = await query;
     console.log('Payload de Supabase en Seguimiento Diario (getClients):', data);
     
     if (error) {
