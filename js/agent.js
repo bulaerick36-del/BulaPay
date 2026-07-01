@@ -897,7 +897,7 @@ const agentModule = {
       const currentUser = window.BulaPayDB.getCurrentUser();
       const routeId = currentUser && currentUser.routeId ? currentUser.routeId : 'route_1';
 
-      const newClient = {
+      const payload = {
         cedula,
         name,
         phone,
@@ -910,25 +910,28 @@ const agentModule = {
         installmentsCount: installments,
         installmentAmount: Math.round(debt / installments),
         routeId,
-        agent_id: agentId
+        agent_id: currentUser.id || currentUser.username
       };
 
-      console.log('[DEBUG] Objeto cliente a guardar:', newClient);
+      console.log('Firma del Agente antes de guardar:', currentUser.id || currentUser.username, 'Payload completo:', payload);
 
       // Guardar
-      await window.BulaPayDB.saveClient(newClient);
-      this.currentClient = newClient;
+      await window.BulaPayDB.saveClient(payload);
+      this.currentClient = payload;
       console.log('[DEBUG] Cliente guardado exitosamente en base de datos. currentClient:', this.currentClient);
 
+      // Actualización de la Interfaz (Refetch) para el contador
+      this.updateTotalClientsCount();
+
       // Envío de email de bienvenida (Resend placeholder)
-      console.log('[DEBUG] Llamando a sendWelcomeEmail para:', newClient.email);
-      this.sendWelcomeEmail(newClient);
+      console.log('[DEBUG] Llamando a sendWelcomeEmail para:', payload.email);
+      this.sendWelcomeEmail(payload);
 
       // Resetear formulario
       this.formRegisterClient.reset();
 
       // Mostrar modal simulador WhatsApp
-      this.showWhatsAppMockup(newClient);
+      this.showWhatsAppMockup(payload);
     } catch (err) {
       console.error('[DEBUG ERROR] Error atrapado al registrar cliente en agent.js:', err);
       if (err && typeof err === 'object') {
