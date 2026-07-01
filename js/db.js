@@ -424,7 +424,7 @@ const db = {
     const currentUser = this.getCurrentUser();
     if (!currentUser) return [];
 
-    let query = supabase.from('clients').select('cedula, name, phone, zone, city, installmentAmount, totalDebt, outstanding, created_at, agent_id, supervisor_id, routeId');
+    let query = supabase.from('clients').select('*');
 
     // Si es un Agente de Ruta, filtrar por su agent_id (su propio ID/username)
     if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
@@ -441,6 +441,8 @@ const db = {
     }
 
     const { data, error } = await query;
+    console.log('Payload de Supabase en Seguimiento Diario (getClients):', data);
+    
     if (error) {
       console.error("Error al obtener clientes en Supabase:", error);
       return [];

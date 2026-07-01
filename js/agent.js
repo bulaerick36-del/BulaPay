@@ -1293,10 +1293,10 @@ const agentModule = {
           const badgeText = hasPaid ? 'Pagó' : 'Pendiente';
           const dashedBorder = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
           
-          const clientName = c.name || 'N/A';
-          const clientCedula = String(c.cedula || 'N/A');
-          const clientPhone = c.phone || 'N/A';
-          const clientAddress = (c.zone || c.city) ? `${c.zone || 'N/A'}, ${c.city || 'N/A'}` : 'N/A';
+          const clientName = c.name || 'Desconocido';
+          const clientCedula = String(c.cedula || 'No registrada');
+          const clientPhone = c.phone || 'Sin teléfono';
+          const clientAddress = (c.zone || c.city) ? `${c.zone || 'N/A'}, ${c.city || 'N/A'}` : 'Sin dirección';
           const clientInstallment = c.installmentAmount ? `$${Number(c.installmentAmount).toLocaleString('es-CO')}` : '0';
           
           htmlContent += `
@@ -1309,8 +1309,8 @@ const agentModule = {
                 </div>
               </div>
               <div id="details-${clientCedula}" class="tracking-client-details" style="display: none; padding: 0.75rem 1rem; font-size: 0.75rem; border-top: 1px dashed ${dashedBorder}; flex-direction: column; gap: 0.35rem; color: var(--text-secondary); width: 100%; animation: fadeIn 0.2s ease-in-out;">
-                <div><strong>Cédula:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.cedula || 'N/A'}</span></div>
-                <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.phone || 'N/A'}</span></div>
+                <div><strong>Cédula:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.cedula || 'No registrada'}</span></div>
+                <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.phone || 'Sin teléfono'}</span></div>
                 <div><strong>Dirección:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.direccion || clientAddress}</span></div>
                 <div><strong>Cuota:</strong> <span style="font-weight: 700; color: var(--text-primary);">${clientInstallment}</span></div>
               </div>
