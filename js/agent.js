@@ -1280,9 +1280,6 @@ const agentModule = {
         return;
       }
 
-      // 1. Gestión de Estado del Acordeón (State)
-      let expandedClientId = null;
-
       // 3. Renderizado Condicional del Contenido (Los Datos)
       const renderClients = () => {
         let htmlContent = '';
