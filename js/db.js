@@ -421,25 +421,12 @@ const db = {
   // CLIENTS
   async getClients() {
     const supabase = await initSupabase();
-    const currentUser = this.getCurrentUser();
-    if (!currentUser) return [];
+    
+    // Consulta totalmente global sin filtros de usuario ni supervisor, tal como se solicitó
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id, name, cedula, phone, direccion, zone, city, installmentAmount, totalDebt, outstanding, created_at, agent_id, supervisor_id, routeId');
 
-    let query = supabase.from('clients').select('id, name, cedula, phone, direccion, zone, city, installmentAmount, totalDebt, outstanding, created_at, agent_id, supervisor_id, routeId');
-
-    // Si es un Agente de Ruta, filtrar por su agent_id (su propio ID/username)
-    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
-      const supId = this.getSupervisorId();
-      if (supId) {
-        query = query.eq('supervisor_id', supId);
-      }
-    } else {
-      // Supervisor o Comercio
-      const supId = this.getSupervisorId();
-      if (!supId) return [];
-      query = query.eq('supervisor_id', supId);
-    }
-
-    const { data, error } = await query;
     console.log('Payload de Supabase en Seguimiento Diario (getClients):', data);
     
     if (error) {
