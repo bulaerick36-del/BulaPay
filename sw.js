@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bulapay-v30';
+const CACHE_NAME = 'bulapay-v31';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,7 @@ const ASSETS = [
   './js/db.js',
   './js/auth.js',
   './js/supervisor.js',
-  './js/agent.js',
+  './js/agent_v6.js',
   './js/customer.js',
   './js/app.js',
   './assets/logo.svg'
