@@ -1317,6 +1317,7 @@ const agentModule = {
                 <div><strong>Teléfono:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.phone || 'Sin teléfono'}</span></div>
                 <div><strong>Dirección:</strong> <span style="color: var(--text-primary); font-weight: 500;">${c.direccion || clientAddress}</span></div>
                 <div><strong>Cuota:</strong> <span style="font-weight: 700; color: var(--text-primary);">${clientInstallment}</span></div>
+                <button class="btn-select-client" data-cedula="${c.cedula}" style="margin-top: 0.5rem; padding: 0.6rem; background-color: var(--color-primario); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🧾 Cobrar a este cliente</button>
               </div>
             </div>
           `;
@@ -1335,6 +1336,27 @@ const agentModule = {
             } else {
               details.style.display = 'none';
               if (arrow) arrow.style.transform = 'rotate(0deg)';
+            }
+          });
+        });
+
+        // Interacción: Seleccionar cliente para cobrar
+        const selectButtons = content.querySelectorAll('.btn-select-client');
+        selectButtons.forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const cedula = e.target.getAttribute('data-cedula');
+            
+            // Cerrar el modal
+            const modal = document.getElementById('agent-route-tracking-modal');
+            if (modal) modal.style.display = 'none';
+            
+            // Llenar el input y disparar la búsqueda
+            const input = document.getElementById('agent-search-cedula');
+            if (input) {
+              input.value = cedula;
+              const searchBtn = document.getElementById('btn-agent-search');
+              if (searchBtn) searchBtn.click();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           });
         });
