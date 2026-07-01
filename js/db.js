@@ -538,9 +538,9 @@ const db = {
     console.log('[DEBUG DB] saveClient - Preparando inserción de cliente en Supabase:', client);
     const currentUser = this.getCurrentUser();
     if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
-      if (client.agent_id !== currentUser.username) {
-        throw new Error("Acceso Denegado: No puedes registrar clientes con un agent_id diferente al tuyo.");
-      }
+      const agentId = currentUser.id || currentUser.username;
+      // Forzar que el cliente tome el agent_id del usuario actual para evitar registros huérfanos
+      client.agent_id = agentId;
     }
     try {
       const supabase = await initSupabase();
