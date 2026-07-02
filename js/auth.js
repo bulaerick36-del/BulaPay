@@ -326,13 +326,10 @@ const authModule = {
       this.userNavInfo.style.display = 'none';
     }
 
-    // Sincronizar visibilidad de enlaces rápidos condicionalmente (Ocultar solo para Supervisor y Cliente)
+    // Sincronizar visibilidad de enlaces rápidos condicionalmente (Ocultar si hay sesión iniciada)
     const devLinks = document.getElementById('demo-quick-links');
     if (devLinks) {
-      const currentRoute = window.app.router ? window.app.router.currentRoute : 'auth';
-      const isSupervisorRole = user && (user.role === 'Usuario Supervisor' || user.role === 'supervisor' || user.role === 'Administrador de Rutas' || user.role === 'Otros (Comercios, Compraventas, Mercados)' || user.role === 'Comercio Independiente');
-      const isClienteRole = user && (user.role === 'Cliente' || user.role === 'cliente' || user.role === 'client');
-      if (currentRoute === 'supervisor' || currentRoute === 'customer' || isSupervisorRole || isClienteRole) {
+      if (user) {
         devLinks.style.display = 'none';
       } else {
         devLinks.style.display = 'flex';
