@@ -439,40 +439,31 @@ const agentModule = {
       this.historyClientName.textContent = client.name;
 
       const hasOutstanding = Number(client.outstanding) > 0;
-      const isRojo = client.risk === 'Rojo';
       
-      const currentUser = window.BulaPayDB.getCurrentUser();
-      const isCrossLoan = hasOutstanding && client.agent_id && currentUser && client.agent_id !== currentUser.username;
-      
-      let crossLoanAlertHtml = '';
-      if (isCrossLoan) {
-        let agentName = client.agent_id;
-        try {
-          const agentUser = await window.BulaPayDB.getUserByUsername(client.agent_id);
-          if (agentUser) agentName = agentUser.name || agentUser.username;
-        } catch (e) {}
-        const municipality = client.city || 'Desconocido';
-        crossLoanAlertHtml = `⚠️ Precaución: Este cliente tiene un cartón (crédito) activo con el agente ${agentName} en el municipio ${municipality}.`;
-      }
-
-      if (hasOutstanding && isRojo) {
-        // 🔴 ROJO: Crédito en mora
+      if (client.risk === 'Rojo') {
         this.historyTrafficLight.className = 'traffic-light-header rojo';
         this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo)';
-      } else if (hasOutstanding && !isRojo) {
-        // 🟡 AMARILLO: Crédito activo al día
+      } else if (client.risk === 'Amarillo') {
         this.historyTrafficLight.className = 'traffic-light-header amarillo';
         this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
       } else {
-        // 🟢 VERDE: Todos los créditos pagados y cerrados
         this.historyTrafficLight.className = 'traffic-light-header verde';
         this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
       }
       
-      if (isCrossLoan) {
+      if (hasOutstanding) {
+        let agentName = client.agent_id || 'Desconocido';
+        try {
+          if (client.agent_id) {
+            const agentUser = await window.BulaPayDB.getUserByUsername(client.agent_id);
+            if (agentUser) agentName = agentUser.name || agentUser.username;
+          }
+        } catch (e) {}
+        const municipality = client.city || 'Desconocido';
+        
         this.historyActiveCreditsAlert.style.display = 'flex';
         this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
-        this.historyActiveCreditsAlert.innerHTML = crossLoanAlertHtml;
+        this.historyActiveCreditsAlert.innerHTML = `⚠️ Atención: Este cliente tiene un crédito activo con el agente ${agentName} en el municipio ${municipality}.`;
       } else {
         this.historyActiveCreditsAlert.style.display = 'none';
       }
