@@ -152,9 +152,6 @@ const agentModule = {
     this.historyRiskStatus = document.getElementById('history-risk-status');
     this.historyRiskDot = document.getElementById('history-risk-dot');
     this.historyClientName = document.getElementById('history-client-name');
-    this.historyClientCedulaVal = document.getElementById('history-client-cedula-val');
-    this.historyClientRiskLabel = document.getElementById('history-client-risk-label');
-    this.historyClientNote = document.getElementById('history-client-note');
     this.historyActiveCreditsAlert = document.getElementById('history-active-credits-alert');
 
     // Cartón de Pagos Modal
@@ -237,6 +234,29 @@ const agentModule = {
         this.verificarHistorialCliente(cedula);
       }
     });
+
+    // Búsqueda Rápida (Header)
+    const inputQuickSearch = document.getElementById('quick-agent-search');
+    const btnQuickSearch = document.getElementById('btn-quick-search');
+    const executeQuickSearch = () => {
+      if (!inputQuickSearch) return;
+      const cedula = inputQuickSearch.value.trim();
+      if (!cedula) return;
+      this.switchTab('history');
+      if (this.inputHistoryCedula) {
+        this.inputHistoryCedula.value = cedula;
+      }
+      this.verificarHistorialCliente(cedula);
+      inputQuickSearch.value = ''; // limpiar
+    };
+    if (btnQuickSearch) {
+      btnQuickSearch.addEventListener('click', executeQuickSearch);
+    }
+    if (inputQuickSearch) {
+      inputQuickSearch.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') executeQuickSearch();
+      });
+    }
 
     // Registrar Pago
     this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
@@ -398,11 +418,7 @@ const agentModule = {
     this.historyPlaceholder.style.display = 'none';
     this.historyError.style.display = 'none';
     this.historyResults.style.display = 'block';
-    this.historyClientCedulaVal.textContent = cedula;
     this.historyClientName.textContent = 'Cargando...';
-    this.historyClientRiskLabel.textContent = 'Cargando...';
-    this.historyClientRiskLabel.style.color = 'var(--text-secondary)';
-    this.historyClientNote.textContent = 'Consultando base de datos central de BulaPay en Supabase...';
     this.historyActiveCreditsAlert.style.display = 'none';
     this.historyTrafficLight.className = 'traffic-light-header';
     this.historyRiskStatus.textContent = '⏳ Buscando historial...';
@@ -424,56 +440,43 @@ const agentModule = {
 
       const hasOutstanding = Number(client.outstanding) > 0;
       const isRojo = client.risk === 'Rojo';
+      
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      const isCrossLoan = hasOutstanding && client.agent_id && currentUser && client.agent_id !== currentUser.username;
+      
+      let crossLoanAlertHtml = '';
+      if (isCrossLoan) {
+        let agentName = client.agent_id;
+        try {
+          const agentUser = await window.BulaPayDB.getUserByUsername(client.agent_id);
+          if (agentUser) agentName = agentUser.name || agentUser.username;
+        } catch (e) {}
+        const municipality = client.city || 'Desconocido';
+        crossLoanAlertHtml = `⚠️ Precaución: Este cliente tiene un cartón (crédito) activo con el agente ${agentName} en el municipio ${municipality}.`;
+      }
 
       if (hasOutstanding && isRojo) {
         // 🔴 ROJO: Crédito en mora
         this.historyTrafficLight.className = 'traffic-light-header rojo';
         this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo)';
-        this.historyClientRiskLabel.textContent = 'ROJO (Alto Riesgo)';
-        this.historyClientRiskLabel.style.color = 'var(--color-rojo)';
-        this.historyClientNote.textContent = 'No prestar, reportado en Maicao por deudas caídas / mora severa.';
-        
-        // Consultar la ruta del crédito activo
-        const route = client.routeId ? await window.BulaPayDB.getGlobalRouteById(client.routeId) : null;
-        const routeName = route ? route.name : 'Ruta Desconocida';
-        
-        this.historyActiveCreditsAlert.style.display = 'flex';
-        this.historyActiveCreditsAlert.className = 'risk-alert-box'; // Red style
-        this.historyActiveCreditsAlert.innerHTML = `⚠️ Cuidado: Este cliente tiene una deuda activa de $${Number(client.outstanding).toLocaleString('es-CO')} en la ruta "${routeName}" (${client.city}).`;
       } else if (hasOutstanding && !isRojo) {
         // 🟡 AMARILLO: Crédito activo al día
         this.historyTrafficLight.className = 'traffic-light-header amarillo';
         this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
-        this.historyClientRiskLabel.textContent = 'AMARILLO (Riesgo Medio)';
-        this.historyClientRiskLabel.style.color = 'var(--color-amarillo)';
-        this.historyClientNote.textContent = 'Cliente que pagó, pero tiene deudas o demoras constantes en la plataforma.';
-        
-        // Consultar la ruta del crédito activo
-        const route = client.routeId ? await window.BulaPayDB.getGlobalRouteById(client.routeId) : null;
-        const routeName = route ? route.name : 'Ruta Desconocida';
-        
-        this.historyActiveCreditsAlert.style.display = 'flex';
-        this.historyActiveCreditsAlert.className = 'risk-alert-box warning'; // Yellow style
-        this.historyActiveCreditsAlert.innerHTML = `⚠️ Cuidado: Este cliente ya tiene un crédito activo de $${Number(client.outstanding).toLocaleString('es-CO')} en la ruta "${routeName}" (${client.city}).`;
       } else {
         // 🟢 VERDE: Todos los créditos pagados y cerrados
         this.historyTrafficLight.className = 'traffic-light-header verde';
-        this.historyRiskStatus.textContent = '🟢 VERDE (Cliente Excelente)';
-        this.historyClientRiskLabel.textContent = 'VERDE (Cliente Excelente)';
-        this.historyClientRiskLabel.style.color = 'var(--color-verde)';
-        this.historyClientNote.textContent = 'Cliente puntual, apto para nuevos créditos. Todos los créditos están cancelados.';
+        this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
+      }
+      
+      if (isCrossLoan) {
+        this.historyActiveCreditsAlert.style.display = 'flex';
+        this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+        this.historyActiveCreditsAlert.innerHTML = crossLoanAlertHtml;
+      } else {
         this.historyActiveCreditsAlert.style.display = 'none';
       }
 
-      // Renderizar Días de Mora en Historial / Evaluación de Riesgo
-      try {
-        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
-        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const container = document.getElementById('history-overdue-days-list');
-        window.BulaPayDB.renderOverdueDaysList(container, dailyStatus);
-      } catch (e) {
-        console.error("Error al renderizar días de mora en verificarHistorialCliente:", e);
-      }
     } catch (err) {
       console.error("Error al consultar Supabase:", err);
       alert('❌ Error al consultar la central de riesgos.');

@@ -550,7 +550,10 @@
                 <span id="agent-tracking-progress">0/0</span>
                 <span class="light-dot" id="agent-tracking-dot" style="width: 7px; height: 7px; border-radius: 50%; background-color: var(--color-rojo); display: inline-block;"></span>
               </button>
-              <span class="role-tag" id="agent-role-tag" style="margin-left: 0.5rem;">Agente de Ruta</span>
+              <div class="quick-search-wrapper" style="display: flex; align-items: center; background: var(--bg-secondary); border-radius: 6px; padding: 0.2rem 0.5rem; border: 1px solid var(--border-color); margin-left: 0.5rem; min-width: 100px;">
+                <input type="number" id="quick-agent-search" placeholder="Cédula..." style="background: transparent; border: none; color: var(--text-primary); font-size: 0.75rem; width: 70px; outline: none;">
+                <button id="btn-quick-search" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary); padding: 0; display: flex; align-items: center;">🔍</button>
+              </div>
             </div>
 
             <!-- Pestañas internas de la terminal del agente -->
@@ -685,25 +688,8 @@
                 </div>
 
                 <!-- Detalles de cuenta/historial del cliente -->
-                <div class="client-detail-card">
-                  <h4 style="font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-primary);" id="history-client-name">-</h4>
-                  
-                  <div class="client-detail-row">
-                    <span class="client-detail-label">Cédula:</span>
-                    <span class="client-detail-val" id="history-client-cedula-val">00000</span>
-                  </div>
-                  <div class="client-detail-row">
-                    <span class="client-detail-label">Calificación:</span>
-                    <span class="client-detail-val" id="history-client-risk-label" style="font-weight: 700;">-</span>
-                  </div>
-                  <div class="client-detail-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
-                    <span class="client-detail-label">Nota de Historial:</span>
-                    <span class="client-detail-val" id="history-client-note" style="font-style: italic; color: var(--text-secondary);">Sin datos.</span>
-                  </div>
-                  <div class="client-detail-row" id="history-overdue-days-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; display: none; width: 100%; border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.75rem;">
-                    <span class="client-detail-label" style="font-weight: 700; color: var(--text-primary);">Días de Mora (Calendario de Pagos):</span>
-                    <div id="history-overdue-days-list" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; width: 100%;"></div>
-                  </div>
+                <div class="client-detail-card" style="margin-bottom: 1rem; border: none; background: transparent; padding: 0;">
+                  <h4 style="font-size: 1.2rem; text-align: center; margin-bottom: 0.5rem; color: var(--text-primary);" id="history-client-name">-</h4>
                 </div>
 
                 <!-- Alerta de Créditos Activos Globales -->

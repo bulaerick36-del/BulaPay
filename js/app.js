@@ -106,12 +106,13 @@ const app = {
         window.authModule.init();
       }
 
-      // Ocultar/mostrar enlaces rápidos de desarrollo condicionalmente (Solo ocultar para Supervisor)
+      // Ocultar/mostrar enlaces rápidos de desarrollo condicionalmente (Solo ocultar para Supervisor y Cliente)
       const devLinks = document.getElementById('demo-quick-links');
       if (devLinks) {
         const currentUser = window.BulaPayDB.getCurrentUser();
         const isSupervisorRole = currentUser && (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor' || currentUser.role === 'Administrador de Rutas' || currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente');
-        if (route === 'supervisor' || isSupervisorRole) {
+        const isClienteRole = currentUser && (currentUser.role === 'Cliente' || currentUser.role === 'cliente' || currentUser.role === 'client');
+        if (route === 'supervisor' || route === 'customer' || isSupervisorRole || isClienteRole) {
           devLinks.style.display = 'none';
         } else {
           devLinks.style.display = 'flex';
