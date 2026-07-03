@@ -260,7 +260,9 @@ const agentModule = {
     }
 
     // Registrar Pago
-    this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
+    if (this.btnSubmitCollect) {
+      this.btnSubmitCollect.addEventListener('click', () => this.registerPayment());
+    }
 
     // Seguimiento de Ruta Diario Modal
     const btnTracking = document.getElementById('btn-agent-route-tracking');
