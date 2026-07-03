@@ -288,23 +288,8 @@ const agentModule = {
     if (this.btnOpenPaymentCard) {
       this.btnOpenPaymentCard.addEventListener('click', () => this.openPaymentCard());
     }
-    if (this.btnRegisterInstallment) {
-      this.btnRegisterInstallment.addEventListener('click', () => {
-        const inputField = document.getElementById('collect-amount');
-        if (inputField) {
-          inputField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          setTimeout(() => inputField.focus(), 300);
-        }
-      });
-    }
     if (this.btnClosePaymentCard) {
       this.btnClosePaymentCard.addEventListener('click', () => this.closePaymentCard());
-    }
-    if (this.btnPaymentCardNoPago) {
-      this.btnPaymentCardNoPago.addEventListener('click', () => {
-        this.closePaymentCard();
-        this.registerNoPayment();
-      });
     }
 
     // Registrar Cliente Nuevo
@@ -582,13 +567,6 @@ const agentModule = {
           cell.classList.add('pendiente');
           cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
         }
-
-        // Registrar acción al hacer click
-        cell.addEventListener('click', async () => {
-          if (confirm(`¿Confirmar pago de cuota ${i} por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
-            await this.payInstallmentFromCard(i, installmentAmount);
-          }
-        });
       }
       
       this.paymentCardGrid.appendChild(cell);
