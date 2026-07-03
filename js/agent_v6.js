@@ -160,7 +160,6 @@ const agentModule = {
     this.paymentCardModal = document.getElementById('agent-payment-card-modal');
     this.btnClosePaymentCard = document.getElementById('btn-close-payment-card');
     this.paymentCardGrid = document.getElementById('payment-card-grid');
-    this.btnLiquidarCarton = document.getElementById('btn-liquidar-carton');
     this.paymentCardClientName = document.getElementById('payment-card-client-name');
     this.paymentCardClientCedula = document.getElementById('payment-card-client-cedula');
     this.paymentCardClientOutstanding = document.getElementById('payment-card-client-outstanding');
@@ -291,9 +290,6 @@ const agentModule = {
     }
     if (this.btnClosePaymentCard) {
       this.btnClosePaymentCard.addEventListener('click', () => this.closePaymentCard());
-    }
-    if (this.btnLiquidarCarton) {
-      this.btnLiquidarCarton.addEventListener('click', () => this.liquidarCarton());
     }
 
     // Registrar Cliente Nuevo
@@ -576,30 +572,6 @@ const agentModule = {
       
       cuotaIdx++;
       dayCount++;
-    }
-
-    // Lógica para habilitar el botón de liquidación
-    if (this.btnLiquidarCarton) {
-      const diffTime = todayZero.getTime() - startZero.getTime();
-      const daysPassed = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (daysPassed >= 30) {
-        this.btnLiquidarCarton.disabled = false;
-        this.btnLiquidarCarton.style.opacity = '1';
-        this.btnLiquidarCarton.style.cursor = 'pointer';
-      } else {
-        this.btnLiquidarCarton.disabled = true;
-        this.btnLiquidarCarton.style.opacity = '0.5';
-        this.btnLiquidarCarton.style.cursor = 'not-allowed';
-      }
-    }
-  },
-
-  async liquidarCarton() {
-    if (!this.currentClient) return;
-    if (confirm(`¿Estás seguro de liquidar el cartón del cliente ${this.currentClient.name}?`)) {
-      alert("¡El cartón está listo para liquidar! Por favor indícame qué acción deseas que se realice en la base de datos (Ej: Borrar deuda, marcar crédito como cancelado, etc.)");
-      // TODO: Implementar la lógica de liquidación en la BD según los requerimientos del usuario.
     }
   },
 
