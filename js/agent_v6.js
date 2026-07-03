@@ -517,59 +517,61 @@ const agentModule = {
     this.paymentCardGrid.innerHTML = '';
     
     const client = this.currentClient;
-    const totalInstallments = client.installmentsCount || 5;
-    const installmentAmount = client.installmentAmount || 100000;
+    const totalInstallments = client.installmentsCount || 20; // Default to typical 20 or 24 quotas
+    const installmentAmount = client.installmentAmount || 8000;
     
     // Obtener los pagos reales desde Supabase
     const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
     
-    // Calcular el acumulado total pagado por el cliente
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-
-    // Ajustar fecha de creación del crédito para estimar los atrasos
-    let creditDate = new Date(client.created_at || Date.now());
-    if (payments.length > 0) {
-      const earliestPayDate = new Date(Math.min(...payments.map(p => new Date(p.date))));
-      if (earliestPayDate < creditDate) {
-        creditDate = new Date(earliestPayDate.getTime() - (7 * 24 * 60 * 60 * 1000));
+    const startDate = new Date(client.created_at || Date.now());
+    const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    
+    const paymentDates = new Set();
+    payments.forEach(p => {
+      if (p.amount > 0 && p.status !== 'No Pago') {
+        paymentDates.add(p.date);
       }
-    }
+    });
 
     const today = new Date();
-    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-    for (let i = 1; i <= totalInstallments; i++) {
+    let dayCount = 0;
+    let cuotaIdx = 1;
+
+    // Generar celdas hasta completar el cartón
+    while (cuotaIdx <= totalInstallments) {
+      const currentDayDate = new Date(startZero);
+      currentDayDate.setDate(startZero.getDate() + dayCount);
+      
+      // Saltar Domingos (0)
+      if (currentDayDate.getDay() === 0) {
+        dayCount++;
+        continue;
+      }
+      
+      const dayStr = currentDayDate.toISOString().split('T')[0];
+      const isPast = currentDayDate < todayZero;
+      const hasPaid = paymentDates.has(dayStr);
+      
       const cell = document.createElement('div');
       cell.classList.add('payment-card-cell');
       
-      // Calcular fecha de vencimiento (una cuota por semana)
-      const dueDate = new Date(creditDate);
-      dueDate.setDate(creditDate.getDate() + (i * 7));
-      const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      
-      const isPaid = totalPaid >= i * installmentAmount;
-      const isPartiallyPaid = !isPaid && totalPaid > (i - 1) * installmentAmount;
-      
-      if (isPaid) {
+      if (hasPaid) {
         cell.classList.add('pagado');
-        cell.innerHTML = `Cuota ${i}<br>✔`;
-      } else if (isPartiallyPaid) {
-        cell.classList.add('abonado');
-        const abonoAmount = totalPaid - ((i - 1) * installmentAmount);
-        cell.innerHTML = `Cuota ${i}<br>Abonado:<br>$${Number(abonoAmount).toLocaleString('es-CO')}`;
+        cell.innerHTML = `Cuota ${cuotaIdx}<br>✔`;
+      } else if (isPast) {
+        cell.classList.add('atrasado');
+        cell.innerHTML = `Cuota ${cuotaIdx}<br>⚠️`;
       } else {
-        // ¿Vencida? Si la fecha de vencimiento es anterior a hoy
-        const isOverdue = dueDateOnly < todayDateOnly;
-        if (isOverdue) {
-          cell.classList.add('atrasado');
-          cell.innerHTML = `Cuota ${i}<br>⚠️`;
-        } else {
-          cell.classList.add('pendiente');
-          cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
-        }
+        cell.classList.add('pendiente');
+        cell.innerHTML = `Cuota ${cuotaIdx}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
       }
       
       this.paymentCardGrid.appendChild(cell);
+      
+      cuotaIdx++;
+      dayCount++;
     }
   },
 
