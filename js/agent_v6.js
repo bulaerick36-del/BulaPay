@@ -155,7 +155,8 @@ const agentModule = {
     this.historyActiveCreditsAlert = document.getElementById('history-active-credits-alert');
 
     // Cartón de Pagos Modal
-    this.btnOpenPaymentCard = document.getElementById('btn-agent-register-installment');
+    this.btnOpenPaymentCard = document.getElementById('btn-agent-view-carton');
+    this.btnRegisterInstallment = document.getElementById('btn-agent-register-installment');
     this.paymentCardModal = document.getElementById('agent-payment-card-modal');
     this.btnClosePaymentCard = document.getElementById('btn-close-payment-card');
     this.paymentCardGrid = document.getElementById('payment-card-grid');
@@ -286,6 +287,15 @@ const agentModule = {
     // Cartón de Pagos
     if (this.btnOpenPaymentCard) {
       this.btnOpenPaymentCard.addEventListener('click', () => this.openPaymentCard());
+    }
+    if (this.btnRegisterInstallment) {
+      this.btnRegisterInstallment.addEventListener('click', () => {
+        const inputField = document.getElementById('collect-amount');
+        if (inputField) {
+          inputField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => inputField.focus(), 300);
+        }
+      });
     }
     if (this.btnClosePaymentCard) {
       this.btnClosePaymentCard.addEventListener('click', () => this.closePaymentCard());
