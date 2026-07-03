@@ -1319,13 +1319,35 @@ const agentModule = {
         clients.forEach(c => {
           const hasPaid = todayPaymentsMap.has(c.cedula);
           
-          const borderStyle = hasPaid ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
-          const bgStyle = hasPaid ? 'var(--color-verde-bg)' : 'var(--color-rojo-bg)';
-          const textColor = hasPaid ? 'var(--color-verde)' : 'var(--color-rojo)';
-          const badgeBg = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+          const clientCreatedAt = c.created_at ? new Date(c.created_at) : new Date(0);
+          const msIn24Hours = 24 * 60 * 60 * 1000;
+          const isNewClient = (Date.now() - clientCreatedAt.getTime()) < msIn24Hours;
+          const isNewUnpaid = !hasPaid && isNewClient;
+
+          let borderStyle, bgStyle, textColor, badgeBg, dashedBorder;
+
+          if (hasPaid) {
+            borderStyle = 'rgba(16, 185, 129, 0.4)';
+            bgStyle = 'var(--color-verde-bg)';
+            textColor = 'var(--color-verde)';
+            badgeBg = 'rgba(16, 185, 129, 0.2)';
+            dashedBorder = 'rgba(16, 185, 129, 0.2)';
+          } else if (isNewUnpaid) {
+            borderStyle = 'var(--border-color, rgba(156, 163, 175, 0.4))';
+            bgStyle = 'var(--bg-primary, #ffffff)';
+            textColor = 'var(--text-primary, #333333)';
+            badgeBg = 'var(--bg-secondary, rgba(156, 163, 175, 0.15))';
+            dashedBorder = 'var(--border-color, rgba(156, 163, 175, 0.2))';
+          } else {
+            borderStyle = 'rgba(239, 68, 68, 0.4)';
+            bgStyle = 'var(--color-rojo-bg)';
+            textColor = 'var(--color-rojo)';
+            badgeBg = 'rgba(239, 68, 68, 0.2)';
+            dashedBorder = 'rgba(239, 68, 68, 0.2)';
+          }
+
           const clientCedula = String(c.cedula || 'No registrada');
           const badgeText = hasPaid ? 'Pagó' : clientCedula;
-          const dashedBorder = hasPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
           
           const clientName = c.name || 'Desconocido';
           const clientPhone = c.phone || 'Sin teléfono';
