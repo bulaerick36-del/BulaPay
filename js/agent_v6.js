@@ -438,6 +438,25 @@ const agentModule = {
       this.historyError.style.display = 'none';
       this.historyClientName.textContent = client.name;
 
+      // Calcular riesgo dinámico basado en pagos
+      try {
+        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+        const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
+        
+        if (Number(client.outstanding) === 0) {
+          client.risk = 'Verde';
+        } else if (overdueCount >= 3) {
+          client.risk = 'Rojo';
+        } else if (overdueCount > 0) {
+          client.risk = 'Amarillo';
+        } else {
+          client.risk = 'Verde';
+        }
+      } catch (e) {
+        console.error("Error al calcular riesgo dinámico en historial:", e);
+      }
+
       const hasOutstanding = Number(client.outstanding) > 0;
       
       if (client.risk === 'Rojo') {
@@ -672,6 +691,26 @@ const agentModule = {
     this.detailOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
     this.detailInstallment.textContent = `$${Number(client.installmentAmount).toLocaleString('es-CO')}`;
     
+    // Calcular riesgo dinámico basado en pagos
+    let dailyStatusList = [];
+    try {
+      const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+      dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+      const overdueCount = dailyStatusList.filter(s => s.isOverdue).length;
+      
+      if (Number(client.outstanding) === 0) {
+        client.risk = 'Verde';
+      } else if (overdueCount >= 3) {
+        client.risk = 'Rojo';
+      } else if (overdueCount > 0) {
+        client.risk = 'Amarillo';
+      } else {
+        client.risk = 'Verde';
+      }
+    } catch (e) {
+      console.error("Error al calcular riesgo dinámico en renderClientInfo:", e);
+    }
+
     // Semáforo de Riesgo
     this.riskHeader.className = 'traffic-light-header'; // Reset
     
@@ -698,13 +737,9 @@ const agentModule = {
     this.inputCollectAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
 
     // Renderizar Días de Mora en Detalles del Cliente
-    try {
-      const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
-      const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-      const container = document.getElementById('client-overdue-days-list');
-      window.BulaPayDB.renderOverdueDaysList(container, dailyStatus);
-    } catch (e) {
-      console.error("Error al renderizar días de mora en renderClientInfo:", e);
+    const container = document.getElementById('client-overdue-days-list');
+    if (container) {
+      window.BulaPayDB.renderOverdueDaysList(container, dailyStatusList);
     }
   },
 
