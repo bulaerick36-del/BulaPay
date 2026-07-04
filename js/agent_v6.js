@@ -318,11 +318,11 @@ const agentModule = {
       if (!inputQuickSearch) return;
       const cedula = inputQuickSearch.value.trim();
       if (!cedula) return;
-      this.switchTab('collect');
-      if (this.inputSearchCedula) {
-        this.inputSearchCedula.value = cedula;
+      this.switchTab('history');
+      if (this.inputHistoryCedula) {
+        this.inputHistoryCedula.value = cedula;
       }
-      this.searchClient();
+      this.verificarHistorialCliente(cedula);
       inputQuickSearch.value = ''; // limpiar
     };
     if (btnQuickSearch) {
