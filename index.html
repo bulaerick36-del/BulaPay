@@ -537,7 +537,7 @@
           <div class="phone-screen-content">
             
             <div class="agent-title-bar" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%;">
-              <div id="agent-profile-trigger" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1;">
+              <div id="agent-profile-trigger" style="display: flex; align-items: center; gap: 0.5rem;">
                 <!-- Ícono de Usuario (Avatar SVG) -->
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                 <div>
@@ -1151,6 +1151,93 @@
     </div>
   </div>
 
+  <!-- Modal Panel Privado (Solo Independiente) -->
+  <div id="private-agent-panel-modal" style="display: none; position: fixed; inset: 0; background-color: var(--bg-primary); z-index: 99999; flex-direction: column; overflow-y: auto;">
+    
+    <!-- Panel Header (Cerrar) -->
+    <div style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-secondary); position: sticky; top: 0; z-index: 10;">
+      <h2 style="margin: 0; font-size: 1.25rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+        <span style="color: var(--accent);">⚙️</span> Panel de Control Privado
+      </h2>
+      <button id="btn-close-private-panel" style="background-color: var(--color-rojo-bg); border: 1px solid rgba(239,68,68,0.4); color: var(--color-rojo); font-weight: 700; cursor: pointer; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.9rem; transition: transform 0.1s;">
+        Cerrar Panel
+      </button>
+    </div>
+
+    <!-- Contenido del Panel -->
+    <div style="padding: 1.5rem; max-width: 800px; margin: 0 auto; width: 100%;">
+      
+      <!-- Pestañas del Panel -->
+      <div style="display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 2px solid var(--border-color);">
+        <button id="btn-tab-private-profile" style="background: none; border: none; padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 700; color: var(--accent); border-bottom: 2px solid var(--accent); margin-bottom: -2px; cursor: pointer;">
+          👤 Mi Perfil
+        </button>
+        <button id="btn-tab-private-business" style="background: none; border: none; padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 700; color: var(--text-secondary); cursor: pointer;">
+          📊 Mi Negocio
+        </button>
+      </div>
+
+      <!-- Pestaña: Mi Perfil -->
+      <div id="private-panel-profile" style="display: block;">
+        <div class="card" style="margin-bottom: 1.5rem;">
+          <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">Información Personal</h3>
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label style="display:block; margin-bottom:0.3rem; font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Nombre Completo</label>
+            <input type="text" placeholder="Tu nombre..." style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-primary);">
+          </div>
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label style="display:block; margin-bottom:0.3rem; font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Teléfono de Contacto</label>
+            <input type="tel" placeholder="Tu teléfono..." style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-primary);">
+          </div>
+          <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="display:block; margin-bottom:0.3rem; font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Correo Electrónico</label>
+            <input type="email" placeholder="Tu correo..." style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-primary);">
+          </div>
+          <button class="btn btn-primary" style="width:100%; padding:0.8rem; font-weight:bold; font-size:1rem; border-radius:8px;">Guardar Cambios</button>
+        </div>
+
+        <div class="card" style="border: 1px solid rgba(239,68,68,0.3);">
+          <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--color-rojo);">Cambiar Contraseña</h3>
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label style="display:block; margin-bottom:0.3rem; font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Contraseña Actual</label>
+            <input type="password" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-primary);">
+          </div>
+          <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label style="display:block; margin-bottom:0.3rem; font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Nueva Contraseña</label>
+            <input type="password" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-primary);">
+          </div>
+          <button class="btn" style="width:100%; padding:0.8rem; font-weight:bold; font-size:1rem; border-radius:8px; background-color:var(--color-rojo); color:white; border:none;">Actualizar Contraseña</button>
+        </div>
+      </div>
+
+      <!-- Pestaña: Mi Negocio -->
+      <div id="private-panel-business" style="display: none; flex-direction: column; gap: 1.5rem;">
+        
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 16px; padding: 2rem; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 10px 15px -3px rgba(16,185,129,0.3);">
+          <span style="font-size: 2.5rem; margin-bottom: 0.5rem;">💰</span>
+          <h3 style="margin: 0 0 0.5rem 0; font-weight: 600; font-size: 1.1rem; opacity: 0.9;">Mi Capital Base</h3>
+          <h1 style="margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: -1px;">$0</h1>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+            <span style="font-size: 2rem; margin-bottom: 0.5rem;">📊</span>
+            <h3 style="margin: 0; font-size: 1rem; color: var(--text-primary);">Cierre de Caja</h3>
+            <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem; color: var(--text-secondary);">Cuadre del día</p>
+          </div>
+          
+          <div style="background-color: var(--color-rojo-bg); border: 1px solid rgba(239,68,68,0.3); border-radius: 16px; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+            <span style="font-size: 2rem; margin-bottom: 0.5rem;">🚨</span>
+            <h3 style="margin: 0; font-size: 1rem; color: var(--color-rojo);">Lista Negra</h3>
+            <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem; color: var(--color-rojo); opacity: 0.8;">Clientes Morosos</p>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
   <!-- Pie de Página Fijo -->
   <footer style="border-top: 1px solid var(--border-color); background-color: var(--bg-primary); padding: 1.5rem 2rem; margin-top: auto; font-size: 0.85rem; color: var(--text-secondary); text-align: center;">
     <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
@@ -1167,7 +1254,7 @@
   <script src="js/db.js?v=8"></script>
   <script src="js/auth.js?v=5"></script>
   <script src="js/supervisor.js?v=5"></script>
-  <script src="js/agent_v6.js?v=19"></script>
+  <script src="js/agent_v6.js?v=20"></script>
   <script src="js/customer.js?v=5"></script>
   <!-- Controlador Principal -->
   <script src="js/app.js"></script>

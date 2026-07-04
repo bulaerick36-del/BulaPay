@@ -461,6 +461,39 @@ const agentModule = {
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
     const roleTag = document.getElementById('agent-role-tag');
+    const profileTrigger = document.getElementById('agent-profile-trigger');
+    const privatePanel = document.getElementById('private-agent-panel-modal');
+    const btnClosePrivatePanel = document.getElementById('btn-close-private-panel');
+    const tabProfileBtn = document.getElementById('btn-tab-private-profile');
+    const tabBusinessBtn = document.getElementById('btn-tab-private-business');
+    const tabProfileContent = document.getElementById('private-panel-profile');
+    const tabBusinessContent = document.getElementById('private-panel-business');
+
+    // Inicializar Eventos del Panel Privado
+    if (btnClosePrivatePanel) {
+      btnClosePrivatePanel.onclick = () => {
+        if (privatePanel) privatePanel.style.display = 'none';
+      };
+    }
+
+    if (tabProfileBtn && tabBusinessBtn) {
+      tabProfileBtn.onclick = () => {
+        tabProfileBtn.style.color = 'var(--accent)';
+        tabProfileBtn.style.borderBottom = '2px solid var(--accent)';
+        tabBusinessBtn.style.color = 'var(--text-secondary)';
+        tabBusinessBtn.style.borderBottom = 'none';
+        tabProfileContent.style.display = 'block';
+        tabBusinessContent.style.display = 'none';
+      };
+      tabBusinessBtn.onclick = () => {
+        tabBusinessBtn.style.color = 'var(--accent)';
+        tabBusinessBtn.style.borderBottom = '2px solid var(--accent)';
+        tabProfileBtn.style.color = 'var(--text-secondary)';
+        tabProfileBtn.style.borderBottom = 'none';
+        tabProfileContent.style.display = 'none';
+        tabBusinessContent.style.display = 'flex';
+      };
+    }
 
     if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
       if (agentNameElement) agentNameElement.textContent = `Cobrador: ${currentUser.name}`;
@@ -472,10 +505,29 @@ const agentModule = {
       if (agentRouteElement) {
         if (currentUser.role === 'Agente Independiente') {
           agentRouteElement.textContent = 'Cobrador Independiente';
+          
+          // RBAC: Solo Agente Independiente puede abrir el Panel
+          if (profileTrigger) {
+            profileTrigger.style.cursor = 'pointer';
+            profileTrigger.style.transition = 'opacity 0.2s';
+            profileTrigger.onmouseover = () => profileTrigger.style.opacity = '0.8';
+            profileTrigger.onmouseout = () => profileTrigger.style.opacity = '1';
+            profileTrigger.onclick = () => {
+              if (privatePanel) privatePanel.style.display = 'flex';
+            };
+          }
         } else {
           agentRouteElement.textContent = myRoute 
             ? `Ruta: ${myRoute.name} | Capital: $${Number(myRoute.capital).toLocaleString('es-CO')}` 
             : 'Ruta no asignada';
+            
+          // Bloquear interacción
+          if (profileTrigger) {
+            profileTrigger.style.cursor = 'default';
+            profileTrigger.onmouseover = null;
+            profileTrigger.onmouseout = null;
+            profileTrigger.onclick = null;
+          }
         }
       }
     } else {
