@@ -137,8 +137,14 @@ const agentModule = {
     this.inputSearchCedula = document.getElementById('cobrar-search-input');
     this.btnSearch = document.getElementById('btn-agent-search');
     this.searchPlaceholder = document.getElementById('agent-search-placeholder');
-    this.searchResults = document.getElementById('agent-search-results');
     this.searchError = document.getElementById('agent-search-error');
+
+    // Vista Aislada de Cobro
+    this.cobroActionContainer = document.getElementById('cobro-action-container');
+    this.cobroClientName = document.getElementById('cobro-client-name');
+    this.cobroClientOutstanding = document.getElementById('cobro-client-outstanding');
+    this.inputCobroAmount = document.getElementById('input-cobro-amount');
+    this.btnCobroSubmit = document.getElementById('btn-cobro-submit');
 
     // Búsqueda Historial
     this.inputHistoryCedula = document.getElementById('agent-history-cedula');
@@ -216,19 +222,28 @@ const agentModule = {
     this.tabHistory.addEventListener('click', () => this.switchTab('history'));
     this.tabRegister.addEventListener('click', () => this.switchTab('register'));
 
-    // Búsqueda de Cliente
-    this.btnSearch.addEventListener('click', () => this.searchClient());
-    this.inputSearchCedula.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        this.searchClient();
-      }
-    });
+    // Botón Búsqueda Cobro
+    if (this.btnSearch) {
+      this.btnSearch.addEventListener('click', () => this.searchClient());
+    }
+    if (this.inputSearchCedula) {
+      this.inputSearchCedula.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.searchClient();
+      });
+    }
 
-    // Búsqueda de Historial
-    this.btnHistorySearch.addEventListener('click', () => {
-      const cedula = this.inputHistoryCedula.value.trim();
-      this.verificarHistorialCliente(cedula);
-    });
+    // Botón Confirmar Pago Aislado
+    if (this.btnCobroSubmit) {
+      this.btnCobroSubmit.addEventListener('click', () => this.handleIsolatedPayment());
+    }
+
+    // Historial
+    if (this.btnHistorySearch) {
+      this.btnHistorySearch.addEventListener('click', () => {
+        const cedula = this.inputHistoryCedula.value.trim();
+        this.verificarHistorialCliente(cedula);
+      });
+    }
     this.inputHistoryCedula.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         const cedula = this.inputHistoryCedula.value.trim();
@@ -644,14 +659,27 @@ const agentModule = {
       const client = await window.BulaPayDB.getClientByCedula(cedula);
       if (!client) {
         alert('❌ Cliente no registrado en el sistema BulaPay.');
-        this.searchResults.style.display = 'none';
-        this.searchPlaceholder.style.display = 'block';
+        if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
+        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
         if (this.searchError) this.searchError.style.display = 'none';
         return;
       }
 
       if (this.searchError) this.searchError.style.display = 'none';
-      await this.renderClientInfo(client);
+      
+      this.currentClient = client;
+      
+      // Mostrar la tarjeta minimalista aislada
+      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
+      if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'block';
+      
+      if (this.cobroClientName) this.cobroClientName.textContent = client.name;
+      if (this.cobroClientOutstanding) this.cobroClientOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
+      
+      if (this.inputCobroAmount) {
+        this.inputCobroAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
+      }
+      
     } catch (err) {
       console.error(err);
       if (err.message === 'ACCESO_DENEGADO_OTRO_AGENTE') {
@@ -661,11 +689,79 @@ const agentModule = {
         } else {
           alert('Operación denegada: Este cliente pertenece a la ruta de otro asesor. No puedes gestionar sus cobros.');
         }
-        this.searchResults.style.display = 'none';
-        this.searchPlaceholder.style.display = 'none';
+        if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
+        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
       } else {
         alert('❌ Error al buscar cliente.');
       }
+    }
+  },
+
+  async handleIsolatedPayment() {
+    if (this.isRouteClosed()) {
+      alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
+      return;
+    }
+    if (!this.currentClient) return;
+
+    const amount = parseFloat(this.inputCobroAmount.value);
+    if (isNaN(amount) || amount <= 0) {
+      alert('⚠️ Ingrese un valor válido de recaudo.');
+      return;
+    }
+
+    if (amount > Number(this.currentClient.outstanding)) {
+      alert(`⚠️ El monto ingresado supera el saldo pendiente de $${Number(this.currentClient.outstanding).toLocaleString('es-CO')}`);
+      return;
+    }
+
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+
+    try {
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      
+      // Validar si ya pagó hoy
+      const todayStr = this.getLocalDateString();
+      if (payments.some(p => p.date === todayStr)) {
+        alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
+        return;
+      }
+
+      const newPayment = {
+        clientCedula: this.currentClient.cedula,
+        installmentNumber: payments.length + 1,
+        amount: amount,
+        date: this.getLocalDateString(),
+        agentName: currentUser.name,
+        status: amount >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado'
+      };
+
+      // Registrar en base de datos (esto actualiza el saldo automáticamente)
+      await window.BulaPayDB.addPayment(newPayment);
+
+      // Reportar ubicación
+      this.captureAndSendLocation();
+
+      // Notificación de éxito
+      alert('✅ Pago registrado con éxito.');
+
+      // Re-buscar el cliente para actualizar pantalla de inmediato
+      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      this.currentClient = updatedClient;
+      
+      // Actualizar saldo mostrado
+      if (this.cobroClientOutstanding) {
+        this.cobroClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      }
+      
+      // Limpiar input para siguiente cobro
+      if (this.inputCobroAmount) {
+        this.inputCobroAmount.value = '';
+      }
+      
+    } catch (e) {
+      console.error(e);
+      alert('❌ Error al registrar el pago de la cuota.');
     }
   },
 
