@@ -726,7 +726,9 @@ const agentModule = {
     this.detailStatus.textContent = statusText;
 
     // Rellenar campo de monto de abono por defecto
-    this.inputCollectAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
+    if (this.inputCollectAmount) {
+      this.inputCollectAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
+    }
 
     // Renderizar Días de Mora en Detalles del Cliente
     const container = document.getElementById('client-overdue-days-list');
