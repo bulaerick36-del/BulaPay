@@ -256,16 +256,16 @@ const agentModule = {
     if (this.btnCobroCarton) {
       this.btnCobroCarton.addEventListener('click', () => {
         if (this.cobroInputState && this.cobroCartonState) {
-          this.cobroInputState.style.display = 'none';
-          this.cobroCartonState.style.display = 'block';
+          this.cobroInputState.style.setProperty('display', 'none', 'important');
+          this.cobroCartonState.style.setProperty('display', 'block', 'important');
         }
       });
     }
     if (this.btnCobroBack) {
       this.btnCobroBack.addEventListener('click', () => {
         if (this.cobroInputState && this.cobroCartonState) {
-          this.cobroCartonState.style.display = 'none';
-          this.cobroInputState.style.display = 'block';
+          this.cobroCartonState.style.setProperty('display', 'none', 'important');
+          this.cobroInputState.style.setProperty('display', 'block', 'important');
         }
       });
     }
@@ -717,10 +717,10 @@ const agentModule = {
       
       // Mostrar la tarjeta minimalista aislada y asegurar estado inicial
       if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
-      if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'block';
+      if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'block', 'important');
       if (this.cobroInputState && this.cobroCartonState) {
-        this.cobroInputState.style.display = 'block';
-        this.cobroCartonState.style.display = 'none';
+        this.cobroInputState.style.setProperty('display', 'block', 'important');
+        this.cobroCartonState.style.setProperty('display', 'none', 'important');
       }
       
       if (this.cobroClientName) this.cobroClientName.textContent = client.name;
