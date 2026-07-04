@@ -960,12 +960,16 @@ const db = {
       badge.style.border = '1px solid';
       badge.style.textAlign = 'center';
       
-      if (onClickCallback && status.isOverdue) {
+      badge.style.transition = 'transform 0.1s ease';
+
+      if (onClickCallback && !status.hasPaid) {
         badge.style.cursor = 'pointer';
         badge.title = 'Clic para marcar como pagado';
         badge.addEventListener('click', () => {
           onClickCallback(status);
         });
+        badge.addEventListener('mouseenter', () => badge.style.transform = 'scale(1.08)');
+        badge.addEventListener('mouseleave', () => badge.style.transform = 'scale(1)');
       }
       
       const dateLabel = status.dateStr.slice(5); // MM-DD
@@ -981,10 +985,13 @@ const db = {
         badge.style.borderColor = 'rgba(239, 68, 68, 0.3)';
         badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: 700; color: var(--color-rojo); margin-top: 0.15rem;">⚠️ Atrasada</span>`;
       } else {
-        badge.style.backgroundColor = 'var(--bg-secondary)';
-        badge.style.color = 'var(--text-secondary)';
-        badge.style.borderColor = 'var(--border-color)';
-        badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: 400; opacity: 0.7; margin-top: 0.15rem;">Pendiente</span>`;
+        const bgHover = onClickCallback ? 'var(--bg-secondary)' : 'var(--bg-secondary)';
+        badge.style.backgroundColor = bgHover;
+        badge.style.color = status.isToday ? 'var(--text-primary)' : 'var(--text-secondary)';
+        badge.style.borderColor = status.isToday ? 'var(--color-primary)' : 'var(--border-color)';
+        const fontWeight = status.isToday ? '800' : '400';
+        const labelStr = status.isToday ? 'Hoy (Cobrar)' : 'Pendiente';
+        badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: ${fontWeight}; opacity: 0.9; margin-top: 0.15rem;">${labelStr}</span>`;
       }
       container.appendChild(badge);
     });
