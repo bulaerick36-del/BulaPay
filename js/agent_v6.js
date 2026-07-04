@@ -359,7 +359,7 @@ const agentModule = {
         cedulaEl.textContent = client.cedula;
         phoneEl.textContent = client.phone || 'N/A';
         cityEl.textContent = client.city || 'N/A';
-        addressEl.textContent = client.address || 'N/A';
+        addressEl.textContent = client.direccion || client.zone || 'N/A';
         outEl.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
       } catch (err) {
         console.error(err);
