@@ -318,11 +318,11 @@ const agentModule = {
       if (!inputQuickSearch) return;
       const cedula = inputQuickSearch.value.trim();
       if (!cedula) return;
-      this.switchTab('history');
-      if (this.inputHistoryCedula) {
-        this.inputHistoryCedula.value = cedula;
+      this.switchTab('collect');
+      if (this.inputSearchCedula) {
+        this.inputSearchCedula.value = cedula;
       }
-      this.verificarHistorialCliente(cedula);
+      this.searchClient();
       inputQuickSearch.value = ''; // limpiar
     };
     if (btnQuickSearch) {
@@ -457,6 +457,16 @@ const agentModule = {
 
     if (tab === 'collect') {
       this.tabCollect.classList.add('active');
+      
+      // Limpiar Estado Cobro
+      this.currentClient = null;
+      if (this.inputCobroCedula) this.inputCobroCedula.value = '';
+      if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'flex';
+      if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
+      if (this.cobroInputState) this.cobroInputState.style.setProperty('display', 'block', 'important');
+      if (this.cobroCartonState) this.cobroCartonState.style.setProperty('display', 'none', 'important');
+      
       if (window.gpsBlocked) {
         this.panelCollect.style.setProperty('display', 'none', 'important');
         if (blockedPanel) blockedPanel.style.display = 'flex';
@@ -469,13 +479,18 @@ const agentModule = {
       if (tab === 'history') {
         this.tabHistory.classList.add('active');
         this.panelHistory.style.display = 'block';
+        
+        // Limpiar Estado Historial
         this.historyResults.style.display = 'none';
         this.historyError.style.display = 'none';
         this.historyPlaceholder.style.display = 'block';
-        this.inputHistoryCedula.value = '';
+        if (this.inputHistoryCedula) this.inputHistoryCedula.value = '';
       } else if (tab === 'register') {
         this.tabRegister.classList.add('active');
         this.panelRegister.style.display = 'block';
+        
+        // Limpiar Estado Registro
+        if (this.formRegisterClient) this.formRegisterClient.reset();
       }
     }
   },
