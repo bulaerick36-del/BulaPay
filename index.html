@@ -632,6 +632,16 @@
                   </div>
                 </div>
 
+                <!-- FORMULARIO DE RECAUDO RESTAURADO -->
+                <div class="form-group" style="margin-top: 1.5rem; margin-bottom: 1rem; border-top: 1px dashed var(--border-color); padding-top: 1rem;">
+                  <label for="collect-amount" style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">Monto a Cobrar ($)</label>
+                  <input type="number" id="collect-amount" placeholder="Ej. 10000" style="padding: 0.8rem; font-size: 1.2rem; font-weight: bold; width: 100%; border: 2px solid var(--border-color); border-radius: 8px; background-color: var(--bg-primary); color: var(--text-primary); text-align: center;">
+                </div>
+                
+                <button type="button" class="btn btn-primary" id="btn-submit-collect" style="width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: 800; margin-bottom: 1rem; background-color: var(--accent); color: var(--bg-primary); border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);">
+                  💰 Registrar Pago
+                </button>
+
                 <!-- Botón destacado Ver Cartón -->
                 <button type="button" class="btn btn-secondary" id="btn-agent-view-carton" style="width: 100%; padding: 0.75rem; font-size: 0.95rem; font-weight: 700; margin-bottom: 1.25rem; background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px;">
                   👁️ Ver Cartón
@@ -847,21 +857,6 @@
               <!-- Cuadrícula Grid del Cartón -->
               <div id="payment-card-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
                 <!-- Dinámico en JS -->
-              </div>
-
-              <!-- SECCIÓN DE REGISTRO DE CUOTA -->
-              <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 0.5rem;">
-                <h5 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: var(--text-primary); text-transform: uppercase;">Registrar Cuota</h5>
-                <div class="form-group" style="margin-bottom: 0.75rem;">
-                  <label for="collect-amount" style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Monto a Cobrar ($)</label>
-                  <input type="number" id="collect-amount" placeholder="Ej. 10000" style="width: 100%; padding: 0.6rem; font-size: 1.1rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-weight: bold; text-align: center;">
-                </div>
-                <button type="button" class="btn btn-primary" id="btn-submit-collect" style="width: 100%; padding: 0.75rem; font-size: 0.95rem; font-weight: bold; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 6px; margin-bottom: 0.5rem; cursor: pointer; box-shadow: 0 4px 6px rgba(16,185,129,0.3);">
-                  💰 Registrar Pago
-                </button>
-                <button type="button" id="btn-payment-card-nopago" class="btn btn-secondary" style="width: 100%; padding: 0.6rem; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer;">
-                  🚫 Registrar No Pago
-                </button>
               </div>
 
             </div>
