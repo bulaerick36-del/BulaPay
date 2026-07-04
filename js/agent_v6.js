@@ -735,55 +735,6 @@ const agentModule = {
     if (container) {
       window.BulaPayDB.renderOverdueDaysList(container, dailyStatusList);
     }
-
-    // --- RECONSTRUCCIÓN FORZADA DE LA INTERFAZ DE PAGO ---
-    // Limpiar contenedor dinámico si ya existe para evitar duplicados
-    let paymentContainer = document.getElementById('dynamic-payment-form-container');
-    if (paymentContainer) {
-      paymentContainer.remove();
-    }
-
-    // Crear el nuevo contenedor para el formulario de pago
-    paymentContainer = document.createElement('div');
-    paymentContainer.id = 'dynamic-payment-form-container';
-    paymentContainer.style.marginTop = '1.5rem';
-    paymentContainer.style.marginBottom = '1rem';
-    
-    // Inyectar HTML/JSX (Estructura de la Caja Registradora)
-    paymentContainer.innerHTML = `
-      <hr style="border: 0; border-top: 1px dashed var(--border-color); margin-bottom: 1rem;">
-      <h3 style="font-size: 1rem; font-weight: 800; color: var(--text-primary); text-transform: uppercase; margin-bottom: 0.75rem; text-align: center;">Registrar Pago de Cuota</h3>
-      <div class="form-group" style="margin-bottom: 1rem;">
-        <input type="number" id="collect-amount-dynamic" placeholder="Ej. 10000" style="padding: 0.85rem; font-size: 1.25rem; font-weight: 800; width: 100%; border: 2px solid var(--accent); border-radius: 8px; background-color: var(--bg-primary); color: var(--text-primary); text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
-      </div>
-      <button type="button" class="btn btn-primary" id="btn-submit-collect-dynamic" style="width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3); cursor: pointer;">
-        💰 Confirmar Pago
-      </button>
-    `;
-
-    // Insertar el contenedor justo debajo de los detalles del cliente (y antes del botón Ver Cartón si existe)
-    const viewCartonBtn = document.getElementById('btn-agent-view-carton');
-    if (viewCartonBtn && viewCartonBtn.parentNode) {
-      viewCartonBtn.parentNode.insertBefore(paymentContainer, viewCartonBtn);
-    } else {
-      this.searchResults.appendChild(paymentContainer);
-    }
-
-    // Establecer el valor por defecto en el nuevo input dinámico
-    const dynamicInput = document.getElementById('collect-amount-dynamic');
-    if (dynamicInput) {
-      dynamicInput.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
-    }
-
-    // Lógica de Captura: Conectar el botón de Confirmar Pago
-    const dynamicBtn = document.getElementById('btn-submit-collect-dynamic');
-    if (dynamicBtn) {
-      dynamicBtn.addEventListener('click', async () => {
-        // Enlazar temporalmente las variables antiguas al nuevo DOM para usar la misma lógica de registerPayment
-        this.inputCollectAmount = document.getElementById('collect-amount-dynamic');
-        await this.registerPayment();
-      });
-    }
   },
 
   isRouteClosed() {
