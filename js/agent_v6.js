@@ -154,6 +154,7 @@ const agentModule = {
     this.btnCobroInvoice = document.getElementById('btn-cobro-invoice');
     this.btnCobroCarton = document.getElementById('btn-cobro-carton');
     this.btnCobroBack = document.getElementById('btn-cobro-back');
+    this.btnLiquidarCarton = document.getElementById('btn-liquidar-carton');
     
     // Modal Factura
     this.cobroInvoiceModal = document.getElementById('cobro-invoice-modal');
@@ -267,6 +268,19 @@ const agentModule = {
           this.cobroCartonState.style.setProperty('display', 'none', 'important');
           this.cobroInputState.style.setProperty('display', 'block', 'important');
         }
+      });
+    }
+    
+    if (this.btnLiquidarCarton) {
+      this.btnLiquidarCarton.addEventListener('click', () => {
+        alert('🎉 ¡Cartón Liquidado Exitosamente! Todas las 30 cuotas han sido cubiertas.');
+        if (this.cobroCartonState && this.cobroInputState) {
+          this.cobroCartonState.style.setProperty('display', 'none', 'important');
+          this.cobroInputState.style.setProperty('display', 'block', 'important');
+        }
+        if (this.inputCobroCedula) this.inputCobroCedula.value = '';
+        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'flex';
+        if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
       });
     }
 
@@ -736,6 +750,19 @@ const agentModule = {
           const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
           const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
           
+          // Lógica del Botón Liquidar Cartón
+          if (this.btnLiquidarCarton) {
+            if (Number(client.outstanding) <= 0) {
+              this.btnLiquidarCarton.disabled = false;
+              this.btnLiquidarCarton.style.cursor = 'pointer';
+              this.btnLiquidarCarton.style.opacity = '1';
+            } else {
+              this.btnLiquidarCarton.disabled = true;
+              this.btnLiquidarCarton.style.cursor = 'not-allowed';
+              this.btnLiquidarCarton.style.opacity = '0.5';
+            }
+          }
+
           window.BulaPayDB.renderOverdueDaysList(
             this.cobroOverdueDaysList, 
             dailyStatusList, 

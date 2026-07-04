@@ -638,9 +638,14 @@
                     </div>
                   </div>
 
-                  <button type="button" class="btn btn-secondary" id="btn-cobro-back" style="width: 100%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer;">
-                    ⬅️ Volver Atrás
-                  </button>
+                  <div style="display: flex; gap: 0.5rem; width: 100%;">
+                    <button type="button" class="btn btn-secondary" id="btn-cobro-back" style="flex: 1; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer;">
+                      ⬅️ Volver
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btn-liquidar-carton" disabled style="flex: 1; padding: 0.8rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 10px; cursor: not-allowed; opacity: 0.5; box-shadow: 0 4px 6px rgba(16,185,129,0.2);">
+                      ✅ Liquidar Cartón
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1106,7 +1111,7 @@
   <script src="js/db.js?v=7"></script>
   <script src="js/auth.js?v=5"></script>
   <script src="js/supervisor.js?v=5"></script>
-  <script src="js/agent_v6.js?v=13"></script>
+  <script src="js/agent_v6.js?v=14"></script>
   <script src="js/customer.js?v=5"></script>
   <!-- Controlador Principal -->
   <script src="js/app.js"></script>
