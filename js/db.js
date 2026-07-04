@@ -887,34 +887,38 @@ const db = {
     if (!client) return [];
     
     const startDate = new Date(client.created_at || Date.now());
-    const today = new Date();
+    const todayZero = new Date();
+    todayZero.setHours(0,0,0,0);
     
-    const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    
-    const diffTime = todayZero.getTime() - startZero.getTime();
-    const diffDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
-    
-    const paymentDates = new Set();
-    payments.forEach(p => {
-      if (p.amount > 0 && p.status !== 'No Pago') {
-        paymentDates.add(p.date);
-      }
-    });
+    // Mapear pagos por número de cuota (concordancia exacta con el saldo pendiente)
+    const paidInstallments = new Set();
+    if (payments) {
+      payments.forEach(p => {
+        if (p.amount > 0 && p.status !== 'No Pago') {
+          paidInstallments.add(Number(p.installmentNumber));
+        }
+      });
+    }
 
     const dailyStatus = [];
+    const totalInstallments = client.installmentsCount || 30; // Mostrar todo el cartón
     
-    for (let d = 0; d < diffDays; d++) {
-      const currentDayDate = new Date(startZero);
-      currentDayDate.setDate(startZero.getDate() + d);
-      const dayStr = currentDayDate.toISOString().split('T')[0];
+    let validDaysCounter = 0;
+    let calendarDaysOffset = 0;
+    
+    while (validDaysCounter < totalInstallments) {
+      const currentDayDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      currentDayDate.setDate(currentDayDate.getDate() + calendarDaysOffset);
       
       const isSunday = currentDayDate.getDay() === 0;
-      if (isSunday) continue;
+      calendarDaysOffset++;
       
-      const dayNum = d + 1;
-      const hasPaid = paymentDates.has(dayStr);
+      if (isSunday) continue; // Saltar domingos en el calendario
       
+      const dayNum = validDaysCounter + 1; // Cuota 1, 2, 3...
+      const hasPaid = paidInstallments.has(dayNum);
+      
+      const dayStr = currentDayDate.toISOString().split('T')[0];
       const isPastDay = currentDayDate < todayZero;
       const isOverdue = isPastDay && !hasPaid;
       
@@ -925,6 +929,8 @@ const db = {
         hasPaid: hasPaid,
         isOverdue: isOverdue
       });
+      
+      validDaysCounter++;
     }
     
     return dailyStatus;
