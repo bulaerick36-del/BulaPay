@@ -134,7 +134,7 @@ const agentModule = {
     this.panelRegister = document.getElementById('panel-agent-register');
     
     // Búsqueda
-    this.inputSearchCedula = document.getElementById('agent-search-cedula');
+    this.inputSearchCedula = document.getElementById('cobrar-search-input');
     this.btnSearch = document.getElementById('btn-agent-search');
     this.searchPlaceholder = document.getElementById('agent-search-placeholder');
     this.searchResults = document.getElementById('agent-search-results');
@@ -237,7 +237,7 @@ const agentModule = {
     });
 
     // Búsqueda Rápida (Header)
-    const inputQuickSearch = document.getElementById('quick-agent-search');
+    const inputQuickSearch = document.getElementById('header-search-input');
     const btnQuickSearch = document.getElementById('btn-quick-search');
     const executeQuickSearch = () => {
       if (!inputQuickSearch) return;
@@ -1383,7 +1383,7 @@ const agentModule = {
             if (modal) modal.style.display = 'none';
             
             // Llenar el input y disparar la búsqueda
-            const input = document.getElementById('agent-search-cedula');
+            const input = document.getElementById('cobrar-search-input');
             if (input) {
               input.value = cedula;
               const searchBtn = document.getElementById('btn-agent-search');

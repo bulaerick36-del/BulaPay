@@ -551,7 +551,7 @@
                 <span class="light-dot" id="agent-tracking-dot" style="width: 7px; height: 7px; border-radius: 50%; background-color: var(--color-rojo); display: inline-block;"></span>
               </button>
               <div class="quick-search-wrapper" style="display: flex; align-items: center; background: var(--bg-secondary); border-radius: 6px; padding: 0.2rem 0.5rem; border: 1px solid var(--border-color); margin-left: 0.5rem; min-width: 100px;">
-                <input type="number" id="quick-agent-search" placeholder="Cédula..." style="background: transparent; border: none; color: var(--text-primary); font-size: 0.75rem; width: 70px; outline: none;">
+                <input type="number" id="header-search-input" placeholder="Cédula..." style="background: transparent; border: none; color: var(--text-primary); font-size: 0.75rem; width: 70px; outline: none;">
                 <button id="btn-quick-search" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary); padding: 0; display: flex; align-items: center;">🔍</button>
               </div>
             </div>
@@ -583,7 +583,7 @@
                   Consultar Cédula del Cliente
                 </label>
                 <div class="search-input-wrapper">
-                  <input type="number" id="agent-search-cedula" placeholder="Ingresar Cédula (Ej. 12345, 67890)">
+                  <input type="number" id="cobrar-search-input" placeholder="Ingresar Cédula (Ej. 12345, 67890)">
                   <button type="button" class="btn-search-icon" id="btn-agent-search">🔍</button>
                 </div>
               </div>
@@ -634,11 +634,11 @@
 
                 <!-- FORMULARIO DE RECAUDO RESTAURADO -->
                 <div class="form-group" style="margin-top: 1.5rem; margin-bottom: 1rem; border-top: 1px dashed var(--border-color); padding-top: 1rem;">
-                  <label for="collect-amount" style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">Monto a Cobrar ($)</label>
-                  <input type="number" id="collect-amount" placeholder="Ej. 10000" style="padding: 0.8rem; font-size: 1.2rem; font-weight: bold; width: 100%; border: 2px solid var(--border-color); border-radius: 8px; background-color: var(--bg-primary); color: var(--text-primary); text-align: center;">
+                  <label for="collect-amount" style="font-size: 0.75rem; font-weight: 800; color: var(--text-primary); display: block; margin-bottom: 0.5rem; text-transform: uppercase;">Monto a Cobrar ($)</label>
+                  <input type="number" id="collect-amount" placeholder="Ej. 10000" style="padding: 0.75rem; font-size: 1.2rem; font-weight: 800; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; background-color: var(--bg-secondary); color: var(--text-primary); text-align: center;">
                 </div>
                 
-                <button type="button" class="btn btn-primary" id="btn-submit-collect" style="width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: 800; margin-bottom: 1rem; background-color: var(--accent); color: var(--bg-primary); border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);">
+                <button type="button" class="btn btn-primary" id="btn-submit-collect" style="width: 100%; padding: 0.85rem; font-size: 1.05rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);">
                   💰 Registrar Pago
                 </button>
 
