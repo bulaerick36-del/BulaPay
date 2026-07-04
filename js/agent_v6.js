@@ -327,10 +327,11 @@ const agentModule = {
       const statusDiv = document.getElementById('global-search-status');
       const resultsDiv = document.getElementById('global-search-results');
       const nameEl = document.getElementById('global-search-name');
+      const cedulaEl = document.getElementById('global-search-cedula');
       const phoneEl = document.getElementById('global-search-phone');
+      const cityEl = document.getElementById('global-search-city');
+      const addressEl = document.getElementById('global-search-address');
       const outEl = document.getElementById('global-search-outstanding');
-      const trafficLight = document.getElementById('global-search-traffic-light');
-      const riskEl = document.getElementById('global-search-risk-status');
       const btnClose = document.getElementById('btn-close-global-search');
       
       if (!modal) return;
@@ -351,38 +352,15 @@ const agentModule = {
           return;
         }
         
-        // Calcular riesgo dinámico
-        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
-        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
-        
-        if (Number(client.outstanding) === 0) {
-          client.risk = 'Verde';
-        } else if (overdueCount >= 3) {
-          client.risk = 'Rojo';
-        } else if (overdueCount > 0) {
-          client.risk = 'Amarillo';
-        } else {
-          client.risk = 'Verde';
-        }
-        
         statusDiv.style.display = 'none';
         resultsDiv.style.display = 'flex';
         
         nameEl.textContent = client.name;
-        phoneEl.textContent = client.phone || 'No registra';
+        cedulaEl.textContent = client.cedula;
+        phoneEl.textContent = client.phone || 'N/A';
+        cityEl.textContent = client.city || 'N/A';
+        addressEl.textContent = client.address || 'N/A';
         outEl.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
-        
-        if (client.risk === 'Rojo') {
-          trafficLight.className = 'traffic-light-header rojo';
-          riskEl.textContent = '🔴 ROJO (Alto Riesgo)';
-        } else if (client.risk === 'Amarillo') {
-          trafficLight.className = 'traffic-light-header amarillo';
-          riskEl.textContent = '🟡 AMARILLO (Riesgo Medio)';
-        } else {
-          trafficLight.className = 'traffic-light-header verde';
-          riskEl.textContent = '🟢 VERDE (Buen Cliente)';
-        }
       } catch (err) {
         console.error(err);
         statusDiv.textContent = '❌ Error al consultar Supabase.';

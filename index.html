@@ -1120,15 +1120,27 @@
         <!-- Contenedor de Resultados (Oculto inicialmente) -->
         <div id="global-search-results" style="display: none; flex-direction: column; gap: 1rem;">
           
-          <div style="text-align: center;">
-            <div id="global-search-traffic-light" class="traffic-light-header" style="margin: 0 auto 1rem auto;">
-              <div id="global-search-risk-status" style="font-weight: 800; font-size: 0.8rem; letter-spacing: 0.5px;">🟢 VERDE</div>
-            </div>
-            <h2 id="global-search-name" style="margin: 0; font-size: 1.2rem; color: var(--text-primary); line-height: 1.2;">-</h2>
-            <p id="global-search-phone" style="margin: 0.25rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">-</p>
+          <div style="text-align: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+            <h2 id="global-search-name" style="margin: 0; font-size: 1.25rem; color: var(--text-primary); line-height: 1.2;">-</h2>
+            <p id="global-search-cedula" style="margin: 0.25rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem; font-family: monospace;">-</p>
           </div>
 
-          <div style="background-color: var(--bg-secondary); border-radius: 12px; padding: 1.25rem; text-align: center; border: 1px solid var(--border-color);">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
+            <div>
+              <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.15rem;">Teléfono</span>
+              <span id="global-search-phone" style="color: var(--text-primary);">-</span>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.15rem;">Ciudad</span>
+              <span id="global-search-city" style="color: var(--text-primary);">-</span>
+            </div>
+            <div style="grid-column: span 2;">
+              <span style="color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.15rem;">Dirección</span>
+              <span id="global-search-address" style="color: var(--text-primary);">-</span>
+            </div>
+          </div>
+
+          <div style="background-color: var(--bg-secondary); border-radius: 12px; padding: 1.25rem; text-align: center; border: 1px solid var(--border-color); margin-top: 0.5rem;">
             <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Saldo Pendiente</p>
             <p id="global-search-outstanding" style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: 800; color: var(--color-rojo); letter-spacing: -1px;">$0</p>
           </div>
@@ -1155,7 +1167,7 @@
   <script src="js/db.js?v=8"></script>
   <script src="js/auth.js?v=5"></script>
   <script src="js/supervisor.js?v=5"></script>
-  <script src="js/agent_v6.js?v=17"></script>
+  <script src="js/agent_v6.js?v=18"></script>
   <script src="js/customer.js?v=5"></script>
   <!-- Controlador Principal -->
   <script src="js/app.js"></script>
