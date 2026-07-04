@@ -631,8 +631,11 @@
                     <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: #6c757d; display: inline-block;"></span> Pendiente</span>
                   </div>
 
-                  <div id="cobro-overdue-days-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem;">
-                    <!-- Se renderiza dinámicamente -->
+                  <!-- Wrapper para proteger el estado principal de las modificaciones de db.js -->
+                  <div id="carton-inner-wrapper" style="width: 100%;">
+                    <div id="cobro-overdue-days-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem;">
+                      <!-- Se renderiza dinámicamente -->
+                    </div>
                   </div>
 
                   <button type="button" class="btn btn-secondary" id="btn-cobro-back" style="width: 100%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer;">
@@ -1103,7 +1106,7 @@
   <script src="js/db.js?v=6"></script>
   <script src="js/auth.js?v=5"></script>
   <script src="js/supervisor.js?v=5"></script>
-  <script src="js/agent_v6.js?v=11"></script>
+  <script src="js/agent_v6.js?v=12"></script>
   <script src="js/customer.js?v=5"></script>
   <!-- Controlador Principal -->
   <script src="js/app.js"></script>
