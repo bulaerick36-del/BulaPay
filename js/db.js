@@ -930,7 +930,7 @@ const db = {
     return dailyStatus;
   },
 
-  renderOverdueDaysList(container, dailyStatus) {
+  renderOverdueDaysList(container, dailyStatus, onClickCallback = null) {
     if (!container) return;
     container.innerHTML = '';
     
@@ -953,6 +953,14 @@ const db = {
       badge.style.minWidth = '60px';
       badge.style.border = '1px solid';
       badge.style.textAlign = 'center';
+      
+      if (onClickCallback && status.isOverdue) {
+        badge.style.cursor = 'pointer';
+        badge.title = 'Clic para marcar como pagado';
+        badge.addEventListener('click', () => {
+          onClickCallback(status);
+        });
+      }
       
       const dateLabel = status.dateStr.slice(5); // MM-DD
       

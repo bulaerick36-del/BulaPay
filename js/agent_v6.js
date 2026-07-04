@@ -144,7 +144,24 @@ const agentModule = {
     this.cobroClientName = document.getElementById('cobro-client-name');
     this.cobroClientOutstanding = document.getElementById('cobro-client-outstanding');
     this.inputCobroAmount = document.getElementById('input-cobro-amount');
-    this.btnCobroSubmit = document.getElementById('btn-cobro-submit');
+    
+    // Contenedores Flujo A y Flujo B
+    this.cobroInputState = document.getElementById('cobro-input-state');
+    this.cobroCartonState = document.getElementById('cobro-carton-state');
+    this.cobroOverdueDaysList = document.getElementById('cobro-overdue-days-list');
+    
+    // Botones
+    this.btnCobroInvoice = document.getElementById('btn-cobro-invoice');
+    this.btnCobroCarton = document.getElementById('btn-cobro-carton');
+    this.btnCobroBack = document.getElementById('btn-cobro-back');
+    
+    // Modal Factura
+    this.cobroInvoiceModal = document.getElementById('cobro-invoice-modal');
+    this.invoiceClientName = document.getElementById('invoice-client-name');
+    this.invoiceAmount = document.getElementById('invoice-amount');
+    this.invoiceNewBalance = document.getElementById('invoice-new-balance');
+    this.btnInvoiceConfirm = document.getElementById('btn-invoice-confirm');
+    this.btnInvoiceCancel = document.getElementById('btn-invoice-cancel');
 
     // Búsqueda Historial
     this.inputHistoryCedula = document.getElementById('agent-history-cedula');
@@ -232,9 +249,38 @@ const agentModule = {
       });
     }
 
-    // Botón Confirmar Pago Aislado
-    if (this.btnCobroSubmit) {
-      this.btnCobroSubmit.addEventListener('click', () => this.handleIsolatedPayment());
+    // Botones Flujo Doble (Factura y Cartón)
+    if (this.btnCobroInvoice) {
+      this.btnCobroInvoice.addEventListener('click', () => this.handleInvoiceRequest());
+    }
+    if (this.btnCobroCarton) {
+      this.btnCobroCarton.addEventListener('click', () => {
+        if (this.cobroInputState && this.cobroCartonState) {
+          this.cobroInputState.style.display = 'none';
+          this.cobroCartonState.style.display = 'block';
+        }
+      });
+    }
+    if (this.btnCobroBack) {
+      this.btnCobroBack.addEventListener('click', () => {
+        if (this.cobroInputState && this.cobroCartonState) {
+          this.cobroCartonState.style.display = 'none';
+          this.cobroInputState.style.display = 'block';
+        }
+      });
+    }
+
+    // Botones Modal Factura
+    if (this.btnInvoiceConfirm) {
+      this.btnInvoiceConfirm.addEventListener('click', () => {
+        this.cobroInvoiceModal.style.display = 'none';
+        this.executePaymentTransaction();
+      });
+    }
+    if (this.btnInvoiceCancel) {
+      this.btnInvoiceCancel.addEventListener('click', () => {
+        this.cobroInvoiceModal.style.display = 'none';
+      });
     }
 
     // Historial
@@ -669,15 +715,35 @@ const agentModule = {
       
       this.currentClient = client;
       
-      // Mostrar la tarjeta minimalista aislada
+      // Mostrar la tarjeta minimalista aislada y asegurar estado inicial
       if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
       if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'block';
+      if (this.cobroInputState && this.cobroCartonState) {
+        this.cobroInputState.style.display = 'block';
+        this.cobroCartonState.style.display = 'none';
+      }
       
       if (this.cobroClientName) this.cobroClientName.textContent = client.name;
       if (this.cobroClientOutstanding) this.cobroClientOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
       
       if (this.inputCobroAmount) {
         this.inputCobroAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
+      }
+
+      // Preparar el Cartón Interactivo (Flujo B)
+      if (this.cobroOverdueDaysList) {
+        try {
+          const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+          const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+          
+          window.BulaPayDB.renderOverdueDaysList(
+            this.cobroOverdueDaysList, 
+            dailyStatusList, 
+            (status) => this.handleCartonPayment(status) // Callback interactivo solo aquí
+          );
+        } catch (e) {
+          console.error("Error al preparar cartón interactivo:", e);
+        }
       }
       
     } catch (err) {
@@ -697,7 +763,7 @@ const agentModule = {
     }
   },
 
-  async handleIsolatedPayment() {
+  handleInvoiceRequest() {
     if (this.isRouteClosed()) {
       alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
       return;
@@ -710,17 +776,30 @@ const agentModule = {
       return;
     }
 
+    // Regla de Seguridad 1: Prevención de Saldos Negativos
     if (amount > Number(this.currentClient.outstanding)) {
-      alert(`⚠️ El monto ingresado supera el saldo pendiente de $${Number(this.currentClient.outstanding).toLocaleString('es-CO')}`);
+      alert('Error: El pago supera la deuda actual');
       return;
     }
 
+    // Abrir Modal de Factura
+    if (this.cobroInvoiceModal) {
+      this.invoiceClientName.textContent = this.currentClient.name;
+      this.invoiceAmount.textContent = `$${amount.toLocaleString('es-CO')}`;
+      
+      const newBalance = Number(this.currentClient.outstanding) - amount;
+      this.invoiceNewBalance.textContent = `$${newBalance.toLocaleString('es-CO')}`;
+      
+      this.cobroInvoiceModal.style.display = 'flex';
+    }
+  },
+
+  async executePaymentTransaction() {
+    const amount = parseFloat(this.inputCobroAmount.value);
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
-      
-      // Validar si ya pagó hoy
       const todayStr = this.getLocalDateString();
       if (payments.some(p => p.date === todayStr)) {
         alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
@@ -731,37 +810,84 @@ const agentModule = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: payments.length + 1,
         amount: amount,
-        date: this.getLocalDateString(),
+        date: todayStr,
         agentName: currentUser.name,
         status: amount >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado'
       };
 
-      // Registrar en base de datos (esto actualiza el saldo automáticamente)
       await window.BulaPayDB.addPayment(newPayment);
-
-      // Reportar ubicación
       this.captureAndSendLocation();
 
-      // Notificación de éxito
       alert('✅ Pago registrado con éxito.');
 
-      // Re-buscar el cliente para actualizar pantalla de inmediato
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       this.currentClient = updatedClient;
       
-      // Actualizar saldo mostrado
-      if (this.cobroClientOutstanding) {
-        this.cobroClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
-      }
-      
-      // Limpiar input para siguiente cobro
       if (this.inputCobroAmount) {
         this.inputCobroAmount.value = '';
       }
       
+      await this.searchClient(); // Refrescar vista
+      
     } catch (e) {
       console.error(e);
       alert('❌ Error al registrar el pago de la cuota.');
+    }
+  },
+
+  async handleCartonPayment(status) {
+    if (this.isRouteClosed()) {
+      alert('Operación denegada: La ruta se encuentra cerrada.');
+      return;
+    }
+    if (!this.currentClient) return;
+    
+    // Confirmación nativa
+    const dateLabel = status.dateStr.slice(5);
+    const isConfirmed = confirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`);
+    if (!isConfirmed) return;
+
+    // Regla de Seguridad 2: Descontar el valor de la cuota
+    const amountToPay = Math.min(Number(this.currentClient.installmentAmount), Number(this.currentClient.outstanding));
+    
+    // Regla de Seguridad 1: Prevenir saldo negativo (aunque Math.min lo cubre, validamos por si acaso)
+    if (amountToPay > Number(this.currentClient.outstanding)) {
+      alert('Error: El pago supera la deuda actual');
+      return;
+    }
+
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+
+    try {
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      
+      const newPayment = {
+        clientCedula: this.currentClient.cedula,
+        installmentNumber: payments.length + 1,
+        amount: amountToPay,
+        date: status.dateStr, // Insertar con la fecha atrasada específica
+        agentName: currentUser.name,
+        status: 'Pagado'
+      };
+
+      await window.BulaPayDB.addPayment(newPayment);
+      this.captureAndSendLocation();
+
+      alert(`✅ Día ${status.dayNumber} registrado como pagado.`);
+
+      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      this.currentClient = updatedClient;
+      
+      await this.searchClient(); // Refresca y actualiza cartón automáticamente
+      
+    } catch (e) {
+      console.error(e);
+      if (e.message && e.message.includes('transacción diaria por cliente')) {
+        // En caso de que el sistema antifraude de un solo pago por fecha bloquee
+        alert('❌ No se puede registrar: Ya existe un pago registrado para esa fecha específica.');
+      } else {
+        alert('❌ Error al registrar el pago retroactivo.');
+      }
     }
   },
 

@@ -595,21 +595,50 @@
 
               <!-- CAJA REGISTRADORA (VISTA AISLADA) -->
               <div class="client-result-container" id="cobro-action-container" style="display: none; padding: 1.5rem; background-color: var(--bg-primary); border-radius: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-md); margin-bottom: 1.25rem;">
-                <h4 id="cobro-client-name" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); text-align: center; margin-bottom: 0.5rem; text-transform: uppercase;">Nombre del Cliente</h4>
                 
-                <div style="text-align: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px dashed var(--border-color);">
-                  <span style="font-size: 0.85rem; color: var(--text-secondary); display: block; font-weight: 600; margin-bottom: 0.25rem;">Saldo Pendiente</span>
-                  <span id="cobro-client-outstanding" style="font-size: 2rem; font-weight: 900; color: var(--color-rojo); display: block; letter-spacing: -0.5px;">$0</span>
+                <!-- ESTADO INICIAL: Input Numérico -->
+                <div id="cobro-input-state">
+                  <h4 id="cobro-client-name" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); text-align: center; margin-bottom: 0.5rem; text-transform: uppercase;">Nombre del Cliente</h4>
+                  
+                  <div style="text-align: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px dashed var(--border-color);">
+                    <span style="font-size: 0.85rem; color: var(--text-secondary); display: block; font-weight: 600; margin-bottom: 0.25rem;">Saldo Pendiente</span>
+                    <span id="cobro-client-outstanding" style="font-size: 2rem; font-weight: 900; color: var(--color-rojo); display: block; letter-spacing: -0.5px;">$0</span>
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label for="input-cobro-amount" style="font-size: 0.75rem; font-weight: 800; color: var(--text-primary); text-transform: uppercase; margin-bottom: 0.5rem; display: block; text-align: center;">Monto a Recibir ($)</label>
+                    <input type="number" id="input-cobro-amount" placeholder="Ej. 10000" style="padding: 1rem; font-size: 1.5rem; font-weight: 900; width: 100%; border: 2px solid var(--border-color); border-radius: 10px; background-color: var(--bg-secondary); color: var(--text-primary); text-align: center; outline: none; transition: var(--transition-smooth);">
+                  </div>
+                  
+                  <div style="display: flex; gap: 0.5rem; flex-direction: column;">
+                    <button type="button" class="btn btn-primary" id="btn-cobro-invoice" style="width: 100%; padding: 1rem; font-size: 1.15rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 10px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); cursor: pointer; transition: transform 0.1s;">
+                      🧾 Generar Factura
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="btn-cobro-carton" style="width: 100%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer; transition: background 0.2s;">
+                      🗓️ Pagar en Cartón
+                    </button>
+                  </div>
                 </div>
 
-                <div class="form-group" style="margin-bottom: 1rem;">
-                  <label for="input-cobro-amount" style="font-size: 0.75rem; font-weight: 800; color: var(--text-primary); text-transform: uppercase; margin-bottom: 0.5rem; display: block; text-align: center;">Monto a Recibir ($)</label>
-                  <input type="number" id="input-cobro-amount" placeholder="Ej. 10000" style="padding: 1rem; font-size: 1.5rem; font-weight: 900; width: 100%; border: 2px solid var(--border-color); border-radius: 10px; background-color: var(--bg-secondary); color: var(--text-primary); text-align: center; outline: none; transition: var(--transition-smooth);">
+                <!-- ESTADO SECUNDARIO: Calendario de Pagos (Flujo B) -->
+                <div id="cobro-carton-state" style="display: none;">
+                  <h4 style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); text-align: center; margin-bottom: 1rem; text-transform: uppercase;">Seleccionar Día a Pagar</h4>
+                  
+                  <!-- Instrucciones / Convenciones -->
+                  <div style="display: flex; justify-content: space-around; font-size: 0.65rem; margin-bottom: 1.5rem; padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: 6px;">
+                    <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-verde); display: inline-block;"></span> Pagado</span>
+                    <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-rojo); display: inline-block;"></span> Atrasado</span>
+                    <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: #6c757d; display: inline-block;"></span> Pendiente</span>
+                  </div>
+
+                  <div id="cobro-overdue-days-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem;">
+                    <!-- Se renderiza dinámicamente -->
+                  </div>
+
+                  <button type="button" class="btn btn-secondary" id="btn-cobro-back" style="width: 100%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer;">
+                    ⬅️ Volver Atrás
+                  </button>
                 </div>
-                
-                <button type="button" class="btn btn-primary" id="btn-cobro-submit" style="width: 100%; padding: 1rem; font-size: 1.15rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 10px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); cursor: pointer; transition: transform 0.1s;">
-                  💰 Registrar Pago
-                </button>
               </div>
 
               <!-- Mensaje por defecto cuando no hay búsqueda -->
@@ -820,6 +849,40 @@
                 <!-- Dinámico en JS -->
               </div>
 
+            </div>
+          </div>
+
+          <!-- MODAL DE FACTURA (FLUJO A) -->
+          <div class="overlay-modal" id="cobro-invoice-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.9); z-index: 250;">
+            <div style="background-color: var(--bg-primary); border-radius: 12px; width: 90%; max-width: 340px; padding: 2rem; display: flex; flex-direction: column; align-items: stretch; border: 1px solid var(--border-color); box-shadow: var(--shadow-lg);">
+              
+              <div style="text-align: center; margin-bottom: 1.5rem; border-bottom: 2px dashed var(--border-color); padding-bottom: 1.5rem;">
+                <h3 style="margin: 0; font-size: 1.25rem; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--text-primary);">TICKET DE COBRO</h3>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.7;">BulaPay Sistema de Recaudos</span>
+              </div>
+              
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600;">Cliente:</span>
+                <span id="invoice-client-name" style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); text-align: right; max-width: 60%; word-break: break-word;">-</span>
+              </div>
+              
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600;">Monto a Pagar:</span>
+                <span id="invoice-amount" style="font-size: 1.1rem; font-weight: 900; color: var(--text-primary);">$-</span>
+              </div>
+              
+              <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; margin-bottom: 2rem; padding-top: 1rem; border-top: 1px dashed rgba(255,255,255,0.1);">
+                <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600;">Nuevo Saldo:</span>
+                <span id="invoice-new-balance" style="font-size: 1.25rem; font-weight: 900; color: var(--color-rojo);">$-</span>
+              </div>
+              
+              <button type="button" id="btn-invoice-confirm" class="btn btn-primary" style="padding: 1rem; font-size: 1.1rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(16,185,129,0.3); margin-bottom: 0.75rem;">
+                ✅ Confirmar y Pagar
+              </button>
+              
+              <button type="button" id="btn-invoice-cancel" class="btn btn-secondary" style="padding: 0.75rem; font-size: 0.9rem; font-weight: 700; background: transparent; color: var(--text-secondary); border: none; cursor: pointer;">
+                Cancelar
+              </button>
             </div>
           </div>
 
@@ -1037,10 +1100,10 @@
 
   <!-- MODULOS JAVASCRIPT DE BulaPay -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/db.js?v=5"></script>
+  <script src="js/db.js?v=6"></script>
   <script src="js/auth.js?v=5"></script>
   <script src="js/supervisor.js?v=5"></script>
-  <script src="js/agent_v6.js?v=8"></script>
+  <script src="js/agent_v6.js?v=9"></script>
   <script src="js/customer.js?v=5"></script>
   <!-- Controlador Principal -->
   <script src="js/app.js"></script>
