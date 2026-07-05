@@ -1599,7 +1599,7 @@ const agentModule = {
       }
 
       const currentUser = window.BulaPayDB.getCurrentUser();
-      const routeId = currentUser && currentUser.routeId ? currentUser.routeId : 'route_1';
+      const routeId = currentUser && currentUser.routeId ? currentUser.routeId : null;
 
       const payload = {
         cedula,
