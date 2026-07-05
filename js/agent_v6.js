@@ -521,17 +521,27 @@ const agentModule = {
               }
             };
           }
+          
+          // Asegurar que la pestaña de Registro esté visible para el Agente Independiente
+          if (this.tabRegister) {
+            this.tabRegister.style.display = 'block';
+          }
         } else {
           agentRouteElement.textContent = myRoute 
             ? `Ruta: ${myRoute.name} | Capital: $${Number(myRoute.capital).toLocaleString('es-CO')}` 
             : 'Ruta no asignada';
             
-          // Bloquear interacción
+          // Bloquear interacción del panel privado
           if (profileTrigger) {
             profileTrigger.style.cursor = 'default';
             profileTrigger.onmouseover = null;
             profileTrigger.onmouseout = null;
             profileTrigger.onclick = null;
+          }
+          
+          // Ocultar pestaña de Registro de Clientes para Agentes de Ruta
+          if (this.tabRegister) {
+            this.tabRegister.style.display = 'none';
           }
         }
       }
