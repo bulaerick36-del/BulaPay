@@ -612,6 +612,49 @@ const agentModule = {
         }
       };
     }
+    
+    // 1.5 Cambiar Contraseña
+    const btnUpdatePassword = document.getElementById('btn-update-private-password');
+    const inputCurrentPassword = document.getElementById('private-profile-current-password');
+    const inputNewPassword = document.getElementById('private-profile-new-password');
+    
+    if (btnUpdatePassword && inputNewPassword) {
+      btnUpdatePassword.onclick = async () => {
+        const currentPass = inputCurrentPassword ? inputCurrentPassword.value : '';
+        const newPass = inputNewPassword.value;
+        
+        if (newPass.length < 6) {
+          alert('❌ La nueva contraseña debe tener al menos 6 caracteres para ser segura.');
+          return;
+        }
+        
+        if (currentUser.password && currentPass !== currentUser.password) {
+          alert('❌ La contraseña actual es incorrecta.');
+          return;
+        }
+        
+        const originalText = btnUpdatePassword.textContent;
+        btnUpdatePassword.textContent = 'Actualizando...';
+        btnUpdatePassword.disabled = true;
+        
+        try {
+          await window.BulaPayDB.updateUserPassword(currentUser.username, newPass);
+          
+          currentUser.password = newPass; 
+          localStorage.setItem('bulapay_user', JSON.stringify(currentUser));
+          
+          alert('✅ ¡Contraseña actualizada correctamente!');
+          if (inputCurrentPassword) inputCurrentPassword.value = '';
+          inputNewPassword.value = '';
+        } catch (error) {
+          console.error(error);
+          alert('❌ Error al actualizar: ' + error.message);
+        } finally {
+          btnUpdatePassword.textContent = originalText;
+          btnUpdatePassword.disabled = false;
+        }
+      };
+    }
 
     // 2. Dar vida al Dashboard 'Mi Negocio' (Métrica de Capital)
     const capitalEl = document.getElementById('private-panel-capital');

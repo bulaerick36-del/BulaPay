@@ -779,6 +779,33 @@ const db = {
     return data && data[0] ? data[0] : null;
   },
 
+  async updateUserPassword(username, newPassword) {
+    const supabase = await initSupabase();
+    
+    // 1. Intentar actualizar en Supabase Auth
+    try {
+      const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+      if (authError) {
+        console.warn("No se pudo actualizar Supabase Auth (probablemente no hay sesión de Auth activa):", authError.message);
+        // Si el usuario usa Supabase Auth estrictamente, deberíamos lanzar el error, pero 
+        // como BulaPay también tiene una tabla custom, dejamos que continúe a actualizarla.
+      }
+    } catch (e) {
+      console.warn("Fallo al actualizar en Supabase Auth:", e);
+    }
+    
+    // 2. Actualizar en la tabla personalizada 'users' de BulaPay
+    const { error: dbError } = await supabase
+      .from('users')
+      .update({ password: newPassword })
+      .eq('username', username.toLowerCase());
+      
+    if (dbError) {
+      console.error(`Error al actualizar contraseña de usuario "${username}":`, dbError);
+      throw new Error('No se pudo actualizar la contraseña en la base de datos.');
+    }
+  },
+
   async updateUserLocation(username, lat, lng) {
     const supabase = await initSupabase();
     const { error } = await supabase
