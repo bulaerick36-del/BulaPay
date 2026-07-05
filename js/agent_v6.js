@@ -1129,9 +1129,9 @@ const agentModule = {
             const hasOverdue = dailyStatusList.some(s => s.isOverdue);
             const todayStr = this.getLocalDateString();
             const paidToday = payments.some(p => p.date === todayStr);
-            const cuotaPendiente = dailyStatusList.find(c => !c.hasPaid && !c.isOverdue);
+            const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
 
-            if (!cuotaPendiente || (!hasOverdue && paidToday)) {
+            if (!cuotaDeHoy || cuotaDeHoy.hasPaid || (!hasOverdue && paidToday)) {
               this.btnCobroInvoice.disabled = true;
               this.btnCobroInvoice.style.cursor = 'not-allowed';
               this.btnCobroInvoice.style.opacity = '0.5';
@@ -1215,15 +1215,22 @@ const agentModule = {
 
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
-      const cuotaActual = dailyStatusList.find(c => !c.hasPaid && !c.isOverdue);
+      
+      const todayStr = this.getLocalDateString();
+      const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
 
-      if (!cuotaActual) {
-        alert('El día de hoy ya está pagado.');
+      if (!cuotaDeHoy) {
+        alert('No hay cuota programada para la fecha de hoy.');
+        return;
+      }
+
+      if (cuotaDeHoy.hasPaid) {
+        alert('La cuota de hoy ya fue registrada. NO se permiten adelantar días a futuro con este botón.');
         return;
       }
       
       const tieneAtrasos = dailyStatusList.some(s => s.isOverdue);
-      const todayStr = this.getLocalDateString();
+      // const todayStr = this.getLocalDateString(); // ya está arriba
       if (!tieneAtrasos && payments.some(p => p.date === todayStr)) {
         alert('Precaución: El cliente está al día y ya registró un pago hoy. Por seguridad, solo se permite una transacción diaria para clientes al día.');
         return;
@@ -1232,7 +1239,7 @@ const agentModule = {
       // 3. Ejecución del pago apuntando a la cuota específica
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        installmentNumber: cuotaActual.dayNumber,
+        installmentNumber: cuotaDeHoy.dayNumber,
         amount: amount,
         date: todayStr,
         agentName: currentUser.name,
