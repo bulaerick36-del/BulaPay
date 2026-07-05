@@ -559,12 +559,11 @@ const agentModule = {
     const cedulaInput = document.getElementById('private-profile-cedula');
     const addressInput = document.getElementById('private-profile-address');
     const usernameInput = document.getElementById('private-profile-username');
-    
     if (nameInput) nameInput.value = currentUser.name || "";
-    if (phoneInput) phoneInput.value = currentUser.telefono || currentUser.phone || "";
-    if (emailInput) emailInput.value = currentUser.correo || currentUser.email || "";
+    if (phoneInput) phoneInput.value = currentUser.phone || "";
+    if (emailInput) emailInput.value = currentUser.email || "";
     if (cedulaInput) cedulaInput.value = currentUser.documentNumber || currentUser.id || "";
-    if (addressInput) addressInput.value = currentUser.direccion || currentUser.address || "";
+    if (addressInput) addressInput.value = currentUser.zone || "";
     if (usernameInput) usernameInput.value = currentUser.username || "";
 
     const btnSaveProfile = document.getElementById('btn-save-private-profile');
@@ -586,11 +585,8 @@ const agentModule = {
           const profileUpdates = {
             name: newName,
             phone: newPhone,
-            telefono: newPhone,
             email: newEmail,
-            correo: newEmail,
-            direccion: newAddress,
-            address: newAddress
+            zone: newAddress
           };
           
           await window.BulaPayDB.updateUserProfile(currentUser.username, profileUpdates);
