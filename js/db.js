@@ -924,7 +924,10 @@ const db = {
       const isSunday = currentDayDate.getDay() === 0;
       calendarDaysOffset++;
       
-      if (isSunday) continue; // Saltar domingos en el calendario
+      const currentUser = this.getCurrentUser();
+      const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
+      
+      if (isSunday && !isIndependent) continue; // Saltar domingos excepto para Agentes Independientes
 
       
       const dayNum = validDaysCounter + 1; // Cuota 1, 2, 3...
