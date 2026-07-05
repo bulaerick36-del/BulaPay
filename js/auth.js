@@ -198,15 +198,13 @@ const authModule = {
     // Cerrar Sesión
     this.btnLogout.addEventListener('click', () => {
       window.BulaPayDB.logout();
-      this.userNavInfo.style.display = 'none';
       
-      // Resetear rol y aplicar tema por defecto
+      // Limpiar datos temporales de la sesión
       localStorage.removeItem('bulaRole');
-      if (typeof window.applyDynamicTheme === 'function') {
-        window.applyDynamicTheme();
-      }
       
-      window.app.router.navigate('auth');
+      // Forzar recarga completa de la página para limpiar TODO el estado del DOM (inputs, variables en memoria)
+      window.location.hash = '';
+      window.location.reload();
     });
 
     // Listener de Tipo de Cuenta en Registro
