@@ -1201,10 +1201,18 @@ const agentModule = {
   },
 
   async executePaymentTransaction() {
-    const amount = parseFloat(this.inputCobroAmount.value);
-    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+    if (this.isLoadingPayment) return;
+    this.isLoadingPayment = true;
+
+    if (this.btnCobroInvoice) {
+      this.btnCobroInvoice.disabled = true;
+      this.btnCobroInvoice.innerHTML = 'Procesando...';
+    }
 
     try {
+      const amount = parseFloat(this.inputCobroAmount.value);
+      const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
       const cuotaActual = dailyStatusList.find(c => !c.hasPaid && !c.isOverdue);
@@ -1244,7 +1252,7 @@ const agentModule = {
         this.inputCobroAmount.value = '';
       }
       
-      await this.searchClient(); // Recarga y repinta el cartón completo
+      await this.searchClient(); // Recarga y repinta el cartón completo ANTES del alert
 
       // Evaluar estado general del cliente para la alerta dinámica
       const allPayments = await window.BulaPayDB.getPaymentsByClient(updatedClient.cedula);
@@ -1258,8 +1266,15 @@ const agentModule = {
       }
       
     } catch (e) {
-      console.error(e);
-      alert('❌ Error al registrar el pago de la cuota.');
+      console.error("Error capturado en Confirmar Pago:", e);
+      alert('Error REAL: ' + (e.message || 'Fallo desconocido al registrar el pago.'));
+    } finally {
+      this.isLoadingPayment = false;
+      if (this.btnCobroInvoice) {
+        // searchClient() ya se encargó de evaluar si debe estar disabled o no.
+        // Pero restauramos el texto original
+        this.btnCobroInvoice.innerHTML = 'Confirmar Pago';
+      }
     }
   },
 
