@@ -1210,7 +1210,7 @@ const agentModule = {
       const cuotaActual = dailyStatusList.find(c => !c.hasPaid && !c.isOverdue);
 
       if (!cuotaActual) {
-        alert('No hay cuotas pendientes para cobrar.');
+        alert('El día de hoy ya está pagado.');
         return;
       }
       
