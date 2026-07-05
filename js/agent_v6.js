@@ -1239,8 +1239,8 @@ const agentModule = {
       
       // Evaluar estado general del cliente para la alerta dinámica
       const allPayments = await window.BulaPayDB.getPaymentsByClient(updatedClient.cedula);
-      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(updatedClient, allPayments);
-      const hasOverdue = dailyStatusList.some(s => s.isOverdue);
+      const updatedDailyStatusList = window.BulaPayDB.getDailyPaymentStatus(updatedClient, allPayments);
+      const hasOverdue = updatedDailyStatusList.some(s => s.isOverdue);
 
       if (hasOverdue) {
         alert('Pago exitoso. Recuerde que tiene unos días atrasados, recuerde ponerse al día.');
