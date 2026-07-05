@@ -553,7 +553,7 @@ const agentModule = {
     if (nameInput) nameInput.value = currentUser.name || '';
     if (phoneInput) phoneInput.value = currentUser.phone || '';
     if (emailInput) emailInput.value = currentUser.email || ''; 
-    if (cedulaInput) cedulaInput.value = currentUser.cedula || currentUser.username || '';
+    if (cedulaInput) cedulaInput.value = currentUser.documentNumber || currentUser.id || '';
     if (addressInput) addressInput.value = currentUser.address || currentUser.direccion || '';
     if (usernameInput) usernameInput.value = currentUser.username || '';
 
@@ -655,15 +655,14 @@ const agentModule = {
         
         try {
           const payments = await window.BulaPayDB.getPayments();
-          const now = new Date();
-          const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+          const todayStr = new Date().toISOString().split('T')[0];
           
           let totalCollected = 0;
           let totalLent = 0;
           
           // Cobrado hoy
           const todaysPayments = payments.filter(p => {
-             const isToday = p.date.startsWith(todayStr);
+             const isToday = p.date && p.date.startsWith(todayStr);
              const isMine = p.agent_id === currentUser.username;
              return isToday && isMine;
           });
@@ -680,9 +679,16 @@ const agentModule = {
           
           const onHand = totalCollected - totalLent;
           
-          elCollected.textContent = `$${totalCollected.toLocaleString('es-CO')}`;
-          elLent.textContent = `-$${totalLent.toLocaleString('es-CO')}`;
-          elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+          elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
+          elLent.textContent = `-$${Math.abs(totalLent).toLocaleString('es-CO')}`;
+          
+          if (onHand < 0) {
+            elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
+            elOnHand.style.color = 'var(--color-rojo)';
+          } else {
+            elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+            elOnHand.style.color = 'var(--text-primary)';
+          }
         } catch (e) {
           console.error(e);
           elCollected.textContent = 'Error';
@@ -714,10 +720,15 @@ const agentModule = {
             else if (overdueCount > 0) risk = 'Amarillo';
             
             if (risk === 'Rojo') {
+              const oldestUnpaid = overdueDays[0].date;
+              const diffTime = new Date() - new Date(oldestUnpaid);
+              let diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              if (diffDays < 0) diffDays = 0;
+              
               badClients.push({
                 name: client.name,
                 cedula: client.cedula,
-                overdueCount: overdueCount
+                overdueCount: diffDays
               });
             }
           }
