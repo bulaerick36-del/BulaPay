@@ -552,16 +552,16 @@ const agentModule = {
     
     if (nameInput) nameInput.value = currentUser.name || "";
     if (phoneInput) {
-      const p = currentUser.phone || "";
+      const p = String(currentUser.phone || "");
       phoneInput.value = p.includes("Tu teléfono") ? "" : p;
     }
     if (emailInput) {
-      const e = currentUser.email || "";
+      const e = String(currentUser.email || "");
       emailInput.value = e.includes("Tu correo") ? "" : e;
     }
     if (cedulaInput) cedulaInput.value = currentUser.documentNumber || currentUser.id || "";
     if (addressInput) {
-      const a = currentUser.address || currentUser.direccion || "";
+      const a = String(currentUser.address || currentUser.direccion || "");
       addressInput.value = a.includes("Tu dirección") ? "" : a;
     }
     if (usernameInput) usernameInput.value = currentUser.username || "";
@@ -732,7 +732,7 @@ const agentModule = {
             
             if (risk === 'Rojo') {
               let diffDays = 0;
-              const oldestUnpaid = overdueDays[0]?.date || client.fechaVencimiento;
+              const oldestUnpaid = (overdueDays.length > 0 ? overdueDays[0].date : null) || client.fechaVencimiento;
               
               if (oldestUnpaid) {
                 const diffTime = Math.abs(new Date() - new Date(oldestUnpaid));
