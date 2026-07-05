@@ -663,8 +663,8 @@ const agentModule = {
       capitalEl.textContent = 'Calculando...';
       try {
         const clients = await window.BulaPayDB.getClients();
-        // Filtrar clientes de este agente activo
-        agentClients = clients.filter(c => c.agent_id === currentUser.username && c.status !== 'liquidado');
+        // Filtrar clientes de este agente activo. Como el backend ya filtra por ruta/supervisor, tomamos todos los no liquidados.
+        agentClients = clients.filter(c => c.status !== 'liquidado');
         
         let totalCapital = 0;
         for (const client of agentClients) {
@@ -716,7 +716,7 @@ const agentModule = {
           // Cobrado hoy
           const todaysPayments = payments.filter(p => {
              const isToday = p.date && p.date.startsWith(todayStr);
-             const isMine = p.agent_id === currentUser.username;
+             const isMine = p.supervisor_id === currentUser.username || p.agentName === currentUser.name;
              return isToday && isMine;
           });
           totalCollected = todaysPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
@@ -725,8 +725,7 @@ const agentModule = {
           const clients = await window.BulaPayDB.getClients();
           const todaysClients = clients.filter(c => {
              const isToday = c.date && c.date.startsWith(todayStr);
-             const isMine = c.agent_id === currentUser.username;
-             return isToday && isMine;
+             return isToday;
           });
           totalLent = todaysClients.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
           
@@ -764,7 +763,7 @@ const agentModule = {
           const badClients = [];
           
           for (const client of agentClients) {
-            const clientPayments = payments.filter(p => p.cedula === client.cedula);
+            const clientPayments = payments.filter(p => String(p.clientCedula) === String(client.cedula));
             const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, clientPayments);
             const overdueDays = dailyStatus.filter(s => s.isOverdue);
             const overdueCount = overdueDays.length;
