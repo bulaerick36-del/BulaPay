@@ -929,14 +929,23 @@ const db = {
       const dayNum = validDaysCounter + 1; // Cuota 1, 2, 3...
       const hasPaid = paidInstallments.has(dayNum);
       
-      const dayStr = currentDayDate.toISOString().split('T')[0];
+      const year = currentDayDate.getFullYear();
+      const month = String(currentDayDate.getMonth() + 1).padStart(2, '0');
+      const day = String(currentDayDate.getDate()).padStart(2, '0');
+      const dayStr = `${year}-${month}-${day}`;
+      
       const isPastDay = currentDayDate < todayZero;
       const isOverdue = isPastDay && !hasPaid;
+      
+      const todayYear = todayZero.getFullYear();
+      const todayMonth = String(todayZero.getMonth() + 1).padStart(2, '0');
+      const todayDay = String(todayZero.getDate()).padStart(2, '0');
+      const todayStr = `${todayYear}-${todayMonth}-${todayDay}`;
       
       dailyStatus.push({
         dayNumber: dayNum,
         dateStr: dayStr,
-        isToday: dayStr === todayZero.toISOString().split('T')[0],
+        isToday: dayStr === todayStr,
         hasPaid: hasPaid,
         isOverdue: isOverdue
       });
