@@ -758,37 +758,12 @@ const agentModule = {
         container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Calculando morosos...</p>';
         
         try {
-          // Filtrar morosos (Rojo, Amarillo con muchos días, etc.)
-          const payments = await window.BulaPayDB.getPayments();
-          const badClients = [];
-          
-          for (const client of agentClients) {
-            const clientPayments = payments.filter(p => String(p.clientCedula) === String(client.cedula));
-            const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, clientPayments);
-            const overdueDays = dailyStatus.filter(s => s.isOverdue);
-            const overdueCount = overdueDays.length;
-            
-            let risk = 'Verde';
-            if (Number(client.outstanding) === 0) risk = 'Verde';
-            else if (overdueCount >= 3) risk = 'Rojo';
-            else if (overdueCount > 0) risk = 'Amarillo';
-            
-            if (risk === 'Rojo') {
-              let diffDays = 0;
-              const oldestUnpaid = (overdueDays.length > 0 ? overdueDays[0].date : null) || client.fechaVencimiento;
-              
-              if (oldestUnpaid) {
-                const diffTime = Math.abs(new Date() - new Date(oldestUnpaid));
-                diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              }
-              
-              badClients.push({
-                name: client.name,
-                cedula: client.cedula,
-                overdueCount: diffDays
-              });
-            }
-          }
+          const clients = await window.BulaPayDB.getClients();
+          const badClients = clients.filter(c => 
+            c.agent_id === currentUser.username && 
+            Number(c.outstanding) > 0 && 
+            c.risk === 'Rojo'
+          );
           
           if (badClients.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: #10b981; font-weight: bold;">🎉 ¡Felicidades! No tienes clientes en Lista Negra.</p>';
@@ -797,15 +772,14 @@ const agentModule = {
           
           // Renderizar lista
           container.innerHTML = badClients.map(c => `
-            <div style="background-color: var(--bg-secondary); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
               <div>
-                <h4 style="margin: 0 0 0.25rem 0; color: var(--text-primary); font-size: 0.95rem;">${c.name}</h4>
-                <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">${c.cedula}</span>
+                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${c.name}</h4>
+                <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">CC: ${c.cedula}</p>
               </div>
-              <div style="background-color: var(--color-rojo-bg); color: var(--color-rojo); font-weight: bold; font-size: 0.8rem; padding: 0.25rem 0.5rem; border-radius: 6px; text-align: center;">
-                ${c.overdueCount} Días
-                <span style="display:block; font-size:0.6rem; opacity:0.8;">de mora</span>
-              </div>
+              <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700;">
+                Deuda: $${Number(c.outstanding).toLocaleString('es-CO')}
+              </span>
             </div>
           `).join('');
           
