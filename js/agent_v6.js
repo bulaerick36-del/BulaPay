@@ -550,12 +550,21 @@ const agentModule = {
     const addressInput = document.getElementById('private-profile-address');
     const usernameInput = document.getElementById('private-profile-username');
     
-    if (nameInput) nameInput.value = currentUser.name || '';
-    if (phoneInput) phoneInput.value = currentUser.phone || '';
-    if (emailInput) emailInput.value = currentUser.email || ''; 
-    if (cedulaInput) cedulaInput.value = currentUser.documentNumber || currentUser.id || '';
-    if (addressInput) addressInput.value = currentUser.address || currentUser.direccion || '';
-    if (usernameInput) usernameInput.value = currentUser.username || '';
+    if (nameInput) nameInput.value = currentUser.name || "";
+    if (phoneInput) {
+      const p = currentUser.phone || "";
+      phoneInput.value = p.includes("Tu teléfono") ? "" : p;
+    }
+    if (emailInput) {
+      const e = currentUser.email || "";
+      emailInput.value = e.includes("Tu correo") ? "" : e;
+    }
+    if (cedulaInput) cedulaInput.value = currentUser.documentNumber || currentUser.id || "";
+    if (addressInput) {
+      const a = currentUser.address || currentUser.direccion || "";
+      addressInput.value = a.includes("Tu dirección") ? "" : a;
+    }
+    if (usernameInput) usernameInput.value = currentUser.username || "";
 
     const btnSaveProfile = document.getElementById('btn-save-private-profile');
     if (btnSaveProfile) {
@@ -680,7 +689,9 @@ const agentModule = {
           const onHand = totalCollected - totalLent;
           
           elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
-          elLent.textContent = `-$${Math.abs(totalLent).toLocaleString('es-CO')}`;
+          
+          const prestadoFormateado = totalLent === 0 ? "$0" : "-$" + Math.abs(totalLent).toLocaleString('es-CO');
+          elLent.textContent = prestadoFormateado;
           
           if (onHand < 0) {
             elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
@@ -720,10 +731,13 @@ const agentModule = {
             else if (overdueCount > 0) risk = 'Amarillo';
             
             if (risk === 'Rojo') {
-              const oldestUnpaid = overdueDays[0].date;
-              const diffTime = new Date() - new Date(oldestUnpaid);
-              let diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-              if (diffDays < 0) diffDays = 0;
+              let diffDays = 0;
+              const oldestUnpaid = overdueDays[0]?.date || client.fechaVencimiento;
+              
+              if (oldestUnpaid) {
+                const diffTime = Math.abs(new Date() - new Date(oldestUnpaid));
+                diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              }
               
               badClients.push({
                 name: client.name,
