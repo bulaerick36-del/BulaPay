@@ -468,7 +468,9 @@ const agentModule = {
     const tabBusinessBtn = document.getElementById('btn-tab-private-business');
     const tabProfileContent = document.getElementById('private-panel-profile');
     const tabBusinessContent = document.getElementById('private-panel-business');
-
+    const cashModal = document.getElementById('private-panel-cash-modal');
+    const blacklistModal = document.getElementById('private-panel-blacklist-modal');
+    
     // Inicializar Eventos del Panel Privado
     if (btnClosePrivatePanel) {
       btnClosePrivatePanel.onclick = () => {
@@ -544,10 +546,16 @@ const agentModule = {
     const nameInput = document.getElementById('private-profile-name');
     const phoneInput = document.getElementById('private-profile-phone');
     const emailInput = document.getElementById('private-profile-email');
+    const cedulaInput = document.getElementById('private-profile-cedula');
+    const addressInput = document.getElementById('private-profile-address');
+    const usernameInput = document.getElementById('private-profile-username');
     
     if (nameInput) nameInput.value = currentUser.name || '';
     if (phoneInput) phoneInput.value = currentUser.phone || '';
-    if (emailInput) emailInput.value = currentUser.username || ''; // Username acts as email in BulaPay
+    if (emailInput) emailInput.value = currentUser.email || ''; 
+    if (cedulaInput) cedulaInput.value = currentUser.cedula || currentUser.username || '';
+    if (addressInput) addressInput.value = currentUser.address || currentUser.direccion || '';
+    if (usernameInput) usernameInput.value = currentUser.username || '';
 
     const btnSaveProfile = document.getElementById('btn-save-private-profile');
     if (btnSaveProfile) {
@@ -555,6 +563,9 @@ const agentModule = {
         try {
           const newName = nameInput.value.trim();
           const newPhone = phoneInput.value.trim();
+          const newEmail = emailInput.value.trim();
+          const newAddress = addressInput.value.trim();
+          
           if (!newName) {
             alert('❌ El nombre no puede estar vacío');
             return;
@@ -564,11 +575,17 @@ const agentModule = {
           
           await window.BulaPayDB.updateUser(currentUser.id, {
             name: newName,
-            phone: newPhone
+            phone: newPhone,
+            email: newEmail,
+            direccion: newAddress,
+            address: newAddress
           });
           
           currentUser.name = newName;
           currentUser.phone = newPhone;
+          currentUser.email = newEmail;
+          currentUser.address = newAddress;
+          currentUser.direccion = newAddress;
           localStorage.setItem('bulapay_user', JSON.stringify(currentUser));
           
           // Actualizar la vista
@@ -588,12 +605,13 @@ const agentModule = {
 
     // 2. Dar vida al Dashboard 'Mi Negocio' (Métrica de Capital)
     const capitalEl = document.getElementById('private-panel-capital');
+    let agentClients = [];
     if (capitalEl) {
       capitalEl.textContent = 'Calculando...';
       try {
         const clients = await window.BulaPayDB.getClients();
         // Filtrar clientes de este agente activo
-        const agentClients = clients.filter(c => c.agent_id === currentUser.username && c.status !== 'liquidado');
+        agentClients = clients.filter(c => c.agent_id === currentUser.username && c.status !== 'liquidado');
         
         let totalCapital = 0;
         for (const client of agentClients) {
@@ -608,6 +626,126 @@ const agentModule = {
         console.error(err);
         capitalEl.textContent = 'Error';
       }
+    }
+    
+    // Lógica para Modales
+    const cashModal = document.getElementById('private-panel-cash-modal');
+    const blacklistModal = document.getElementById('private-panel-blacklist-modal');
+    const btnCash = document.getElementById('btn-trigger-cash-modal');
+    const btnBlacklist = document.getElementById('btn-trigger-blacklist-modal');
+    
+    if (cashModal) {
+      document.getElementById('btn-close-private-cash').onclick = () => cashModal.style.display = 'none';
+    }
+    if (blacklistModal) {
+      document.getElementById('btn-close-private-blacklist').onclick = () => blacklistModal.style.display = 'none';
+    }
+
+    // Modal de Cierre de Caja
+    if (btnCash && cashModal) {
+      btnCash.onclick = async () => {
+        cashModal.style.display = 'flex';
+        const elCollected = document.getElementById('private-cash-collected');
+        const elLent = document.getElementById('private-cash-lent');
+        const elOnHand = document.getElementById('private-cash-on-hand');
+        
+        elCollected.textContent = 'Cargando...';
+        elLent.textContent = 'Cargando...';
+        elOnHand.textContent = 'Cargando...';
+        
+        try {
+          const payments = await window.BulaPayDB.getPayments();
+          const now = new Date();
+          const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+          
+          let totalCollected = 0;
+          let totalLent = 0;
+          
+          // Cobrado hoy
+          const todaysPayments = payments.filter(p => {
+             const isToday = p.date.startsWith(todayStr);
+             const isMine = p.agent_id === currentUser.username;
+             return isToday && isMine;
+          });
+          totalCollected = todaysPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+          
+          // Prestado hoy (clientes nuevos hoy de este agente)
+          const clients = await window.BulaPayDB.getClients();
+          const todaysClients = clients.filter(c => {
+             const isToday = c.date && c.date.startsWith(todayStr);
+             const isMine = c.agent_id === currentUser.username;
+             return isToday && isMine;
+          });
+          totalLent = todaysClients.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+          
+          const onHand = totalCollected - totalLent;
+          
+          elCollected.textContent = `$${totalCollected.toLocaleString('es-CO')}`;
+          elLent.textContent = `-$${totalLent.toLocaleString('es-CO')}`;
+          elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+        } catch (e) {
+          console.error(e);
+          elCollected.textContent = 'Error';
+        }
+      };
+    }
+    
+    // Modal de Lista Negra
+    if (btnBlacklist && blacklistModal) {
+      btnBlacklist.onclick = async () => {
+        blacklistModal.style.display = 'flex';
+        const container = document.getElementById('private-blacklist-container');
+        container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Calculando morosos...</p>';
+        
+        try {
+          // Filtrar morosos (Rojo, Amarillo con muchos días, etc.)
+          const payments = await window.BulaPayDB.getPayments();
+          const badClients = [];
+          
+          for (const client of agentClients) {
+            const clientPayments = payments.filter(p => p.cedula === client.cedula);
+            const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, clientPayments);
+            const overdueDays = dailyStatus.filter(s => s.isOverdue);
+            const overdueCount = overdueDays.length;
+            
+            let risk = 'Verde';
+            if (Number(client.outstanding) === 0) risk = 'Verde';
+            else if (overdueCount >= 3) risk = 'Rojo';
+            else if (overdueCount > 0) risk = 'Amarillo';
+            
+            if (risk === 'Rojo') {
+              badClients.push({
+                name: client.name,
+                cedula: client.cedula,
+                overdueCount: overdueCount
+              });
+            }
+          }
+          
+          if (badClients.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #10b981; font-weight: bold;">🎉 ¡Felicidades! No tienes clientes en Lista Negra.</p>';
+            return;
+          }
+          
+          // Renderizar lista
+          container.innerHTML = badClients.map(c => `
+            <div style="background-color: var(--bg-secondary); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h4 style="margin: 0 0 0.25rem 0; color: var(--text-primary); font-size: 0.95rem;">${c.name}</h4>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">${c.cedula}</span>
+              </div>
+              <div style="background-color: var(--color-rojo-bg); color: var(--color-rojo); font-weight: bold; font-size: 0.8rem; padding: 0.25rem 0.5rem; border-radius: 6px; text-align: center;">
+                ${c.overdueCount} Días
+                <span style="display:block; font-size:0.6rem; opacity:0.8;">de mora</span>
+              </div>
+            </div>
+          `).join('');
+          
+        } catch (e) {
+          console.error(e);
+          container.innerHTML = '<p style="text-align: center; color: var(--color-rojo);">Error al calcular lista negra.</p>';
+        }
+      };
     }
   },
 
