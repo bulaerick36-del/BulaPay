@@ -1124,14 +1124,14 @@ const agentModule = {
             }
           }
 
-          // Lógica Candado de Adelantos: Deshabilitar "Confirmar Pago" si está al día y ya pagó hoy
+          // Lógica Candado Inteligente: Excepción para Morosos
           if (this.btnCobroInvoice) {
             const hasOverdue = dailyStatusList.some(s => s.isOverdue);
             const todayStr = this.getLocalDateString();
             const paidToday = payments.some(p => p.date === todayStr);
-            const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
+            const cuotaPendiente = dailyStatusList.find(c => !c.hasPaid && !c.isOverdue);
 
-            if (!cuotaDeHoy || (!hasOverdue && paidToday)) {
+            if (!cuotaPendiente || (!hasOverdue && paidToday)) {
               this.btnCobroInvoice.disabled = true;
               this.btnCobroInvoice.style.cursor = 'not-allowed';
               this.btnCobroInvoice.style.opacity = '0.5';
@@ -1206,26 +1206,25 @@ const agentModule = {
 
     try {
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
-      const todayStr = this.getLocalDateString();
-      if (payments.some(p => p.date === todayStr)) {
-        alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const cuotaActual = dailyStatusList.find(c => !c.hasPaid && !c.isOverdue);
+
+      if (!cuotaActual) {
+        alert('No hay cuotas pendientes para cobrar.');
         return;
       }
-
-      // 1. Obtener la lista de cuotas y buscar la coincidencia estricta de fecha
-      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
-      const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
-
-      // 2. Manejo de días sin cuota programada (Domingos o festivos)
-      if (!cuotaDeHoy) {
-        alert('No hay cuota programada para el día de hoy.');
+      
+      const tieneAtrasos = dailyStatusList.some(s => s.isOverdue);
+      const todayStr = this.getLocalDateString();
+      if (!tieneAtrasos && payments.some(p => p.date === todayStr)) {
+        alert('Precaución: El cliente está al día y ya registró un pago hoy. Por seguridad, solo se permite una transacción diaria para clientes al día.');
         return;
       }
 
       // 3. Ejecución del pago apuntando a la cuota específica
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        installmentNumber: cuotaDeHoy.dayNumber,
+        installmentNumber: cuotaActual.dayNumber,
         amount: amount,
         date: todayStr,
         agentName: currentUser.name,
@@ -1288,11 +1287,20 @@ const agentModule = {
     try {
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const tieneAtrasos = dailyStatusList.some(s => s.isOverdue);
+      const todayStr = this.getLocalDateString();
+      
+      if (!tieneAtrasos && payments.some(p => p.date === todayStr)) {
+        alert('Precaución: El cliente está al día y ya registró un pago hoy. Por seguridad, solo se permite una transacción diaria para clientes al día.');
+        return;
+      }
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        installmentNumber: payments.length + 1,
+        installmentNumber: status.dayNumber, // Insertar asignado al dia exacto
         amount: amountToPay,
-        date: status.dateStr, // Insertar con la fecha atrasada específica
+        date: todayStr, // La fecha de pago es hoy
         agentName: currentUser.name,
         status: 'Pagado'
       };

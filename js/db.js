@@ -683,21 +683,6 @@ const db = {
     }
 
     const currentUser = this.getCurrentUser();
-    
-    // CONTROL ANTIFRAUDE: Un solo pago por día
-    const todayStr = new Date().toISOString().split('T')[0];
-    const { data: existingPayments, error: checkError } = await supabase
-      .from('payments')
-      .select('id')
-      .eq('clientCedula', String(payment.clientCedula))
-      .eq('date', todayStr);
-    
-    if (checkError) {
-      console.error("Error al verificar pagos diarios:", checkError);
-    } else if (existingPayments && existingPayments.length > 0) {
-      throw new Error("Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.");
-    }
-    
     // currentUser ya fue declarado arriba
     const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
 
