@@ -513,7 +513,10 @@ const agentModule = {
             profileTrigger.onmouseover = () => profileTrigger.style.opacity = '0.8';
             profileTrigger.onmouseout = () => profileTrigger.style.opacity = '1';
             profileTrigger.onclick = () => {
-              if (privatePanel) privatePanel.style.display = 'flex';
+              if (privatePanel) {
+                privatePanel.style.display = 'flex';
+                this.hydratePrivatePanel(currentUser);
+              }
             };
           }
         } else {
@@ -531,10 +534,80 @@ const agentModule = {
         }
       }
     } else {
-      // Generic fallback
-      if (agentNameElement) agentNameElement.textContent = 'Cobrador: Juan Pérez';
-      if (agentRouteElement) agentRouteElement.textContent = 'Ruta Centro - Norte';
-      if (roleTag) roleTag.textContent = 'Agente de Ruta';
+      if (agentNameElement) agentNameElement.textContent = 'Cargando...';
+      if (agentRouteElement) agentRouteElement.textContent = 'Verificando sesión';
+    }
+  },
+
+  async hydratePrivatePanel(currentUser) {
+    // 1. Hidratar 'Mi Perfil'
+    const nameInput = document.getElementById('private-profile-name');
+    const phoneInput = document.getElementById('private-profile-phone');
+    const emailInput = document.getElementById('private-profile-email');
+    
+    if (nameInput) nameInput.value = currentUser.name || '';
+    if (phoneInput) phoneInput.value = currentUser.phone || '';
+    if (emailInput) emailInput.value = currentUser.username || ''; // Username acts as email in BulaPay
+
+    const btnSaveProfile = document.getElementById('btn-save-private-profile');
+    if (btnSaveProfile) {
+      btnSaveProfile.onclick = async () => {
+        try {
+          const newName = nameInput.value.trim();
+          const newPhone = phoneInput.value.trim();
+          if (!newName) {
+            alert('❌ El nombre no puede estar vacío');
+            return;
+          }
+          btnSaveProfile.textContent = 'Guardando...';
+          btnSaveProfile.disabled = true;
+          
+          await window.BulaPayDB.updateUser(currentUser.id, {
+            name: newName,
+            phone: newPhone
+          });
+          
+          currentUser.name = newName;
+          currentUser.phone = newPhone;
+          localStorage.setItem('bulapay_user', JSON.stringify(currentUser));
+          
+          // Actualizar la vista
+          const agentNameElement = document.getElementById('agent-welcome-name');
+          if (agentNameElement) agentNameElement.textContent = `Cobrador: ${currentUser.name}`;
+          
+          alert('✅ Perfil actualizado correctamente');
+        } catch (err) {
+          console.error(err);
+          alert('❌ Error al actualizar el perfil');
+        } finally {
+          btnSaveProfile.textContent = 'Guardar Cambios';
+          btnSaveProfile.disabled = false;
+        }
+      };
+    }
+
+    // 2. Dar vida al Dashboard 'Mi Negocio' (Métrica de Capital)
+    const capitalEl = document.getElementById('private-panel-capital');
+    if (capitalEl) {
+      capitalEl.textContent = 'Calculando...';
+      try {
+        const clients = await window.BulaPayDB.getClients();
+        // Filtrar clientes de este agente activo
+        const agentClients = clients.filter(c => c.agent_id === currentUser.username && c.status !== 'liquidado');
+        
+        let totalCapital = 0;
+        for (const client of agentClients) {
+          const outstanding = Number(client.outstanding) || 0;
+          if (outstanding > 0) {
+            totalCapital += outstanding;
+          }
+        }
+        
+        capitalEl.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
+      } catch (err) {
+        console.error(err);
+        capitalEl.textContent = 'Error';
+      }
     }
   },
 
