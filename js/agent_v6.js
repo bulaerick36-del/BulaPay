@@ -1129,8 +1129,9 @@ const agentModule = {
             const hasOverdue = dailyStatusList.some(s => s.isOverdue);
             const todayStr = this.getLocalDateString();
             const paidToday = payments.some(p => p.date === todayStr);
+            const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
 
-            if (!hasOverdue && paidToday) {
+            if (!cuotaDeHoy || (!hasOverdue && paidToday)) {
               this.btnCobroInvoice.disabled = true;
               this.btnCobroInvoice.style.cursor = 'not-allowed';
               this.btnCobroInvoice.style.opacity = '0.5';
@@ -1211,9 +1212,20 @@ const agentModule = {
         return;
       }
 
+      // 1. Obtener la lista de cuotas y buscar la coincidencia estricta de fecha
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
+
+      // 2. Manejo de días sin cuota programada (Domingos o festivos)
+      if (!cuotaDeHoy) {
+        alert('No hay cuota programada para el día de hoy.');
+        return;
+      }
+
+      // 3. Ejecución del pago apuntando a la cuota específica
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        installmentNumber: payments.length + 1,
+        installmentNumber: cuotaDeHoy.dayNumber,
         amount: amount,
         date: todayStr,
         agentName: currentUser.name,
