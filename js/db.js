@@ -704,10 +704,9 @@ const db = {
         }
       }
     }
-    
     // Obtener total de pagos históricos del cliente para calcular el correlativo de cuota
     const clientPayments = await this.getPaymentsByClient(payment.clientCedula);
-    const installmentNumber = clientPayments.length + 1;
+    const installmentNumber = payment.installmentNumber || (clientPayments.length + 1);
     
     const signature = `BulaPay-SIG-${payment.clientCedula}-${Date.now().toString().slice(-4)}`;
     const id = 'pay_' + installmentNumber + '_' + Date.now();

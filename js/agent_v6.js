@@ -1232,10 +1232,20 @@ const agentModule = {
       };
 
       await window.BulaPayDB.addPayment(newPayment);
+      
+      // Si llega aquí, es porque NO hubo error en Supabase
       this.captureAndSendLocation();
 
+      // Forzar re-render descargando las cuotas nuevamente (El Fix visual)
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      this.currentClient = updatedClient;
       
+      if (this.inputCobroAmount) {
+        this.inputCobroAmount.value = '';
+      }
+      
+      await this.searchClient(); // Recarga y repinta el cartón completo
+
       // Evaluar estado general del cliente para la alerta dinámica
       const allPayments = await window.BulaPayDB.getPaymentsByClient(updatedClient.cedula);
       const updatedDailyStatusList = window.BulaPayDB.getDailyPaymentStatus(updatedClient, allPayments);
@@ -1246,14 +1256,6 @@ const agentModule = {
       } else {
         alert('Pago exitoso.');
       }
-
-      this.currentClient = updatedClient;
-      
-      if (this.inputCobroAmount) {
-        this.inputCobroAmount.value = '';
-      }
-      
-      await this.searchClient(); // Refrescar vista
       
     } catch (e) {
       console.error(e);
@@ -1308,12 +1310,12 @@ const agentModule = {
       await window.BulaPayDB.addPayment(newPayment);
       this.captureAndSendLocation();
 
-      alert(`✅ Día ${status.dayNumber} registrado como pagado.`);
-
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       this.currentClient = updatedClient;
       
-      await this.searchClient(); // Refresca y actualiza cartón automáticamente
+      await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
+      
+      alert(`✅ Día ${status.dayNumber} registrado como pagado.`);
       
     } catch (e) {
       console.error(e);
