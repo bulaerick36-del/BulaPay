@@ -921,10 +921,8 @@ const db = {
       const currentDayDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
       currentDayDate.setDate(currentDayDate.getDate() + calendarDaysOffset);
       
-      const isSunday = currentDayDate.getDay() === 0;
       calendarDaysOffset++;
-      
-      if (isSunday) continue; // Saltar domingos en el calendario
+
       
       const dayNum = validDaysCounter + 1; // Cuota 1, 2, 3...
       const hasPaid = paidInstallments.has(dayNum);
