@@ -542,6 +542,16 @@ const agentModule = {
   },
 
   async hydratePrivatePanel(currentUser) {
+    try {
+      const dbUser = await window.BulaPayDB.getUserByUsername(currentUser.username);
+      if (dbUser) {
+        currentUser = { ...currentUser, ...dbUser };
+        localStorage.setItem('bulapay_user', JSON.stringify(currentUser));
+      }
+    } catch (e) {
+      console.warn("Error sincronizando perfil desde DB:", e);
+    }
+    
     // 1. Hidratar 'Mi Perfil'
     const nameInput = document.getElementById('private-profile-name');
     const phoneInput = document.getElementById('private-profile-phone');
