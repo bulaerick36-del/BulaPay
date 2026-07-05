@@ -1124,6 +1124,23 @@ const agentModule = {
             }
           }
 
+          // Lógica Candado de Adelantos: Deshabilitar "Confirmar Pago" si está al día y ya pagó hoy
+          if (this.btnCobroInvoice) {
+            const hasOverdue = dailyStatusList.some(s => s.isOverdue);
+            const todayStr = this.getLocalDateString();
+            const paidToday = payments.some(p => p.date === todayStr);
+
+            if (!hasOverdue && paidToday) {
+              this.btnCobroInvoice.disabled = true;
+              this.btnCobroInvoice.style.cursor = 'not-allowed';
+              this.btnCobroInvoice.style.opacity = '0.5';
+            } else {
+              this.btnCobroInvoice.disabled = false;
+              this.btnCobroInvoice.style.cursor = 'pointer';
+              this.btnCobroInvoice.style.opacity = '1';
+            }
+          }
+
           window.BulaPayDB.renderOverdueDaysList(
             this.cobroOverdueDaysList, 
             dailyStatusList, 
@@ -1206,9 +1223,19 @@ const agentModule = {
       await window.BulaPayDB.addPayment(newPayment);
       this.captureAndSendLocation();
 
-      alert('✅ Pago registrado con éxito.');
-
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      
+      // Evaluar estado general del cliente para la alerta dinámica
+      const allPayments = await window.BulaPayDB.getPaymentsByClient(updatedClient.cedula);
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(updatedClient, allPayments);
+      const hasOverdue = dailyStatusList.some(s => s.isOverdue);
+
+      if (hasOverdue) {
+        alert('Pago exitoso. Recuerde que tiene unos días atrasados, recuerde ponerse al día.');
+      } else {
+        alert('Pago exitoso.');
+      }
+
       this.currentClient = updatedClient;
       
       if (this.inputCobroAmount) {
