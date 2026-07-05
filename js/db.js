@@ -474,7 +474,10 @@ const db = {
 
   async getClientByCedula(cedula) {
     try {
-      return await this.getGlobalClientByCedula(cedula);
+      // Buscar solo dentro de los clientes que le pertenecen al agente/supervisor actual
+      const clients = await this.getClients();
+      const client = clients.find(c => String(c.cedula) === String(cedula));
+      return client || null;
     } catch (err) {
       console.error(`Excepción en getClientByCedula para cédula "${cedula}":`, err);
       return null;

@@ -539,9 +539,9 @@ const agentModule = {
             profileTrigger.onclick = null;
           }
           
-          // Ocultar pestaña de Registro de Clientes para Agentes de Ruta
+          // Asegurar que la pestaña de Registro esté visible para los Agentes de Ruta (pueden registrar clientes)
           if (this.tabRegister) {
-            this.tabRegister.style.display = 'none';
+            this.tabRegister.style.display = 'block';
           }
         }
       }
