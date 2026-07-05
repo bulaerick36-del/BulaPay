@@ -561,19 +561,10 @@ const agentModule = {
     const usernameInput = document.getElementById('private-profile-username');
     
     if (nameInput) nameInput.value = currentUser.name || "";
-    if (phoneInput) {
-      const p = String(currentUser.phone || "");
-      phoneInput.value = p.includes("Tu teléfono") ? "" : p;
-    }
-    if (emailInput) {
-      const e = String(currentUser.email || "");
-      emailInput.value = e.includes("Tu correo") ? "" : e;
-    }
+    if (phoneInput) phoneInput.value = currentUser.telefono || currentUser.phone || "";
+    if (emailInput) emailInput.value = currentUser.correo || currentUser.email || "";
     if (cedulaInput) cedulaInput.value = currentUser.documentNumber || currentUser.id || "";
-    if (addressInput) {
-      const a = String(currentUser.address || currentUser.direccion || "");
-      addressInput.value = a.includes("Tu dirección") ? "" : a;
-    }
+    if (addressInput) addressInput.value = currentUser.direccion || currentUser.address || "";
     if (usernameInput) usernameInput.value = currentUser.username || "";
 
     const btnSaveProfile = document.getElementById('btn-save-private-profile');
@@ -592,13 +583,17 @@ const agentModule = {
           btnSaveProfile.textContent = 'Guardando...';
           btnSaveProfile.disabled = true;
           
-          await window.BulaPayDB.updateUser(currentUser.id, {
+          const profileUpdates = {
             name: newName,
             phone: newPhone,
+            telefono: newPhone,
             email: newEmail,
+            correo: newEmail,
             direccion: newAddress,
             address: newAddress
-          });
+          };
+          
+          await window.BulaPayDB.updateUserProfile(currentUser.username, profileUpdates);
           
           currentUser.name = newName;
           currentUser.phone = newPhone;
