@@ -943,6 +943,7 @@ const db = {
       
       const isPastDay = currentDayDate < todayZero;
       const isOverdue = isPastDay && !hasPaid;
+      const isFuture = currentDayDate > todayZero;
       
       const todayYear = todayZero.getFullYear();
       const todayMonth = String(todayZero.getMonth() + 1).padStart(2, '0');
@@ -954,7 +955,8 @@ const db = {
         dateStr: dayStr,
         isToday: dayStr === todayStr,
         hasPaid: hasPaid,
-        isOverdue: isOverdue
+        isOverdue: isOverdue,
+        isFuture: isFuture
       });
       
       validDaysCounter++;
@@ -989,7 +991,7 @@ const db = {
       
       badge.style.transition = 'transform 0.1s ease';
 
-      if (onClickCallback && !status.hasPaid) {
+      if (onClickCallback && !status.hasPaid && !status.isFuture) {
         badge.style.cursor = 'pointer';
         badge.title = 'Clic para marcar como pagado';
         badge.addEventListener('click', () => {
@@ -997,6 +999,8 @@ const db = {
         });
         badge.addEventListener('mouseenter', () => badge.style.transform = 'scale(1.08)');
         badge.addEventListener('mouseleave', () => badge.style.transform = 'scale(1)');
+      } else if (status.isFuture) {
+        badge.title = 'Día futuro (No se puede marcar aún)';
       }
       
       const dateLabel = status.dateStr.slice(5); // MM-DD

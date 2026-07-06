@@ -1295,6 +1295,11 @@ const agentModule = {
     }
     if (!this.currentClient) return;
     
+    if (status.isFuture) {
+      alert('Operación denegada: No se puede registrar pagos en días futuros. Espere a que corresponda la fecha.');
+      return;
+    }
+
     // Confirmación nativa
     const dateLabel = status.dateStr.slice(5);
     const isConfirmed = confirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`);
