@@ -930,7 +930,7 @@ const db = {
       const currentUser = this.getCurrentUser();
       const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
       
-      if (isSunday && !isIndependent) continue; // Saltar domingos excepto para Agentes Independientes
+      if (isSunday) continue; // Saltar domingos siempre
 
       
       const dayNum = validDaysCounter + 1; // Cuota 1, 2, 3...

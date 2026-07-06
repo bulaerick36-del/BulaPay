@@ -1229,24 +1229,18 @@ const agentModule = {
       const todayStr = this.getLocalDateString();
       const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
 
+      // 1. Búsqueda Única y Exclusiva (HOY)
       if (!cuotaDeHoy) {
-        alert('No hay cuota programada para la fecha de hoy.');
-        return;
+        return; // Detiene el proceso si no hay cuota exacta para hoy
       }
 
+      // 2. El Mensaje de Servicio (Bloqueo de Futuro)
       if (cuotaDeHoy.hasPaid) {
-        alert('La cuota de hoy ya fue registrada. NO se permiten adelantar días a futuro con este botón.');
-        return;
-      }
-      
-      const tieneAtrasos = dailyStatusList.some(s => s.isOverdue);
-      // const todayStr = this.getLocalDateString(); // ya está arriba
-      if (!tieneAtrasos && payments.some(p => p.date === todayStr)) {
-        alert('Precaución: El cliente está al día y ya registró un pago hoy. Por seguridad, solo se permite una transacción diaria para clientes al día.');
-        return;
+        alert('No puede pagar el día de hoy porque ya está pago. Lo invitamos a ponerse al día con sus cuotas atrasadas.');
+        return; // Aborta la transacción
       }
 
-      // 3. Ejecución del pago apuntando a la cuota específica
+      // 3. Ejecución del pago apuntando EXCLUSIVAMENTE a la cuota de hoy
       const newPayment = {
         clientCedula: this.currentClient.cedula,
         installmentNumber: cuotaDeHoy.dayNumber,
@@ -1288,8 +1282,7 @@ const agentModule = {
     } finally {
       this.isLoadingPayment = false;
       if (this.btnCobroInvoice) {
-        // searchClient() ya se encargó de evaluar si debe estar disabled o no.
-        // Pero restauramos el texto original
+        this.btnCobroInvoice.disabled = false;
         this.btnCobroInvoice.innerHTML = 'Confirmar Pago';
       }
     }
