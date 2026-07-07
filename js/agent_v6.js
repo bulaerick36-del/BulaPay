@@ -1689,7 +1689,15 @@ const agentModule = {
 
       if (applyDiscount) {
         discountAmount = parseFloat(document.getElementById('new-client-discount-amount').value) || 0;
-        discountReason = document.getElementById('new-client-discount-reason').value;
+        
+        let reasons = [];
+        if (document.getElementById('new-client-discount-reason-seguro')?.checked) reasons.push('Seguro');
+        if (document.getElementById('new-client-discount-reason-papeleria')?.checked) reasons.push('Papelería o Software');
+        if (document.getElementById('new-client-discount-reason-otros')?.checked) {
+          const otrosText = document.getElementById('new-client-discount-reason-otros-text').value.trim();
+          reasons.push(otrosText ? `Otros: ${otrosText}` : 'Otros');
+        }
+        discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       }
 
       const montoSalida = montoPrestamo - discountAmount;
@@ -1921,20 +1929,41 @@ const agentModule = {
     const discountCheckbox = document.getElementById('new-client-apply-discount');
     const discountPanel = document.getElementById('new-client-discount-panel');
     const discountAmountInput = document.getElementById('new-client-discount-amount');
-    const discountReasonInput = document.getElementById('new-client-discount-reason');
+    const cbSeguro = document.getElementById('new-client-discount-reason-seguro');
+    const cbPapeleria = document.getElementById('new-client-discount-reason-papeleria');
+    const cbOtros = document.getElementById('new-client-discount-reason-otros');
+    const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
 
     if (discountCheckbox && discountPanel) {
       discountCheckbox.addEventListener('change', (e) => {
         if (e.target.checked) {
           discountPanel.style.display = 'flex';
           discountAmountInput.required = true;
-          discountReasonInput.required = true;
         } else {
           discountPanel.style.display = 'none';
           discountAmountInput.required = false;
-          discountReasonInput.required = false;
           discountAmountInput.value = '';
-          discountReasonInput.value = '';
+          if (cbSeguro) cbSeguro.checked = false;
+          if (cbPapeleria) cbPapeleria.checked = false;
+          if (cbOtros) cbOtros.checked = false;
+          if (inputOtrosText) {
+            inputOtrosText.style.display = 'none';
+            inputOtrosText.required = false;
+            inputOtrosText.value = '';
+          }
+        }
+      });
+    }
+
+    if (cbOtros && inputOtrosText) {
+      cbOtros.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          inputOtrosText.style.display = 'block';
+          inputOtrosText.required = true;
+        } else {
+          inputOtrosText.style.display = 'none';
+          inputOtrosText.required = false;
+          inputOtrosText.value = '';
         }
       });
     }
