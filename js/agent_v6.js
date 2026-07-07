@@ -1688,7 +1688,8 @@ const agentModule = {
       let discountReason = null;
 
       if (applyDiscount) {
-        discountAmount = parseFloat(document.getElementById('new-client-discount-amount').value) || 0;
+        const discountRaw = document.getElementById('new-client-discount-amount').value.replace(/\./g, '');
+        discountAmount = parseFloat(discountRaw) || 0;
         
         let reasons = [];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) reasons.push('Seguro');
@@ -1990,6 +1991,13 @@ const agentModule = {
       e.target.value = val ? formatNumber(val) : '';
       calculate();
     });
+
+    if (discountAmountInput) {
+      discountAmountInput.addEventListener('input', (e) => {
+        let val = e.target.value.replace(/\D/g, '');
+        e.target.value = val ? formatNumber(val) : '';
+      });
+    }
 
     interestInput.addEventListener('input', calculate);
     installmentsInput.addEventListener('input', calculate);
