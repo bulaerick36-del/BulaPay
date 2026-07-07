@@ -269,6 +269,22 @@ const db = {
     return data ? data[0] : route;
   },
 
+  async updateRouteCapital(routeId, capitalAdd) {
+    const supabase = await initSupabase();
+    const route = await this.getRouteById(routeId);
+    if (route) {
+      const newCapital = Number(route.capital) + Number(capitalAdd);
+      const { error } = await supabase
+        .from('routes')
+        .update({ capital: newCapital })
+        .eq('id', routeId);
+      if (error) {
+        console.error(`Error al actualizar capital de ruta "${routeId}":`, error);
+        throw error;
+      }
+    }
+  },
+
   async updateRouteCollected(routeId, collectedAdd) {
     const supabase = await initSupabase();
     const route = await this.getRouteById(routeId);
