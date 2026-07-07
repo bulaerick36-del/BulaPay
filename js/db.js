@@ -1086,22 +1086,19 @@ const db = {
          const isToday = c.created_at && c.created_at.startsWith(todayStr);
          return isToday && c.agent_id === (currentUser.id || currentUser.username);
       });
-      const totalLent = todaysClients.reduce((acc, c) => {
-         const amount = Number(c.amount) || 0;
-         const discount = Number(c.discount_amount) || 0;
-         return acc + (amount - discount);
-      }, 0);
+      const totalLent = todaysClients.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+      const totalDiscounts = todaysClients.reduce((acc, c) => acc + (Number(c.discount_amount) || 0), 0);
       
       // Movimientos de caja
       const todaysMovements = movements.filter(m => m.date === todayStr);
       const totalIn = todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Number(m.amount), 0);
       const totalOut = todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Number(m.amount), 0);
       
-      const onHand = totalCollected - totalLent + totalIn - totalOut;
-      return { totalCollected, totalLent, totalIn, totalOut, onHand };
+      const onHand = totalCollected - totalLent + totalDiscounts + totalIn - totalOut;
+      return { totalCollected, totalLent, totalDiscounts, totalIn, totalOut, onHand };
     } catch (e) {
       console.error('Error calculando caja diaria:', e);
-      return { totalCollected: 0, totalLent: 0, totalIn: 0, totalOut: 0, onHand: 0 };
+      return { totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0 };
     }
   }
 };

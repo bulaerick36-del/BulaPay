@@ -710,19 +710,26 @@ const agentModule = {
         cashModal.style.display = 'flex';
         const elCollected = document.getElementById('private-cash-collected');
         const elLent = document.getElementById('private-cash-lent');
+        const elDiscounts = document.getElementById('private-cash-discounts');
         const elOnHand = document.getElementById('private-cash-on-hand');
         
         elCollected.textContent = 'Cargando...';
         elLent.textContent = 'Cargando...';
+        if (elDiscounts) elDiscounts.textContent = 'Cargando...';
         elOnHand.textContent = 'Cargando...';
         
         try {
-          const { totalCollected, totalLent, onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+          const { totalCollected, totalLent, totalDiscounts, onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
           
           elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
           
           const prestadoFormateado = totalLent === 0 ? "$0" : "-$" + Math.abs(totalLent).toLocaleString('es-CO');
           elLent.textContent = prestadoFormateado;
+
+          if (elDiscounts) {
+            const discountsFormateado = totalDiscounts === 0 ? "$0" : "+$" + Math.abs(totalDiscounts).toLocaleString('es-CO');
+            elDiscounts.textContent = discountsFormateado;
+          }
           
           if (onHand < 0) {
             elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
