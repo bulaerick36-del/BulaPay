@@ -1758,7 +1758,9 @@ const agentModule = {
       console.log('[DEBUG] Cliente guardado exitosamente en base de datos. currentClient:', this.currentClient);
 
       // Actualización de la Interfaz (Refetch) para el contador
-      this.updateTotalClientsCount();
+      if (typeof this.updateRouteTracking === 'function') {
+        this.updateRouteTracking();
+      }
 
       // Envío de email de bienvenida (Resend placeholder)
       console.log('[DEBUG] Llamando a sendWelcomeEmail para:', payload.email);
