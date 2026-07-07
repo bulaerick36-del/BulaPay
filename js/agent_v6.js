@@ -764,6 +764,14 @@ const agentModule = {
 
       document.getElementById('btn-close-cash-management').onclick = () => cashMgmtModal.style.display = 'none';
 
+      const cashMovementAmountInput = document.getElementById('cash-movement-amount');
+      if (cashMovementAmountInput) {
+        cashMovementAmountInput.addEventListener('input', (e) => {
+          let val = e.target.value.replace(/\D/g, '');
+          e.target.value = val ? val.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '';
+        });
+      }
+
       let currentMovementType = '';
       
       document.getElementById('btn-cash-add').onclick = () => {
@@ -779,7 +787,8 @@ const agentModule = {
       };
 
       document.getElementById('btn-cash-movement-confirm').onclick = async () => {
-        const amount = parseFloat(document.getElementById('cash-movement-amount').value);
+        const amountRaw = document.getElementById('cash-movement-amount').value.replace(/\./g, '');
+        const amount = parseFloat(amountRaw);
         if (!amount || amount <= 0) {
           alert('Por favor ingrese un monto válido mayor a 0.');
           return;
