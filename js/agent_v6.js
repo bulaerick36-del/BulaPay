@@ -1676,10 +1676,21 @@ const agentModule = {
       const capitalRaw = document.getElementById('new-client-capital').value.replace(/\./g, '');
       const montoPrestamo = parseFloat(capitalRaw) || 0;
 
-      // 1. Fix Crítico del Freno de Préstamos (Hard Stop)
+      const applyDiscount = document.getElementById('new-client-apply-discount')?.checked;
+      let discountAmount = 0;
+      let discountReason = null;
+
+      if (applyDiscount) {
+        discountAmount = parseFloat(document.getElementById('new-client-discount-amount').value) || 0;
+        discountReason = document.getElementById('new-client-discount-reason').value;
+      }
+
+      const montoSalida = montoPrestamo - discountAmount;
+
+      // 1. Fix Crítico del Freno de Préstamos (Hard Stop) con Descuento
       const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
-      if (montoPrestamo > onHand) {
-        alert(`❌ Fondos Insuficientes. El efectivo en caja de hoy es menor al capital que intentas prestar.\nEfectivo Disponible: $${onHand.toLocaleString('es-CO')}`);
+      if (montoSalida > onHand) {
+        alert(`❌ Fondos Insuficientes. El efectivo en caja de hoy es menor a la salida real de capital.\nSalida Neta: $${montoSalida.toLocaleString('es-CO')}\nEfectivo Disponible: $${onHand.toLocaleString('es-CO')}`);
         return;
       }
 
@@ -1692,6 +1703,8 @@ const agentModule = {
         zone,
         risk: 'Verde', // Inicia excelente
         amount: montoPrestamo, // Guardamos el capital prestado para la caja diaria
+        discount_amount: discountAmount, // Guardamos el descuento inicial
+        discount_reason: discountReason, // Motivo del descuento
         totalDebt: debt,
         outstanding: debt,
         installmentsCount: installments,
@@ -1897,6 +1910,27 @@ const agentModule = {
     const installmentValInput = document.getElementById('new-client-installment-val');
 
     if (!capitalInput || !interestInput || !debtInput || !installmentsInput || !installmentValInput) return;
+
+    const discountCheckbox = document.getElementById('new-client-apply-discount');
+    const discountPanel = document.getElementById('new-client-discount-panel');
+    const discountAmountInput = document.getElementById('new-client-discount-amount');
+    const discountReasonInput = document.getElementById('new-client-discount-reason');
+
+    if (discountCheckbox && discountPanel) {
+      discountCheckbox.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          discountPanel.style.display = 'flex';
+          discountAmountInput.required = true;
+          discountReasonInput.required = true;
+        } else {
+          discountPanel.style.display = 'none';
+          discountAmountInput.required = false;
+          discountReasonInput.required = false;
+          discountAmountInput.value = '';
+          discountReasonInput.value = '';
+        }
+      });
+    }
 
     const formatNumber = (num) => {
       return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");

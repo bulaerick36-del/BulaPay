@@ -156,3 +156,7 @@ CREATE TABLE IF NOT EXISTS caja_movimientos (
 ALTER TABLE caja_movimientos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir todo a anonimos en caja_movimientos" ON caja_movimientos FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE caja_movimientos TO anon, authenticated;
+
+-- Descuentos Iniciales
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_amount" NUMERIC DEFAULT 0;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_reason" TEXT;

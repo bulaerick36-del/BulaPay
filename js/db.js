@@ -1086,7 +1086,11 @@ const db = {
          const isToday = c.created_at && c.created_at.startsWith(todayStr);
          return isToday && c.agent_id === (currentUser.id || currentUser.username);
       });
-      const totalLent = todaysClients.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+      const totalLent = todaysClients.reduce((acc, c) => {
+         const amount = Number(c.amount) || 0;
+         const discount = Number(c.discount_amount) || 0;
+         return acc + (amount - discount);
+      }, 0);
       
       // Movimientos de caja
       const todaysMovements = movements.filter(m => m.date === todayStr);
