@@ -674,7 +674,7 @@ const agentModule = {
       try {
         const currentUser = window.BulaPayDB.getCurrentUser();
         const route = currentUser && currentUser.routeId ? await window.BulaPayDB.getRouteById(currentUser.routeId) : null;
-        const routeCapital = route ? Number(route.capital) || 0 : 0;
+        const routeCapital = route ? parseFloat(route.capital) || 0 : 0;
         capitalEl.textContent = `$${routeCapital.toLocaleString('es-CO')}`;
       } catch (err) {
         console.error(err);
@@ -836,7 +836,7 @@ const agentModule = {
             
             // Re-render del número gigante Capital Base
             const route = await window.BulaPayDB.getRouteById(currentUser.routeId);
-            const routeCapital = route ? Number(route.capital) || 0 : 0;
+            const routeCapital = route ? parseFloat(route.capital) || 0 : 0;
             const capitalEl = document.getElementById('private-panel-capital');
             if (capitalEl) capitalEl.textContent = `$${routeCapital.toLocaleString('es-CO')}`;
           } else {

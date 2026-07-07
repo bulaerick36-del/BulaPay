@@ -273,7 +273,9 @@ const db = {
     const supabase = await initSupabase();
     const route = await this.getRouteById(routeId);
     if (route) {
-      const newCapital = Number(route.capital) + Number(capitalAdd);
+      const capitalActual = parseFloat(route.capital) || 0;
+      const montoSeguro = parseFloat(capitalAdd) || 0;
+      const newCapital = capitalActual + montoSeguro;
       const { error } = await supabase
         .from('routes')
         .update({ capital: newCapital })
