@@ -140,3 +140,19 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS "cedula_representante" TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_name" TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_category" TEXT;
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "workingDays" TEXT DEFAULT 'Mon-Sat';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "amount" NUMERIC DEFAULT 0;
+
+-- Nueva tabla de movimientos de caja
+CREATE TABLE IF NOT EXISTS caja_movimientos (
+  "id" TEXT PRIMARY KEY,
+  "routeId" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "agent_id" TEXT,
+  "type" TEXT NOT NULL,
+  "amount" NUMERIC NOT NULL,
+  "date" DATE NOT NULL DEFAULT CURRENT_DATE,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE caja_movimientos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir todo a anonimos en caja_movimientos" ON caja_movimientos FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE caja_movimientos TO anon, authenticated;

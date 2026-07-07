@@ -717,29 +717,7 @@ const agentModule = {
         elOnHand.textContent = 'Cargando...';
         
         try {
-          const payments = await window.BulaPayDB.getPayments();
-          const todayStr = new Date().toISOString().split('T')[0];
-          
-          let totalCollected = 0;
-          let totalLent = 0;
-          
-          // Cobrado hoy
-          const todaysPayments = payments.filter(p => {
-             const isToday = p.date && p.date.startsWith(todayStr);
-             const isMine = p.supervisor_id === currentUser.username || p.agentName === currentUser.name;
-             return isToday && isMine;
-          });
-          totalCollected = todaysPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-          
-          // Prestado hoy (clientes nuevos hoy de este agente)
-          const clients = await window.BulaPayDB.getClients();
-          const todaysClients = clients.filter(c => {
-             const isToday = c.date && c.date.startsWith(todayStr);
-             return isToday;
-          });
-          totalLent = todaysClients.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
-          
-          const onHand = totalCollected - totalLent;
+          const { totalCollected, totalLent, onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
           
           elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
           
@@ -757,6 +735,92 @@ const agentModule = {
           console.error(e);
           elCollected.textContent = 'Error';
         }
+      };
+    }
+
+    // Modal de Gestión de Caja
+    const cashMgmtModal = document.getElementById('agent-cash-management-modal');
+    const btnCashMgmt = document.getElementById('btn-trigger-cash-management-modal');
+    if (cashMgmtModal && btnCashMgmt) {
+      btnCashMgmt.onclick = async () => {
+        cashMgmtModal.style.display = 'flex';
+        const elAvailable = document.getElementById('cash-management-available');
+        elAvailable.textContent = 'Cargando...';
+        
+        const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+        elAvailable.textContent = `$${Math.abs(onHand).toLocaleString('es-CO')}`;
+        elAvailable.style.color = onHand < 0 ? 'var(--color-rojo)' : 'var(--color-verde)';
+        
+        document.getElementById('cash-movement-form').style.display = 'none';
+        document.getElementById('cash-movement-amount').value = '';
+      };
+
+      document.getElementById('btn-close-cash-management').onclick = () => cashMgmtModal.style.display = 'none';
+
+      let currentMovementType = '';
+      
+      document.getElementById('btn-cash-add').onclick = () => {
+        currentMovementType = 'entrada';
+        document.getElementById('cash-movement-form').style.display = 'flex';
+        document.getElementById('cash-movement-title').textContent = 'Ingresar Dinero a Caja (Entrada)';
+      };
+
+      document.getElementById('btn-cash-remove').onclick = () => {
+        currentMovementType = 'salida';
+        document.getElementById('cash-movement-form').style.display = 'flex';
+        document.getElementById('cash-movement-title').textContent = 'Retirar Dinero de Caja (Salida)';
+      };
+
+      document.getElementById('btn-cash-movement-confirm').onclick = async () => {
+        const amount = parseFloat(document.getElementById('cash-movement-amount').value);
+        if (!amount || amount <= 0) {
+          alert('Por favor ingrese un monto válido mayor a 0.');
+          return;
+        }
+        
+        const currentUser = window.BulaPayDB.getCurrentUser();
+        if (!currentUser) return;
+
+        const btnConfirm = document.getElementById('btn-cash-movement-confirm');
+        btnConfirm.disabled = true;
+        btnConfirm.textContent = 'Procesando...';
+
+        if (currentMovementType === 'salida') {
+           const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+           if (amount > onHand) {
+             alert(`❌ Fondos insuficientes. Solo hay $${onHand.toLocaleString('es-CO')} en caja hoy.`);
+             btnConfirm.disabled = false;
+             btnConfirm.textContent = 'Confirmar Movimiento';
+             return;
+           }
+        }
+
+        const movement = {
+          id: 'mov_' + Date.now(),
+          agent_id: currentUser.id || currentUser.username,
+          routeId: currentUser.routeId,
+          type: currentMovementType,
+          amount: amount,
+          date: new Date().toISOString().split('T')[0]
+        };
+
+        const success = await window.BulaPayDB.saveCashMovement(movement);
+        if (success) {
+          alert('✅ Movimiento registrado exitosamente.');
+          document.getElementById('cash-movement-amount').value = '';
+          document.getElementById('cash-movement-form').style.display = 'none';
+          
+          // Actualizar vista
+          const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+          const elAvailable = document.getElementById('cash-management-available');
+          elAvailable.textContent = `$${Math.abs(onHand).toLocaleString('es-CO')}`;
+          elAvailable.style.color = onHand < 0 ? 'var(--color-rojo)' : 'var(--color-verde)';
+        } else {
+          alert('❌ Error al guardar el movimiento.');
+        }
+        
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = 'Confirmar Movimiento';
       };
     }
     
@@ -1609,6 +1673,16 @@ const agentModule = {
       const currentUser = window.BulaPayDB.getCurrentUser();
       const routeId = currentUser && currentUser.routeId ? currentUser.routeId : null;
 
+      const capitalRaw = document.getElementById('new-client-capital').value.replace(/\./g, '');
+      const montoPrestamo = parseFloat(capitalRaw) || 0;
+
+      // 1. Fix Crítico del Freno de Préstamos (Hard Stop)
+      const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+      if (montoPrestamo > onHand) {
+        alert(`❌ Fondos Insuficientes. El efectivo en caja de hoy es menor al capital que intentas prestar.\nEfectivo Disponible: $${onHand.toLocaleString('es-CO')}`);
+        return;
+      }
+
       const payload = {
         cedula,
         name,
@@ -1617,6 +1691,7 @@ const agentModule = {
         city,
         zone,
         risk: 'Verde', // Inicia excelente
+        amount: montoPrestamo, // Guardamos el capital prestado para la caja diaria
         totalDebt: debt,
         outstanding: debt,
         installmentsCount: installments,

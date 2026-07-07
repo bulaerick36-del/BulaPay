@@ -1026,6 +1026,79 @@ const db = {
       }
       container.appendChild(badge);
     });
+  },
+
+  async getCashMovements() {
+    try {
+      const supabase = await initSupabase();
+      const currentUser = this.getCurrentUser();
+      let query = supabase.from('caja_movimientos').select('*');
+      
+      if (currentUser && currentUser.role === 'Agente de Ruta') {
+         query = query.eq('agent_id', currentUser.id || currentUser.username);
+      }
+      
+      const { data, error } = await query;
+      if (error && error.code === '42P01') {
+        console.warn('Tabla caja_movimientos no existe aún.');
+        return [];
+      }
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching cash movements:', err);
+      return [];
+    }
+  },
+
+  async saveCashMovement(movement) {
+    try {
+      const supabase = await initSupabase();
+      const { data, error } = await supabase.from('caja_movimientos').insert([movement]);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Error saving cash movement:', err);
+      return false;
+    }
+  },
+
+  async getEfectivoEnCajaDia() {
+    try {
+      const payments = await this.getPayments();
+      const clients = await this.getClients();
+      const movements = await this.getCashMovements();
+      
+      const todayStr = new Date().toISOString().split('T')[0];
+      const currentUser = this.getCurrentUser();
+      if (!currentUser) return { totalCollected: 0, totalLent: 0, totalIn: 0, totalOut: 0, onHand: 0 };
+      
+      // Cobrado hoy
+      const todaysPayments = payments.filter(p => {
+         const isToday = p.date && p.date.startsWith(todayStr);
+         const isMine = p.supervisor_id === currentUser.username || p.agentName === currentUser.name;
+         return isToday && isMine;
+      });
+      const totalCollected = todaysPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+      
+      // Prestado hoy (clientes nuevos hoy)
+      const todaysClients = clients.filter(c => {
+         const isToday = c.created_at && c.created_at.startsWith(todayStr);
+         return isToday && c.agent_id === (currentUser.id || currentUser.username);
+      });
+      const totalLent = todaysClients.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+      
+      // Movimientos de caja
+      const todaysMovements = movements.filter(m => m.date === todayStr);
+      const totalIn = todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Number(m.amount), 0);
+      const totalOut = todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Number(m.amount), 0);
+      
+      const onHand = totalCollected - totalLent + totalIn - totalOut;
+      return { totalCollected, totalLent, totalIn, totalOut, onHand };
+    } catch (e) {
+      console.error('Error calculando caja diaria:', e);
+      return { totalCollected: 0, totalLent: 0, totalIn: 0, totalOut: 0, onHand: 0 };
+    }
   }
 };
 

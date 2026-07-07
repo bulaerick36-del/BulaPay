@@ -1235,17 +1235,20 @@
           <h1 id="private-panel-capital" style="margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: -1px;">$0</h1>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-          <div id="btn-trigger-cash-modal" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: transform 0.15s, opacity 0.15s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onmousedown="this.style.transform='scale(0.95)'; this.style.opacity='0.8'" onmouseup="this.style.transform='scale(1.02)'; this.style.opacity='1'">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+          <div id="btn-trigger-cash-modal" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: transform 0.15s, opacity 0.15s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onmousedown="this.style.transform='scale(0.95)'; this.style.opacity='0.8'" onmouseup="this.style.transform='scale(1.02)'; this.style.opacity='1'">
             <span style="font-size: 2rem; margin-bottom: 0.5rem;">📊</span>
-            <h3 style="margin: 0; font-size: 1rem; color: var(--text-primary);">Cierre de Caja</h3>
-            <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem; color: var(--text-secondary);">Cuadre del día</p>
+            <h3 style="margin: 0; font-size: 0.9rem; color: var(--text-primary);">Cierre de Caja</h3>
           </div>
           
-          <div id="btn-trigger-blacklist-modal" style="background-color: var(--color-rojo-bg); border: 1px solid rgba(239,68,68,0.3); border-radius: 16px; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: transform 0.15s, opacity 0.15s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onmousedown="this.style.transform='scale(0.95)'; this.style.opacity='0.8'" onmouseup="this.style.transform='scale(1.02)'; this.style.opacity='1'">
+          <div id="btn-trigger-cash-management-modal" style="background-color: var(--color-verde-bg); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: transform 0.15s, opacity 0.15s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onmousedown="this.style.transform='scale(0.95)'; this.style.opacity='0.8'" onmouseup="this.style.transform='scale(1.02)'; this.style.opacity='1'">
+            <span style="font-size: 2rem; margin-bottom: 0.5rem;">🏧</span>
+            <h3 style="margin: 0; font-size: 0.9rem; color: var(--color-verde);">Caja</h3>
+          </div>
+
+          <div id="btn-trigger-blacklist-modal" style="background-color: var(--color-rojo-bg); border: 1px solid rgba(239,68,68,0.3); border-radius: 16px; padding: 1.5rem 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; transition: transform 0.15s, opacity 0.15s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" onmousedown="this.style.transform='scale(0.95)'; this.style.opacity='0.8'" onmouseup="this.style.transform='scale(1.02)'; this.style.opacity='1'">
             <span style="font-size: 2rem; margin-bottom: 0.5rem;">🚨</span>
-            <h3 style="margin: 0; font-size: 1rem; color: var(--color-rojo);">Lista Negra</h3>
-            <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem; color: var(--color-rojo); opacity: 0.8;">Clientes Morosos</p>
+            <h3 style="margin: 0; font-size: 0.9rem; color: var(--color-rojo);">Lista Negra</h3>
           </div>
         </div>
 
@@ -1278,6 +1281,39 @@
         </div>
 
         <button id="btn-close-private-cash" class="btn" style="width: 100%; padding: 0.8rem; margin-top: 1rem; border-radius: 8px;">Cerrar Cuadre</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Gestión de Efectivo Diario -->
+  <div id="agent-cash-management-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(15, 23, 42, 0.85); z-index: 100000; justify-content: center; align-items: center; padding: 1rem; backdrop-filter: blur(4px);">
+    <div style="background-color: var(--bg-primary); border-radius: 16px; width: 100%; max-width: 450px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3); overflow: hidden; border: 1px solid var(--border-color);">
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-secondary);">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span style="font-size: 1.5rem;">🏧</span>
+          <h3 style="margin: 0; font-size: 1rem; color: var(--text-primary);">Gestión de Efectivo Diario</h3>
+        </div>
+      </div>
+      
+      <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background-color: var(--bg-secondary); border-radius: 12px; margin-top: 0.5rem;">
+          <span style="font-weight: 800; font-size: 1.1rem;">Efectivo Disponible:</span>
+          <span id="cash-management-available" style="font-size: 1.75rem; font-weight: 900; letter-spacing: -1px; color: var(--color-verde);">$0</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+          <button id="btn-cash-add" class="btn btn-primary" style="background-color: var(--color-verde); border-color: var(--color-verde); color: white; padding: 0.8rem; border-radius: 8px;">Agregar a Caja</button>
+          <button id="btn-cash-remove" class="btn btn-outline" style="color: var(--color-rojo); border-color: var(--color-rojo); padding: 0.8rem; border-radius: 8px;">Sacar de Caja</button>
+        </div>
+
+        <div id="cash-movement-form" style="display: none; flex-direction: column; gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+          <h4 id="cash-movement-title" style="margin: 0; font-size: 0.9rem; color: var(--text-primary);">Nuevo Movimiento</h4>
+          <input type="number" id="cash-movement-amount" placeholder="Monto Ej: 50000" style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-primary); color: var(--text-primary);">
+          <button id="btn-cash-movement-confirm" class="btn btn-primary" style="width: 100%; padding: 0.8rem; border-radius: 8px;">Confirmar Movimiento</button>
+        </div>
+
+        <button id="btn-close-cash-management" class="btn" style="width: 100%; padding: 0.8rem; margin-top: 1rem; border-radius: 8px;">Cerrar</button>
       </div>
     </div>
   </div>
