@@ -2000,8 +2000,16 @@ const agentModule = {
       const renderClients = () => {
         let htmlContent = '';
         clients.forEach(c => {
-          const hasPaid = todayPaymentsMap.has(c.cedula);
+          const hasPaidRecordToday = todayPaymentsMap.has(c.cedula);
           
+          const isCancelled = Number(c.outstanding) <= 0;
+          const clientPayments = allPayments.filter(p => String(p.clientCedula) === String(c.cedula));
+          const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(c, clientPayments);
+          const todayStatus = dailyStatusList.find(s => s.isToday);
+          const hasPaidTodayQuota = todayStatus ? todayStatus.hasPaid : false;
+          
+          const hasPaid = isCancelled || hasPaidRecordToday || hasPaidTodayQuota;
+
           const clientCreatedAt = c.created_at ? new Date(c.created_at) : new Date(0);
           const msIn24Hours = 24 * 60 * 60 * 1000;
           const isNewClient = (Date.now() - clientCreatedAt.getTime()) < msIn24Hours;
@@ -2030,7 +2038,10 @@ const agentModule = {
           }
 
           const clientCedula = String(c.cedula || 'No registrada');
-          const badgeText = hasPaid ? 'Pagó' : clientCedula;
+          
+          let badgeText = clientCedula;
+          if (isCancelled) badgeText = 'Cancelado';
+          else if (hasPaid) badgeText = 'Pagó';
           
           const clientName = c.name || 'Desconocido';
           const clientPhone = c.phone || 'Sin teléfono';
