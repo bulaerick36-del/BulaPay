@@ -124,6 +124,8 @@ async function fetchColombiaGeography() {
 
 const agentModule = {
   currentClient: null,
+  isMassPaymentMode: false,
+  selectedInstallments: [],
 
   async init() {
     this.tabCollect = document.getElementById('tab-agent-collect');
@@ -188,6 +190,8 @@ const agentModule = {
     this.paymentCardClientCedula = document.getElementById('payment-card-client-cedula');
     this.paymentCardClientOutstanding = document.getElementById('payment-card-client-outstanding');
     this.btnPaymentCardNoPago = document.getElementById('btn-payment-card-nopago');
+    this.massPaymentSwitch = document.getElementById('mass-payment-switch');
+    this.btnProcessMassPayment = document.getElementById('btn-process-mass-payment');
 
     // Detalles Cliente
     this.riskHeader = document.getElementById('client-traffic-light');
@@ -408,6 +412,19 @@ const agentModule = {
     }
     if (this.btnClosePaymentCard) {
       this.btnClosePaymentCard.addEventListener('click', () => this.closePaymentCard());
+    }
+
+    if (this.massPaymentSwitch) {
+      this.massPaymentSwitch.addEventListener('change', (e) => {
+        this.isMassPaymentMode = e.target.checked;
+        this.selectedInstallments = [];
+        if (this.btnProcessMassPayment) this.btnProcessMassPayment.style.display = 'none';
+        this.renderPaymentCardGrid();
+      });
+    }
+
+    if (this.btnProcessMassPayment) {
+      this.btnProcessMassPayment.addEventListener('click', () => this.processMassPayment());
     }
 
     // Registrar Cliente Nuevo
@@ -1051,6 +1068,10 @@ const agentModule = {
 
   closePaymentCard() {
     this.paymentCardModal.style.display = 'none';
+    this.isMassPaymentMode = false;
+    this.selectedInstallments = [];
+    if (this.massPaymentSwitch) this.massPaymentSwitch.checked = false;
+    if (this.btnProcessMassPayment) this.btnProcessMassPayment.style.display = 'none';
   },
 
   async renderPaymentCardGrid() {
@@ -1106,6 +1127,49 @@ const agentModule = {
       } else {
         cell.classList.add('pendiente');
         cell.innerHTML = `Cuota ${cuotaIdx}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
+      }
+      
+      // Manejar clicks (excepto si ya está pagado)
+      if (!hasPaid) {
+        const currentCuota = cuotaIdx;
+        const currentAmount = installmentAmount;
+        const currentDayStr = dayStr;
+        const currentIsPast = isPast;
+        
+        // Mantener selección visual si ya estaba seleccionada
+        if (this.isMassPaymentMode && this.selectedInstallments.find(i => i.number === currentCuota)) {
+          cell.classList.add('selected');
+        }
+
+        cell.style.cursor = 'pointer';
+        cell.onclick = () => {
+          if (this.isMassPaymentMode) {
+            const idx = this.selectedInstallments.findIndex(i => i.number === currentCuota);
+            if (idx > -1) {
+              this.selectedInstallments.splice(idx, 1);
+              cell.classList.remove('selected');
+            } else {
+              this.selectedInstallments.push({ number: currentCuota, amount: currentAmount, date: currentDayStr });
+              cell.classList.add('selected');
+            }
+            
+            // Actualizar botón procesar
+            if (this.selectedInstallments.length > 0) {
+              this.btnProcessMassPayment.style.display = 'block';
+              const total = this.selectedInstallments.reduce((sum, item) => sum + item.amount, 0);
+              this.btnProcessMassPayment.innerText = `Procesar Pago Masivo (${this.selectedInstallments.length}) - Total: $${total.toLocaleString('es-CO')}`;
+            } else {
+              this.btnProcessMassPayment.style.display = 'none';
+            }
+          } else {
+            const todayStr = this.getLocalDateString();
+            if (!currentIsPast && currentDayStr > todayStr) {
+              alert('Candado: No se pueden cobrar cuotas futuras en modo normal. Active el Pago Masivo para adelantar cuotas.');
+              return;
+            }
+            this.payInstallmentFromCard(currentCuota, currentAmount, currentDayStr);
+          }
+        };
       }
       
       this.paymentCardGrid.appendChild(cell);
@@ -1168,6 +1232,74 @@ const agentModule = {
       } else {
         alert('❌ Error al registrar el pago de la cuota.');
       }
+    }
+  },
+
+  async processMassPayment() {
+    if (!this.selectedInstallments || this.selectedInstallments.length === 0) return;
+    
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+    const todayStr = this.getLocalDateString();
+    
+    try {
+      this.btnProcessMassPayment.disabled = true;
+      this.btnProcessMassPayment.innerText = 'Procesando...';
+      
+      let totalAmount = 0;
+      let lastPayment = null;
+      
+      // Procesar en lote (una por una para mantener el ledger intacto)
+      for (const cuota of this.selectedInstallments) {
+        const newPayment = {
+          clientCedula: this.currentClient.cedula,
+          installmentNumber: cuota.number,
+          amount: cuota.amount,
+          date: todayStr, // La instrucción dice: usar fecha de HOY
+          agentName: currentUser.name,
+          status: 'Pagado'
+        };
+        lastPayment = await window.BulaPayDB.addPayment(newPayment);
+        totalAmount += cuota.amount;
+      }
+
+      // Reportar geolocalización una sola vez
+      this.captureAndSendLocation();
+
+      // Preparar recibo virtual agrupado
+      if (lastPayment) {
+        const fakePaymentForReceipt = {
+          ...lastPayment,
+          amount: totalAmount, // Gran total
+          installmentNumber: `Masivo (${this.selectedInstallments.length} cuotas)` 
+        };
+        window.showBulaPayReceipt(fakePaymentForReceipt, this.currentClient);
+      }
+
+      // Reset UI y Estados
+      this.isMassPaymentMode = false;
+      this.selectedInstallments = [];
+      if (this.massPaymentSwitch) this.massPaymentSwitch.checked = false;
+      this.btnProcessMassPayment.style.display = 'none';
+
+      // Re-consultar los datos del cliente actualizados
+      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      this.currentClient = updatedClient;
+      
+      // Actualizar la interfaz principal del cobrador y Cartón
+      await this.renderClientInfo(updatedClient);
+      await this.renderPaymentCardGrid();
+      
+      // Actualizar saldo mostrado en el modal
+      this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      
+      // Actualizar botón de seguimiento
+      await this.updateRouteTracking();
+      
+    } catch (err) {
+      console.error("Error al procesar pago masivo:", err);
+      alert('❌ Error al procesar el pago masivo. ' + err.message);
+    } finally {
+      this.btnProcessMassPayment.disabled = false;
     }
   },
 

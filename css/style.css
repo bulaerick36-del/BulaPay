@@ -914,6 +914,14 @@ form .btn:not([style*="width: auto"]):not([style*="width:auto"]) {
   border-color: var(--border-color);
 }
 
+.payment-card-cell.selected {
+  background-color: rgba(99, 102, 241, 0.2) !important;
+  border: 2px solid var(--primary) !important;
+  transform: scale(1.05);
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
+  z-index: 2;
+}
+
 /* Espacio Publicitario / Monetización */
 .ad-banner-placeholder {
   background-color: var(--bg-secondary);

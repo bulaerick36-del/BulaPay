@@ -884,10 +884,21 @@
                 <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; border-radius: 50%; background-color: #6c757d; display: inline-block;"></span> Pendiente</span>
               </div>
 
+              <!-- Toggle Pago Masivo -->
+              <div class="mass-payment-toggle" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; justify-content: flex-end; background: var(--bg-secondary); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                <label for="mass-payment-switch" style="font-size: 0.85rem; font-weight: bold; color: var(--text-secondary); margin: 0; cursor: pointer; flex-grow: 1;">Pago Masivo (Selección Múltiple)</label>
+                <input type="checkbox" id="mass-payment-switch" style="width: 20px; height: 20px; margin: 0; accent-color: var(--primary); cursor: pointer;">
+              </div>
+
               <!-- Cuadrícula Grid del Cartón -->
               <div id="payment-card-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
                 <!-- Dinámico en JS -->
               </div>
+
+              <!-- Botón Procesar Pago Masivo -->
+              <button id="btn-process-mass-payment" class="btn btn-primary" style="display: none; width: 100%; margin-top: 1rem; position: sticky; bottom: 0; z-index: 10; padding: 1rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(90deg, var(--primary), var(--accent)); box-shadow: 0 -4px 15px rgba(0,0,0,0.3);">
+                Procesar Pago Masivo (0)
+              </button>
 
             </div>
           </div>
