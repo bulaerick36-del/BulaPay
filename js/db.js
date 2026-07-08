@@ -1026,6 +1026,12 @@ const db = {
         badge.style.color = 'var(--color-verde)';
         badge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
         badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: 700; margin-top: 0.15rem;">✔ Pagado</span>`;
+      } else if (selectedIds && selectedIds.includes(status.dayNumber)) {
+        badge.style.backgroundColor = 'rgba(16, 185, 129, 0.15)';
+        badge.style.color = 'var(--primary)';
+        badge.style.borderColor = 'var(--primary)';
+        badge.style.borderWidth = '2px';
+        badge.innerHTML = `<span>Día ${status.dayNumber}</span><span style="font-size: 0.6rem; opacity: 0.85; font-weight: 500;">${dateLabel}</span><span style="font-size: 0.55rem; font-weight: 800; margin-top: 0.15rem;">✅ Sel.</span>`;
       } else if (status.isOverdue) {
         badge.style.backgroundColor = 'var(--color-rojo-bg)';
         badge.style.color = 'var(--color-rojo)';
