@@ -1102,6 +1102,7 @@ const db = {
          return isToday && isMine;
       });
       const totalCollected = todaysPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+      const massPaymentsTotal = todaysPayments.reduce((acc, p) => p.is_mass_payment ? acc + (Number(p.amount) || 0) : acc, 0);
       
       // Prestado hoy (clientes nuevos hoy)
       const todaysClients = clients.filter(c => {
@@ -1117,10 +1118,10 @@ const db = {
       const totalOut = todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Number(m.amount), 0);
       
       const onHand = totalCollected - totalLent + totalDiscounts + totalIn - totalOut;
-      return { totalCollected, totalLent, totalDiscounts, totalIn, totalOut, onHand };
+      return { totalCollected, totalLent, totalDiscounts, totalIn, totalOut, onHand, massPaymentsTotal };
     } catch (e) {
       console.error('Error calculando caja diaria:', e);
-      return { totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0 };
+      return { totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
     }
   }
 };

@@ -472,13 +472,17 @@ window.showBulaPayReceipt = function(payment, client) {
   if (payment.status === 'Abonado') {
     badge.textContent = 'ABONADO';
     badge.className = 'receipt-badge-status abonado';
-    stamp.textContent = '🟡';
-    stamp.style.color = 'var(--color-amarillo)';
+    if (stamp) {
+      stamp.textContent = '🟡';
+      stamp.style.color = 'var(--color-amarillo)';
+    }
   } else {
     badge.textContent = 'PAGADO';
     badge.className = 'receipt-badge-status';
-    stamp.textContent = '🟢';
-    stamp.style.color = 'var(--color-verde)';
+    if (stamp) {
+      stamp.textContent = '🟢';
+      stamp.style.color = 'var(--color-verde)';
+    }
   }
 
   modal.classList.add('active');

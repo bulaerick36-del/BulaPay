@@ -732,9 +732,20 @@ const agentModule = {
         elOnHand.textContent = 'Cargando...';
         
         try {
-          const { totalCollected, totalLent, totalDiscounts, onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+          const { totalCollected, totalLent, totalDiscounts, onHand, massPaymentsTotal } = await window.BulaPayDB.getEfectivoEnCajaDia();
           
           elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
+          
+          const elMass = document.getElementById('private-cash-mass-payments');
+          if (elMass) {
+            if (massPaymentsTotal && massPaymentsTotal > 0) {
+              elMass.textContent = `$${Math.abs(massPaymentsTotal).toLocaleString('es-CO')}`;
+              elMass.style.color = 'var(--color-verde, #10b981)';
+            } else {
+              elMass.textContent = '$0';
+              elMass.style.color = 'var(--text-muted)';
+            }
+          }
           
           const prestadoFormateado = totalLent === 0 ? "$0" : "-$" + Math.abs(totalLent).toLocaleString('es-CO');
           elLent.textContent = prestadoFormateado;
@@ -1037,11 +1048,15 @@ const agentModule = {
         } catch (e) {}
         const municipality = client.city || 'Desconocido';
         
-        this.historyActiveCreditsAlert.style.display = 'flex';
-        this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
-        this.historyActiveCreditsAlert.innerHTML = `⚠️ Atención: Este cliente tiene un crédito activo con el agente ${agentName} en el municipio ${municipality}.`;
+        if (this.historyActiveCreditsAlert) {
+          this.historyActiveCreditsAlert.style.display = 'flex';
+          this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+          this.historyActiveCreditsAlert.innerHTML = `⚠️ Atención: Este cliente tiene un crédito activo con el agente ${agentName} en el municipio ${municipality}.`;
+        }
       } else {
-        this.historyActiveCreditsAlert.style.display = 'none';
+        if (this.historyActiveCreditsAlert) {
+          this.historyActiveCreditsAlert.style.display = 'none';
+        }
       }
 
     } catch (err) {
@@ -1261,7 +1276,8 @@ const agentModule = {
           amount: cuota.amount,
           date: todayStr, // La instrucción dice: usar fecha de HOY
           agentName: currentUser.name,
-          status: 'Pagado'
+          status: 'Pagado',
+          is_mass_payment: true
         };
         lastPayment = await window.BulaPayDB.addPayment(newPayment);
         totalAmount += cuota.amount;
@@ -1284,7 +1300,9 @@ const agentModule = {
       this.isMassPaymentMode = false;
       this.selectedInstallments = [];
       if (this.massPaymentSwitch) this.massPaymentSwitch.checked = false;
-      this.btnProcessMassPayment.style.display = 'none';
+      if (this.btnProcessMassPayment) {
+        this.btnProcessMassPayment.style.display = 'none';
+      }
 
       // Re-consultar los datos del cliente actualizados
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
@@ -1294,7 +1312,9 @@ const agentModule = {
       await this.renderClientInfo(updatedClient);
       
       // Actualizar saldo mostrado en el modal
-      this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      if (this.paymentCardClientOutstanding) {
+        this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      }
       
       // Actualizar botón de seguimiento
       await this.updateRouteTracking();
@@ -1303,7 +1323,9 @@ const agentModule = {
       console.error("Error al procesar pago masivo:", err);
       alert('❌ Error al procesar el pago masivo. ' + err.message);
     } finally {
-      this.btnProcessMassPayment.disabled = false;
+      if (this.btnProcessMassPayment) {
+        this.btnProcessMassPayment.disabled = false;
+      }
     }
   },
 
