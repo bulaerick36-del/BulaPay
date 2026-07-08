@@ -1561,7 +1561,6 @@ const agentModule = {
     if (!isConfirmed) return;
 
     // Regla de Seguridad 2: Descontar el valor de la cuota
-    const amountToPay = Math.min(Number(this.currentClient.installmentAmount), Number(this.currentClient.outstanding));
     
     // Regla de Seguridad 1: Prevenir saldo negativo (aunque Math.min lo cubre, validamos por si acaso)
     if (amountToPay > Number(this.currentClient.outstanding)) {
