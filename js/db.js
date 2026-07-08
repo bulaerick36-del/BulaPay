@@ -983,7 +983,7 @@ const db = {
     return dailyStatus;
   },
 
-  renderOverdueDaysList(container, dailyStatus, onClickCallback = null) {
+  renderOverdueDaysList(container, dailyStatus, onClickCallback = null, selectedIds = []) {
     if (!container) return;
     container.innerHTML = '';
     
@@ -1009,16 +1009,14 @@ const db = {
       
       badge.style.transition = 'transform 0.1s ease';
 
-      if (onClickCallback && !status.hasPaid && !status.isFuture) {
+      if (onClickCallback && !status.hasPaid) {
         badge.style.cursor = 'pointer';
-        badge.title = 'Clic para marcar como pagado';
+        badge.title = status.isFuture ? 'Día futuro' : 'Clic para marcar como pagado';
         badge.addEventListener('click', () => {
           onClickCallback(status);
         });
         badge.addEventListener('mouseenter', () => badge.style.transform = 'scale(1.08)');
         badge.addEventListener('mouseleave', () => badge.style.transform = 'scale(1)');
-      } else if (status.isFuture) {
-        badge.title = 'Día futuro (No se puede marcar aún)';
       }
       
       const dateLabel = status.dateStr.slice(5); // MM-DD

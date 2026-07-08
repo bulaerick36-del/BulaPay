@@ -419,7 +419,12 @@ const agentModule = {
         this.isMassPaymentMode = e.target.checked;
         this.selectedInstallments = [];
         if (this.btnProcessMassPayment) this.btnProcessMassPayment.style.display = 'none';
-        this.renderPaymentCardGrid();
+        if (this.currentClient) {
+          window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula).then(payments => {
+            const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+            window.BulaPayDB.renderOverdueDaysList(this.cobroOverdueDaysList, dailyStatusList, (st) => this.handleCartonPayment(st), []);
+          });
+        }
       });
     }
 
@@ -1287,7 +1292,6 @@ const agentModule = {
       
       // Actualizar la interfaz principal del cobrador y Cartón
       await this.renderClientInfo(updatedClient);
-      await this.renderPaymentCardGrid();
       
       // Actualizar saldo mostrado en el modal
       this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
@@ -1519,8 +1523,35 @@ const agentModule = {
     }
     if (!this.currentClient) return;
     
+    const amountToPay = Math.min(Number(this.currentClient.installmentAmount), Number(this.currentClient.outstanding));
+
+    if (this.isMassPaymentMode) {
+      if (status.hasPaid) return;
+      
+      const idx = this.selectedInstallments.findIndex(i => i.number === status.dayNumber);
+      if (idx > -1) {
+        this.selectedInstallments.splice(idx, 1);
+      } else {
+        this.selectedInstallments.push({ number: status.dayNumber, amount: amountToPay, date: status.dateStr });
+      }
+      
+      if (this.selectedInstallments.length > 0) {
+        this.btnProcessMassPayment.style.display = 'block';
+        const total = this.selectedInstallments.reduce((sum, item) => sum + item.amount, 0);
+        this.btnProcessMassPayment.innerText = `Procesar Pago Masivo (${this.selectedInstallments.length}) - Total: $${total.toLocaleString('es-CO')}`;
+      } else {
+        this.btnProcessMassPayment.style.display = 'none';
+      }
+      
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const selectedIds = this.selectedInstallments.map(i => i.number);
+      window.BulaPayDB.renderOverdueDaysList(this.cobroOverdueDaysList, dailyStatusList, (st) => this.handleCartonPayment(st), selectedIds);
+      return;
+    }
+    
     if (status.isFuture) {
-      alert('Operación denegada: No se puede registrar pagos en días futuros. Espere a que corresponda la fecha.');
+      alert('Operación denegada: No se puede registrar pagos en días futuros. Active el modo Pago Masivo para adelantar pagos.');
       return;
     }
 
