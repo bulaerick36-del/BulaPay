@@ -1690,7 +1690,7 @@ const agentModule = {
     else if (client.risk === 'Amarillo') statusText = 'Atrasado';
     else if (client.risk === 'Rojo') statusText = 'Mora Severa';
 
-    this.detailStatus.textContent = statusText;
+    if (this.detailStatus) this.detailStatus.textContent = statusText;
 
     // Rellenar campo de monto de abono por defecto
     if (this.inputCollectAmount) {
