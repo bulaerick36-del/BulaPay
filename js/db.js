@@ -1123,6 +1123,16 @@ const db = {
       console.error('Error calculando caja diaria:', e);
       return { totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
     }
+  },
+
+  async upsertPayments(paymentsArray) {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase.from('payments').upsert(paymentsArray);
+    if (error) {
+      console.error("[DEBUG DB ERROR] Error en upsertPayments:", error);
+      throw error;
+    }
+    return data;
   }
 };
 
