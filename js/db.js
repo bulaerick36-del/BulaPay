@@ -976,21 +976,24 @@ const db = {
 
       // REGLA DE ADELANTO: Si es una cuota pendiente y hubo pagos anteriores
       if (!hasPaid && advancedDate) {
-        // Avanzar el generador un día hábil
-        advancedDate.setDate(advancedDate.getDate() + 1);
-        while (advancedDate.getDay() === 0) {
-          advancedDate.setDate(advancedDate.getDate() + 1);
+        // Mirar cuál sería el siguiente día hábil adelantado
+        let peekDate = new Date(advancedDate);
+        peekDate.setDate(peekDate.getDate() + 1);
+        while (peekDate.getDay() === 0) {
+          peekDate.setDate(peekDate.getDate() + 1);
         }
         
-        const advYear = advancedDate.getFullYear();
-        const advMonth = String(advancedDate.getMonth() + 1).padStart(2, '0');
-        const advDay = String(advancedDate.getDate()).padStart(2, '0');
+        const advYear = peekDate.getFullYear();
+        const advMonth = String(peekDate.getMonth() + 1).padStart(2, '0');
+        const advDay = String(peekDate.getDate()).padStart(2, '0');
         const advDateStr = `${advYear}-${advMonth}-${advDay}`;
         
-        // La cuota toma la fecha más temprana entre la matemática original y la generada por el adelanto
+        // Solo usamos y consumimos el espacio adelantado si mejora (acerca) la fecha de la cuota
         if (advDateStr < mathDateStr) {
           finalDateStr = advDateStr;
           finalDateObj = new Date(advYear, advMonth - 1, advDay);
+          // Confirmamos que consumimos este día
+          advancedDate = peekDate;
         }
       }
 
