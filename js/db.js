@@ -924,10 +924,13 @@ const db = {
     
     // Mapear pagos por número de cuota (concordancia exacta con el saldo pendiente)
     const paidInstallments = new Set();
+    const pendingDates = new Map();
     if (payments) {
       payments.forEach(p => {
         if (p.amount > 0 && p.status !== 'No Pago') {
           paidInstallments.add(Number(p.installmentNumber));
+        } else if (p.status === 'Pendiente' && p.date) {
+          pendingDates.set(Number(p.installmentNumber), p.date);
         }
       });
     }
@@ -954,10 +957,22 @@ const db = {
       const dayNum = validDaysCounter + 1; // Cuota 1, 2, 3...
       const hasPaid = paidInstallments.has(dayNum);
       
-      const year = currentDayDate.getFullYear();
-      const month = String(currentDayDate.getMonth() + 1).padStart(2, '0');
-      const day = String(currentDayDate.getDate()).padStart(2, '0');
-      const dayStr = `${year}-${month}-${day}`;
+      let dayStr = "";
+
+      // Si existe una fecha reprogramada en base de datos para esta cuota pendiente
+      if (!hasPaid && pendingDates.has(dayNum)) {
+        dayStr = pendingDates.get(dayNum);
+        // Ajustar currentDayDate a la fecha reprogramada para lógica de isOverdue/isFuture
+        const parts = dayStr.split('-');
+        if (parts.length === 3) {
+          currentDayDate = new Date(parts[0], parts[1] - 1, parts[2]);
+        }
+      } else {
+        const year = currentDayDate.getFullYear();
+        const month = String(currentDayDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDayDate.getDate()).padStart(2, '0');
+        dayStr = `${year}-${month}-${day}`;
+      }
       
       const isPastDay = currentDayDate < todayZero;
       const isOverdue = isPastDay && !hasPaid;
