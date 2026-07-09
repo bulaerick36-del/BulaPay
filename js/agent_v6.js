@@ -1638,15 +1638,15 @@ const agentModule = {
     this.currentClient = client;
     
     // Ocultar placeholder y mostrar resultados
-    this.searchPlaceholder.style.display = 'none';
-    this.searchResults.style.display = 'block';
+    if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
+    if (this.searchResults) this.searchResults.style.display = 'block';
 
     // Rellenar Info
-    this.detailName.textContent = client.name;
-    this.detailCedula.textContent = client.cedula;
-    this.detailPhone.textContent = client.phone;
-    this.detailOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
-    this.detailInstallment.textContent = `$${Number(client.installmentAmount).toLocaleString('es-CO')}`;
+    if (this.detailName) this.detailName.textContent = client.name;
+    if (this.detailCedula) this.detailCedula.textContent = client.cedula;
+    if (this.detailPhone) this.detailPhone.textContent = client.phone;
+    if (this.detailOutstanding) this.detailOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
+    if (this.detailInstallment) this.detailInstallment.textContent = `$${Number(client.installmentAmount).toLocaleString('es-CO')}`;
     
     // Calcular riesgo dinámico basado en pagos
     let dailyStatusList = [];
@@ -1669,17 +1669,19 @@ const agentModule = {
     }
 
     // Semáforo de Riesgo
-    this.riskHeader.className = 'traffic-light-header'; // Reset
-    
-    if (client.risk === 'Verde') {
-      this.riskHeader.classList.add('verde');
-      this.riskStatus.textContent = '🟢 Cliente Excelente (Al Día)';
-    } else if (client.risk === 'Amarillo') {
-      this.riskHeader.classList.add('amarillo');
-      this.riskStatus.textContent = '🟡 Pago con Retrasos (Riesgo Medio)';
-    } else if (client.risk === 'Rojo') {
-      this.riskHeader.classList.add('rojo');
-      this.riskStatus.textContent = '🔴 Cartera Castigada (Alto Riesgo)';
+    if (this.riskHeader) {
+      this.riskHeader.className = 'traffic-light-header'; // Reset
+      
+      if (client.risk === 'Verde') {
+        this.riskHeader.classList.add('verde');
+        if (this.riskStatus) this.riskStatus.textContent = '🟢 Cliente Excelente (Al Día)';
+      } else if (client.risk === 'Amarillo') {
+        this.riskHeader.classList.add('amarillo');
+        if (this.riskStatus) this.riskStatus.textContent = '🟡 Pago con Retrasos (Riesgo Medio)';
+      } else if (client.risk === 'Rojo') {
+        this.riskHeader.classList.add('rojo');
+        if (this.riskStatus) this.riskStatus.textContent = '🔴 Cartera Castigada (Alto Riesgo)';
+      }
     }
 
     // Estado de Cartera texto explicativo
