@@ -1140,7 +1140,7 @@ const db = {
          return isToday && isMine;
       });
       const totalCollected = todaysPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-      const massPaymentsTotal = todaysPayments.reduce((acc, p) => p.is_mass_payment ? acc + (Number(p.amount) || 0) : acc, 0);
+      const massPaymentsTotal = todaysPayments.reduce((acc, p) => (p.is_mass_payment || (p.status && p.status.includes('Masivo'))) ? acc + (Number(p.amount) || 0) : acc, 0);
       
       // Prestado hoy (clientes nuevos hoy)
       const todaysClients = clients.filter(c => {

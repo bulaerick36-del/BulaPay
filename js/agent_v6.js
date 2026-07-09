@@ -1276,7 +1276,7 @@ const agentModule = {
           amount: cuota.amount,
           date: todayStr, // La instrucción dice: usar fecha de HOY
           agentName: currentUser.name,
-          status: 'Pagado',
+          status: 'Pagado Masivo',
           is_mass_payment: true
         };
         lastPayment = await window.BulaPayDB.addPayment(newPayment);
