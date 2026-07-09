@@ -1304,46 +1304,6 @@ const agentModule = {
         this.btnProcessMassPayment.style.display = 'none';
       }
 
-      // ---- INICIO: REESTRUCTURACIÓN DE CALENDARIO ----
-      // 1. Identificación de Cuotas Restantes:
-      const allPaymentsAfterMass = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
-      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, allPaymentsAfterMass);
-      const pendingCuotas = dailyStatusList.filter(c => !c.hasPaid);
-
-      // 2. Reprogramación de Fechas (Date Shifting):
-      let nextDate = new Date(); // Empezamos desde hoy
-      
-      const pendingToUpsert = pendingCuotas.map(cuota => {
-        nextDate.setDate(nextDate.getDate() + 1); // Avanzar un día
-        
-        // Si la lógica original salta los domingos (getDay() === 0)
-        while (nextDate.getDay() === 0) {
-          nextDate.setDate(nextDate.getDate() + 1);
-        }
-        
-        const dateStr = nextDate.toISOString().split('T')[0];
-        const supId = window.BulaPayDB.getSupervisorId ? window.BulaPayDB.getSupervisorId() : null;
-        
-        // Creamos o actualizamos un registro de pago 'Pendiente' con la nueva fecha
-        return {
-          id: 'pay_' + cuota.dayNumber + '_' + Date.now() + '_' + Math.random().toString(36).substring(7),
-          clientCedula: this.currentClient.cedula,
-          installmentNumber: cuota.dayNumber,
-          amount: 0,
-          date: dateStr,
-          agentName: currentUser.name,
-          status: 'Pendiente',
-          is_mass_payment: false,
-          supervisor_id: supId
-        };
-      });
-
-      // 3. Actualización en Base de Datos:
-      if (pendingToUpsert.length > 0 && typeof window.BulaPayDB.upsertPayments === 'function') {
-        await window.BulaPayDB.upsertPayments(pendingToUpsert);
-      }
-      // ---- FIN: REESTRUCTURACIÓN DE CALENDARIO ----
-
       // Re-consultar los datos del cliente actualizados
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       this.currentClient = updatedClient;

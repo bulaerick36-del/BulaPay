@@ -924,15 +924,28 @@ const db = {
     
     // Mapear pagos por número de cuota (concordancia exacta con el saldo pendiente)
     const paidInstallments = new Set();
-    const pendingDates = new Map();
+    let maxPaymentDateStr = null;
+
     if (payments) {
       payments.forEach(p => {
         if (p.amount > 0 && p.status !== 'No Pago') {
           paidInstallments.add(Number(p.installmentNumber));
-        } else if (p.status === 'Pendiente' && p.date) {
-          pendingDates.set(Number(p.installmentNumber), p.date);
+          if (p.date) {
+            if (!maxPaymentDateStr || p.date > maxPaymentDateStr) {
+              maxPaymentDateStr = p.date;
+            }
+          }
         }
       });
+    }
+
+    // Configurar el generador de fechas adelantadas (advancedDate)
+    let advancedDate = null;
+    if (maxPaymentDateStr) {
+      const parts = maxPaymentDateStr.split('-');
+      if (parts.length === 3) {
+        advancedDate = new Date(parts[0], parts[1] - 1, parts[2]);
+      }
     }
 
     const dailyStatus = [];
@@ -948,35 +961,42 @@ const db = {
       const isSunday = currentDayDate.getDay() === 0;
       calendarDaysOffset++;
       
-      const currentUser = this.getCurrentUser();
-      const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
-      
       if (isSunday) continue; // Saltar domingos siempre
 
-      
       const dayNum = validDaysCounter + 1; // Cuota 1, 2, 3...
       const hasPaid = paidInstallments.has(dayNum);
       
-      let dayStr = "";
-
-      // Si existe una fecha reprogramada en base de datos para esta cuota pendiente
-      if (!hasPaid && pendingDates.has(dayNum)) {
-        dayStr = pendingDates.get(dayNum);
-        // Ajustar currentDayDate a la fecha reprogramada para lógica de isOverdue/isFuture
-        const parts = dayStr.split('-');
-        if (parts.length === 3) {
-          currentDayDate = new Date(parts[0], parts[1] - 1, parts[2]);
-        }
-      } else {
-        const year = currentDayDate.getFullYear();
-        const month = String(currentDayDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDayDate.getDate()).padStart(2, '0');
-        dayStr = `${year}-${month}-${day}`;
-      }
+      const year = currentDayDate.getFullYear();
+      const month = String(currentDayDate.getMonth() + 1).padStart(2, '0');
+      const day = String(currentDayDate.getDate()).padStart(2, '0');
+      let mathDateStr = `${year}-${month}-${day}`;
       
-      const isPastDay = currentDayDate < todayZero;
+      let finalDateStr = mathDateStr;
+      let finalDateObj = currentDayDate;
+
+      // REGLA DE ADELANTO: Si es una cuota pendiente y hubo pagos anteriores
+      if (!hasPaid && advancedDate) {
+        // Avanzar el generador un día hábil
+        advancedDate.setDate(advancedDate.getDate() + 1);
+        while (advancedDate.getDay() === 0) {
+          advancedDate.setDate(advancedDate.getDate() + 1);
+        }
+        
+        const advYear = advancedDate.getFullYear();
+        const advMonth = String(advancedDate.getMonth() + 1).padStart(2, '0');
+        const advDay = String(advancedDate.getDate()).padStart(2, '0');
+        const advDateStr = `${advYear}-${advMonth}-${advDay}`;
+        
+        // La cuota toma la fecha más temprana entre la matemática original y la generada por el adelanto
+        if (advDateStr < mathDateStr) {
+          finalDateStr = advDateStr;
+          finalDateObj = new Date(advYear, advMonth - 1, advDay);
+        }
+      }
+
+      const isPastDay = finalDateObj < todayZero;
       const isOverdue = isPastDay && !hasPaid;
-      const isFuture = currentDayDate > todayZero;
+      const isFuture = finalDateObj > todayZero;
       
       const todayYear = todayZero.getFullYear();
       const todayMonth = String(todayZero.getMonth() + 1).padStart(2, '0');
@@ -985,8 +1005,8 @@ const db = {
       
       dailyStatus.push({
         dayNumber: dayNum,
-        dateStr: dayStr,
-        isToday: dayStr === todayStr,
+        dateStr: finalDateStr,
+        isToday: finalDateStr === todayStr,
         hasPaid: hasPaid,
         isOverdue: isOverdue,
         isFuture: isFuture
