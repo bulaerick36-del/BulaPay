@@ -926,15 +926,20 @@ const db = {
     const paidInstallments = new Set();
     let maxPaymentDateStr = null;
 
+    const pendingRecordsMap = new Map();
+
     if (payments) {
       payments.forEach(p => {
-        if (p.amount > 0 && p.status !== 'No Pago') {
+        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente') {
           paidInstallments.add(Number(p.installmentNumber));
           if (p.date) {
             if (!maxPaymentDateStr || p.date > maxPaymentDateStr) {
               maxPaymentDateStr = p.date;
             }
           }
+        }
+        if (p.status === 'Pendiente') {
+          pendingRecordsMap.set(Number(p.installmentNumber), p.date);
         }
       });
     }
@@ -974,26 +979,35 @@ const db = {
       let finalDateStr = mathDateStr;
       let finalDateObj = currentDayDate;
 
-      // REGLA DE ADELANTO: Si es una cuota pendiente y hubo pagos anteriores
-      if (!hasPaid && advancedDate) {
-        // Mirar cuál sería el siguiente día hábil adelantado
-        let peekDate = new Date(advancedDate);
-        peekDate.setDate(peekDate.getDate() + 1);
-        while (peekDate.getDay() === 0) {
-          peekDate.setDate(peekDate.getDate() + 1);
+      // Usar la fecha explícita si existe en la base de datos ('Pendiente')
+      if (pendingRecordsMap.has(dayNum)) {
+        finalDateStr = pendingRecordsMap.get(dayNum);
+        const parts = finalDateStr.split('-');
+        if (parts.length === 3) {
+          finalDateObj = new Date(parts[0], parts[1] - 1, parts[2]);
         }
-        
-        const advYear = peekDate.getFullYear();
-        const advMonth = String(peekDate.getMonth() + 1).padStart(2, '0');
-        const advDay = String(peekDate.getDate()).padStart(2, '0');
-        const advDateStr = `${advYear}-${advMonth}-${advDay}`;
-        
-        // Solo usamos y consumimos el espacio adelantado si mejora (acerca) la fecha de la cuota
-        if (advDateStr < mathDateStr) {
-          finalDateStr = advDateStr;
-          finalDateObj = new Date(advYear, advMonth - 1, advDay);
-          // Confirmamos que consumimos este día
-          advancedDate = peekDate;
+      } else {
+        // REGLA DE ADELANTO: Si es una cuota pendiente y hubo pagos anteriores
+        if (!hasPaid && advancedDate) {
+          // Mirar cuál sería el siguiente día hábil adelantado
+          let peekDate = new Date(advancedDate);
+          peekDate.setDate(peekDate.getDate() + 1);
+          while (peekDate.getDay() === 0) {
+            peekDate.setDate(peekDate.getDate() + 1);
+          }
+          
+          const advYear = peekDate.getFullYear();
+          const advMonth = String(peekDate.getMonth() + 1).padStart(2, '0');
+          const advDay = String(peekDate.getDate()).padStart(2, '0');
+          const advDateStr = `${advYear}-${advMonth}-${advDay}`;
+          
+          // Solo usamos y consumimos el espacio adelantado si mejora (acerca) la fecha de la cuota
+          if (advDateStr < mathDateStr) {
+            finalDateStr = advDateStr;
+            finalDateObj = new Date(advYear, advMonth - 1, advDay);
+            // Confirmamos que consumimos este día
+            advancedDate = peekDate;
+          }
         }
       }
 
@@ -1137,7 +1151,8 @@ const db = {
       const todaysPayments = payments.filter(p => {
          const isToday = p.date && p.date.startsWith(todayStr);
          const isMine = p.supervisor_id === currentUser.username || p.agentName === currentUser.name;
-         return isToday && isMine;
+         const isRealPayment = p.status !== 'Pendiente';
+         return isToday && isMine && isRealPayment;
       });
       const totalCollected = todaysPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
       const massPaymentsTotal = todaysPayments.reduce((acc, p) => (p.is_mass_payment || (p.status && p.status.includes('Masivo'))) ? acc + (Number(p.amount) || 0) : acc, 0);
@@ -1160,6 +1175,38 @@ const db = {
     } catch (e) {
       console.error('Error calculando caja diaria:', e);
       return { totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
+    }
+  },
+
+  async updatePendingInstallments(cedula, pendingCuotasArray) {
+    const supabase = await initSupabase();
+    // 1. Eliminar cuotas pendientes anteriores para evitar duplicados
+    await supabase.from('payments').delete().eq('clientCedula', cedula).eq('status', 'Pendiente');
+    
+    // 2. Insertar las nuevas cuotas pendientes re-mapeadas
+    if (!pendingCuotasArray || pendingCuotasArray.length === 0) return;
+    
+    const currentUser = this.getCurrentUser();
+    const supId = this.getSupervisorId();
+    
+    const records = pendingCuotasArray.map(cuota => {
+      return {
+        id: 'pend_' + cuota.installmentNumber + '_' + Date.now() + Math.floor(Math.random()*1000),
+        clientCedula: cedula,
+        installmentNumber: cuota.installmentNumber,
+        amount: cuota.amount,
+        date: cuota.date,
+        agentName: currentUser ? currentUser.name : 'Sistema',
+        status: 'Pendiente',
+        signature: 'N/A',
+        supervisor_id: supId
+      };
+    });
+    
+    const { error } = await supabase.from('payments').insert(records);
+    if (error) {
+      console.error("Error al actualizar cuotas pendientes:", error);
+      throw error;
     }
   },
 

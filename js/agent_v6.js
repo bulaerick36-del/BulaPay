@@ -1283,6 +1283,40 @@ const agentModule = {
         totalAmount += cuota.amount;
       }
 
+      // 2. Re-mapeo de Cuotas Pendientes (El Fix)
+      // Inmediatamente después de marcar las cuotas como pagadas, calculamos las pendientes
+      const currentClientPayments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, currentClientPayments);
+      const pendingCuotas = dailyStatus.filter(s => !s.hasPaid);
+      
+      // Ordenadas por su número de cuota original
+      pendingCuotas.sort((a, b) => a.dayNumber - b.dayNumber);
+
+      let nextDate = new Date(); // HOY
+      const newPendingRecords = [];
+      
+      for (const pending of pendingCuotas) {
+        nextDate.setDate(nextDate.getDate() + 1); // MAÑANA
+        while (nextDate.getDay() === 0) { // saltando domingos
+          nextDate.setDate(nextDate.getDate() + 1);
+        }
+        
+        const yyyy = nextDate.getFullYear();
+        const mm = String(nextDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(nextDate.getDate()).padStart(2, '0');
+        const futureDateStr = `${yyyy}-${mm}-${dd}`;
+        
+        newPendingRecords.push({
+          installmentNumber: pending.dayNumber,
+          amount: this.currentClient.installmentAmount,
+          date: futureDateStr
+        });
+      }
+      
+      if (newPendingRecords.length > 0) {
+        await window.BulaPayDB.updatePendingInstallments(this.currentClient.cedula, newPendingRecords);
+      }
+
       // Reportar geolocalización una sola vez
       this.captureAndSendLocation();
 
