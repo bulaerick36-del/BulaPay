@@ -1286,8 +1286,22 @@ const agentModule = {
       // 2. Re-mapeo de Cuotas Pendientes (El Fix)
       // Inmediatamente después de marcar las cuotas como pagadas, calculamos las pendientes
       const currentClientPayments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      
+      let maxPaidInstallment = 0;
+      currentClientPayments.forEach(p => {
+        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente') {
+           const num = Number(p.installmentNumber);
+           if (!isNaN(num) && num > maxPaidInstallment) {
+              maxPaidInstallment = num;
+           }
+        }
+      });
+      
       const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, currentClientPayments);
-      const pendingCuotas = dailyStatus.filter(s => !s.hasPaid);
+      
+      // SOLO reprogramamos las cuotas pendientes que estén DESPUÉS de la máxima cuota pagada.
+      // Las cuotas pendientes ANTERIORES (saltadas) se mantienen con su fecha original (atrasadas).
+      const pendingCuotas = dailyStatus.filter(s => !s.hasPaid && s.dayNumber > maxPaidInstallment);
       
       // Ordenadas por su número de cuota original
       pendingCuotas.sort((a, b) => a.dayNumber - b.dayNumber);
