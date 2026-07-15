@@ -696,7 +696,7 @@ const agentModule = {
       try {
         const currentUser = window.BulaPayDB.getCurrentUser();
         const route = currentUser && currentUser.routeId ? await window.BulaPayDB.getRouteById(currentUser.routeId) : null;
-        const routeCapital = route ? parseFloat(route.capital) || 0 : 0;
+        const routeCapital = route ? await window.BulaPayDB.getRealBaseCapital(route.id) : 0;
         capitalEl.textContent = `$${routeCapital.toLocaleString('es-CO')}`;
       } catch (err) {
         console.error(err);
@@ -705,6 +705,60 @@ const agentModule = {
     }
     
     // Lógica para Modales
+    const injectModal = document.getElementById('modal-inject-capital');
+    const btnInjectCapital = document.getElementById('btn-show-inject-modal');
+    if (injectModal && btnInjectCapital) {
+      btnInjectCapital.onclick = () => injectModal.style.display = 'flex';
+      document.getElementById('btn-close-inject-modal').onclick = () => injectModal.style.display = 'none';
+      
+      const btnConfirmInject = document.getElementById('btn-confirm-inject-capital');
+      if (btnConfirmInject) {
+        const injectInput = document.getElementById('inject-capital-amount');
+        if (injectInput) {
+          injectInput.addEventListener('input', (e) => {
+            let val = e.target.value.replace(/\D/g, '');
+            e.target.value = val ? val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '';
+          });
+        }
+        
+        btnConfirmInject.onclick = async () => {
+          const currentUser = window.BulaPayDB.getCurrentUser();
+          const rawAmount = document.getElementById('inject-capital-amount').value.replace(/\./g, '');
+          const amount = parseFloat(rawAmount);
+          
+          if (isNaN(amount) || amount <= 0) {
+            alert('Por favor ingresa un monto válido.');
+            return;
+          }
+          
+          btnConfirmInject.disabled = true;
+          btnConfirmInject.textContent = 'Procesando...';
+          
+          try {
+            const success = await window.BulaPayDB.injectCapital(currentUser.routeId, currentUser.username || currentUser.id, amount);
+            if (success) {
+              alert('✅ Capital inyectado exitosamente.');
+              injectModal.style.display = 'none';
+              document.getElementById('inject-capital-amount').value = '';
+              
+              // Re-render Capital Base
+              const newCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
+              const capEl = document.getElementById('private-panel-capital');
+              if (capEl) capEl.textContent = `$${newCapital.toLocaleString('es-CO')}`;
+            } else {
+              alert('❌ Error al inyectar capital.');
+            }
+          } catch (error) {
+            console.error(error);
+            alert('❌ Error de conexión.');
+          } finally {
+            btnConfirmInject.disabled = false;
+            btnConfirmInject.textContent = 'Registrar Inyección';
+          }
+        };
+      }
+    }
+
     const cashModal = document.getElementById('private-panel-cash-modal');
     const blacklistModal = document.getElementById('private-panel-blacklist-modal');
     const btnCash = document.getElementById('btn-trigger-cash-modal');
@@ -844,20 +898,11 @@ const agentModule = {
           date: new Date().toISOString().split('T')[0]
         };
 
-        // Sincronizar Capital Base
-        let capitalDelta = 0;
-        if (currentMovementType === 'entrada') {
-          capitalDelta = amount;
-        } else if (currentMovementType === 'salida') {
-          capitalDelta = -amount;
-        }
-        
         try {
-          await window.BulaPayDB.updateRouteCapital(currentUser.routeId, capitalDelta);
           const success = await window.BulaPayDB.saveCashMovement(movement);
           
           if (success) {
-            alert('✅ Movimiento registrado y Capital Base actualizado exitosamente.');
+            alert('✅ Movimiento registrado exitosamente.');
             document.getElementById('cash-movement-amount').value = '';
             document.getElementById('cash-movement-form').style.display = 'none';
             
@@ -868,8 +913,7 @@ const agentModule = {
             elAvailable.style.color = onHand < 0 ? 'var(--color-rojo)' : 'var(--color-verde)';
             
             // Re-render del número gigante Capital Base
-            const route = await window.BulaPayDB.getRouteById(currentUser.routeId);
-            const routeCapital = route ? parseFloat(route.capital) || 0 : 0;
+            const routeCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
             const capitalEl = document.getElementById('private-panel-capital');
             if (capitalEl) capitalEl.textContent = `$${routeCapital.toLocaleString('es-CO')}`;
           } else {
@@ -877,7 +921,7 @@ const agentModule = {
           }
         } catch (error) {
           console.error(error);
-          alert('❌ Error al actualizar el Capital Base.');
+          alert('❌ Error de conexión.');
         }
         
         btnConfirm.disabled = false;

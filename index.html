@@ -1275,6 +1275,7 @@
           <span style="font-size: 2.5rem; margin-bottom: 0.5rem;">💰</span>
           <h3 style="margin: 0 0 0.5rem 0; font-weight: 600; font-size: 1.1rem; opacity: 0.9;">Mi Capital Base (Activo)</h3>
           <h1 id="private-panel-capital" style="margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: -1px;">$0</h1>
+          <button id="btn-show-inject-modal" style="margin-top: 1rem; padding: 0.6rem 1.2rem; background-color: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 20px; font-weight: 600; cursor: pointer; transition: background-color 0.2s;">➕ Inyectar Capital</button>
         </div>
 
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
@@ -1296,6 +1297,24 @@
 
       </div>
 
+    </div>
+  </div>
+
+  <!-- Modal: Inyectar Capital -->
+  <div id="modal-inject-capital" style="display: none; position: fixed; inset: 0; background-color: rgba(15, 23, 42, 0.85); z-index: 100000; justify-content: center; align-items: center; padding: 1rem; backdrop-filter: blur(4px);">
+    <div style="background-color: var(--bg-primary); border-radius: 16px; width: 100%; max-width: 400px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3); overflow: hidden; border: 1px solid var(--border-color);">
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-secondary);">
+        <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">➕ Inyectar Capital</h3>
+        <button id="btn-close-inject-modal" style="background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; padding: 0;">&times;</button>
+      </div>
+      <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;">
+        <p style="margin: 0; font-size: 0.9rem; color: var(--text-secondary);">Ingresa el monto de tu propio bolsillo que sumarás al capital de trabajo.</p>
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); font-weight: 600;">Monto a Inyectar ($)</label>
+          <input type="text" id="inject-capital-amount" placeholder="Ej. 1.000.000" inputmode="numeric" style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 1.1rem;">
+        </div>
+        <button id="btn-confirm-inject-capital" class="btn btn-primary" style="width: 100%; padding: 0.8rem; font-weight: bold; border-radius: 8px;">Registrar Inyección</button>
+      </div>
     </div>
   </div>
 

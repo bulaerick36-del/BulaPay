@@ -1101,6 +1101,86 @@ const db = {
       container.appendChild(badge);
     });
   },
+  async getCapitalInjections(routeId) {
+    try {
+      const supabase = await initSupabase();
+      let query = supabase.from('capital_injections').select('*');
+      if (routeId) {
+        query = query.eq('routeId', routeId);
+      }
+      const { data, error } = await query;
+      if (error && error.code === '42P01') {
+        console.warn('Tabla capital_injections no existe aún.');
+        return [];
+      }
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching capital injections:', err);
+      return [];
+    }
+  },
+
+  async injectCapital(routeId, agentId, amount) {
+    try {
+      const supabase = await initSupabase();
+      const injection = {
+        id: 'inj_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        routeId: routeId,
+        agent_id: agentId,
+        amount: parseFloat(amount),
+        date: new Date().toISOString().split('T')[0]
+      };
+      const { error } = await supabase.from('capital_injections').insert([injection]);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Error injecting capital:', err);
+      return false;
+    }
+  },
+
+  async getRealBaseCapital(routeId) {
+    try {
+      // 1. Suma Total Inyectada por el Agente
+      const injections = await this.getCapitalInjections(routeId);
+      const totalInjected = injections.reduce((acc, inj) => acc + (parseFloat(inj.amount) || 0), 0);
+
+      // 2. Total de Intereses (Réditos) ya RECAUDADOS
+      let totalCollectedInterests = 0;
+      const clients = await this.getClients();
+      for (const c of clients) {
+        if (c.routeId === routeId) {
+          const debt = parseFloat(c.totalDebt) || 0;
+          const amountLent = parseFloat(c.amount) || debt;
+          const outstanding = parseFloat(c.outstanding) || 0;
+          const totalPaid = debt - outstanding;
+
+          if (debt > 0 && debt > amountLent) {
+            const interestRatio = (debt - amountLent) / debt;
+            totalCollectedInterests += (totalPaid * interestRatio);
+          }
+        }
+      }
+
+      // 3. Gastos Operativos / Retiros
+      // Solo tomamos en cuenta los movimientos manuales marcados como "salida" (que corresponden a Retiros)
+      // Los desembolsos de créditos ya son ignorados aquí (ya que no entran a caja_movimientos como salidas).
+      const movements = await this.getCashMovements();
+      let totalExpenses = 0;
+      for (const m of movements) {
+        if (m.routeId === routeId && m.type === 'salida') {
+          totalExpenses += (parseFloat(m.amount) || 0);
+        }
+      }
+
+      const realBaseCapital = totalInjected + totalCollectedInterests - totalExpenses;
+      return Math.max(0, realBaseCapital); // Mantenemos un piso de 0 para evitar descuadres raros
+    } catch (err) {
+      console.error('Error calculating Real Base Capital:', err);
+      return 0;
+    }
+  },
 
   async getCashMovements() {
     try {

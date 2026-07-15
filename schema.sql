@@ -160,3 +160,18 @@ GRANT ALL ON TABLE caja_movimientos TO anon, authenticated;
 -- Descuentos Iniciales
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_amount" NUMERIC DEFAULT 0;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_reason" TEXT;
+
+-- Nueva tabla de inyecciones de capital
+CREATE TABLE IF NOT EXISTS capital_injections (
+  "id" TEXT PRIMARY KEY,
+  "routeId" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "agent_id" TEXT,
+  "amount" NUMERIC NOT NULL,
+  "date" DATE NOT NULL DEFAULT CURRENT_DATE,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE capital_injections ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir todo a anonimos en capital_injections" ON capital_injections FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE capital_injections TO anon, authenticated;
+
