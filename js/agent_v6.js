@@ -1908,7 +1908,6 @@ const agentModule = {
 
     const cedula = document.getElementById('new-client-cedula').value.trim();
     const phone = document.getElementById('new-client-phone').value.trim();
-    const email = document.getElementById('new-client-email').value.trim();
     const department = document.getElementById('new-client-department').value;
     const cityVal = document.getElementById('new-client-city').value;
     const city = department ? `${department} - ${cityVal}` : cityVal;
@@ -1918,7 +1917,7 @@ const agentModule = {
     const installments = parseInt(document.getElementById('new-client-installments').value);
 
     console.log('[DEBUG] Intentando registrar nuevo cliente. Datos del formulario:', {
-      name, agentId, cedula, phone, email, department, cityVal, city, zone, debt, installments
+      name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments
     });
 
     try {
@@ -1968,7 +1967,6 @@ const agentModule = {
         cedula,
         name,
         phone,
-        email,
         city,
         zone,
         risk: 'Verde', // Inicia excelente
