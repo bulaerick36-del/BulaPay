@@ -1474,8 +1474,13 @@
           BulaPay-SIG-xxxxx
         </div>
       </div>
-      <div class="receipt-footer">
-        <button class="btn btn-accent" id="btn-close-receipt" style="padding: 0.5rem; font-size: 0.85rem; width: auto; min-width: 120px; display: inline-block;">Entendido / Cerrar</button>
+      <div class="receipt-footer" style="display: flex; flex-direction: column; gap: 0.5rem; align-items: center;">
+        <button class="btn" id="btn-whatsapp-receipt" style="background-color: #25D366; color: white; border: none; padding: 0.75rem 1rem; border-radius: 8px; font-weight: bold; width: 100%; max-width: 280px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          📲 Enviar Recibo por WhatsApp
+        </button>
+        <button class="btn" id="btn-close-receipt" style="padding: 0.5rem; font-size: 0.85rem; width: 100%; max-width: 280px; background-color: transparent; border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px; cursor: pointer;">
+          Cerrar
+        </button>
       </div>
     </div>
   </div>
