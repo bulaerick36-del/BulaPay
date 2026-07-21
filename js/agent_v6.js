@@ -1327,53 +1327,8 @@ const agentModule = {
         totalAmount += cuota.amount;
       }
 
-      // 2. Re-mapeo de Cuotas Pendientes (El Fix)
-      // Inmediatamente después de marcar las cuotas como pagadas, calculamos las pendientes
-      const currentClientPayments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
-      
-      let maxPaidInstallment = 0;
-      currentClientPayments.forEach(p => {
-        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente') {
-           const num = Number(p.installmentNumber);
-           if (!isNaN(num) && num > maxPaidInstallment) {
-              maxPaidInstallment = num;
-           }
-        }
-      });
-      
-      const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, currentClientPayments);
-      
-      // SOLO reprogramamos las cuotas pendientes que estén DESPUÉS de la máxima cuota pagada.
-      // Las cuotas pendientes ANTERIORES (saltadas) se mantienen con su fecha original (atrasadas).
-      const pendingCuotas = dailyStatus.filter(s => !s.hasPaid && s.dayNumber > maxPaidInstallment);
-      
-      // Ordenadas por su número de cuota original
-      pendingCuotas.sort((a, b) => a.dayNumber - b.dayNumber);
-
-      let nextDate = new Date(); // HOY
-      const newPendingRecords = [];
-      
-      for (const pending of pendingCuotas) {
-        nextDate.setDate(nextDate.getDate() + 1); // MAÑANA
-        while (nextDate.getDay() === 0) { // saltando domingos
-          nextDate.setDate(nextDate.getDate() + 1);
-        }
-        
-        const yyyy = nextDate.getFullYear();
-        const mm = String(nextDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(nextDate.getDate()).padStart(2, '0');
-        const futureDateStr = `${yyyy}-${mm}-${dd}`;
-        
-        newPendingRecords.push({
-          installmentNumber: pending.dayNumber,
-          amount: this.currentClient.installmentAmount,
-          date: futureDateStr
-        });
-      }
-      
-      if (newPendingRecords.length > 0) {
-        await window.BulaPayDB.updatePendingInstallments(this.currentClient.cedula, newPendingRecords);
-      }
+      // 2. Date Shifting (Corrimiento de Fechas) Estricto
+      await window.BulaPayDB.shiftPendingDates(this.currentClient.cedula);
 
       // Reportar geolocalización una sola vez
       this.captureAndSendLocation();

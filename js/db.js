@@ -1290,6 +1290,50 @@ const db = {
     }
   },
 
+  async shiftPendingDates(cedula) {
+    const supabase = await initSupabase();
+    
+    // 1. Extraer Pendientes
+    const { data: pendingInstallments, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('clientCedula', String(cedula))
+      .eq('status', 'Pendiente')
+      .order('installmentNumber', { ascending: true });
+
+    if (error) {
+      console.error("Error al obtener cuotas pendientes:", error);
+      throw error;
+    }
+
+    if (!pendingInstallments || pendingInstallments.length === 0) return;
+
+    // 2. Calcular Fechas y 3. Iteración
+    let nextDate = new Date();
+    
+    for (let i = 0; i < pendingInstallments.length; i++) {
+      nextDate.setDate(nextDate.getDate() + 1);
+      while (nextDate.getDay() === 0) { // Saltar domingos
+        nextDate.setDate(nextDate.getDate() + 1);
+      }
+      
+      const yyyy = nextDate.getFullYear();
+      const mm = String(nextDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(nextDate.getDate()).padStart(2, '0');
+      pendingInstallments[i].date = `${yyyy}-${mm}-${dd}`;
+    }
+
+    // 4. Actualización Masiva (Upsert)
+    const { error: upsertError } = await supabase
+      .from('payments')
+      .upsert(pendingInstallments);
+
+    if (upsertError) {
+      console.error("Error en upsert de cuotas pendientes:", upsertError);
+      throw upsertError;
+    }
+  },
+
   async upsertPayments(paymentsArray) {
     const supabase = await initSupabase();
     const { data, error } = await supabase.from('payments').upsert(paymentsArray);
