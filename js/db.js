@@ -1122,22 +1122,20 @@ const db = {
   },
 
   async injectCapital(routeId, agentId, amount) {
-    try {
-      const supabase = await initSupabase();
-      const injection = {
-        id: 'inj_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-        routeId: routeId,
-        agent_id: agentId,
-        amount: parseFloat(amount),
-        date: new Date().toISOString().split('T')[0]
-      };
-      const { error } = await supabase.from('capital_injections').insert([injection]);
-      if (error) throw error;
-      return true;
-    } catch (err) {
-      console.error('Error injecting capital:', err);
-      return false;
+    const supabase = await initSupabase();
+    const injection = {
+      id: 'inj_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      routeId: routeId ? routeId : null,
+      agent_id: agentId ? agentId : null,
+      amount: parseFloat(amount),
+      date: new Date().toISOString().split('T')[0]
+    };
+    const { error } = await supabase.from('capital_injections').insert([injection]);
+    if (error) {
+      console.error('Error injecting capital DB:', error);
+      throw error;
     }
+    return true;
   },
 
   async getRealBaseCapital(routeId) {

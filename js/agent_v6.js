@@ -735,22 +735,18 @@ const agentModule = {
           btnConfirmInject.textContent = 'Procesando...';
           
           try {
-            const success = await window.BulaPayDB.injectCapital(currentUser.routeId, currentUser.username || currentUser.id, amount);
-            if (success) {
-              alert('✅ Capital inyectado exitosamente.');
-              injectModal.style.display = 'none';
-              document.getElementById('inject-capital-amount').value = '';
-              
-              // Re-render Capital Base
-              const newCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
-              const capEl = document.getElementById('private-panel-capital');
-              if (capEl) capEl.textContent = `$${newCapital.toLocaleString('es-CO')}`;
-            } else {
-              alert('❌ Error al inyectar capital.');
-            }
+            await window.BulaPayDB.injectCapital(currentUser.routeId, currentUser.username || currentUser.id, amount);
+            alert('✅ Capital inyectado exitosamente.');
+            injectModal.style.display = 'none';
+            document.getElementById('inject-capital-amount').value = '';
+            
+            // Re-render Capital Base
+            const newCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
+            const capEl = document.getElementById('private-panel-capital');
+            if (capEl) capEl.textContent = `$${newCapital.toLocaleString('es-CO')}`;
           } catch (error) {
             console.error(error);
-            alert('❌ Error de conexión.');
+            alert('❌ Error al inyectar capital: ' + (error.message || JSON.stringify(error)));
           } finally {
             btnConfirmInject.disabled = false;
             btnConfirmInject.textContent = 'Registrar Inyección';
