@@ -1140,15 +1140,26 @@ const db = {
 
   async getRealBaseCapital(routeId) {
     try {
+      const currentUser = this.getCurrentUser();
+      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+
       // 1. Suma Total Inyectada por el Agente
       const injections = await this.getCapitalInjections(routeId);
-      const totalInjected = injections.reduce((acc, inj) => acc + (parseFloat(inj.amount) || 0), 0);
+      let totalInjected = 0;
+      for (const inj of injections) {
+        if (routeId) {
+          if (inj.routeId === routeId) totalInjected += (parseFloat(inj.amount) || 0);
+        } else if (agentId) {
+          if (inj.agent_id === agentId) totalInjected += (parseFloat(inj.amount) || 0);
+        }
+      }
 
       // 2. Total de Intereses (Réditos) ya RECAUDADOS
       let totalCollectedInterests = 0;
       const clients = await this.getClients();
       for (const c of clients) {
-        if (c.routeId === routeId) {
+        const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId);
+        if (belongsToUser) {
           const debt = parseFloat(c.totalDebt) || 0;
           const amountLent = parseFloat(c.amount) || debt;
           const outstanding = parseFloat(c.outstanding) || 0;
@@ -1162,12 +1173,11 @@ const db = {
       }
 
       // 3. Gastos Operativos / Retiros
-      // Solo tomamos en cuenta los movimientos manuales marcados como "salida" (que corresponden a Retiros)
-      // Los desembolsos de créditos ya son ignorados aquí (ya que no entran a caja_movimientos como salidas).
       const movements = await this.getCashMovements();
       let totalExpenses = 0;
       for (const m of movements) {
-        if (m.routeId === routeId && m.type === 'salida') {
+        const belongsToUser = routeId ? (m.routeId === routeId) : (m.agent_id === agentId);
+        if (belongsToUser && m.type === 'salida') {
           totalExpenses += (parseFloat(m.amount) || 0);
         }
       }
