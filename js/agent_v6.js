@@ -1563,11 +1563,8 @@ const agentModule = {
       const updatedDailyStatusList = window.BulaPayDB.getDailyPaymentStatus(updatedClient, allPayments);
       const hasOverdue = updatedDailyStatusList.some(s => s.isOverdue);
 
-      if (hasOverdue) {
-        alert('Pago exitoso. Recuerde que tiene unos días atrasados, recuerde ponerse al día.');
-      } else {
-        alert('Pago exitoso.');
-      }
+      // Mostrar modal obligatorio SMS para notificar el pago
+      this.showMandatorySmsPrompt(updatedClient, 'payment');
       
     } catch (e) {
       console.error("Error capturado en Confirmar Pago:", e);
@@ -1664,7 +1661,7 @@ const agentModule = {
       
       await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
       
-      alert(`✅ Día ${status.dayNumber} registrado como pagado.`);
+      this.showMandatorySmsPrompt(updatedClient, 'payment');
       
     } catch (e) {
       console.error(e);
@@ -1996,8 +1993,8 @@ const agentModule = {
       // Resetear formulario
       this.formRegisterClient.reset();
 
-      // Mostrar modal simulador WhatsApp
-      this.showWhatsAppMockup(payload);
+      // Mostrar modal obligatorio SMS
+      this.showMandatorySmsPrompt(payload, 'register');
     } catch (err) {
       console.error('[DEBUG ERROR] Error atrapado al registrar cliente en agent.js:', err);
       if (err && typeof err === 'object') {
@@ -2015,19 +2012,92 @@ const agentModule = {
     }
   },
 
-  showWhatsAppMockup(client) {
-    if (!this.shareModal) return;
-
-    this.waAvatar.textContent = client.name.charAt(0);
-    this.waName.textContent = client.name;
-    
-    // URL dinámica que simula el enlace del cliente
+  showMandatorySmsPrompt(client, type) {
+    const currentUser = window.BulaPayDB.getCurrentUser() || {};
+    const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
+    // Generar el link para que el cliente meta su cédula. Aseguramos no incluir un ID estático en el mensaje para que él mismo la digite.
+    // Opcionalmente, la appUrl puede incluir ?view=customer. El prompt original dice "apunte a la vista donde el cliente ingresa su cédula".
+    // La raíz (index.html) sin view normalmente tiene el input de cédula, o se usa un view especial. Usaremos origin + pathname.
     const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${client.cedula}`;
-    this.waLinkUrl.href = appUrl;
-    this.waLinkUrl.textContent = appUrl;
+    
+    let text = '';
+    if (type === 'register') {
+      text = `Hola, bienvenido. BulaPay te notifica que adquiriste un crédito con el agente ${agentName}. Nosotros cuidamos tu beneficio. En el siguiente link podrás consultar tu cartón día a día: ${appUrl}`;
+    } else if (type === 'payment') {
+      text = `Hola. BulaPay te indica: pago exitoso de tu cuota. En el siguiente link podrás ver tu cartón: ${appUrl}`;
+    }
 
-    // Activar modal
-    this.shareModal.classList.add('active');
+    const encodedText = encodeURIComponent(text);
+    let phoneStr = String(client.phone || '').trim();
+    if (phoneStr && !phoneStr.startsWith('+') && !phoneStr.startsWith('57')) {
+      phoneStr = '+57' + phoneStr;
+    } else if (phoneStr.startsWith('57')) {
+      phoneStr = '+' + phoneStr;
+    } else if (!phoneStr.startsWith('+57')) {
+      phoneStr = '+57' + phoneStr.replace(/\\D/g, ''); // fallback
+    }
+
+    const smsUrl = `sms:${phoneStr}?body=${encodedText}`;
+
+    // Crear el overlay modal un-closable
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
+    overlay.style.display = 'flex';
+    overlay.style.justifyContent = 'center';
+    overlay.style.alignItems = 'center';
+    overlay.style.zIndex = '999999';
+    overlay.style.flexDirection = 'column';
+
+    const modal = document.createElement('div');
+    modal.style.backgroundColor = '#fff';
+    modal.style.padding = '30px 20px';
+    modal.style.borderRadius = '12px';
+    modal.style.textAlign = 'center';
+    modal.style.maxWidth = '90%';
+    modal.style.width = '400px';
+    modal.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+    
+    const title = document.createElement('h2');
+    title.textContent = type === 'register' ? 'Registro Exitoso' : 'Pago Exitoso';
+    title.style.marginTop = '0';
+    title.style.color = '#333';
+    title.style.fontSize = '24px';
+    title.style.marginBottom = '15px';
+    
+    const message = document.createElement('p');
+    message.textContent = 'Para continuar, es OBLIGATORIO notificar al cliente vía SMS.';
+    message.style.color = '#555';
+    message.style.fontSize = '16px';
+    message.style.lineHeight = '1.5';
+    message.style.marginBottom = '25px';
+
+    const btn = document.createElement('button');
+    btn.textContent = 'Continuar y Enviar SMS';
+    btn.style.backgroundColor = 'var(--color-primario, #4A90E2)';
+    btn.style.color = '#fff';
+    btn.style.border = 'none';
+    btn.style.padding = '14px 24px';
+    btn.style.borderRadius = '8px';
+    btn.style.fontSize = '18px';
+    btn.style.cursor = 'pointer';
+    btn.style.fontWeight = 'bold';
+    btn.style.width = '100%';
+
+    btn.onclick = () => {
+      window.location.href = smsUrl;
+      document.body.removeChild(overlay);
+    };
+
+    modal.appendChild(title);
+    modal.appendChild(message);
+    modal.appendChild(btn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
   },
 
   async captureAndSendLocation() {
