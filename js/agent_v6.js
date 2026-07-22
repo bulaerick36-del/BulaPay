@@ -1952,10 +1952,10 @@ const agentModule = {
 
       const montoSalida = montoPrestamo - discountAmount;
 
-      // 1. Fix Crítico del Freno de Préstamos (Hard Stop) con Descuento
-      const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
-      if (montoSalida > onHand) {
-        alert(`❌ Fondos Insuficientes. El efectivo en caja de hoy es menor a la salida real de capital.\nSalida Neta: $${montoSalida.toLocaleString('es-CO')}\nEfectivo Disponible: $${onHand.toLocaleString('es-CO')}`);
+      // 1. Fix Crítico del Freno de Préstamos (Hard Stop) con Descuento usando Caja Líquida
+      const liquidCash = await window.BulaPayDB.getLiquidCash(routeId);
+      if (montoSalida > liquidCash) {
+        alert(`❌ Fondos Insuficientes. La Caja Líquida es menor al capital requerido para el desembolso.\nSalida Neta (A entregar): $${montoSalida.toLocaleString('es-CO')}\nCaja Líquida Disponible: $${liquidCash.toLocaleString('es-CO')}`);
         return;
       }
 

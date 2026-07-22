@@ -1143,18 +1143,15 @@ const db = {
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
 
-      // 1. Suma Total Inyectada por el Agente
+      // 1. Suma Total Inyectada
       const injections = await this.getCapitalInjections(routeId);
       let totalInjected = 0;
       for (const inj of injections) {
-        if (routeId) {
-          if (inj.routeId === routeId) totalInjected += (parseFloat(inj.amount) || 0);
-        } else if (agentId) {
-          if (inj.agent_id === agentId) totalInjected += (parseFloat(inj.amount) || 0);
-        }
+        const belongsToUser = routeId ? (inj.routeId === routeId) : (inj.agent_id === agentId);
+        if (belongsToUser) totalInjected += (parseFloat(inj.amount) || 0);
       }
 
-      // 2. Total de Intereses (Réditos) ya RECAUDADOS
+      // 2. Intereses Reales Recaudados
       let totalCollectedInterests = 0;
       const clients = await this.getClients();
       for (const c of clients) {
@@ -1163,16 +1160,16 @@ const db = {
           const debt = parseFloat(c.totalDebt) || 0;
           const amountLent = parseFloat(c.amount) || debt;
           const outstanding = parseFloat(c.outstanding) || 0;
-          const totalPaid = debt - outstanding;
+          const totalPaid = Math.max(0, debt - outstanding); // Evitar negativos
 
-          if (debt > 0 && debt > amountLent) {
+          if (debt > 0 && debt > amountLent && totalPaid > 0) {
             const interestRatio = (debt - amountLent) / debt;
             totalCollectedInterests += (totalPaid * interestRatio);
           }
         }
       }
 
-      // 3. Gastos Operativos / Retiros
+      // 3. Gastos / Retiros (Exclusivamente 'salida')
       const movements = await this.getCashMovements();
       let totalExpenses = 0;
       for (const m of movements) {
@@ -1182,10 +1179,62 @@ const db = {
         }
       }
 
+      // BAJO NINGUNA CIRCUNSTANCIA se restan desembolsos de préstamos.
       const realBaseCapital = totalInjected + totalCollectedInterests - totalExpenses;
-      return Math.max(0, realBaseCapital); // Mantenemos un piso de 0 para evitar descuadres raros
+      return realBaseCapital;
     } catch (err) {
       console.error('Error calculating Real Base Capital:', err);
+      return 0;
+    }
+  },
+
+  async getLiquidCash(routeId) {
+    try {
+      const currentUser = this.getCurrentUser();
+      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+
+      // 1. Suma (capital_injections)
+      const injections = await this.getCapitalInjections(routeId);
+      let totalInjected = 0;
+      for (const inj of injections) {
+        const belongsToUser = routeId ? (inj.routeId === routeId) : (inj.agent_id === agentId);
+        if (belongsToUser) totalInjected += (parseFloat(inj.amount) || 0);
+      }
+
+      // 2. Suma (Todas las cuotas pagadas por clientes) y 4. Suma (Total de capital entregado/desembolsado)
+      let totalPaidByClients = 0;
+      let totalCapitalLent = 0;
+      const clients = await this.getClients();
+      for (const c of clients) {
+        const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId);
+        if (belongsToUser) {
+          const debt = parseFloat(c.totalDebt) || 0;
+          const outstanding = parseFloat(c.outstanding) || 0;
+          const totalPaid = Math.max(0, debt - outstanding);
+          totalPaidByClients += totalPaid;
+
+          const amountLent = parseFloat(c.amount) || 0;
+          const discount = parseFloat(c.discount_amount) || 0;
+          // Capital realmente entregado (descontando el seguro/papelería retenido)
+          totalCapitalLent += Math.max(0, amountLent - discount);
+        }
+      }
+
+      // 3. Suma (Gastos/Retiros)
+      const movements = await this.getCashMovements();
+      let totalExpenses = 0;
+      for (const m of movements) {
+        const belongsToUser = routeId ? (m.routeId === routeId) : (m.agent_id === agentId);
+        if (belongsToUser && m.type === 'salida') {
+          totalExpenses += (parseFloat(m.amount) || 0);
+        }
+      }
+
+      // Fórmula: Inyecciones + Pagos - Gastos - Desembolsos
+      const liquidCash = totalInjected + totalPaidByClients - totalExpenses - totalCapitalLent;
+      return liquidCash;
+    } catch (err) {
+      console.error('Error calculating Liquid Cash:', err);
       return 0;
     }
   },
