@@ -695,6 +695,19 @@ const db = {
     return data || [];
   },
 
+  async getGlobalPaymentsByClient(cedula) {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('clientCedula', String(cedula));
+    if (error) {
+      console.error(`Error al obtener pagos globales del cliente "${cedula}":`, error);
+      return [];
+    }
+    return data || [];
+  },
+
   async addPayment(payment) {
     const supabase = await initSupabase();
     

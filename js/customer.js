@@ -66,7 +66,7 @@ const customerModule = {
 
   async loadClientStatement(cedula) {
     try {
-      const client = await window.BulaPayDB.getClientByCedula(cedula);
+      const client = await window.BulaPayDB.getGlobalClientByCedula(cedula);
       if (!client) {
         alert('❌ Cliente no registrado en el sistema BulaPay.');
         if (this.statementHeader) this.statementHeader.style.display = 'none';
@@ -76,7 +76,7 @@ const customerModule = {
         return;
       }
 
-      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+      const payments = await window.BulaPayDB.getGlobalPaymentsByClient(cedula);
       const totalPaid = payments.reduce((acc, curr) => acc + Number(curr.amount), 0);
 
       // Actualizar Resumen en el DOM con capitalización en JavaScript
@@ -106,8 +106,7 @@ const customerModule = {
         // Obtener el nombre del agente de cobro
         if (client.routeId) {
           try {
-            const routes = await window.BulaPayDB.getRoutes();
-            const clientRoute = routes.find(r => r.id === client.routeId);
+            const clientRoute = await window.BulaPayDB.getGlobalRouteById(client.routeId);
             if (clientRoute && clientRoute.agentName) {
               assignedEntityLabel = clientRoute.agentName;
             }
