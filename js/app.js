@@ -488,7 +488,6 @@ window.showBulaPayReceipt = function(payment, client) {
   modal.classList.add('active');
 
   const btnClose = document.getElementById('btn-close-receipt');
-  const btnWhatsApp = document.getElementById('btn-whatsapp-receipt');
 
   const handleClose = () => {
     modal.classList.remove('active');
@@ -496,30 +495,6 @@ window.showBulaPayReceipt = function(payment, client) {
 
   if (btnClose) {
     btnClose.onclick = handleClose;
-  }
-
-  if (btnWhatsApp) {
-    btnWhatsApp.onclick = () => {
-      // 1. Construcción del Mensaje y URL
-      const domain = window.location.origin;
-      const linkCarton = `${domain}/consulta?cedula=${client.cedula}`;
-      const rawMessage = `BulaPay: Cuota pagada exitosamente. Verifica tu carton y saldo pendiente en el siguiente link: ${linkCarton}`;
-      const mensajeCodificado = encodeURIComponent(rawMessage);
-
-      // 2. Formateo del Número de Teléfono
-      let phone = client.phone || '';
-      let numeroFormateado = phone.replace(/[\s-]/g, '');
-      if (numeroFormateado && !numeroFormateado.startsWith('57')) {
-        numeroFormateado = '57' + numeroFormateado;
-      }
-
-      // 3. Abrir WhatsApp
-      if (numeroFormateado) {
-        window.open('https://wa.me/' + numeroFormateado + '?text=' + mensajeCodificado, '_blank');
-      } else {
-        alert('El cliente no tiene un número de teléfono registrado.');
-      }
-    };
   }
 };
 

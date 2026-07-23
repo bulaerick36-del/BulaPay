@@ -211,14 +211,6 @@ const agentModule = {
     // Registro
     this.formRegisterClient = document.getElementById('form-register-client');
 
-    // Modal WhatsApp
-    this.shareModal = document.getElementById('notification-share-modal');
-    this.waAvatar = document.getElementById('wa-avatar');
-    this.waName = document.getElementById('wa-name');
-    this.waLinkUrl = document.getElementById('wa-link-url');
-    this.btnCloseWaModal = document.getElementById('btn-close-wa-modal');
-    this.btnOpenLinkWa = document.getElementById('btn-open-link-wa');
-    this.btnSendEmailWa = document.getElementById('btn-send-email-wa');
 
     this.bindEvents();
     await this.updateAgentHeader();
@@ -438,44 +430,6 @@ const agentModule = {
       await this.registerNewClient();
     });
 
-    // Acciones del modal WhatsApp
-    if (this.btnCloseWaModal) {
-      this.btnCloseWaModal.addEventListener('click', () => {
-        this.shareModal.classList.remove('active');
-      });
-    }
-
-    if (this.btnOpenLinkWa) {
-      this.btnOpenLinkWa.addEventListener('click', () => {
-        if (this.currentClient) {
-          this.shareModal.classList.remove('active');
-          
-          // URL dinámica del portal del cliente
-          const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${this.currentClient.cedula}`;
-          
-          // Mensaje pre-armado
-          const message = `👋 ¡Hola ${this.currentClient.name}! Le damos la bienvenida a BulaPay. Hemos registrado su venta a plazos. Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado aquí: ${appUrl}`;
-          
-          // Enlace click-to-chat de WhatsApp armando la URL (https://wa.me/+57...) con el teléfono limpio
-          let rawPhone = this.currentClient.phone.replace(/[\s+]/g, '');
-          if (rawPhone.startsWith('57')) {
-            rawPhone = rawPhone.substring(2);
-          }
-          const waUrl = `https://wa.me/+57${rawPhone}?text=${encodeURIComponent(message)}`;
-          
-          window.open(waUrl, '_blank');
-        }
-      });
-    }
-
-    if (this.btnSendEmailWa) {
-      this.btnSendEmailWa.addEventListener('click', () => {
-        if (this.currentClient) {
-          this.shareModal.classList.remove('active');
-          this.sendWelcomeEmail(this.currentClient);
-        }
-      });
-    }
   },
 
   async updateAgentHeader() {
@@ -1362,6 +1316,9 @@ const agentModule = {
       // Actualizar botón de seguimiento
       await this.updateRouteTracking();
       
+      // Mostrar modal obligatorio SMS para notificar el pago masivo
+      this.showMandatorySmsPrompt(updatedClient, 'payment');
+      
     } catch (err) {
       console.error("Error al procesar pago masivo:", err);
       alert('❌ Error al procesar el pago masivo. ' + err.message);
@@ -2016,16 +1973,47 @@ const agentModule = {
   showMandatorySmsPrompt(client, type) {
     const currentUser = window.BulaPayDB.getCurrentUser() || {};
     const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
-    // Generar el link para que el cliente meta su cédula. Aseguramos no incluir un ID estático en el mensaje para que él mismo la digite.
-    // Opcionalmente, la appUrl puede incluir ?view=customer. El prompt original dice "apunte a la vista donde el cliente ingresa su cédula".
-    // La raíz (index.html) sin view normalmente tiene el input de cédula, o se usa un view especial. Usaremos origin + pathname.
-    const appUrl = `${window.location.origin}${window.location.pathname}?view=customer&id=${client.cedula}`;
+    const appUrl = `https://www.bulapay.online/?cedula=${client.cedula}`;
     
     let text = '';
     if (type === 'register') {
-      text = `Hola, bienvenido. BulaPay te notifica que adquiriste un crédito con el agente ${agentName}. Nosotros cuidamos tu beneficio. En el siguiente link podrás consultar tu cartón día a día: ${appUrl}`;
+      text = `=======================
+     B U L A  P A Y
+Notificación Oficial
+=======================
+
+Estimado(a) ${client.name},
+
+Su crédito ha sido APROBADO y activado exitosamente.
+
+📌 Agente Asignado: ${agentName}
+📌 Estado: ACTIVO
+📌 Cobertura: Gestión de Cartera
+
+Consulte su estado de cuenta, cuotas y cartón digital en tiempo real aquí:
+${appUrl}
+
+-----------------------
+BulaPay • Plataforma Segura`;
     } else if (type === 'payment') {
-      text = `Hola. BulaPay te indica: pago exitoso de tu cuota. En el siguiente link podrás ver tu cartón: ${appUrl}`;
+      text = `=======================
+     B U L A  P A Y
+Comprobante de Pago
+=======================
+
+Estimado(a) ${client.name},
+
+Confirmamos el recibo exitoso de su cuota.
+
+📌 Agente: ${agentName}
+📌 Estado: PAGO REGISTRADO
+📌 Concepto: Abonado a Cartera
+
+Verifique el balance de su cartón digital y saldo restante en su portal oficial:
+${appUrl}
+
+-----------------------
+BulaPay • Plataforma Segura`;
     }
 
     const encodedText = encodeURIComponent(text);
@@ -2035,7 +2023,7 @@ const agentModule = {
     } else if (phoneStr.startsWith('57')) {
       phoneStr = '+' + phoneStr;
     } else if (!phoneStr.startsWith('+57')) {
-      phoneStr = '+57' + phoneStr.replace(/\\D/g, ''); // fallback
+      phoneStr = '+57' + phoneStr.replace(/\D/g, ''); // fallback
     }
 
     const smsUrl = `sms:${phoneStr}?body=${encodedText}`;
