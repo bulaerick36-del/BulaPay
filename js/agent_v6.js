@@ -1871,13 +1871,34 @@ const agentModule = {
     });
 
     try {
-      console.log('[DEBUG] Dentro del bloque try de registerNewClient. Verificando cédula existente...');
       // Validar existencia
       const existing = await window.BulaPayDB.getClientByCedula(cedula);
       if (existing) {
         console.warn('[DEBUG] Cédula ya existente registrada:', existing);
-        alert('❌ Ya existe un cliente registrado con esta Cédula.');
-        return;
+        let proceed = false;
+        
+        if (typeof Swal !== 'undefined') {
+          const result = await Swal.fire({
+            title: 'Cliente Existente',
+            text: 'Este usuario ya está registrado en la base de datos. Verifique el historial.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Continuar de todos modos',
+            cancelButtonText: 'Ver Historial / Cancelar',
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33'
+          });
+          proceed = result.isConfirmed;
+        } else {
+          proceed = confirm('Este usuario ya está registrado en la base de datos. Verifique el historial.\n\n[OK] Continuar de todos modos\n[Cancelar] Ver Historial / Cancelar');
+        }
+
+        if (!proceed) {
+          if (this.switchTab) this.switchTab('history');
+          if (this.inputHistoryCedula) this.inputHistoryCedula.value = cedula;
+          if (typeof this.verificarHistorialCliente === 'function') this.verificarHistorialCliente(cedula);
+          return;
+        }
       }
 
       const currentUser = window.BulaPayDB.getCurrentUser();
@@ -1913,11 +1934,13 @@ const agentModule = {
         return;
       }
 
+      const emailSintetico = `cliente_${cedula.trim()}_${Date.now()}@bulapay.online`;
+
       const payload = {
         cedula,
         name,
         phone,
-        email: 'sin-correo@bulapay.online', // Bypass para la validación estricta del backend/DB
+        email: emailSintetico, // Bypass para evitar restricciones UNIQUE en Supabase
         city,
         zone,
         risk: 'Verde', // Inicia excelente
@@ -1934,8 +1957,12 @@ const agentModule = {
 
       console.log('Firma del Agente antes de guardar:', currentUser.id || currentUser.username, 'Payload completo:', payload);
 
-      // Guardar
-      await window.BulaPayDB.saveClient(payload);
+      // Guardar o Actualizar
+      if (existing) {
+        await window.BulaPayDB.updateClient(cedula, payload);
+      } else {
+        await window.BulaPayDB.saveClient(payload);
+      }
       this.currentClient = payload;
       console.log('[DEBUG] Cliente guardado exitosamente en base de datos. currentClient:', this.currentClient);
 

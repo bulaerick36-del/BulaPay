@@ -639,6 +639,24 @@ const db = {
     return data ? data[0] : payload;
   },
 
+  async updateClient(cedula, payload) {
+    const supabase = await initSupabase();
+    const supId = this.getSupervisorId();
+    if (supId && !payload.supervisor_id) {
+      payload.supervisor_id = supId;
+    }
+    const { data, error } = await supabase
+      .from('clients')
+      .update(payload)
+      .eq('cedula', String(cedula))
+      .select();
+    if (error) {
+      console.error("[DEBUG DB ERROR] Error al actualizar cliente:", error);
+      throw error;
+    }
+    return data ? data[0] : payload;
+  },
+
   async updateClientOutstanding(cedula, amountPaid) {
     const supabase = await initSupabase();
     const client = await this.getGlobalClientByCedula(cedula);
