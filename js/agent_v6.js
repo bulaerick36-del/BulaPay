@@ -2000,47 +2000,14 @@ const agentModule = {
   showMandatorySmsPrompt(client, type) {
     const currentUser = window.BulaPayDB.getCurrentUser() || {};
     const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
-    const appUrl = `https://www.bulapay.online/?cedula=${client.cedula}`;
+    const cleanCedula = String(client.cedula).replace(/[\s-]/g, '');
+    const appUrl = `https://bulapay.online/?c=${cleanCedula}`;
     
     let text = '';
     if (type === 'register') {
-      text = `=======================
-     B U L A  P A Y
-Notificación Oficial
-=======================
-
-Estimado(a) ${client.name},
-
-Su crédito ha sido APROBADO y activado exitosamente.
-
-📌 Agente Asignado: ${agentName}
-📌 Estado: ACTIVO
-📌 Cobertura: Gestión de Cartera
-
-Consulte su estado de cuenta, cuotas y cartón digital en tiempo real aquí:
-${appUrl}
-
------------------------
-BulaPay • Plataforma Segura`;
+      text = `BulaPay: Credito APROBADO con el agente ${agentName}. Consulta tu carton digital en: ${appUrl}`;
     } else if (type === 'payment') {
-      text = `=======================
-     B U L A  P A Y
-Comprobante de Pago
-=======================
-
-Estimado(a) ${client.name},
-
-Confirmamos el recibo exitoso de su cuota.
-
-📌 Agente: ${agentName}
-📌 Estado: PAGO REGISTRADO
-📌 Concepto: Abonado a Cartera
-
-Verifique el balance de su cartón digital y saldo restante en su portal oficial:
-${appUrl}
-
------------------------
-BulaPay • Plataforma Segura`;
+      text = `BulaPay: Pago EXITOSO de tu cuota. Verifica tu saldo actualizado en: ${appUrl}`;
     }
 
     const encodedText = encodeURIComponent(text);
