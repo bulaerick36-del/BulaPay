@@ -656,12 +656,24 @@ const db = {
   async registerCreditToExistingClient(payload) {
     const supabase = await initSupabase();
     
-    // 1. Extracción Correcta del ID
-    const { data, error } = await supabase.from('clients').select('cedula').eq('cedula', payload.cedula);
-    if (error) throw error;
-    if (!data || data.length === 0) throw new Error('Cliente no encontrado en BD');
+    // 1. Extracción Correcta del ID (Buscando por cedula, telefono o zona, igual que antes)
+    const [resCedula, resPhone, resZone] = await Promise.all([
+      supabase.from('clients').select('cedula').eq('cedula', payload.cedula).limit(1),
+      supabase.from('clients').select('cedula').eq('phone', payload.phone).limit(1),
+      supabase.from('clients').select('cedula').eq('zone', payload.zone).limit(1)
+    ]);
+
+    const existing = [
+      ...(resCedula.data || []),
+      ...(resPhone.data || []),
+      ...(resZone.data || [])
+    ];
+
+    if (!existing || existing.length === 0) {
+      throw new Error('Cliente no encontrado en BD (ni por cédula, ni teléfono, ni zona)');
+    }
     
-    const clientId = data[0].cedula;
+    const clientId = existing[0].cedula;
     console.log('-> ID del cliente recuperado:', clientId);
     console.log('-> Intentando insertar nuevo crédito para el cliente...');
     
