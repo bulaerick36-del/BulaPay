@@ -2000,17 +2000,23 @@ const agentModule = {
           }).then(async (result) => {
             if (result.isConfirmed) {
               try {
-                await window.BulaPayDB.updateClient(cedula, payload);
+                // Hacer bypass/upsert buscando id real del cliente por si cedula/telefono ya existen
+                const updatedPayload = await window.BulaPayDB.forceUpsertClientByCedulaOrPhone(payload);
+                this.currentClient = updatedPayload;
+                
+                if (typeof this.updateRouteTracking === 'function') {
+                  this.updateRouteTracking();
+                }
+                this.sendWelcomeEmail(updatedPayload);
+                this.formRegisterClient.reset();
+                
+                // Disparar SMS obligatorio
+                this.showMandatorySmsPrompt(updatedPayload, 'register');
               } catch (e) {
-                console.warn('Update fallback failed:', e);
+                console.error('Update fallback (forceUpsert) failed:', e);
+                // Aquí el SMS no se dispara si la BD falla irremediablemente
+                alert('❌ Error al actualizar el cliente duplicado. Revisa la consola para más detalles.');
               }
-              this.currentClient = payload;
-              if (typeof this.updateRouteTracking === 'function') {
-                this.updateRouteTracking();
-              }
-              this.sendWelcomeEmail(payload);
-              this.formRegisterClient.reset();
-              this.showMandatorySmsPrompt(payload, 'register');
             } else {
               const navClients = document.getElementById('nav-clients');
               if (navClients) navClients.click();
@@ -2018,14 +2024,18 @@ const agentModule = {
           });
         } else {
           if (confirm('Este número de teléfono, cédula o dirección ya está registrado. ¿Desea continuar con el registro del cliente o cancelar y verificar en el historial?')) {
-            window.BulaPayDB.updateClient(cedula, payload).catch(e => console.warn(e));
-            this.currentClient = payload;
-            if (typeof this.updateRouteTracking === 'function') {
-              this.updateRouteTracking();
-            }
-            this.sendWelcomeEmail(payload);
-            this.formRegisterClient.reset();
-            this.showMandatorySmsPrompt(payload, 'register');
+            window.BulaPayDB.forceUpsertClientByCedulaOrPhone(payload).then((updatedPayload) => {
+              this.currentClient = updatedPayload;
+              if (typeof this.updateRouteTracking === 'function') {
+                this.updateRouteTracking();
+              }
+              this.sendWelcomeEmail(updatedPayload);
+              this.formRegisterClient.reset();
+              this.showMandatorySmsPrompt(updatedPayload, 'register');
+            }).catch(e => {
+              console.error('Update fallback (forceUpsert via confirm) failed:', e);
+              alert('❌ Error al actualizar el cliente duplicado. Revisa la consola para más detalles.');
+            });
           } else {
             const navClients = document.getElementById('nav-clients');
             if (navClients) navClients.click();

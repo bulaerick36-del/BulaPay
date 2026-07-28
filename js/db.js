@@ -594,6 +594,33 @@ const db = {
     }
   },
 
+  async forceUpsertClientByCedulaOrPhone(payload) {
+    const supabase = await initSupabase();
+    try {
+      const { data: existing, error: selectErr } = await supabase
+        .from('clients')
+        .select('*')
+        .or(`cedula.eq.${payload.cedula},phone.eq.${payload.phone}`)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        const realCedula = existing[0].cedula;
+        const { data, error } = await supabase
+          .from('clients')
+          .update(payload)
+          .eq('cedula', realCedula)
+          .select();
+        if (error) throw error;
+        return { ...payload, cedula: realCedula };
+      } else {
+        return await this.saveClient(payload);
+      }
+    } catch (err) {
+      console.error("[DEBUG DB ERROR] Fallo en forceUpsertClientByCedulaOrPhone:", err);
+      throw err;
+    }
+  },
+
   async getCommerceBuyers() {
     const supabase = await initSupabase();
     const { data, error } = await supabase
