@@ -594,29 +594,36 @@ const db = {
     }
   },
 
-  async forceUpsertClientByCedulaOrPhone(payload) {
+  async forceUpdateExistingClient(payload) {
     const supabase = await initSupabase();
     try {
+      // 1. Recuperar el ID del Cliente Existente filtrando estrictamente por cédula
       const { data: existing, error: selectErr } = await supabase
         .from('clients')
-        .select('*')
-        .or(`cedula.eq.${payload.cedula},phone.eq.${payload.phone}`)
+        .select('cedula')
+        .eq('cedula', payload.cedula)
         .limit(1);
 
+      if (selectErr) throw selectErr;
+
       if (existing && existing.length > 0) {
-        const realCedula = existing[0].cedula;
-        const { data, error } = await supabase
+        const clienteExistenteId = existing[0].cedula;
+        // 2. Actualización Segura (Update) filtrando por el ID (cédula)
+        const { data, error: updateErr } = await supabase
           .from('clients')
           .update(payload)
-          .eq('cedula', realCedula)
+          .eq('cedula', clienteExistenteId)
           .select();
-        if (error) throw error;
-        return { ...payload, cedula: realCedula };
+        
+        if (updateErr) throw updateErr;
+        return { ...payload, cedula: clienteExistenteId };
       } else {
+        // Fallback en caso de que la restricción UNIQUE sea por otro campo (como teléfono)
+        // pero seguimos la directriz de intentar insert
         return await this.saveClient(payload);
       }
     } catch (err) {
-      console.error("[DEBUG DB ERROR] Fallo en forceUpsertClientByCedulaOrPhone:", err);
+      console.error("[DEBUG DB ERROR] Fallo en forceUpdateExistingClient:", err);
       throw err;
     }
   },
