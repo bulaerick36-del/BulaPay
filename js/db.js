@@ -657,11 +657,11 @@ const db = {
     const supabase = await initSupabase();
     
     // 1. Extracción Correcta del ID
-    const { data, error } = await supabase.from('clients').select('id').eq('cedula', payload.cedula);
+    const { data, error } = await supabase.from('clients').select('cedula').eq('cedula', payload.cedula);
     if (error) throw error;
     if (!data || data.length === 0) throw new Error('Cliente no encontrado en BD');
     
-    const clientId = data[0].id;
+    const clientId = data[0].cedula;
     console.log('-> ID del cliente recuperado:', clientId);
     console.log('-> Intentando insertar nuevo crédito para el cliente...');
     
