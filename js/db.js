@@ -597,11 +597,11 @@ const db = {
   async forceUpdateExistingClient(payload) {
     const supabase = await initSupabase();
     try {
-      // 1. Recuperar el ID del Cliente Existente filtrando por cédula o teléfono
+      // 1. Recuperar el ID del Cliente Existente filtrando por cédula, teléfono o dirección (zone)
       const { data: existing, error: selectErr } = await supabase
         .from('clients')
         .select('cedula')
-        .or(`cedula.eq.${payload.cedula},phone.eq.${payload.phone}`)
+        .or(`cedula.eq."${payload.cedula}",phone.eq."${payload.phone}",zone.eq."${payload.zone}"`)
         .limit(1);
 
       if (selectErr) throw selectErr;
