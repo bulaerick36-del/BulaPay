@@ -617,10 +617,26 @@ const db = {
 
       if (existing && existing.length > 0) {
         const clienteExistenteId = existing[0].cedula;
-        // 2. Actualización Segura (Update) filtrando por el ID (cédula)
+        // 2. Actualización Segura (Update) - Omitimos campos únicos (cedula, phone, zone) para no disparar restricciones
+        const safeUpdatePayload = {
+          name: payload.name, // El nombre se puede actualizar sin problemas
+          city: payload.city,
+          amount: payload.amount,
+          discount_amount: payload.discount_amount,
+          discount_reason: payload.discount_reason,
+          totalDebt: payload.totalDebt,
+          outstanding: payload.outstanding,
+          installmentsCount: payload.installmentsCount,
+          installmentAmount: payload.installmentAmount,
+          routeId: payload.routeId,
+          agent_id: payload.agent_id,
+          risk: payload.risk,
+          email: payload.email
+        };
+
         const { data, error: updateErr } = await supabase
           .from('clients')
-          .update(payload)
+          .update(safeUpdatePayload)
           .eq('cedula', clienteExistenteId)
           .select();
         
