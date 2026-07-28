@@ -2386,7 +2386,7 @@ const supervisorModule = {
     try {
       const existing = await window.BulaPayDB.getCommerceBuyerByCedula(cedula);
       if (existing) {
-        alert('Error: Esta cédula o correo ya está registrado como comprador en el comercio.');
+        alert('Error: Esta cédula ya está registrada como comprador en el comercio.');
         return;
       }
       
@@ -2412,7 +2412,7 @@ const supervisorModule = {
       );
       
       if (isUniqueViolation) {
-        alert('Error: Esta cédula o correo ya está registrado como comprador en el comercio.');
+        alert('Error: Esta cédula ya está registrada como comprador en el comercio.');
       } else {
         alert('❌ Error al registrar la venta.');
       }

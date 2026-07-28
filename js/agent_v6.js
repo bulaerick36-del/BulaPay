@@ -1987,8 +1987,50 @@ const agentModule = {
         console.error('[DEBUG ERROR] Error stringificado:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
       }
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
-      if (dupMsg) {
-        alert(dupMsg);
+      if (dupMsg === 'DUPLICATE_DATA') {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: 'Dato registrado',
+            text: 'Este número de teléfono, cédula o dirección ya está registrado. ¿Desea continuar con el registro del cliente o cancelar y verificar en el historial?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Continuar con el registro',
+            cancelButtonText: 'Cancelar y ver historial',
+            reverseButtons: true
+          }).then(async (result) => {
+            if (result.isConfirmed) {
+              try {
+                await window.BulaPayDB.updateClient(cedula, payload);
+              } catch (e) {
+                console.warn('Update fallback failed:', e);
+              }
+              this.currentClient = payload;
+              if (typeof this.updateRouteTracking === 'function') {
+                this.updateRouteTracking();
+              }
+              this.sendWelcomeEmail(payload);
+              this.formRegisterClient.reset();
+              this.showMandatorySmsPrompt(payload, 'register');
+            } else {
+              const navClients = document.getElementById('nav-clients');
+              if (navClients) navClients.click();
+            }
+          });
+        } else {
+          if (confirm('Este número de teléfono, cédula o dirección ya está registrado. ¿Desea continuar con el registro del cliente o cancelar y verificar en el historial?')) {
+            window.BulaPayDB.updateClient(cedula, payload).catch(e => console.warn(e));
+            this.currentClient = payload;
+            if (typeof this.updateRouteTracking === 'function') {
+              this.updateRouteTracking();
+            }
+            this.sendWelcomeEmail(payload);
+            this.formRegisterClient.reset();
+            this.showMandatorySmsPrompt(payload, 'register');
+          } else {
+            const navClients = document.getElementById('nav-clients');
+            if (navClients) navClients.click();
+          }
+        }
       } else if (err.message === 'ACCESO_DENEGADO_OTRO_AGENTE') {
         alert('❌ Error: Ya existe un cliente registrado con esta Cédula (cartera de otro cobrador).');
       } else {

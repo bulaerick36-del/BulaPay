@@ -538,7 +538,7 @@ const db = {
                               (error.details && error.details.includes('already exists'));
                               
     if (isUniqueViolation) {
-      return 'ERROR: El correo, cédula, teléfono o dirección ya está registrado en la base de datos. Por favor, verifica los datos.';
+      return 'DUPLICATE_DATA';
     }
     
     return null;
