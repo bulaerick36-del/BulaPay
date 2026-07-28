@@ -1870,6 +1870,8 @@ const agentModule = {
       name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments
     });
 
+    let payload = null;
+
     try {
       // Validar existencia
       const existing = await window.BulaPayDB.getClientByCedula(cedula);
@@ -1936,7 +1938,7 @@ const agentModule = {
 
       const emailSintetico = `cliente_${cedula.trim()}_${Date.now()}@bulapay.online`;
 
-      const payload = {
+      payload = {
         cedula,
         name,
         phone,
