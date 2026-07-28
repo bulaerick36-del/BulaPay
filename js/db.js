@@ -597,14 +597,23 @@ const db = {
   async forceUpdateExistingClient(payload) {
     const supabase = await initSupabase();
     try {
-      // 1. Recuperar el ID del Cliente Existente filtrando por cédula, teléfono o dirección (zone)
-      const { data: existing, error: selectErr } = await supabase
-        .from('clients')
-        .select('cedula')
-        .or(`cedula.eq."${payload.cedula}",phone.eq."${payload.phone}",zone.eq."${payload.zone}"`)
-        .limit(1);
+      // 1. Recuperar el ID del Cliente Existente (búsqueda paralela para evitar fallos de sintaxis en PostgREST)
+      const [resCedula, resPhone, resZone] = await Promise.all([
+        supabase.from('clients').select('cedula').eq('cedula', payload.cedula).limit(1),
+        supabase.from('clients').select('cedula').eq('phone', payload.phone).limit(1),
+        supabase.from('clients').select('cedula').eq('zone', payload.zone).limit(1)
+      ]);
 
-      if (selectErr) throw selectErr;
+      if (resCedula.error) console.error("Error buscando por cédula:", resCedula.error);
+      if (resPhone.error) console.error("Error buscando por teléfono:", resPhone.error);
+      if (resZone.error) console.error("Error buscando por zona:", resZone.error);
+
+      // Consolidar resultados (basta con que al menos uno encuentre la coincidencia)
+      const existing = [
+        ...(resCedula.data || []),
+        ...(resPhone.data || []),
+        ...(resZone.data || [])
+      ];
 
       if (existing && existing.length > 0) {
         const clienteExistenteId = existing[0].cedula;
