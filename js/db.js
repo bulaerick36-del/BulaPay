@@ -653,6 +653,39 @@ const db = {
     }
   },
 
+  async registerCreditToExistingClient(payload) {
+    const supabase = await initSupabase();
+    
+    // 1. Extracción Correcta del ID
+    const { data, error } = await supabase.from('clients').select('id').eq('cedula', payload.cedula);
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Cliente no encontrado en BD');
+    
+    const clientId = data[0].id;
+    console.log('-> ID del cliente recuperado:', clientId);
+    console.log('-> Intentando insertar nuevo crédito para el cliente...');
+    
+    // 2. Bypass de Actualización
+    // Usar clientId como Foreign Key en la tabla de créditos
+    const creditPayload = {
+      client_id: clientId,
+      amount: payload.amount,
+      discount_amount: payload.discount_amount,
+      discount_reason: payload.discount_reason,
+      totalDebt: payload.totalDebt,
+      outstanding: payload.outstanding,
+      installmentsCount: payload.installmentsCount,
+      installmentAmount: payload.installmentAmount,
+      routeId: payload.routeId,
+      agent_id: payload.agent_id
+    };
+
+    const { error: insertError } = await supabase.from('credits').insert([creditPayload]);
+    if (insertError) throw insertError;
+    
+    return { ...payload, id: clientId };
+  },
+
   async getCommerceBuyers() {
     const supabase = await initSupabase();
     const { data, error } = await supabase

@@ -2003,7 +2003,7 @@ const agentModule = {
             if (result.isConfirmed) {
               try {
                 // Paso 1 y 2: Recuperar ID y Actualización Segura
-                const updatedPayload = await window.BulaPayDB.forceUpdateExistingClient(payload);
+                const updatedPayload = await window.BulaPayDB.registerCreditToExistingClient(payload);
                 this.currentClient = updatedPayload;
                 
                 if (typeof this.updateRouteTracking === 'function') {
@@ -2016,7 +2016,7 @@ const agentModule = {
                 this.showMandatorySmsPrompt(updatedPayload, 'register');
               } catch (error) {
                 // Paso 4: Manejo de Errores Transparente
-                console.error('Update fallback (forceUpdateExistingClient) failed:', error);
+                console.error('Update fallback (registerCreditToExistingClient) failed:', error);
                 alert('Error de BD: ' + (error.message || 'Error desconocido'));
               }
             } else {
@@ -2026,7 +2026,7 @@ const agentModule = {
           });
         } else {
           if (confirm('Este número de teléfono, cédula o dirección ya está registrado. ¿Desea continuar con el registro del cliente o cancelar y verificar en el historial?')) {
-            window.BulaPayDB.forceUpdateExistingClient(payload).then((updatedPayload) => {
+            window.BulaPayDB.registerCreditToExistingClient(payload).then((updatedPayload) => {
               this.currentClient = updatedPayload;
               if (typeof this.updateRouteTracking === 'function') {
                 this.updateRouteTracking();
@@ -2035,7 +2035,7 @@ const agentModule = {
               this.formRegisterClient.reset();
               this.showMandatorySmsPrompt(updatedPayload, 'register');
             }).catch(error => {
-              console.error('Update fallback (forceUpdateExistingClient via confirm) failed:', error);
+              console.error('Update fallback (registerCreditToExistingClient via confirm) failed:', error);
               alert('Error de BD: ' + (error.message || 'Error desconocido'));
             });
           } else {
