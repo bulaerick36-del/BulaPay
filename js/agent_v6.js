@@ -1856,7 +1856,10 @@ const agentModule = {
     }
     const agentId = currentUser.username;
 
-    const cedula = document.getElementById('new-client-cedula').value.trim();
+    // Sanitizar cédula para evitar espacios accidentales
+    const rawCedula = document.getElementById('new-client-cedula').value;
+    const cedula = String(rawCedula).replace(/[\s-]/g, '').trim();
+    
     const phone = document.getElementById('new-client-phone').value.trim();
     const department = document.getElementById('new-client-department').value;
     const cityVal = document.getElementById('new-client-city').value;
