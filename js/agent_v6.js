@@ -2059,82 +2059,45 @@ const agentModule = {
     
     let text = '';
     if (type === 'register') {
-      text = `BulaPay: Credito APROBADO con el agente ${agentName}. Consulta tu carton digital en: ${appUrl}`;
+      text = `BulaPay: Crédito APROBADO. Agente: ${agentName}. Consulte su saldo y cartón digital en: ${appUrl}`;
     } else if (type === 'payment') {
-      text = `BulaPay: Pago EXITOSO de tu cuota. Verifica tu saldo actualizado en: ${appUrl}`;
+      text = `BulaPay: Pago EXITOSO. Verifique su saldo actualizado en: ${appUrl}`;
     }
 
     const encodedText = encodeURIComponent(text);
     let phoneStr = String(client.phone || '').trim();
-    if (phoneStr && !phoneStr.startsWith('+') && !phoneStr.startsWith('57')) {
-      phoneStr = '+57' + phoneStr;
-    } else if (phoneStr.startsWith('57')) {
-      phoneStr = '+' + phoneStr;
-    } else if (!phoneStr.startsWith('+57')) {
-      phoneStr = '+57' + phoneStr.replace(/\D/g, ''); // fallback
+    
+    // Normalizar número para WhatsApp (sin el signo +)
+    if (phoneStr.startsWith('+')) {
+      phoneStr = phoneStr.replace('+', '');
+    }
+    if (!phoneStr.startsWith('57')) {
+      phoneStr = '57' + phoneStr.replace(/\D/g, ''); // fallback
     }
 
-    const smsUrl = `sms:${phoneStr}?body=${encodedText}`;
+    const waUrl = `https://wa.me/${phoneStr}?text=${encodedText}`;
 
-    // Crear el overlay modal un-closable
-    const overlay = document.createElement('div');
-    overlay.style.position = 'fixed';
-    overlay.style.top = '0';
-    overlay.style.left = '0';
-    overlay.style.width = '100vw';
-    overlay.style.height = '100vh';
-    overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
-    overlay.style.display = 'flex';
-    overlay.style.justifyContent = 'center';
-    overlay.style.alignItems = 'center';
-    overlay.style.zIndex = '999999';
-    overlay.style.flexDirection = 'column';
-
-    const modal = document.createElement('div');
-    modal.style.backgroundColor = '#fff';
-    modal.style.padding = '30px 20px';
-    modal.style.borderRadius = '12px';
-    modal.style.textAlign = 'center';
-    modal.style.maxWidth = '90%';
-    modal.style.width = '400px';
-    modal.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
-    
-    const title = document.createElement('h2');
-    title.textContent = type === 'register' ? 'Registro Exitoso' : 'Pago Exitoso';
-    title.style.marginTop = '0';
-    title.style.color = '#333';
-    title.style.fontSize = '24px';
-    title.style.marginBottom = '15px';
-    
-    const message = document.createElement('p');
-    message.textContent = 'Para continuar, es OBLIGATORIO notificar al cliente vía SMS.';
-    message.style.color = '#555';
-    message.style.fontSize = '16px';
-    message.style.lineHeight = '1.5';
-    message.style.marginBottom = '25px';
-
-    const btn = document.createElement('button');
-    btn.textContent = 'Continuar y Enviar SMS';
-    btn.style.backgroundColor = 'var(--color-primario, #4A90E2)';
-    btn.style.color = '#fff';
-    btn.style.border = 'none';
-    btn.style.padding = '14px 24px';
-    btn.style.borderRadius = '8px';
-    btn.style.fontSize = '18px';
-    btn.style.cursor = 'pointer';
-    btn.style.fontWeight = 'bold';
-    btn.style.width = '100%';
-
-    btn.onclick = () => {
-      window.location.href = smsUrl;
-      document.body.removeChild(overlay);
-    };
-
-    modal.appendChild(title);
-    modal.appendChild(message);
-    modal.appendChild(btn);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: type === 'register' ? 'Registro Exitoso' : 'Pago Exitoso',
+        text: 'BulaPay sugiere enviar el mensaje de notificación con el enlace por WhatsApp. ¿Desea enviarlo ahora?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, enviar por WhatsApp',
+        cancelButtonText: 'No enviar',
+        confirmButtonColor: '#25D366',
+        cancelButtonColor: '#d33'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          window.open(waUrl, '_blank');
+        }
+      });
+    } else {
+      // Fallback si no carga SweetAlert
+      if (confirm('BulaPay sugiere enviar el mensaje por WhatsApp. ¿Desea enviarlo ahora?')) {
+        window.open(waUrl, '_blank');
+      }
+    }
   },
 
   async captureAndSendLocation() {
@@ -2377,7 +2340,6 @@ const agentModule = {
 
       if (response.ok) {
         console.log('[DEBUG] sendWelcomeEmail - Correo enviado exitosamente');
-        alert('✅ Correo enviado exitosamente a ' + clientData.email);
       } else {
         const errorText = await response.text();
         console.error('[DEBUG ERROR] Error en respuesta de /api/send-email (Raw):', errorText);
@@ -2391,7 +2353,6 @@ const agentModule = {
       }
     } catch (err) {
       console.error('[DEBUG ERROR] Error atrapado al enviar correo en sendWelcomeEmail:', err);
-      alert('Error técnico: ' + err.message + ' - Detalles: ' + JSON.stringify(data.details));
     }
   },
 
