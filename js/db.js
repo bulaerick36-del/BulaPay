@@ -467,8 +467,8 @@ const db = {
       if (assignedRouteId) {
         query = query.eq('routeId', assignedRouteId);
       } else {
-        // Si no tiene ruta asignada, no mostramos clientes para no mezclar datos
-        return [];
+        // Si no tiene ruta asignada (ej. independiente puro), filtra por su id de agente
+        query = query.eq('agent_id', currentUser.id || currentUser.username);
       }
     } else {
       // Supervisor o Comercio
