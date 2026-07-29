@@ -2055,7 +2055,7 @@ const agentModule = {
     const currentUser = window.BulaPayDB.getCurrentUser() || {};
     const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
     const cleanCedula = String(client.cedula).replace(/[\s-]/g, '');
-    const appUrl = `https://bulapay.online/?c=${cleanCedula}`;
+    const appUrl = `https://bulapay.online/?view=customer&id=${cleanCedula}`;
     
     let text = '';
     if (type === 'register') {
