@@ -595,8 +595,12 @@ const db = {
         throw error;
       }
 
+      if (!data || data.length === 0) {
+        throw new Error('Fallo Silencioso: La base de datos no retornó el cliente guardado. Posible bloqueo por políticas RLS en Supabase.');
+      }
+
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
-      return (data && data.length > 0) ? data[0] : client;
+      return data[0];
     } catch (err) {
       console.error('Error de ejecución en saveClient:', err);
       throw err;
