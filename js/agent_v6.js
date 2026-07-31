@@ -2183,19 +2183,33 @@ const agentModule = {
     if (typeof Swal !== 'undefined') {
       Swal.fire({
         title: title,
-        text: 'La operación se guardó correctamente. Proceda a notificar al cliente vía WhatsApp.',
+        text: 'El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?',
         icon: 'success',
-        confirmButtonText: 'Continuar y Enviar WhatsApp',
+        showCancelButton: true,
+        confirmButtonText: 'Notificar al Cliente',
+        cancelButtonText: 'Omitir y Guardar',
         confirmButtonColor: '#25D366',
+        cancelButtonColor: '#6c757d',
         allowOutsideClick: false
       }).then((result) => {
         if (result.isConfirmed) {
           window.open(urlWa, '_blank');
+          if (this.formRegisterClient) {
+            this.formRegisterClient.reset();
+          }
+        } else if (result.isDismissed) {
+          if (this.formRegisterClient) {
+            this.formRegisterClient.reset();
+          }
         }
       });
     } else {
-      alert(`${title}\nLa operación se guardó correctamente. Proceda a notificar al cliente vía WhatsApp.`);
-      window.open(urlWa, '_blank');
+      if (confirm(`El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?`)) {
+        window.open(urlWa, '_blank');
+      }
+      if (this.formRegisterClient) {
+        this.formRegisterClient.reset();
+      }
     }
   },
 
