@@ -2187,7 +2187,7 @@ const agentModule = {
         icon: 'success',
         showCancelButton: true,
         confirmButtonText: 'Notificar al Cliente',
-        cancelButtonText: 'Omitir y Guardar',
+        cancelButtonText: 'Omitir',
         confirmButtonColor: '#25D366',
         cancelButtonColor: '#6c757d',
         allowOutsideClick: false
