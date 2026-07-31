@@ -644,17 +644,40 @@ const agentModule = {
 
     // 2. Dar vida al Dashboard 'Mi Negocio' (Métrica de Capital)
     const capitalEl = document.getElementById('private-panel-capital');
+    const carteraEl = document.getElementById('private-panel-cartera');
+    const gananciaEl = document.getElementById('private-panel-ganancia');
     let agentClients = [];
     if (capitalEl) {
       capitalEl.textContent = 'Calculando...';
+      if (carteraEl) carteraEl.textContent = '...';
+      if (gananciaEl) gananciaEl.textContent = '...';
       try {
         const currentUser = window.BulaPayDB.getCurrentUser();
         const route = currentUser && currentUser.routeId ? await window.BulaPayDB.getRouteById(currentUser.routeId) : null;
         const routeCapital = route ? await window.BulaPayDB.getRealBaseCapital(route.id) : 0;
         capitalEl.textContent = `$${routeCapital.toLocaleString('es-CO')}`;
+        
+        if (currentUser) {
+          const clients = await window.BulaPayDB.getClients();
+          let totalCartera = 0;
+          let totalGanancia = 0;
+          clients.forEach(client => {
+            if (client.status === 'ACTIVO') {
+              const saldoRestante = parseFloat(client.saldo_restante || client.balance || 0);
+              const totalRecaudar = parseFloat(client.monto_total || client.totalToPay || client.total_amount || 0);
+              const prestado = parseFloat(client.monto_prestado || client.amount || 0);
+              totalCartera += saldoRestante;
+              totalGanancia += (totalRecaudar - prestado);
+            }
+          });
+          if (carteraEl) carteraEl.textContent = `$${totalCartera.toLocaleString('es-CO')}`;
+          if (gananciaEl) gananciaEl.textContent = `$${totalGanancia.toLocaleString('es-CO')}`;
+        }
       } catch (err) {
         console.error(err);
         capitalEl.textContent = 'Error';
+        if (carteraEl) carteraEl.textContent = 'Error';
+        if (gananciaEl) gananciaEl.textContent = 'Error';
       }
     }
     
