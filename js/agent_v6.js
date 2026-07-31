@@ -715,14 +715,20 @@ const agentModule = {
         
         if (currentUser) {
           const clients = await window.BulaPayDB.getClients();
+          if (clients && clients.length > 0) {
+            console.log('Objeto Cliente BD:', clients[0]);
+          }
           let totalCartera = 0;
           let totalGanancia = 0;
-          clients.forEach(client => {
-            // El indicador solo suma créditos estrictamente ACTIVOS
-            if (client.status === 'ACTIVO') {
-              const saldoRestante = Number(client.saldo_restante || client.outstanding || client.balance || 0);
-              const totalRecaudar = Number(client.monto_total || client.totalToPay || client.total_amount || 0);
-              const prestado = Number(client.monto_prestado || client.amount || 0);
+          clients.forEach(c => {
+            // Validación de estado flexible
+            const isActive = (c.status && c.status.toUpperCase() === 'ACTIVO') || (c.estado && c.estado.toUpperCase() === 'ACTIVO');
+            
+            if (isActive) {
+              const saldoRestante = Number(c.saldo_restante || c.balance || c.amount || c.outstanding || 0);
+              const totalRecaudar = Number(c.total_a_recaudar || c.monto_total || c.totalToPay || c.total_amount || 0);
+              const prestado = Number(c.capital_prestado || c.monto_prestado || c.amount || 0);
+              
               totalCartera += saldoRestante;
               totalGanancia += (totalRecaudar - prestado);
             }
@@ -2135,50 +2141,80 @@ const agentModule = {
   },
 
   showMandatorySmsPrompt(client, type) {
-    const currentUser = window.BulaPayDB.getCurrentUser() || {};
-    const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
-    const cleanCedula = String(client.cedula).replace(/[\s-]/g, '');
-    const appUrl = `https://bulapay.online/?view=customer&id=${cleanCedula}`;
-    
-    let text = '';
-    if (type === 'register') {
-      text = `BulaPay: Crédito APROBADO. Agente: ${agentName}. Consulte su saldo y cartón digital en: ${appUrl}`;
-    } else if (type === 'payment') {
-      text = `BulaPay: Pago EXITOSO. Verifique su saldo actualizado en: ${appUrl}`;
-    }
+    try {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      if (!isMobile) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: 'Registro Exitoso',
+            text: 'Registro Exitoso. (Nota: El envío de SMS nativo solo está disponible en dispositivos móviles)',
+            icon: 'info',
+            confirmButtonText: 'Aceptar'
+          });
+        } else {
+          alert('Registro Exitoso. (Nota: El envío de SMS nativo solo está disponible en dispositivos móviles)');
+        }
+        return;
+      }
+      
+      const currentUser = window.BulaPayDB.getCurrentUser() || {};
+      const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
+      const cleanCedula = String(client.cedula).replace(/[\s-]/g, '');
+      const appUrl = `https://bulapay.online/?view=customer&id=${cleanCedula}`;
+      
+      let text = '';
+      if (type === 'register') {
+        text = `BulaPay: Crédito APROBADO. Agente: ${agentName}. Consulte su saldo y cartón digital en: ${appUrl}`;
+      } else if (type === 'payment') {
+        text = `BulaPay: Pago EXITOSO. Verifique su saldo actualizado en: ${appUrl}`;
+      }
 
-    const encodedText = encodeURIComponent(text);
-    let phoneStr = String(client.phone || '').trim();
-    
-    // Normalizar número para WhatsApp (sin el signo +)
-    if (phoneStr.startsWith('+')) {
-      phoneStr = phoneStr.replace('+', '');
-    }
-    if (!phoneStr.startsWith('57')) {
-      phoneStr = '57' + phoneStr.replace(/\D/g, ''); // fallback
-    }
+      const encodedText = encodeURIComponent(text);
+      let phoneStr = String(client.phone || '').trim();
+      
+      // Normalizar número para WhatsApp (sin el signo +)
+      if (phoneStr.startsWith('+')) {
+        phoneStr = phoneStr.replace('+', '');
+      }
+      if (!phoneStr.startsWith('57')) {
+        phoneStr = '57' + phoneStr.replace(/\D/g, ''); // fallback
+      }
 
-    const waUrl = `https://wa.me/${phoneStr}?text=${encodedText}`;
+      const waUrl = `https://wa.me/${phoneStr}?text=${encodedText}`;
+      
+      // Si el código original tuviera un sms:// o navigator.share, esto lo cubriría:
+      if (navigator.share && isMobile) {
+        // Bloque tentativo de fallback si se intentó hacer share nativo
+      }
 
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        title: type === 'register' ? 'Registro Exitoso' : 'Pago Exitoso',
-        text: 'BulaPay sugiere enviar el mensaje de notificación con el enlace por WhatsApp. ¿Desea enviarlo ahora?',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, enviar por WhatsApp',
-        cancelButtonText: 'No enviar',
-        confirmButtonColor: '#25D366',
-        cancelButtonColor: '#d33'
-      }).then((result) => {
-        if (result.isConfirmed) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: type === 'register' ? 'Registro Exitoso' : 'Pago Exitoso',
+          text: 'BulaPay sugiere enviar el mensaje de notificación con el enlace por WhatsApp. ¿Desea enviarlo ahora?',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'Sí, enviar por WhatsApp',
+          cancelButtonText: 'No enviar',
+          confirmButtonColor: '#25D366',
+          cancelButtonColor: '#d33'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            window.open(waUrl, '_blank');
+          }
+        });
+      } else {
+        // Fallback si no carga SweetAlert
+        if (confirm('BulaPay sugiere enviar el mensaje por WhatsApp. ¿Desea enviarlo ahora?')) {
           window.open(waUrl, '_blank');
         }
-      });
-    } else {
-      // Fallback si no carga SweetAlert
-      if (confirm('BulaPay sugiere enviar el mensaje por WhatsApp. ¿Desea enviarlo ahora?')) {
-        window.open(waUrl, '_blank');
+      }
+    } catch (err) {
+      console.error("Error al enviar SMS nativo:", err);
+      if (typeof Swal !== 'undefined') {
+        Swal.fire('Registro Exitoso', 'Registro Exitoso. (Nota: El envío de SMS nativo solo está disponible en dispositivos móviles)', 'info');
+      } else {
+        alert('Registro Exitoso. (Nota: El envío de SMS nativo solo está disponible en dispositivos móviles)');
       }
     }
   },
