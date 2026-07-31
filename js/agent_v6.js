@@ -2021,8 +2021,8 @@ const agentModule = {
       // 1. Fix Crítico del Freno de Préstamos (Hard Stop) con Descuento usando Caja Líquida
       const liquidCash = await window.BulaPayDB.getLiquidCash(routeId);
       if (montoSalida > liquidCash) {
-        alert(`❌ Fondos Insuficientes. La Caja Líquida es menor al capital requerido para el desembolso.\nSalida Neta (A entregar): $${montoSalida.toLocaleString('es-CO')}\nCaja Líquida Disponible: $${liquidCash.toLocaleString('es-CO')}`);
-        return;
+        const bypass = confirm(`❌ Fondos Insuficientes (La Caja Líquida es menor al capital requerido).\nSalida Neta (A entregar): $${montoSalida.toLocaleString('es-CO')}\nCaja Líquida Disponible: $${liquidCash.toLocaleString('es-CO')}\n\n¿Desea forzar el registro de todos modos (Bypass)?`);
+        if (!bypass) return;
       }
 
       const emailSintetico = `cliente_${cedula.trim()}_${Date.now()}@bulapay.online`;
