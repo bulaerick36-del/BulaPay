@@ -487,11 +487,7 @@ const agentModule = {
         e.preventDefault();
         e.stopPropagation();
         
-        // Ejecutar validación HTML5 manualmente ya que es type="button"
-        if (!this.formRegisterClient.checkValidity()) {
-          this.formRegisterClient.reportValidity();
-          return;
-        }
+        console.log('Paso 1: Botón presionado, preventDefault ejecutado.');
         
         await this.registerNewClient();
       });
@@ -1966,9 +1962,7 @@ const agentModule = {
     const debt = parseFloat(debtRaw) || 0;
     const installments = parseInt(document.getElementById('new-client-installments').value);
 
-    console.log('[DEBUG] Intentando registrar nuevo cliente. Datos del formulario:', {
-      name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments
-    });
+    console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
 
     let payload = null;
 

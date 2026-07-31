@@ -574,8 +574,7 @@ const db = {
         }
       });
 
-      console.log('Datos a enviar:', client);
-      console.log('[DEBUG DB] saveClient - Conectando a Supabase e insertando...');
+      console.log('Paso 3: Iniciando petición a Supabase...', client);
       
       const { data, error } = await supabase
         .from('clients')
