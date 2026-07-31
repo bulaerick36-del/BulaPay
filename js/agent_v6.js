@@ -268,15 +268,71 @@ const agentModule = {
     }
     
     if (this.btnLiquidarCarton) {
-      this.btnLiquidarCarton.addEventListener('click', () => {
-        alert('🎉 ¡Cartón Liquidado Exitosamente! Todas las 30 cuotas han sido cubiertas.');
-        if (this.cobroCartonState && this.cobroInputState) {
-          this.cobroCartonState.style.setProperty('display', 'none', 'important');
-          this.cobroInputState.style.setProperty('display', 'block', 'important');
+      this.btnLiquidarCarton.addEventListener('click', async () => {
+        if (!this.currentClient) return;
+
+        if (!confirm('¿Estás seguro de liquidar este cartón? Esta acción es irreversible.')) return;
+
+        this.btnLiquidarCarton.disabled = true;
+        this.btnLiquidarCarton.textContent = 'Liquidando...';
+
+        try {
+          const client = this.currentClient;
+          const totalEsperado = Number(client.totalToPay || client.monto_total || 0);
+          const saldoRestante = Number(client.outstanding || client.saldo_restante || 0);
+          const capitalPrestado = Number(client.amount || client.monto_prestado || 0);
+          
+          // Recaudo Real es todo lo que se debía menos lo que aún debe
+          const recaudoReal = totalEsperado - saldoRestante;
+          
+          let gananciaReal = 0;
+          let nuevoEstado = 'LIQUIDADO';
+
+          // Escenario A: Ganancia Real
+          if (recaudoReal > capitalPrestado) {
+            gananciaReal = recaudoReal - capitalPrestado;
+            const currentUser = window.BulaPayDB.getCurrentUser();
+            const routeId = currentUser ? currentUser.routeId : null;
+            const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+            
+            // Inyectar ganancia realizada al capital base
+            await window.BulaPayDB.injectCapital(routeId, agentId, gananciaReal);
+            alert(`🎉 ¡Cartón Liquidado Exitosamente!\nGanancia Real de $${gananciaReal.toLocaleString('es-CO')} ha sido sumada al Capital Base.`);
+          } 
+          // Escenario B: Pérdida o Mala Paga
+          else {
+            if (recaudoReal < totalEsperado) {
+              const deuda = totalEsperado - recaudoReal;
+              nuevoEstado = 'MOROSO';
+              alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda de $${deuda.toLocaleString('es-CO')}.`);
+            } else {
+              alert('Cartón Liquidado. No hubo ganancia real para sumar al Capital Base.');
+            }
+          }
+
+          // Actualizar estado del cliente en DB
+          await window.BulaPayDB.forceUpdateExistingClient({
+            cedula: client.cedula,
+            status: nuevoEstado
+          });
+
+          // Limpiar UI
+          if (this.cobroCartonState && this.cobroInputState) {
+            this.cobroCartonState.style.setProperty('display', 'none', 'important');
+            this.cobroInputState.style.setProperty('display', 'block', 'important');
+          }
+          if (this.inputCobroCedula) this.inputCobroCedula.value = '';
+          if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'flex';
+          if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
+          this.currentClient = null;
+
+        } catch (error) {
+          console.error("Error al liquidar cartón:", error);
+          alert('❌ Ocurrió un error al liquidar el cartón.');
+        } finally {
+          this.btnLiquidarCarton.disabled = false;
+          this.btnLiquidarCarton.textContent = 'Liquidar Cartón';
         }
-        if (this.inputCobroCedula) this.inputCobroCedula.value = '';
-        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'flex';
-        if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
       });
     }
 
@@ -655,17 +711,18 @@ const agentModule = {
         const currentUser = window.BulaPayDB.getCurrentUser();
         const route = currentUser && currentUser.routeId ? await window.BulaPayDB.getRouteById(currentUser.routeId) : null;
         const routeCapital = route ? await window.BulaPayDB.getRealBaseCapital(route.id) : 0;
-        capitalEl.textContent = `$${routeCapital.toLocaleString('es-CO')}`;
+        capitalEl.textContent = `$${Number(routeCapital).toLocaleString('es-CO')}`;
         
         if (currentUser) {
           const clients = await window.BulaPayDB.getClients();
           let totalCartera = 0;
           let totalGanancia = 0;
           clients.forEach(client => {
+            // El indicador solo suma créditos estrictamente ACTIVOS
             if (client.status === 'ACTIVO') {
-              const saldoRestante = parseFloat(client.saldo_restante || client.balance || 0);
-              const totalRecaudar = parseFloat(client.monto_total || client.totalToPay || client.total_amount || 0);
-              const prestado = parseFloat(client.monto_prestado || client.amount || 0);
+              const saldoRestante = Number(client.saldo_restante || client.outstanding || client.balance || 0);
+              const totalRecaudar = Number(client.monto_total || client.totalToPay || client.total_amount || 0);
+              const prestado = Number(client.monto_prestado || client.amount || 0);
               totalCartera += saldoRestante;
               totalGanancia += (totalRecaudar - prestado);
             }

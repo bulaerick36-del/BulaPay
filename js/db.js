@@ -1278,7 +1278,7 @@ const db = {
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
 
-      // 1. Suma Total Inyectada
+      // 1. Suma Total Inyectada (Capital inicial, manual y ganancias realizadas)
       const injections = await this.getCapitalInjections(routeId);
       let totalInjected = 0;
       for (const inj of injections) {
@@ -1286,25 +1286,7 @@ const db = {
         if (belongsToUser) totalInjected += (parseFloat(inj.amount) || 0);
       }
 
-      // 2. Intereses Reales Recaudados
-      let totalCollectedInterests = 0;
-      const clients = await this.getClients();
-      for (const c of clients) {
-        const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId);
-        if (belongsToUser) {
-          const debt = parseFloat(c.totalDebt) || 0;
-          const amountLent = parseFloat(c.amount) || debt;
-          const outstanding = parseFloat(c.outstanding) || 0;
-          const totalPaid = Math.max(0, debt - outstanding); // Evitar negativos
-
-          if (debt > 0 && debt > amountLent && totalPaid > 0) {
-            const interestRatio = (debt - amountLent) / debt;
-            totalCollectedInterests += (totalPaid * interestRatio);
-          }
-        }
-      }
-
-      // 3. Gastos / Retiros (Exclusivamente 'salida')
+      // 2. Gastos / Retiros (Exclusivamente 'salida')
       const movements = await this.getCashMovements();
       let totalExpenses = 0;
       for (const m of movements) {
@@ -1314,11 +1296,11 @@ const db = {
         }
       }
 
-      // BAJO NINGUNA CIRCUNSTANCIA se restan desembolsos de préstamos.
-      const realBaseCapital = totalInjected + totalCollectedInterests - totalExpenses;
+      // El Capital Base es estático y estricto. Las ganancias de cartera se inyectan al liquidar.
+      const realBaseCapital = totalInjected - totalExpenses;
       return realBaseCapital;
     } catch (err) {
-      console.error('Error calculating Real Base Capital:', err);
+      console.error('Error fetching real base capital:', err);
       return 0;
     }
   },
