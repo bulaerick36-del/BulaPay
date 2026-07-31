@@ -2018,13 +2018,7 @@ const agentModule = {
 
       const montoSalida = montoPrestamo - discountAmount;
 
-      // 1. Freno de Préstamos usando Caja Diaria (onHand) para coincidir con la interfaz
-      const dailyCashData = await window.BulaPayDB.getEfectivoEnCajaDia();
-      const liquidCash = dailyCashData.onHand || 0;
-      if (montoSalida > liquidCash) {
-        const bypass = confirm(`❌ Fondos Insuficientes (Su Efectivo Disponible Diario es menor al capital requerido).\nSalida Neta (A entregar): $${montoSalida.toLocaleString('es-CO')}\nEfectivo Disponible: $${liquidCash.toLocaleString('es-CO')}\n\n¿Desea forzar el registro de todos modos (Bypass)?`);
-        if (!bypass) return;
-      }
+
 
       const emailSintetico = `cliente_${cedula.trim()}_${Date.now()}@bulapay.online`;
 
