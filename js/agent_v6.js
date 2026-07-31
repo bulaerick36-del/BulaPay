@@ -2018,10 +2018,11 @@ const agentModule = {
 
       const montoSalida = montoPrestamo - discountAmount;
 
-      // 1. Fix Crítico del Freno de Préstamos (Hard Stop) con Descuento usando Caja Líquida
-      const liquidCash = await window.BulaPayDB.getLiquidCash(routeId);
+      // 1. Freno de Préstamos usando Caja Diaria (onHand) para coincidir con la interfaz
+      const dailyCashData = await window.BulaPayDB.getEfectivoEnCajaDia();
+      const liquidCash = dailyCashData.onHand || 0;
       if (montoSalida > liquidCash) {
-        const bypass = confirm(`❌ Fondos Insuficientes (La Caja Líquida es menor al capital requerido).\nSalida Neta (A entregar): $${montoSalida.toLocaleString('es-CO')}\nCaja Líquida Disponible: $${liquidCash.toLocaleString('es-CO')}\n\n¿Desea forzar el registro de todos modos (Bypass)?`);
+        const bypass = confirm(`❌ Fondos Insuficientes (Su Efectivo Disponible Diario es menor al capital requerido).\nSalida Neta (A entregar): $${montoSalida.toLocaleString('es-CO')}\nEfectivo Disponible: $${liquidCash.toLocaleString('es-CO')}\n\n¿Desea forzar el registro de todos modos (Bypass)?`);
         if (!bypass) return;
       }
 
