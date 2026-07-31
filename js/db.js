@@ -558,36 +558,71 @@ const db = {
       if (supId && !client.supervisor_id) {
         client.supervisor_id = supId;
       }
+      
+      // Verificación estricta de tipos de datos (Payload)
+      client.amount = Number(client.amount) || 0;
+      client.discount_amount = Number(client.discount_amount) || 0;
+      client.totalDebt = Number(client.totalDebt) || 0;
+      client.outstanding = Number(client.outstanding) || 0;
+      client.installmentsCount = Number(client.installmentsCount) || 1;
+      client.installmentAmount = Number(client.installmentAmount) || 0;
+      
+      // Limpiar undefined
+      Object.keys(client).forEach(key => {
+        if (client[key] === undefined) {
+          client[key] = null;
+        }
+      });
+
+      console.log('Datos a enviar:', client);
       console.log('[DEBUG DB] saveClient - Conectando a Supabase e insertando...');
+      
       let { data, error } = await supabase
         .from('clients')
         .insert([client])
         .select();
 
-      if (error && (error.message.includes('product_name') || error.message.includes('product_category') || error.code === '42703')) {
-        console.warn("Columnas de producto no encontradas en Supabase, reintentando sin ellas...");
-        const fallbackClient = { ...client };
-        delete fallbackClient.product_name;
-        delete fallbackClient.product_category;
+      // Atrape estricto de errores de Supabase según las indicaciones
+      if (error) {
+        if (error.message.includes('product_name') || error.message.includes('product_category') || error.code === '42703') {
+          console.warn("Columnas de producto no encontradas en Supabase, reintentando sin ellas...");
+          const fallbackClient = { ...client };
+          delete fallbackClient.product_name;
+          delete fallbackClient.product_category;
 
-        const retryResult = await supabase
-          .from('clients')
-          .insert([fallbackClient])
-          .select();
+          const retryResult = await supabase
+            .from('clients')
+            .insert([fallbackClient])
+            .select();
 
-        if (retryResult.error) {
-          console.error("[DEBUG DB ERROR] Error en reintento de saveClient:", retryResult.error);
-          throw retryResult.error;
+          if (retryResult.error) {
+            console.error('Datos a enviar (Fallback):', fallbackClient);
+            if (typeof Swal !== 'undefined') {
+              Swal.fire('Error al guardar', retryResult.error.message + ' | Detalles: ' + JSON.stringify(retryResult.error.details), 'error');
+            } else {
+              alert('Error al guardar: ' + retryResult.error.message + ' | Detalles: ' + JSON.stringify(retryResult.error.details));
+            }
+            return null;
+          }
+          data = retryResult.data;
+          error = null;
+        } else {
+          console.error('Datos a enviar (Original):', client);
+          if (typeof Swal !== 'undefined') {
+            Swal.fire('Error al guardar', error.message + ' | Detalles: ' + JSON.stringify(error.details), 'error');
+          } else {
+            alert('Error al guardar: ' + error.message + ' | Detalles: ' + JSON.stringify(error.details));
+          }
+          return null;
         }
-        data = retryResult.data;
-        error = null;
-      } else if (error) {
-        throw error;
       }
 
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
       return (data && data.length > 0) ? data[0] : client;
     } catch (err) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire('Error Excepcional', err.message, 'error');
+      }
       throw err;
     }
   },
