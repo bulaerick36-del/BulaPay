@@ -480,11 +480,22 @@ const agentModule = {
       this.btnProcessMassPayment.addEventListener('click', () => this.processMassPayment());
     }
 
-    // Registrar Cliente Nuevo
-    this.formRegisterClient.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await this.registerNewClient();
-    });
+    // Registrar Cliente Nuevo (Blindado contra recargas nativas)
+    const btnSaveClient = document.getElementById('btn-agent-save-client');
+    if (btnSaveClient) {
+      btnSaveClient.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Ejecutar validación HTML5 manualmente ya que es type="button"
+        if (!this.formRegisterClient.checkValidity()) {
+          this.formRegisterClient.reportValidity();
+          return;
+        }
+        
+        await this.registerNewClient();
+      });
+    }
 
   },
 

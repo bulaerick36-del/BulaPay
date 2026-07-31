@@ -716,7 +716,7 @@
 
             <!-- PESTAÑA REGISTRAR NUEVO CLIENTE -->
             <div id="panel-agent-register" style="display: none;">
-              <form id="form-register-client">
+              <form id="form-register-client" onsubmit="event.preventDefault();">
                 <div class="form-group">
                   <label for="new-client-name">Nombre Completo del Cliente</label>
                   <input type="text" id="new-client-name" placeholder="Nombre completo" required>
@@ -819,7 +819,7 @@
                   </div>
                 </div>
 
-                <button type="submit" id="btn-agent-save-client" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.6rem;">
+                <button type="button" id="btn-agent-save-client" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.6rem;">
                   Guardar Cliente
                 </button>
               </form>
