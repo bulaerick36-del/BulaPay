@@ -2140,17 +2140,13 @@ const agentModule = {
           alert('❌ Error: Ya existe un cliente registrado con esta Cédula (cartera de otro cobrador).');
         }
       } else {
+        console.error('Error de ejecución:', err);
         const errorMsg = err.message || 'Error desconocido';
         const errorDetails = err.details || '';
         if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            title: 'ERROR CRÍTICO AL GUARDAR',
-            text: `Mensaje: ${errorMsg}\nDetalles: ${errorDetails}`,
-            icon: 'error',
-            confirmButtonColor: '#d33'
-          });
+          Swal.fire('Error de Código', errorMsg + (errorDetails ? ` | Detalles: ${errorDetails}` : ''), 'error');
         } else {
-          alert(`ERROR CRÍTICO AL GUARDAR: ${errorMsg}\nDetalles: ${errorDetails}`);
+          alert(`Error de Código: ${errorMsg}\nDetalles: ${errorDetails}`);
         }
       }
     }
