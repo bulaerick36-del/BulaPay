@@ -585,12 +585,8 @@ const db = {
         throw error;
       }
 
-      if (!data || data.length === 0) {
-        throw new Error("No se devolvieron datos después de la inserción");
-      }
-
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
-      return data ? data[0] : client;
+      return (data && data.length > 0) ? data[0] : client;
     } catch (err) {
       throw err;
     }
