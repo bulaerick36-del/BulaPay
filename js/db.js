@@ -582,14 +582,16 @@ const db = {
         data = retryResult.data;
         error = null;
       } else if (error) {
-        console.error("[DEBUG DB ERROR] Error devuelto por Supabase al registrar cliente:", error);
         throw error;
+      }
+
+      if (!data || data.length === 0) {
+        throw new Error("No se devolvieron datos después de la inserción");
       }
 
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
       return data ? data[0] : client;
     } catch (err) {
-      console.error("[DEBUG DB ERROR] Excepción atrapada en saveClient:", err);
       throw err;
     }
   },

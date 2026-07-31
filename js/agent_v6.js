@@ -2072,11 +2072,6 @@ const agentModule = {
       // Mostrar modal obligatorio SMS
       this.showMandatorySmsPrompt(payload, 'register');
     } catch (err) {
-      console.error('[DEBUG ERROR] Error atrapado al registrar cliente en agent.js:', err);
-      if (err && typeof err === 'object') {
-        console.error('[DEBUG ERROR] Detalles del error (claves):', Object.keys(err));
-        console.error('[DEBUG ERROR] Error stringificado:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
-      }
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
       if (dupMsg === 'DUPLICATE_DATA') {
         if (typeof Swal !== 'undefined') {
@@ -2105,8 +2100,18 @@ const agentModule = {
                 this.showMandatorySmsPrompt(updatedPayload, 'register');
               } catch (error) {
                 // Paso 4: Manejo de Errores Transparente
-                console.error('Update fallback (registerCreditToExistingClient) failed:', error);
-                alert('Error de BD: ' + (error.message || 'Error desconocido'));
+                const errorMsg = error.message || 'Error desconocido';
+                const errorDetails = error.details || '';
+                if (typeof Swal !== 'undefined') {
+                  Swal.fire({
+                    title: 'ERROR CRÍTICO AL GUARDAR',
+                    text: `Mensaje: ${errorMsg}\nDetalles: ${errorDetails}`,
+                    icon: 'error',
+                    confirmButtonColor: '#d33'
+                  });
+                } else {
+                  alert(`ERROR CRÍTICO AL GUARDAR: ${errorMsg}\nDetalles: ${errorDetails}`);
+                }
               }
             } else {
               const navClients = document.getElementById('nav-clients');
@@ -2124,8 +2129,9 @@ const agentModule = {
               this.formRegisterClient.reset();
               this.showMandatorySmsPrompt(updatedPayload, 'register');
             }).catch(error => {
-              console.error('Update fallback (registerCreditToExistingClient via confirm) failed:', error);
-              alert('Error de BD: ' + (error.message || 'Error desconocido'));
+              const errorMsg = error.message || 'Error desconocido';
+              const errorDetails = error.details || '';
+              alert(`ERROR CRÍTICO AL GUARDAR: ${errorMsg}\nDetalles: ${errorDetails}`);
             });
           } else {
             const navClients = document.getElementById('nav-clients');
@@ -2133,9 +2139,24 @@ const agentModule = {
           }
         }
       } else if (err.message === 'ACCESO_DENEGADO_OTRO_AGENTE') {
-        alert('❌ Error: Ya existe un cliente registrado con esta Cédula (cartera de otro cobrador).');
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('Error', 'Ya existe un cliente registrado con esta Cédula (cartera de otro cobrador).', 'error');
+        } else {
+          alert('❌ Error: Ya existe un cliente registrado con esta Cédula (cartera de otro cobrador).');
+        }
       } else {
-        alert('❌ Error al registrar el cliente. Detalles técnicos en la consola.');
+        const errorMsg = err.message || 'Error desconocido';
+        const errorDetails = err.details || '';
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: 'ERROR CRÍTICO AL GUARDAR',
+            text: `Mensaje: ${errorMsg}\nDetalles: ${errorDetails}`,
+            icon: 'error',
+            confirmButtonColor: '#d33'
+          });
+        } else {
+          alert(`ERROR CRÍTICO AL GUARDAR: ${errorMsg}\nDetalles: ${errorDetails}`);
+        }
       }
     }
   },
