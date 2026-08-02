@@ -1406,6 +1406,104 @@ const db = {
     }
   },
 
+  async getDashboardFinancialMetrics(routeId) {
+    try {
+      const currentUser = this.getCurrentUser();
+      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+      const supabase = await initSupabase();
+
+      let creditsList = [];
+
+      // 1. Consultar de la tabla 'credits' si está disponible
+      try {
+        let query = supabase.from('credits').select('*');
+        if (routeId) {
+          query = query.eq('routeId', routeId);
+        } else if (agentId) {
+          query = query.eq('agent_id', agentId);
+        }
+        const { data: creditsData, error: creditsErr } = await query;
+        if (!creditsErr && creditsData && creditsData.length > 0) {
+          creditsList = creditsData;
+        }
+      } catch (e) {
+        console.warn("Tabla credits no disponible en métricas:", e.message);
+      }
+
+      // 2. Fallback: Consultar clientes activos desde la tabla 'clients'
+      if (creditsList.length === 0) {
+        const clients = await this.getClients();
+        creditsList = clients;
+      }
+
+      let carteraEnCalle = 0; // Regla 1: Suma de outstanding ÚNICAMENTE de status = 'Activo'
+      let posibleGanancia = 0; // Regla 2: Suma de intereses (totalDebt - amount) ÚNICAMENTE de status = 'Activo'
+
+      creditsList.forEach(c => {
+        const rawStatus = String(c.status || c.estado || 'Activo').toUpperCase();
+        // Un crédito cuenta para Cartera y Posible Ganancia SOLO si su estado es Activo
+        const isActivo = (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA') &&
+                          rawStatus !== 'LIQUIDADO' && 
+                          rawStatus !== 'LIQUIDADO_PAGADO' && 
+                          rawStatus !== 'LIQUIDADO_MORA' && 
+                          rawStatus !== 'MOROSO';
+
+        if (isActivo) {
+          const outstanding = Number(c.outstanding || c.saldo_restante || 0);
+          const totalDebt = Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0);
+          const amount = Number(c.amount || c.capital_prestado || c.monto_prestado || 0);
+          
+          // Regla 1: Dinero activo en calle
+          carteraEnCalle += Math.max(0, outstanding);
+
+          // Regla 2: Intereses proyectados
+          const interesCredito = Math.max(0, totalDebt - amount);
+          posibleGanancia += interesCredito;
+        }
+      });
+
+      return {
+        carteraEnCalle,
+        posibleGanancia
+      };
+    } catch (err) {
+      console.error("Error al calcular métricas del Dashboard financiero:", err);
+      return { carteraEnCalle: 0, posibleGanancia: 0 };
+    }
+  },
+
+  async liquidateCredit({ cedula, status, outstanding }) {
+    const supabase = await initSupabase();
+    
+    const updatePayload = {
+      status: status,
+      risk: (status === 'Liquidado_Mora' || status === 'MOROSO') ? 'Rojo' : 'Verde'
+    };
+    if (outstanding !== undefined) {
+      updatePayload.outstanding = Number(outstanding);
+    }
+    
+    // 1. Actualizar tabla clients
+    const { error: clientErr } = await supabase
+      .from('clients')
+      .update(updatePayload)
+      .eq('cedula', String(cedula));
+      
+    if (clientErr) console.error("Error al liquidar cliente en Supabase:", clientErr);
+
+    // 2. Actualizar tabla credits si aplica
+    try {
+      await supabase
+        .from('credits')
+        .update({ status: status, outstanding: Number(outstanding || 0) })
+        .eq('client_id', String(cedula));
+    } catch (e) {
+      console.warn("Tabla credits no disponible al liquidar crédito:", e.message);
+    }
+    
+    return true;
+  },
+
   async getLiquidCash(routeId) {
     try {
       const currentUser = this.getCurrentUser();

@@ -278,43 +278,47 @@ const agentModule = {
 
         try {
           const client = this.currentClient;
-          const totalEsperado = Number(client.totalToPay || client.monto_total || 0);
+          const totalEsperado = Number(client.totalToPay || client.monto_total || client.totalDebt || 0);
           const saldoRestante = Number(client.outstanding || client.saldo_restante || 0);
-          const capitalPrestado = Number(client.amount || client.monto_prestado || 0);
+          const capitalPrestado = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
           
-          // Recaudo Real es todo lo que se debía menos lo que aún debe
-          const recaudoReal = totalEsperado - saldoRestante;
+          // Recaudo Real es la diferencia entre el total esperado y el saldo pendiente actual
+          const recaudoReal = Math.max(0, totalEsperado - saldoRestante);
           
           let gananciaReal = 0;
-          let nuevoEstado = 'LIQUIDADO';
+          let nuevoEstado = 'Liquidado_Pagado';
 
-          // Escenario A: Ganancia Real
-          if (recaudoReal > capitalPrestado) {
+          // Escenario A: Liquidación Exitosa con Pago (Regla 3)
+          if (recaudoReal >= capitalPrestado) {
             gananciaReal = recaudoReal - capitalPrestado;
+            nuevoEstado = 'Liquidado_Pagado';
             const currentUser = window.BulaPayDB.getCurrentUser();
             const routeId = currentUser ? currentUser.routeId : null;
             const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
             
-            // Inyectar ganancia realizada al capital base
-            await window.BulaPayDB.injectCapital(routeId, agentId, gananciaReal);
-            alert(`🎉 ¡Cartón Liquidado Exitosamente!\nGanancia Real de $${gananciaReal.toLocaleString('es-CO')} ha sido sumada al Capital Base.`);
-          } 
-          // Escenario B: Pérdida o Mala Paga
-          else {
-            if (recaudoReal < totalEsperado) {
-              const deuda = totalEsperado - recaudoReal;
-              nuevoEstado = 'MOROSO';
-              alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda de $${deuda.toLocaleString('es-CO')}.`);
+            if (gananciaReal > 0) {
+              // Sumar ganancia real al Capital Base automáticamente
+              await window.BulaPayDB.injectCapital(routeId, agentId, gananciaReal);
+              alert(`🎉 ¡Cartón Liquidado Exitosamente!\nGanancia Real de $${gananciaReal.toLocaleString('es-CO')} ha sido sumada al Capital Base.`);
             } else {
-              alert('Cartón Liquidado. No hubo ganancia real para sumar al Capital Base.');
+              alert('🎉 ¡Cartón Liquidado Exitosamente! No hubo ganancia para sumar al Capital Base.');
             }
+          } 
+          // Escenario B: Default / Pérdida (Mala Paga -> Lista Negra - Regla 4)
+          else {
+            nuevoEstado = 'Liquidado_Mora';
+            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda no pagada de $${saldoRestante.toLocaleString('es-CO')}. El crédito desaparece de la vista diaria y de Cartera en Calle.`);
           }
 
-          // Actualizar estado del cliente en DB
-          await window.BulaPayDB.forceUpdateExistingClient({
+          // Actualizar estado del cliente y crédito en DB
+          await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
-            status: nuevoEstado
+            status: nuevoEstado,
+            outstanding: nuevoEstado === 'Liquidado_Pagado' ? 0 : saldoRestante
           });
+
+          // Actualizar inmediatamente las métricas financieras del Dashboard
+          await this.renderFinancialDashboard();
 
           // Limpiar UI
           if (this.cobroCartonState && this.cobroInputState) {
@@ -328,6 +332,13 @@ const agentModule = {
 
         } catch (error) {
           console.error("Error al liquidar cartón:", error);
+          alert('❌ Error al liquidar cartón: ' + (error.message || error));
+        } finally {
+          this.btnLiquidarCarton.disabled = false;
+          this.btnLiquidarCarton.textContent = 'Liquidar Cartón';
+        }
+      });
+    }
           alert('❌ Ocurrió un error al liquidar el cartón.');
         } finally {
           this.btnLiquidarCarton.disabled = false;
@@ -704,51 +715,8 @@ const agentModule = {
       };
     }
 
-    // 2. Dar vida al Dashboard 'Mi Negocio' (Métrica de Capital)
-    const capitalEl = document.getElementById('private-panel-capital');
-    const carteraEl = document.getElementById('private-panel-cartera');
-    const gananciaEl = document.getElementById('private-panel-ganancia');
-    let agentClients = [];
-    if (capitalEl) {
-      capitalEl.textContent = 'Calculando...';
-      if (carteraEl) carteraEl.textContent = '...';
-      if (gananciaEl) gananciaEl.textContent = '...';
-      try {
-        const currentUser = window.BulaPayDB.getCurrentUser();
-        const route = currentUser && currentUser.routeId ? await window.BulaPayDB.getRouteById(currentUser.routeId) : null;
-        const routeCapital = route ? await window.BulaPayDB.getRealBaseCapital(route.id) : 0;
-        capitalEl.textContent = `$${Number(routeCapital).toLocaleString('es-CO')}`;
-        
-        if (currentUser) {
-          const clients = await window.BulaPayDB.getClients();
-          if (clients && clients.length > 0) {
-            console.log('Objeto Cliente BD:', clients[0]);
-          }
-          let totalCartera = 0;
-          let totalGanancia = 0;
-          clients.forEach(c => {
-            // Validación de estado flexible
-            const isActive = (c.status && c.status.toUpperCase() === 'ACTIVO') || (c.estado && c.estado.toUpperCase() === 'ACTIVO');
-            
-            if (isActive) {
-              const saldoRestante = Number(c.saldo_restante || c.balance || c.amount || c.outstanding || 0);
-              const totalRecaudar = Number(c.total_a_recaudar || c.monto_total || c.totalToPay || c.total_amount || 0);
-              const prestado = Number(c.capital_prestado || c.monto_prestado || c.amount || 0);
-              
-              totalCartera += saldoRestante;
-              totalGanancia += (totalRecaudar - prestado);
-            }
-          });
-          if (carteraEl) carteraEl.textContent = `$${totalCartera.toLocaleString('es-CO')}`;
-          if (gananciaEl) gananciaEl.textContent = `$${totalGanancia.toLocaleString('es-CO')}`;
-        }
-      } catch (err) {
-        console.error(err);
-        capitalEl.textContent = 'Error';
-        if (carteraEl) carteraEl.textContent = 'Error';
-        if (gananciaEl) gananciaEl.textContent = 'Error';
-      }
-    }
+    // 2. Dar vida al Dashboard 'Mi Negocio' (Métricas Financieras Estrictas)
+    await this.renderFinancialDashboard();
     
     // Lógica para Modales
     const injectModal = document.getElementById('modal-inject-capital');
@@ -971,42 +939,48 @@ const agentModule = {
       };
     }
     
-    // Modal de Lista Negra
+    // Modal de Lista Negra (Regla 4)
     if (btnBlacklist && blacklistModal) {
       btnBlacklist.onclick = async () => {
         blacklistModal.style.display = 'flex';
         const container = document.getElementById('private-blacklist-container');
-        container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Calculando morosos...</p>';
+        container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Cargando morosos...</p>';
         
         try {
           const clients = await window.BulaPayDB.getClients();
-          const badClients = clients.filter(c => 
-            c.agent_id === currentUser.username && 
-            Number(c.outstanding) > 0 && 
-            c.risk === 'Rojo'
-          );
+          const currentUser = window.BulaPayDB.getCurrentUser();
+          const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+
+          // Regla 4: Filtrar créditos/clientes en default / lista negra
+          const badClients = clients.filter(c => {
+            const isMyClient = !c.agent_id || c.agent_id === agentId || c.routeId === currentUser.routeId;
+            const statusUpper = String(c.status || '').toUpperCase();
+            const isMoroso = statusUpper === 'LIQUIDADO_MORA' || statusUpper === 'MOROSO' || c.risk === 'Rojo';
+            return isMyClient && isMoroso && Number(c.outstanding) > 0;
+          });
           
           if (badClients.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: #10b981; font-weight: bold;">🎉 ¡Felicidades! No tienes clientes en Lista Negra.</p>';
             return;
           }
           
-          // Renderizar lista
+          // Renderizar lista negra
           container.innerHTML = badClients.map(c => `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
               <div>
                 <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${c.name}</h4>
-                <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">CC: ${c.cedula}</p>
+                <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">CC: ${c.cedula} | ${c.city || ''} ${c.zone ? '(' + c.zone + ')' : ''}</p>
+                <span style="font-size: 0.72rem; color: #ef4444; font-weight: 600;">Estado: Liquidado por Mora (Default)</span>
               </div>
-              <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700;">
+              <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">
                 Deuda: $${Number(c.outstanding).toLocaleString('es-CO')}
               </span>
             </div>
           `).join('');
           
         } catch (e) {
-          console.error(e);
-          container.innerHTML = '<p style="text-align: center; color: var(--color-rojo);">Error al calcular lista negra.</p>';
+          console.error("Error al cargar Lista Negra:", e);
+          container.innerHTML = '<p style="text-align: center; color: var(--color-rojo);">Error al cargar Lista Negra.</p>';
         }
       };
     }
@@ -2530,6 +2504,34 @@ const agentModule = {
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  },
+
+  async renderFinancialDashboard() {
+    const capitalEl = document.getElementById('private-panel-capital');
+    const carteraEl = document.getElementById('private-panel-cartera');
+    const gananciaEl = document.getElementById('private-panel-ganancia');
+    if (!capitalEl) return;
+
+    capitalEl.textContent = 'Calculando...';
+    if (carteraEl) carteraEl.textContent = '...';
+    if (gananciaEl) gananciaEl.textContent = '...';
+
+    try {
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      if (!currentUser) return;
+
+      const routeCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
+      capitalEl.textContent = `$${Number(routeCapital).toLocaleString('es-CO')}`;
+      
+      const metrics = await window.BulaPayDB.getDashboardFinancialMetrics(currentUser.routeId);
+      if (carteraEl) carteraEl.textContent = `$${Number(metrics.carteraEnCalle).toLocaleString('es-CO')}`;
+      if (gananciaEl) gananciaEl.textContent = `$${Number(metrics.posibleGanancia).toLocaleString('es-CO')}`;
+    } catch (err) {
+      console.error("Error al renderizar Dashboard financiero:", err);
+      if (capitalEl) capitalEl.textContent = 'Error';
+      if (carteraEl) carteraEl.textContent = 'Error';
+      if (gananciaEl) gananciaEl.textContent = 'Error';
+    }
   },
 
   async updateRouteTracking() {
