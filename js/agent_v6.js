@@ -1945,6 +1945,7 @@ const agentModule = {
   },
 
   async registerNewClient() {
+    let payload = null;
     try {
       console.log('Paso 1: Iniciando registro de cliente...');
 
@@ -2061,7 +2062,7 @@ const agentModule = {
       const emailEl = document.getElementById('new-client-email');
       const emailVal = emailEl ? emailEl.value.trim() : '';
 
-      const payload = {
+      payload = {
         cedula,
         name,
         phone,
