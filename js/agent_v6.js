@@ -339,13 +339,6 @@ const agentModule = {
         }
       });
     }
-          alert('❌ Ocurrió un error al liquidar el cartón.');
-        } finally {
-          this.btnLiquidarCarton.disabled = false;
-          this.btnLiquidarCarton.textContent = 'Liquidar Cartón';
-        }
-      });
-    }
 
     // Botones Modal Factura
     if (this.btnInvoiceConfirm) {
