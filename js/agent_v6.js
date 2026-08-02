@@ -480,17 +480,16 @@ const agentModule = {
       this.btnProcessMassPayment.addEventListener('click', () => this.processMassPayment());
     }
 
-    // Registrar Cliente Nuevo (Blindado contra recargas nativas)
-    const btnSaveClient = document.getElementById('btn-agent-save-client');
-    if (btnSaveClient) {
-      btnSaveClient.addEventListener('click', async (e) => {
+    // Registrar Cliente Nuevo (Reconexión explícita del botón oficial)
+    const btnGuardar = document.getElementById('btn-registrar-cliente-oficial');
+    if (btnGuardar) {
+      btnGuardar.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        console.log('Paso 1: Botón presionado, preventDefault ejecutado.');
-        
+        console.log('¡BINGO! El botón está vivo y conectado.');
+        console.log('Intentando enviar a Supabase la tabla clients...');
         await this.registerNewClient();
-      });
+      };
     }
 
   },
@@ -1059,6 +1058,17 @@ const agentModule = {
         
         // Limpiar Estado Registro
         if (this.formRegisterClient) this.formRegisterClient.reset();
+
+        const btnGuardar = document.getElementById('btn-registrar-cliente-oficial');
+        if (btnGuardar) {
+          btnGuardar.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('¡BINGO! El botón está vivo y conectado.');
+            console.log('Intentando enviar a Supabase la tabla clients...');
+            await this.registerNewClient();
+          };
+        }
       }
     }
   },

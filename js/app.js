@@ -382,7 +382,7 @@ const app = {
           const registerBtn = document.getElementById('btn-agent-register-installment');
           const submitCollectBtn = document.getElementById('btn-submit-collect');
           const noPagoBtn = document.getElementById('btn-payment-card-nopago');
-          const saveClientBtn = document.getElementById('btn-agent-save-client');
+          const saveClientBtn = document.getElementById('btn-registrar-cliente-oficial') || document.getElementById('btn-agent-save-client');
 
           if (isClosed) {
             routeStatusElement.textContent = 'Ruta Cerrada';
