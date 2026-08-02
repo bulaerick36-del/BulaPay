@@ -2009,26 +2009,29 @@ const agentModule = {
 
       console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
 
-      // Validar existencia
-      const existing = await window.BulaPayDB.getClientByCedula(cedula);
+      // Validar existencia únicamente por Cédula (los datos de contacto teléfono/dirección/nombre se pueden duplicar libremente)
+      const existing = await window.BulaPayDB.getGlobalClientByCedula(cedula);
       if (existing) {
         console.warn('[DEBUG] Cédula ya existente registrada:', existing);
         let proceed = false;
         
+        const warningMsg = `La Cédula N° ${cedula} ya se encuentra registrada a nombre de ${existing.name || 'un cliente'}.\n\n¿Desea registrarle un nuevo crédito / cartón a este cliente o cancelar y verificar en el historial?`;
+        
         if (typeof Swal !== 'undefined') {
           const result = await Swal.fire({
-            title: 'Cliente Existente',
-            text: 'Este usuario ya está registrado en la base de datos. Verifique el historial.',
+            title: 'Cédula Registrada',
+            text: warningMsg,
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonText: 'Continuar de todos modos',
+            confirmButtonText: 'Continuar con el registro',
             cancelButtonText: 'Ver Historial / Cancelar',
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33'
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#d33',
+            reverseButtons: true
           });
           proceed = result.isConfirmed;
         } else {
-          proceed = confirm('Este usuario ya está registrado en la base de datos. Verifique el historial.\n\n[OK] Continuar de todos modos\n[Cancelar] Ver Historial / Cancelar');
+          proceed = confirm(warningMsg);
         }
 
         if (!proceed) {
@@ -2039,7 +2042,15 @@ const agentModule = {
         }
       }
 
-      const routeId = currentUser && currentUser.routeId ? currentUser.routeId : null;
+      let routeId = currentUser && currentUser.routeId ? currentUser.routeId : null;
+      if (!routeId && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
+        routeId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
+      }
+
+      let supervisorId = currentUser && currentUser.supervisor ? currentUser.supervisor : null;
+      if (!supervisorId && typeof window.BulaPayDB.getSupervisorIdForUser === 'function') {
+        supervisorId = await window.BulaPayDB.getSupervisorIdForUser(currentUser);
+      }
 
       const applyDiscount = document.getElementById('new-client-apply-discount')?.checked;
       let discountAmount = 0;
@@ -2078,14 +2089,15 @@ const agentModule = {
         installmentsCount: installments,
         installmentAmount: Math.round(debt / installments),
         routeId,
-        agent_id: currentUser.id || currentUser.username
+        agent_id: currentUser.id || currentUser.username,
+        supervisor_id: supervisorId
       };
 
       console.log('Intentando enviar a Supabase la tabla clients...', payload);
 
       let savedResult;
       if (existing) {
-        savedResult = await window.BulaPayDB.updateClient(cedula, payload);
+        savedResult = await window.BulaPayDB.registerCreditToExistingClient(payload);
       } else {
         savedResult = await window.BulaPayDB.saveClient(payload);
       }
@@ -2107,20 +2119,22 @@ const agentModule = {
       this.showMandatorySmsPrompt(payload, 'register');
     } catch (err) {
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
-      if (dupMsg === 'DUPLICATE_DATA') {
+      if (dupMsg === 'DUPLICATE_CEDULA' || dupMsg === 'DUPLICATE_DATA') {
+        const warningMsg = `La Cédula N° ${payload?.cedula || ''} ya se encuentra registrada en el sistema.\n\n¿Desea continuar con el registro del nuevo crédito o cancelar y verificar en el historial?`;
         if (typeof Swal !== 'undefined') {
           Swal.fire({
-            title: 'Dato registrado',
-            text: 'Este número de teléfono, cédula o dirección ya está registrado. ¿Desea continuar con el registro del cliente o cancelar y verificar en el historial?',
+            title: 'Cédula Registrada',
+            text: warningMsg,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Continuar con el registro',
             cancelButtonText: 'Cancelar y ver historial',
-            reverseButtons: true
+            reverseButtons: true,
+            confirmButtonColor: '#10b981'
           }).then(async (result) => {
             if (result.isConfirmed) {
               try {
-                // Paso 1 y 2: Recuperar ID y Actualización Segura
+                // Paso 1 y 2: Registrar Crédito y Actualizar Cliente
                 const updatedPayload = await window.BulaPayDB.registerCreditToExistingClient(payload);
                 this.currentClient = updatedPayload;
                 
@@ -2128,7 +2142,7 @@ const agentModule = {
                   this.updateRouteTracking();
                 }
                 this.sendWelcomeEmail(updatedPayload);
-                this.formRegisterClient.reset();
+                if (this.formRegisterClient) this.formRegisterClient.reset();
                 
                 // Paso 3: Disparar SMS obligatorio
                 this.showMandatorySmsPrompt(updatedPayload, 'register');
@@ -2153,14 +2167,14 @@ const agentModule = {
             }
           });
         } else {
-          if (confirm('Este número de teléfono, cédula o dirección ya está registrado. ¿Desea continuar con el registro del cliente o cancelar y verificar en el historial?')) {
+          if (confirm(warningMsg)) {
             window.BulaPayDB.registerCreditToExistingClient(payload).then((updatedPayload) => {
               this.currentClient = updatedPayload;
               if (typeof this.updateRouteTracking === 'function') {
                 this.updateRouteTracking();
               }
               this.sendWelcomeEmail(updatedPayload);
-              this.formRegisterClient.reset();
+              if (this.formRegisterClient) this.formRegisterClient.reset();
               this.showMandatorySmsPrompt(updatedPayload, 'register');
             }).catch(error => {
               const errorMsg = error.message || 'Error desconocido';

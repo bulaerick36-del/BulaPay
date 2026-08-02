@@ -193,6 +193,65 @@ const db = {
     return user.username;
   },
 
+  async getActiveRouteIdForUser(user) {
+    if (!user) return null;
+    if (user.routeId) return user.routeId;
+    
+    try {
+      const supabase = await initSupabase();
+      const supId = this.getSupervisorId();
+      let query = supabase.from('routes').select('id, agentUsername, supervisor_id');
+      if (supId) {
+        query = query.eq('supervisor_id', supId);
+      }
+      const { data: routes } = await query;
+        
+      if (routes && routes.length > 0) {
+        const username = user.username || user.id;
+        const myRoute = routes.find(r => 
+          r.agentUsername && r.agentUsername.split(',').map(u => u.trim()).includes(username)
+        );
+        if (myRoute) {
+          user.routeId = myRoute.id;
+          this.setCurrentUser(user);
+          return myRoute.id;
+        }
+      }
+    } catch (e) {
+      console.warn("Fallo al resolver ruta activa para el usuario:", e);
+    }
+    return null;
+  },
+
+  async getSupervisorIdForUser(user) {
+    if (!user) return null;
+    if (user.role === 'Usuario Supervisor' || user.role === 'supervisor' || user.role === 'Comercio Independiente' || user.role === 'Otros (Comercios, Compraventas, Mercados)') {
+      return user.username;
+    }
+    if (user.supervisor) return user.supervisor;
+    
+    try {
+      const supabase = await initSupabase();
+      const { data } = await supabase
+        .from('users')
+        .select('supervisor, supervisor_id')
+        .eq('username', user.username || user.id)
+        .maybeSingle();
+        
+      if (data) {
+        const sup = data.supervisor || data.supervisor_id;
+        if (sup) {
+          user.supervisor = sup;
+          this.setCurrentUser(user);
+          return sup;
+        }
+      }
+    } catch (e) {
+      console.warn("Fallo al resolver supervisor_id para el usuario:", e);
+    }
+    return this.getSupervisorId();
+  },
+
   setCurrentUser(user) {
     localStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(user));
   },
@@ -445,34 +504,25 @@ const db = {
     let query = supabase.from('clients').select('*');
 
     if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
-      const supId = this.getSupervisorId();
+      const supId = await this.getSupervisorIdForUser(currentUser);
       if (supId) {
         query = query.eq('supervisor_id', supId);
       }
       
-      // Filtrar por Ruta en lugar de agent_id
       let assignedRouteId = currentUser.routeId;
-      
       if (!assignedRouteId) {
-        // Fallback: Buscar en la tabla de rutas si el agente está asignado allí
-        const { data: routes } = await supabase.from('routes').select('id, agentUsername').eq('supervisor_id', supId || currentUser.username);
-        if (routes) {
-          const myRoute = routes.find(r => r.agentUsername && r.agentUsername.split(',').map(u => u.trim()).includes(currentUser.username));
-          if (myRoute) {
-            assignedRouteId = myRoute.id;
-          }
-        }
+        assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
       }
 
+      const agentId = currentUser.id || currentUser.username;
       if (assignedRouteId) {
-        query = query.eq('routeId', assignedRouteId);
+        query = query.or(`routeId.eq.${assignedRouteId},agent_id.eq.${agentId}`);
       } else {
-        // Si no tiene ruta asignada (ej. independiente puro), filtra por su id de agente
-        query = query.eq('agent_id', currentUser.id || currentUser.username);
+        query = query.eq('agent_id', agentId);
       }
     } else {
       // Supervisor o Comercio
-      const supId = this.getSupervisorId();
+      const supId = await this.getSupervisorIdForUser(currentUser);
       if (supId) {
         query = query.eq('supervisor_id', supId);
       } else {
@@ -538,7 +588,12 @@ const db = {
                               (error.details && error.details.includes('already exists'));
                               
     if (isUniqueViolation) {
-      return 'DUPLICATE_DATA';
+      // Ignorar restricciones únicas sobre teléfono o zona/dirección
+      const isPhoneOrZoneOnly = (error.message && (error.message.includes('phone') || error.message.includes('zone'))) ||
+                                (error.details && (error.details.includes('phone') || error.details.includes('zone')));
+      if (!isPhoneOrZoneOnly) {
+        return 'DUPLICATE_CEDULA';
+      }
     }
     
     return null;
@@ -547,17 +602,20 @@ const db = {
   async saveClient(client) {
     console.log('[DEBUG DB] saveClient - Preparando inserción de cliente en Supabase:', client);
     const currentUser = this.getCurrentUser();
-    if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
+    if (currentUser) {
       const agentId = currentUser.id || currentUser.username;
-      // Forzar que el cliente tome el agent_id del usuario actual para evitar registros huérfanos
-      client.agent_id = agentId;
+      if (!client.agent_id) {
+        client.agent_id = agentId;
+      }
+      if (!client.routeId) {
+        client.routeId = await this.getActiveRouteIdForUser(currentUser);
+      }
+      if (!client.supervisor_id) {
+        client.supervisor_id = await this.getSupervisorIdForUser(currentUser);
+      }
     }
     try {
       const supabase = await initSupabase();
-      const supId = this.getSupervisorId();
-      if (supId && !client.supervisor_id) {
-        client.supervisor_id = supId;
-      }
       
       // Verificación estricta de tipos de datos (Payload)
       client.amount = Number(client.amount) || 0;
@@ -582,7 +640,7 @@ const db = {
         .select();
 
       // Si falla debido a columnas adicionales no existentes en la tabla 'clients', reintentar con esquema esencial
-      if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('column')))) {
+      if (error && (error.code === 'PGRST204' || error.code === '42703' || (error.message && (error.message.includes('column') || error.message.includes('schema cache'))))) {
         console.warn('Error de columna detectado. Reintentando inserción con payload esencial...', error);
         const essentialPayload = {
           cedula: client.cedula,
@@ -636,30 +694,20 @@ const db = {
   async forceUpdateExistingClient(payload) {
     const supabase = await initSupabase();
     try {
-      // 1. Recuperar el ID del Cliente Existente (búsqueda paralela para evitar fallos de sintaxis en PostgREST)
-      const [resCedula, resPhone, resZone] = await Promise.all([
-        supabase.from('clients').select('cedula').eq('cedula', payload.cedula).limit(1),
-        supabase.from('clients').select('cedula').eq('phone', payload.phone).limit(1),
-        supabase.from('clients').select('cedula').eq('zone', payload.zone).limit(1)
-      ]);
-
-      if (resCedula.error) console.error("Error buscando por cédula:", resCedula.error);
-      if (resPhone.error) console.error("Error buscando por teléfono:", resPhone.error);
-      if (resZone.error) console.error("Error buscando por zona:", resZone.error);
-
-      // Consolidar resultados (basta con que al menos uno encuentre la coincidencia)
-      const existing = [
-        ...(resCedula.data || []),
-        ...(resPhone.data || []),
-        ...(resZone.data || [])
-      ];
+      // 1. Recuperar únicamente por cédula
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('cedula')
+        .eq('cedula', String(payload.cedula))
+        .limit(1);
 
       if (existing && existing.length > 0) {
         const clienteExistenteId = existing[0].cedula;
-        // 2. Actualización Segura (Update) - Omitimos campos únicos (cedula, phone, zone) para no disparar restricciones
         const safeUpdatePayload = {
-          name: payload.name, // El nombre se puede actualizar sin problemas
+          name: payload.name,
+          phone: payload.phone,
           city: payload.city,
+          zone: payload.zone,
           amount: payload.amount,
           discount_amount: payload.discount_amount,
           discount_reason: payload.discount_reason,
@@ -669,6 +717,7 @@ const db = {
           installmentAmount: payload.installmentAmount,
           routeId: payload.routeId,
           agent_id: payload.agent_id,
+          supervisor_id: payload.supervisor_id,
           risk: payload.risk,
           email: payload.email
         };
@@ -682,8 +731,6 @@ const db = {
         if (updateErr) throw updateErr;
         return { ...payload, cedula: clienteExistenteId };
       } else {
-        // Fallback en caso de que la restricción UNIQUE sea por otro campo (como teléfono)
-        // pero seguimos la directriz de intentar insert
         return await this.saveClient(payload);
       }
     } catch (err) {
@@ -695,29 +742,20 @@ const db = {
   async registerCreditToExistingClient(payload) {
     const supabase = await initSupabase();
     
-    // 1. Extracción Correcta del ID (Buscando por cedula, telefono o zona, igual que antes)
-    const [resCedula, resPhone, resZone] = await Promise.all([
-      supabase.from('clients').select('cedula').eq('cedula', payload.cedula).limit(1),
-      supabase.from('clients').select('cedula').eq('phone', payload.phone).limit(1),
-      supabase.from('clients').select('cedula').eq('zone', payload.zone).limit(1)
-    ]);
+    // 1. Buscar únicamente por Cédula (los datos de contacto se pueden repetir libremente)
+    const { data: existing, error: searchErr } = await supabase
+      .from('clients')
+      .select('cedula, name')
+      .eq('cedula', String(payload.cedula))
+      .limit(1);
 
-    const existing = [
-      ...(resCedula.data || []),
-      ...(resPhone.data || []),
-      ...(resZone.data || [])
-    ];
+    if (searchErr) console.error("Error buscando por cédula:", searchErr);
 
-    if (!existing || existing.length === 0) {
-      throw new Error('Cliente no encontrado en BD (ni por cédula, ni teléfono, ni zona)');
-    }
+    const clientId = (existing && existing.length > 0) ? existing[0].cedula : String(payload.cedula);
+    console.log('-> ID/Cédula del cliente recuperado:', clientId);
+    console.log('-> Intentando registrar nuevo crédito para el cliente...');
     
-    const clientId = existing[0].cedula;
-    console.log('-> ID del cliente recuperado:', clientId);
-    console.log('-> Intentando insertar nuevo crédito para el cliente...');
-    
-    // 2. Bypass de Actualización
-    // Usar clientId como Foreign Key en la tabla de créditos
+    // 2. Registrar crédito secundario en tabla 'credits' si está configurada
     const creditPayload = {
       client_id: clientId,
       amount: payload.amount,
@@ -728,13 +766,37 @@ const db = {
       installmentsCount: payload.installmentsCount,
       installmentAmount: payload.installmentAmount,
       routeId: payload.routeId,
-      agent_id: payload.agent_id
+      agent_id: payload.agent_id,
+      supervisor_id: payload.supervisor_id,
+      created_at: new Date().toISOString()
     };
 
-    const { error: insertError } = await supabase.from('credits').insert([creditPayload]);
-    if (insertError) throw insertError;
+    try {
+      const { error: insertError } = await supabase.from('credits').insert([creditPayload]);
+      if (insertError) {
+        console.warn("Tabla 'credits' no disponible o no requerida:", insertError.message);
+      }
+    } catch (e) {
+      console.warn("Omitiendo inserción secundaria en 'credits':", e.message);
+    }
+
+    // 3. Actualizar la información activa en la tabla 'clients' con el nuevo crédito/cartón
+    await supabase.from('clients').update({
+      name: payload.name,
+      phone: payload.phone,
+      city: payload.city,
+      zone: payload.zone,
+      totalDebt: payload.totalDebt,
+      outstanding: payload.outstanding,
+      installmentsCount: payload.installmentsCount,
+      installmentAmount: payload.installmentAmount,
+      routeId: payload.routeId,
+      agent_id: payload.agent_id,
+      supervisor_id: payload.supervisor_id,
+      risk: 'Verde'
+    }).eq('cedula', clientId);
     
-    return { ...payload, id: clientId };
+    return { ...payload, cedula: clientId };
   },
 
   async getCommerceBuyers() {
