@@ -2025,13 +2025,14 @@ const agentModule = {
 
 
 
-      const emailSintetico = `cliente_${cedula.trim()}_${Date.now()}@bulapay.online`;
+      const emailEl = document.getElementById('new-client-email');
+      const emailVal = emailEl ? emailEl.value.trim() : '';
 
       payload = {
-        cedula,
-        name,
-        phone,
-        email: emailSintetico, // Bypass para evitar restricciones UNIQUE en Supabase
+        cedula: document.getElementById('new-client-cedula').value.replace(/[\s-]/g, '').trim(),
+        name: document.getElementById('new-client-name').value.trim(),
+        phone: document.getElementById('new-client-phone').value.trim(),
+        email: emailVal || null,
         city,
         zone,
         risk: 'Verde', // Inicia excelente
