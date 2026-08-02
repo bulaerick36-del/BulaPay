@@ -1945,38 +1945,69 @@ const agentModule = {
   },
 
   async registerNewClient() {
-    if (this.isRouteClosed()) {
-      alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
-      return;
-    }
-    const name = document.getElementById('new-client-name').value.trim();
-    
-    // Obtener agentId de forma segura desde la sesión activa
-    const currentUser = window.BulaPayDB.getCurrentUser();
-    if (!currentUser) {
-      alert('❌ Error de seguridad: No hay sesión activa.');
-      return;
-    }
-    const agentId = currentUser.username;
-
-    // Sanitizar cédula para evitar espacios accidentales
-    const rawCedula = document.getElementById('new-client-cedula').value;
-    const cedula = String(rawCedula).replace(/[\s-]/g, '').trim();
-    
-    const phone = document.getElementById('new-client-phone').value.trim();
-    const department = document.getElementById('new-client-department').value;
-    const cityVal = document.getElementById('new-client-city').value;
-    const city = department ? `${department} - ${cityVal}` : cityVal;
-    const zone = document.getElementById('new-client-zone').value.trim();
-    const debtRaw = document.getElementById('new-client-debt').value.replace(/\./g, '');
-    const debt = parseFloat(debtRaw) || 0;
-    const installments = parseInt(document.getElementById('new-client-installments').value);
-
-    console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
-
-    let payload = null;
-
     try {
+      console.log('Paso 1: Iniciando registro de cliente...');
+
+      if (this.formRegisterClient && typeof this.formRegisterClient.reportValidity === 'function') {
+        if (!this.formRegisterClient.reportValidity()) {
+          console.warn('Formulario incompleto: reportValidity() retornó false.');
+          return;
+        }
+      }
+
+      if (this.isRouteClosed()) {
+        alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
+        return;
+      }
+
+      const nameEl = document.getElementById('new-client-name');
+      const cedulaEl = document.getElementById('new-client-cedula');
+      const phoneEl = document.getElementById('new-client-phone');
+      const deptEl = document.getElementById('new-client-department');
+      const cityEl = document.getElementById('new-client-city');
+      const zoneEl = document.getElementById('new-client-zone');
+      const capitalEl = document.getElementById('new-client-capital');
+      const debtEl = document.getElementById('new-client-debt');
+      const installmentsEl = document.getElementById('new-client-installments');
+
+      const name = nameEl ? nameEl.value.trim() : '';
+      const rawCedula = cedulaEl ? cedulaEl.value : '';
+      const cedula = String(rawCedula).replace(/[\s-]/g, '').trim();
+      const phone = phoneEl ? phoneEl.value.trim() : '';
+      const department = deptEl ? deptEl.value : '';
+      const cityVal = cityEl ? cityEl.value : '';
+      const city = department ? `${department} - ${cityVal}` : cityVal;
+      const zone = zoneEl ? zoneEl.value.trim() : '';
+
+      if (!name || !cedula || !phone) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('Campos requeridos', 'Por favor ingrese Nombre, Cédula y Teléfono del cliente.', 'warning');
+        } else {
+          alert('Por favor ingrese Nombre, Cédula y Teléfono del cliente.');
+        }
+        return;
+      }
+      
+      // Obtener agentId de forma segura desde la sesión activa
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      if (!currentUser) {
+        alert('❌ Error de seguridad: No hay sesión activa.');
+        return;
+      }
+      const agentId = currentUser.username;
+
+      const capitalRaw = capitalEl ? capitalEl.value.replace(/\./g, '') : '0';
+      const montoPrestamo = parseFloat(capitalRaw) || 0;
+      const installments = installmentsEl ? (parseInt(installmentsEl.value) || 1) : 1;
+
+      let debt = debtEl ? parseFloat(debtEl.value.replace(/\./g, '')) || 0 : 0;
+      if (!debt || debt === 0) {
+        const interestPercent = parseFloat(document.getElementById('new-client-interest-percent')?.value || '20');
+        debt = Math.round(montoPrestamo * (1 + interestPercent / 100));
+      }
+
+      console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
+
       // Validar existencia
       const existing = await window.BulaPayDB.getClientByCedula(cedula);
       if (existing) {
@@ -2007,41 +2038,33 @@ const agentModule = {
         }
       }
 
-      const currentUser = window.BulaPayDB.getCurrentUser();
       const routeId = currentUser && currentUser.routeId ? currentUser.routeId : null;
-
-      const capitalRaw = document.getElementById('new-client-capital').value.replace(/\./g, '');
-      const montoPrestamo = parseFloat(capitalRaw) || 0;
 
       const applyDiscount = document.getElementById('new-client-apply-discount')?.checked;
       let discountAmount = 0;
       let discountReason = null;
 
       if (applyDiscount) {
-        const discountRaw = document.getElementById('new-client-discount-amount').value.replace(/\./g, '');
+        const discountRaw = document.getElementById('new-client-discount-amount')?.value.replace(/\./g, '') || '0';
         discountAmount = parseFloat(discountRaw) || 0;
         
         let reasons = [];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) reasons.push('Seguro');
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) reasons.push('Papelería o Software');
         if (document.getElementById('new-client-discount-reason-otros')?.checked) {
-          const otrosText = document.getElementById('new-client-discount-reason-otros-text').value.trim();
+          const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || '';
           reasons.push(otrosText ? `Otros: ${otrosText}` : 'Otros');
         }
         discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       }
 
-      const montoSalida = montoPrestamo - discountAmount;
-
-
-
       const emailEl = document.getElementById('new-client-email');
       const emailVal = emailEl ? emailEl.value.trim() : '';
 
-      payload = {
-        cedula: document.getElementById('new-client-cedula').value.replace(/[\s-]/g, '').trim(),
-        name: document.getElementById('new-client-name').value.trim(),
-        phone: document.getElementById('new-client-phone').value.trim(),
+      const payload = {
+        cedula,
+        name,
+        phone,
         email: emailVal || null,
         city,
         zone,
@@ -2057,16 +2080,16 @@ const agentModule = {
         agent_id: currentUser.id || currentUser.username
       };
 
-      console.log('Firma del Agente antes de guardar:', currentUser.id || currentUser.username, 'Payload completo:', payload);
+      console.log('Intentando enviar a Supabase la tabla clients...', payload);
 
-      // Guardar o Actualizar
+      let savedResult;
       if (existing) {
-        await window.BulaPayDB.updateClient(cedula, payload);
+        savedResult = await window.BulaPayDB.updateClient(cedula, payload);
       } else {
-        await window.BulaPayDB.saveClient(payload);
+        savedResult = await window.BulaPayDB.saveClient(payload);
       }
+      console.log('Guardado exitoso:', savedResult);
       this.currentClient = payload;
-      console.log('[DEBUG] Cliente guardado exitosamente en base de datos. currentClient:', this.currentClient);
 
       // Actualización de la Interfaz (Refetch) para el contador
       if (typeof this.updateRouteTracking === 'function') {
@@ -2074,11 +2097,10 @@ const agentModule = {
       }
 
       // Envío de email de bienvenida (Resend placeholder)
-      console.log('[DEBUG] Llamando a sendWelcomeEmail para:', payload.email);
       this.sendWelcomeEmail(payload);
 
       // Resetear formulario
-      this.formRegisterClient.reset();
+      if (this.formRegisterClient) this.formRegisterClient.reset();
 
       // Mostrar modal obligatorio SMS
       this.showMandatorySmsPrompt(payload, 'register');

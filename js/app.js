@@ -371,6 +371,8 @@ const app = {
           if (registerBtn) registerBtn.disabled = false;
           if (submitCollectBtn) submitCollectBtn.disabled = false;
           if (noPagoBtn) noPagoBtn.disabled = false;
+          const saveClientBtn = document.getElementById('btn-registrar-cliente-oficial') || document.getElementById('btn-agent-save-client');
+          if (saveClientBtn) saveClientBtn.disabled = false;
         } else if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
           routeStatusElement.style.display = 'inline';
           
@@ -391,7 +393,8 @@ const app = {
             if (registerBtn) registerBtn.disabled = true;
             if (submitCollectBtn) submitCollectBtn.disabled = true;
             if (noPagoBtn) noPagoBtn.disabled = true;
-            if (saveClientBtn) saveClientBtn.disabled = true;
+            // Mantener saveClientBtn activo para permitir la retroalimentación al presionar el botón
+            if (saveClientBtn) saveClientBtn.disabled = false;
           } else {
             // Operando dentro del horario permitido, mostrar tiempo para el cierre (18:00)
             const closingTime = new Date(now);
