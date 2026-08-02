@@ -1808,8 +1808,8 @@ const agentModule = {
     const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser) return false;
     
-    // El Agente Independiente está libre de restricciones
-    if (currentUser.role === 'Agente Independiente') return false;
+    // El Agente Independiente está libre de restricciones (por rol o por bulaRole en localStorage)
+    if (currentUser.role === 'Agente Independiente' || localStorage.getItem('bulaRole') === 'independent') return false;
     
     // Si es Agente de Ruta estándar o rol general de agente
     if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {

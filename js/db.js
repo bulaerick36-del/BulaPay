@@ -576,12 +576,39 @@ const db = {
 
       console.log('Paso 3: Iniciando petición a Supabase...', client);
       
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('clients')
         .insert([client])
         .select();
 
-      // Atrape estricto de errores de Supabase según las indicaciones
+      // Si falla debido a columnas adicionales no existentes en la tabla 'clients', reintentar con esquema esencial
+      if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('column')))) {
+        console.warn('Error de columna detectado. Reintentando inserción con payload esencial...', error);
+        const essentialPayload = {
+          cedula: client.cedula,
+          name: client.name,
+          phone: client.phone,
+          email: client.email,
+          city: client.city,
+          zone: client.zone,
+          risk: client.risk || 'Verde',
+          totalDebt: client.totalDebt,
+          outstanding: client.outstanding,
+          installmentsCount: client.installmentsCount,
+          installmentAmount: client.installmentAmount,
+          routeId: client.routeId,
+          agent_id: client.agent_id,
+          supervisor_id: client.supervisor_id
+        };
+        const retryResult = await supabase
+          .from('clients')
+          .insert([essentialPayload])
+          .select();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
+      // Atrape estricto de errores de Supabase
       if (error) {
         console.error('Error de Supabase:', error);
         if (typeof Swal !== 'undefined') {
