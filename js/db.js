@@ -1598,8 +1598,11 @@ const db = {
       
       const todayStr = new Date().toISOString().split('T')[0];
       const currentUser = this.getCurrentUser();
-      if (!currentUser) return { totalCollected: 0, totalLent: 0, totalIn: 0, totalOut: 0, onHand: 0 };
+      if (!currentUser) return { baseCapital: 0, totalCollected: 0, totalLent: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
       
+      // Capital Base inyectado de la ruta (incluye inyecciones y descuenta salidas globales de caja)
+      const baseCapital = await this.getRealBaseCapital(currentUser.routeId);
+
       // Cobrado hoy
       const todaysPayments = payments.filter(p => {
          const isToday = p.date && p.date.startsWith(todayStr);
@@ -1618,16 +1621,19 @@ const db = {
       const totalLent = todaysClients.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
       const totalDiscounts = todaysClients.reduce((acc, c) => acc + (Number(c.discount_amount) || 0), 0);
       
-      // Movimientos de caja
+      // Movimientos de caja (entradas y salidas del día)
       const todaysMovements = movements.filter(m => m.date === todayStr);
       const totalIn = todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Number(m.amount), 0);
       const totalOut = todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Number(m.amount), 0);
       
-      const onHand = totalCollected - totalLent + totalDiscounts + totalIn - totalOut;
-      return { totalCollected, totalLent, totalDiscounts, totalIn, totalOut, onHand, massPaymentsTotal };
+      // Efectivo Disponible: Capital Base Inyectado + Cobros del día - Créditos Entregados Hoy (Netos) + Entradas adicionales de caja
+      const netLent = Math.max(0, totalLent - totalDiscounts);
+      const onHand = baseCapital + totalCollected - netLent + totalIn;
+
+      return { baseCapital, totalCollected, totalLent, totalDiscounts, totalIn, totalOut, onHand, massPaymentsTotal };
     } catch (e) {
       console.error('Error calculando caja diaria:', e);
-      return { totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
+      return { baseCapital: 0, totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
     }
   },
 

@@ -747,10 +747,32 @@ const agentModule = {
             injectModal.style.display = 'none';
             document.getElementById('inject-capital-amount').value = '';
             
-            // Re-render Capital Base
-            const newCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
-            const capEl = document.getElementById('private-panel-capital');
-            if (capEl) capEl.textContent = `$${newCapital.toLocaleString('es-CO')}`;
+            // Re-render Capital Base y métricas financieras
+            if (typeof window.AgentV6 !== 'undefined' && window.AgentV6.renderFinancialDashboard) {
+              await window.AgentV6.renderFinancialDashboard();
+            } else {
+              const newCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
+              const capEl = document.getElementById('private-panel-capital');
+              if (capEl) capEl.textContent = `$${newCapital.toLocaleString('es-CO')}`;
+            }
+
+            // Actualizar vistas de Caja en tiempo real para reflejar de inmediato el dinero inyectado (sin F5)
+            const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+            const elAvailable = document.getElementById('cash-management-available');
+            if (elAvailable) {
+              elAvailable.textContent = `$${Math.abs(onHand).toLocaleString('es-CO')}`;
+              elAvailable.style.color = onHand < 0 ? 'var(--color-rojo)' : 'var(--color-verde)';
+            }
+            const elOnHand = document.getElementById('private-cash-on-hand');
+            if (elOnHand) {
+              if (onHand < 0) {
+                elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
+                elOnHand.style.color = 'var(--color-rojo)';
+              } else {
+                elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+                elOnHand.style.color = 'var(--text-primary)';
+              }
+            }
           } catch (error) {
             console.error(error);
             alert('❌ Error al inyectar capital: ' + (error.message || JSON.stringify(error)));
