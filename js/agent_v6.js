@@ -731,7 +731,7 @@ const agentModule = {
         btnConfirmInject.onclick = async () => {
           const currentUser = window.BulaPayDB.getCurrentUser();
           const rawAmount = document.getElementById('inject-capital-amount').value.replace(/\./g, '');
-          const amount = parseFloat(rawAmount);
+          const amount = Math.round(parseFloat(rawAmount) || 0);
           
           if (isNaN(amount) || amount <= 0) {
             alert('Por favor ingresa un monto válido.');
@@ -891,7 +891,7 @@ const agentModule = {
 
       document.getElementById('btn-cash-movement-confirm').onclick = async () => {
         const amountRaw = document.getElementById('cash-movement-amount').value.replace(/\./g, '');
-        const amount = parseFloat(amountRaw);
+        const amount = Math.round(parseFloat(amountRaw) || 0);
         if (!amount || amount <= 0) {
           alert('Por favor ingrese un monto válido mayor a 0.');
           return;
@@ -1987,10 +1987,10 @@ const agentModule = {
       const agentId = currentUser.username;
 
       const capitalRaw = capitalEl ? capitalEl.value.replace(/\./g, '') : '0';
-      const montoPrestamo = parseFloat(capitalRaw) || 0;
+      const montoPrestamo = Math.round(parseFloat(capitalRaw) || 0);
       const installments = installmentsEl ? (parseInt(installmentsEl.value) || 1) : 1;
 
-      let debt = debtEl ? parseFloat(debtEl.value.replace(/\./g, '')) || 0 : 0;
+      let debt = debtEl ? Math.round(parseFloat(debtEl.value.replace(/\./g, '')) || 0) : 0;
       if (!debt || debt === 0) {
         const interestPercent = parseFloat(document.getElementById('new-client-interest-percent')?.value || '20');
         debt = Math.round(montoPrestamo * (1 + interestPercent / 100));
@@ -2047,7 +2047,7 @@ const agentModule = {
 
       if (applyDiscount) {
         const discountRaw = document.getElementById('new-client-discount-amount')?.value.replace(/\./g, '') || '0';
-        discountAmount = parseFloat(discountRaw) || 0;
+        discountAmount = Math.round(parseFloat(discountRaw) || 0);
         
         let reasons = [];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) reasons.push('Seguro');
