@@ -1633,11 +1633,27 @@ const db = {
 
       const agentId = currentUser.id || currentUser.username;
       const agentNameLower = (currentUser.name || '').trim().toLowerCase();
+      const supId = await this.getSupervisorIdForUser(currentUser);
+
+      const getCleanDateStr = (raw) => {
+        if (!raw) return '';
+        const str = String(raw).trim();
+        const datePart = str.split('T')[0].split(' ')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+          return datePart;
+        }
+        const d = new Date(str);
+        if (isNaN(d.getTime())) return '';
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
 
       // Cobrado hoy
       const todaysPayments = payments.filter(p => {
          if (!p.date) return false;
-         const pDate = String(p.date).split('T')[0];
+         const pDate = getCleanDateStr(p.date);
          const isToday = pDate === todayStr;
          
          const pAgentNameLower = (p.agentName || '').trim().toLowerCase();
@@ -1647,38 +1663,71 @@ const db = {
                 p.agent_id === agentId || 
                 p.agentUsername === currentUser.username || 
                 (agentNameLower && pAgentNameLower === agentNameLower) ||
-                p.supervisor_id === currentUser.username
+                (supId && p.supervisor_id === supId)
               );
          const isRealPayment = p.status !== 'Pendiente';
          return isToday && isMine && isRealPayment;
       });
+      
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
       const massPaymentsTotal = Math.round(todaysPayments.reduce((acc, p) => (p.is_mass_payment || (p.status && p.status.includes('Masivo'))) ? acc + Math.round(Number(p.amount) || 0) : acc, 0));
       
       // Prestado hoy (clientes nuevos o créditos re-otorgados hoy)
       const todaysClients = clients.filter(c => {
          if (!c.created_at && !c.date) return false;
-         const rawDate = c.created_at || c.date;
-         let dateStr = '';
-         if (typeof rawDate === 'string') {
-            const dObj = new Date(rawDate);
-            if (!isNaN(dObj.getTime())) {
-               dateStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
-            } else {
-               dateStr = rawDate.split('T')[0];
-            }
-         } else if (rawDate instanceof Date) {
-            dateStr = `${rawDate.getFullYear()}-${String(rawDate.getMonth() + 1).padStart(2, '0')}-${String(rawDate.getDate()).padStart(2, '0')}`;
-         }
-         const isToday = dateStr === todayStr;
-         const belongsToAgent = c.agent_id === agentId || c.routeId === currentUser.routeId;
+         const cDate = getCleanDateStr(c.created_at || c.date);
+         const isToday = cDate === todayStr;
+         
+         const belongsToAgent = (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor')
+            ? (c.supervisor_id === currentUser.username || c.agent_id === currentUser.username)
+            : (
+                c.agent_id === agentId || 
+                c.agentUsername === currentUser.username || 
+                (currentUser.routeId && c.routeId === currentUser.routeId) ||
+                (supId && c.supervisor_id === supId)
+              );
          return isToday && belongsToAgent;
       });
-      const totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount) || 0), 0));
-      const totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.discount_amount) || 0), 0));
-      
+
+      // También consultar registros secundarios de 'credits' si existen para el día de hoy
+      let secondaryCreditsToday = [];
+      try {
+        const supabase = await initSupabase();
+        let q = supabase.from('credits').select('*');
+        if (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor') {
+          q = q.eq('supervisor_id', currentUser.username);
+        } else if (currentUser.routeId) {
+          q = q.eq('routeId', currentUser.routeId);
+        } else {
+          q = q.eq('agent_id', agentId);
+        }
+        const { data: creditsData } = await q;
+        if (creditsData && creditsData.length > 0) {
+          secondaryCreditsToday = creditsData.filter(c => {
+            if (!c.created_at && !c.date) return false;
+            const cDate = getCleanDateStr(c.created_at || c.date);
+            return cDate === todayStr;
+          });
+        }
+      } catch (e) {
+        // credits table optional
+      }
+
+      let totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount) || 0), 0));
+      let totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.discount_amount) || 0), 0));
+
+      if (secondaryCreditsToday.length > 0) {
+        secondaryCreditsToday.forEach(sc => {
+          const alreadyInClients = todaysClients.some(tc => String(tc.cedula) === String(sc.client_id));
+          if (!alreadyInClients) {
+            totalLent += Math.round(Number(sc.amount) || 0);
+            totalDiscounts += Math.round(Number(sc.discount_amount) || 0);
+          }
+        });
+      }
+
       // Movimientos de caja (entradas y salidas del día)
-      const todaysMovements = movements.filter(m => m.date && String(m.date).split('T')[0] === todayStr);
+      const todaysMovements = movements.filter(m => m.date && getCleanDateStr(m.date) === todayStr);
       const totalIn = Math.round(todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       const totalOut = Math.round(todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       
