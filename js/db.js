@@ -786,6 +786,9 @@ const db = {
       phone: payload.phone,
       city: payload.city,
       zone: payload.zone,
+      amount: payload.amount,
+      discount_amount: payload.discount_amount,
+      discount_reason: payload.discount_reason,
       totalDebt: payload.totalDebt,
       outstanding: payload.outstanding,
       installmentsCount: payload.installmentsCount,
@@ -793,7 +796,8 @@ const db = {
       routeId: payload.routeId,
       agent_id: payload.agent_id,
       supervisor_id: payload.supervisor_id,
-      risk: 'Verde'
+      risk: 'Verde',
+      created_at: new Date().toISOString()
     }).eq('cedula', clientId);
     
     return { ...payload, cedula: clientId };
@@ -1651,11 +1655,22 @@ const db = {
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
       const massPaymentsTotal = Math.round(todaysPayments.reduce((acc, p) => (p.is_mass_payment || (p.status && p.status.includes('Masivo'))) ? acc + Math.round(Number(p.amount) || 0) : acc, 0));
       
-      // Prestado hoy (clientes nuevos hoy)
+      // Prestado hoy (clientes nuevos o créditos re-otorgados hoy)
       const todaysClients = clients.filter(c => {
-         if (!c.created_at) return false;
-         const cDate = String(c.created_at).split('T')[0];
-         const isToday = cDate === todayStr;
+         if (!c.created_at && !c.date) return false;
+         const rawDate = c.created_at || c.date;
+         let dateStr = '';
+         if (typeof rawDate === 'string') {
+            const dObj = new Date(rawDate);
+            if (!isNaN(dObj.getTime())) {
+               dateStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+            } else {
+               dateStr = rawDate.split('T')[0];
+            }
+         } else if (rawDate instanceof Date) {
+            dateStr = `${rawDate.getFullYear()}-${String(rawDate.getMonth() + 1).padStart(2, '0')}-${String(rawDate.getDate()).padStart(2, '0')}`;
+         }
+         const isToday = dateStr === todayStr;
          const belongsToAgent = c.agent_id === agentId || c.routeId === currentUser.routeId;
          return isToday && belongsToAgent;
       });
