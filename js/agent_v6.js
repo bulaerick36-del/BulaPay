@@ -231,6 +231,11 @@ const agentModule = {
   },
 
   bindEvents() {
+    window.addEventListener('bulapay-payment-registered', async () => {
+      await this.renderFinancialDashboard();
+      await this.updateCashViews();
+    });
+
     // Alternancia de Pestañas
     this.tabCollect.addEventListener('click', () => this.switchTab('collect'));
     this.tabHistory.addEventListener('click', () => this.switchTab('history'));
@@ -2546,6 +2551,33 @@ const agentModule = {
       if (capitalEl) capitalEl.textContent = 'Error';
       if (carteraEl) carteraEl.textContent = 'Error';
       if (gananciaEl) gananciaEl.textContent = 'Error';
+    }
+  },
+
+  async updateCashViews() {
+    try {
+      const { totalCollected, onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+      const elAvailable = document.getElementById('cash-management-available');
+      if (elAvailable) {
+        elAvailable.textContent = `$${Math.abs(onHand).toLocaleString('es-CO')}`;
+        elAvailable.style.color = onHand < 0 ? 'var(--color-rojo)' : 'var(--color-verde)';
+      }
+      const elOnHand = document.getElementById('private-cash-on-hand');
+      if (elOnHand) {
+        if (onHand < 0) {
+          elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
+          elOnHand.style.color = 'var(--color-rojo)';
+        } else {
+          elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+          elOnHand.style.color = 'var(--text-primary)';
+        }
+      }
+      const elCollected = document.getElementById('private-cash-collected');
+      if (elCollected) {
+        elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
+      }
+    } catch (e) {
+      console.error("Error al actualizar vistas de caja:", e);
     }
   },
 

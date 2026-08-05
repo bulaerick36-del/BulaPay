@@ -889,12 +889,25 @@ const db = {
   // PAYMENTS
   async getPayments() {
     const supabase = await initSupabase();
-    const supId = this.getSupervisorId();
-    if (!supId) return [];
-    const { data, error } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('supervisor_id', supId);
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) return [];
+    
+    const supId = await this.getSupervisorIdForUser(currentUser);
+    let query = supabase.from('payments').select('*');
+    
+    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
+      const agentId = currentUser.id || currentUser.username;
+      const agentName = currentUser.name;
+      if (supId) {
+        query = query.eq('supervisor_id', supId);
+      } else {
+        query = query.or(`agent_id.eq.${agentId},agentName.eq.${agentName}`);
+      }
+    } else if (supId) {
+      query = query.eq('supervisor_id', supId);
+    }
+    
+    const { data, error } = await query;
     if (error) {
       console.error("Error al obtener pagos en Supabase:", error);
       return [];
@@ -905,12 +918,11 @@ const db = {
   async getPaymentsByClient(cedula) {
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();
-    if (!supId) return [];
-    const { data, error } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('clientCedula', String(cedula))
-      .eq('supervisor_id', supId);
+    let query = supabase.from('payments').select('*').eq('clientCedula', String(cedula));
+    if (supId) {
+      query = query.eq('supervisor_id', supId);
+    }
+    const { data, error } = await query;
     if (error) {
       console.error(`Error al obtener pagos del cliente "${cedula}":`, error);
       return [];
@@ -961,6 +973,10 @@ const db = {
         }
       }
     }
+    
+    // Redondeo estricto a números enteros, sin decimales
+    const amountPaid = Math.round(Number(payment.amount) || 0);
+
     // Obtener total de pagos históricos del cliente para calcular el correlativo de cuota
     const clientPayments = await this.getPaymentsByClient(payment.clientCedula);
     const installmentNumber = payment.installmentNumber || (clientPayments.length + 1);
@@ -969,14 +985,19 @@ const db = {
     const id = 'pay_' + installmentNumber + '_' + Date.now();
     
     const supId = this.getSupervisorId();
+    const now = new Date();
+    const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+    const agentName = payment.agentName || (currentUser ? (currentUser.name || currentUser.username) : 'Sistema');
     
     const newPayment = {
       id: id,
       clientCedula: String(payment.clientCedula),
       installmentNumber: installmentNumber,
-      amount: Math.round(Number(payment.amount) || 0),
-      date: payment.date || new Date().toISOString().split('T')[0],
-      agentName: payment.agentName,
+      amount: amountPaid,
+      date: payment.date || localDateStr,
+      agentName: agentName,
+      agent_id: agentId,
       status: payment.status,
       signature: signature,
       supervisor_id: supId
@@ -992,16 +1013,16 @@ const db = {
       throw payError;
     }
 
-    // 2. Actualizar saldo pendiente del cliente
-    await this.updateClientOutstanding(payment.clientCedula, payment.amount);
+    // 2. Actualizar saldo pendiente del cliente (Redondeo estricto a números enteros)
+    await this.updateClientOutstanding(payment.clientCedula, amountPaid);
 
-    // 3. Registrar abono a la ruta del cliente
+    // 3. Registrar abono a la ruta del cliente (Redondeo estricto a números enteros)
     if (client && client.routeId) {
-      await this.updateRouteCollected(client.routeId, payment.amount);
+      await this.updateRouteCollected(client.routeId, amountPaid);
     }
     
-    // Dispatch custom event to notify supervisor SPA in real-time
-    window.dispatchEvent(new CustomEvent('bulapay-payment-registered'));
+    // Dispatch custom event to notify supervisor SPA & agent UI in real-time
+    window.dispatchEvent(new CustomEvent('bulapay-payment-registered', { detail: newPayment }));
 
     return newPayment;
   },
@@ -1597,17 +1618,33 @@ const db = {
       const clients = await this.getClients();
       const movements = await this.getCashMovements();
       
-      const todayStr = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      
       const currentUser = this.getCurrentUser();
-      if (!currentUser) return { baseCapital: 0, totalCollected: 0, totalLent: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
+      if (!currentUser) return { baseCapital: 0, totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
       
       // Capital Base inyectado de la ruta (incluye inyecciones y descuenta salidas globales de caja)
       const baseCapital = Math.round(await this.getRealBaseCapital(currentUser.routeId));
 
+      const agentId = currentUser.id || currentUser.username;
+      const agentNameLower = (currentUser.name || '').trim().toLowerCase();
+
       // Cobrado hoy
       const todaysPayments = payments.filter(p => {
-         const isToday = p.date && p.date.startsWith(todayStr);
-         const isMine = p.supervisor_id === currentUser.username || p.agentName === currentUser.name;
+         if (!p.date) return false;
+         const pDate = String(p.date).split('T')[0];
+         const isToday = pDate === todayStr;
+         
+         const pAgentNameLower = (p.agentName || '').trim().toLowerCase();
+         const isMine = (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor')
+            ? (p.supervisor_id === currentUser.username)
+            : (
+                p.agent_id === agentId || 
+                p.agentUsername === currentUser.username || 
+                (agentNameLower && pAgentNameLower === agentNameLower) ||
+                p.supervisor_id === currentUser.username
+              );
          const isRealPayment = p.status !== 'Pendiente';
          return isToday && isMine && isRealPayment;
       });
@@ -1616,20 +1653,23 @@ const db = {
       
       // Prestado hoy (clientes nuevos hoy)
       const todaysClients = clients.filter(c => {
-         const isToday = c.created_at && c.created_at.startsWith(todayStr);
-         return isToday && c.agent_id === (currentUser.id || currentUser.username);
+         if (!c.created_at) return false;
+         const cDate = String(c.created_at).split('T')[0];
+         const isToday = cDate === todayStr;
+         const belongsToAgent = c.agent_id === agentId || c.routeId === currentUser.routeId;
+         return isToday && belongsToAgent;
       });
       const totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount) || 0), 0));
       const totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.discount_amount) || 0), 0));
       
       // Movimientos de caja (entradas y salidas del día)
-      const todaysMovements = movements.filter(m => m.date === todayStr);
+      const todaysMovements = movements.filter(m => m.date && String(m.date).split('T')[0] === todayStr);
       const totalIn = Math.round(todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       const totalOut = Math.round(todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       
-      // Efectivo Disponible: Capital Base Inyectado + Cobros del día - Créditos Entregados Hoy (Netos) + Entradas adicionales de caja
+      // Efectivo Disponible: Capital Base Inyectado + Cobros del día - Créditos Entregados Hoy (Netos) + Entradas adicionales de caja - Salidas adicionales de caja
       const netLent = Math.max(0, totalLent - totalDiscounts);
-      const onHand = Math.round(baseCapital + totalCollected - netLent + totalIn);
+      const onHand = Math.round(baseCapital + totalCollected - netLent + totalIn - totalOut);
 
       return {
         baseCapital: Math.round(baseCapital),
