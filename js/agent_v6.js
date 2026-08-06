@@ -1939,8 +1939,28 @@ const agentModule = {
   },
 
   async registerNewClient() {
+    // Bloqueo estricto de carrera (Race Condition Lock)
+    if (this.isRegisteringClient) {
+      console.warn('[LOCK] Registro de cliente ya en proceso. Ignorando solicitud duplicada.');
+      return;
+    }
+
+    const btnGuardar = document.getElementById('btn-registrar-cliente-oficial');
     let payload = null;
+
     try {
+      this.isRegisteringClient = true;
+      if (btnGuardar) {
+        btnGuardar.disabled = true;
+        btnGuardar.dataset.originalText = btnGuardar.innerText || 'Guardar Cliente';
+        btnGuardar.innerText = 'Guardando cliente...';
+      }
+
+      // Limpiar/silenciar cualquier estado o modal de alerta previo
+      if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+        Swal.close();
+      }
+
       console.log('Paso 1: Iniciando registro de cliente...');
 
       if (this.formRegisterClient && typeof this.formRegisterClient.reportValidity === 'function') {
@@ -1951,7 +1971,11 @@ const agentModule = {
       }
 
       if (this.isRouteClosed()) {
-        alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('Ruta Cerrada', 'Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.', 'warning');
+        } else {
+          alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
+        }
         return;
       }
 
@@ -2003,9 +2027,15 @@ const agentModule = {
 
       console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
 
-      // Validar existencia únicamente por Cédula (los datos de contacto teléfono/dirección/nombre se pueden duplicar libremente)
+      // BLOQUEO ASÍNCRONO ESTRICTO: Resolver al 100% el SELECT de validación ANTES de iniciar el INSERT
       const existing = await window.BulaPayDB.getGlobalClientByCedula(cedula);
-      if (existing) {
+
+      // Si el cliente NO existe, silenciar/limpiar cualquier estado de alerta previa de duplicado
+      if (!existing) {
+        if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+          Swal.close();
+        }
+      } else {
         console.warn('[DEBUG] Cédula ya existente registrada:', existing);
         let proceed = false;
         
@@ -2098,6 +2128,11 @@ const agentModule = {
       console.log('Guardado exitoso:', savedResult);
       this.currentClient = payload;
 
+      // Garantizar que no quede ninguna alerta de duplicado previa visible en el DOM tras la inserción exitosa
+      if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+        Swal.close();
+      }
+
       // Actualización de la Interfaz (Refetch) para el contador y métricas financieras
       if (typeof this.updateRouteTracking === 'function') {
         this.updateRouteTracking();
@@ -2113,6 +2148,7 @@ const agentModule = {
       // Mostrar modal obligatorio SMS
       this.showMandatorySmsPrompt(payload, 'register');
     } catch (err) {
+      console.error('Error durante la inserción del cliente:', err);
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
       if (dupMsg === 'DUPLICATE_CEDULA' || dupMsg === 'DUPLICATE_DATA') {
         const warningMsg = `La Cédula N° ${payload?.cedula || ''} ya se encuentra registrada en el sistema.\n\n¿Desea continuar con el registro del nuevo crédito o cancelar y verificar en el historial?`;
@@ -2195,6 +2231,16 @@ const agentModule = {
           Swal.fire('Error de Código', errorMsg + (errorDetails ? ` | Detalles: ${errorDetails}` : ''), 'error');
         } else {
           alert(`Error de Código: ${errorMsg}\nDetalles: ${errorDetails}`);
+        }
+      }
+    } finally {
+      this.isRegisteringClient = false;
+      if (btnGuardar) {
+        btnGuardar.disabled = false;
+        if (btnGuardar.dataset.originalText) {
+          btnGuardar.innerText = btnGuardar.dataset.originalText;
+        } else {
+          btnGuardar.innerText = 'Guardar Cliente';
         }
       }
     }
