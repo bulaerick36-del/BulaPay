@@ -74,6 +74,7 @@ CREATE TABLE payments (
   "amount" NUMERIC NOT NULL,
   "date" DATE NOT NULL DEFAULT CURRENT_DATE,
   "agentName" TEXT NOT NULL,
+  "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL,
   "status" TEXT NOT NULL,
   "signature" TEXT NOT NULL,
   "supervisor_id" TEXT,
@@ -121,20 +122,21 @@ INSERT INTO clients ("cedula", "name", "phone", "email", "city", "zone", "risk",
 ('11223', 'Pedro Pablo Restrepo', '3105559988', 'pedro.restrepo@yahoo.com', 'Medellín', 'Sur', 'Rojo', 600000, 450000, 6, 100000, 'route_2');
 
 -- 5. Pagos Semilla
-INSERT INTO payments ("id", "clientCedula", "installmentNumber", "amount", "date", "agentName", "status", "signature") VALUES
-('pay_1', '12345', 1, 100000, '2026-06-01', 'Juan Pérez', 'Pagado', 'BulaPay-SIG-12345-01'),
-('pay_2', '12345', 2, 100000, '2026-06-08', 'Juan Pérez', 'Pagado', 'BulaPay-SIG-12345-02'),
-('pay_3', '12345', 3, 150000, '2026-06-15', 'Juan Pérez', 'Pagado', 'BulaPay-SIG-12345-03'),
-('pay_4', '67890', 1, 80000, '2026-06-02', 'Juan Pérez', 'Pagado', 'BulaPay-SIG-67890-01'),
-('pay_5', '67890', 2, 80000, '2026-06-12', 'Juan Pérez', 'Pagado', 'BulaPay-SIG-67890-02'),
-('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'Pagado', 'BulaPay-SIG-11223-01'),
-('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'Abonado', 'BulaPay-SIG-11223-02');
+INSERT INTO payments ("id", "clientCedula", "installmentNumber", "amount", "date", "agentName", "agent_id", "status", "signature") VALUES
+('pay_1', '12345', 1, 100000, '2026-06-01', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-12345-01'),
+('pay_2', '12345', 2, 100000, '2026-06-08', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-12345-02'),
+('pay_3', '12345', 3, 150000, '2026-06-15', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-12345-03'),
+('pay_4', '67890', 1, 80000, '2026-06-02', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-67890-01'),
+('pay_5', '67890', 2, 80000, '2026-06-12', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-67890-02'),
+('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'agente2', 'Pagado', 'BulaPay-SIG-11223-01'),
+('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'agente2', 'Abonado', 'BulaPay-SIG-11223-02');
 
 -- Migraciones seguras para bases de datos existentes:
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "opening_time" TEXT DEFAULT '06:00';
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "closing_time" TEXT DEFAULT '18:00';
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "has_extension" BOOLEAN DEFAULT false;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "representante_legal" TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "cedula_representante" TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_name" TEXT;

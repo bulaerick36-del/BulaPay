@@ -991,7 +991,7 @@ const db = {
     const supId = this.getSupervisorId();
     const now = new Date();
     const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+    const agentId = payment.agent_id || (currentUser ? (currentUser.id || currentUser.username) : null);
     const agentName = payment.agentName || (currentUser ? (currentUser.name || currentUser.username) : 'Sistema');
     
     const newPayment = {
