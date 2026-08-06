@@ -1521,21 +1521,97 @@ const db = {
     const supabase = await initSupabase();
     
     const isPaid = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
+    
+    // 1. Obtener datos del cliente ANTES de resetear sus saldos numéricos
+    let clientData = null;
+    try {
+      const { data } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('cedula', String(cedula))
+        .maybeSingle();
+      clientData = data;
+    } catch (e) {
+      console.warn("No se pudo obtener datos previos del cliente:", e.message);
+    }
+
+    // 2. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments (sin tocar capital_injections)
+    if (isPaid && clientData) {
+      try {
+        // Eliminar registros de cuotas pendientes previos para este cliente
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('clientCedula', String(cedula))
+          .eq('status', 'Pendiente');
+
+        const totalDebt = Math.round(Number(clientData.totalDebt || clientData.monto_total || 0));
+        const installmentsCount = Number(clientData.installmentsCount || 30);
+        const installmentAmount = Math.round(Number(clientData.installmentAmount || (installmentsCount > 0 ? totalDebt / installmentsCount : 0)));
+
+        // Consultar pagos ya registrados para este cliente
+        const existingPayments = await this.getGlobalPaymentsByClient(cedula);
+        const existingMap = new Map();
+        let currentPaidTotal = 0;
+
+        existingPayments.forEach(p => {
+          if (p.status !== 'Pendiente') {
+            existingMap.set(Number(p.installmentNumber), p);
+            currentPaidTotal += Math.round(Number(p.amount) || 0);
+          }
+        });
+
+        // Generar registros de pagos para las cuotas faltantes
+        const currentUser = this.getCurrentUser();
+        const supId = this.getSupervisorId();
+        const todayStr = new Date().toISOString().split('T')[0];
+        const newPayments = [];
+
+        let remainingDebt = Math.max(0, totalDebt - currentPaidTotal);
+
+        for (let i = 1; i <= installmentsCount; i++) {
+          if (!existingMap.has(i)) {
+            const paymentAmount = Math.min(installmentAmount, remainingDebt);
+            remainingDebt -= paymentAmount;
+
+            newPayments.push({
+              id: 'pay_liq_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+              clientCedula: String(cedula),
+              installmentNumber: i,
+              amount: paymentAmount > 0 ? paymentAmount : installmentAmount,
+              date: todayStr,
+              agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
+              agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
+              status: 'Pagado',
+              signature: `BulaPay-SIG-${cedula}-LIQ-${i}`,
+              supervisor_id: supId
+            });
+          }
+        }
+
+        if (newPayments.length > 0) {
+          const { error: insErr } = await supabase.from('payments').insert(newPayments);
+          if (insErr) console.error("Error al insertar cuotas pagadas en liquidación:", insErr);
+        }
+      } catch (errPay) {
+        console.error("Error al asegurar cuotas en 'pagado' durante liquidación:", errPay);
+      }
+    }
+
+    // 3. Resetear saldos numéricos exactamente a 0 en la tabla clients (o actualizar outstanding si es moroso)
     const updatePayload = {
       status: status,
       risk: (status === 'Liquidado_Mora' || status === 'MOROSO') ? 'Rojo' : 'Verde'
     };
-    
+
     if (isPaid) {
-      // Resetear saldos numéricos del cliente al liquidar/cancelar
       updatePayload.outstanding = 0;
       updatePayload.totalDebt = 0;
       updatePayload.amount = 0;
     } else if (outstanding !== undefined) {
       updatePayload.outstanding = Math.round(Number(outstanding || 0));
     }
-    
-    // 1. Actualizar registro en la tabla clients
+
     const { error: clientErr } = await supabase
       .from('clients')
       .update(updatePayload)
@@ -1543,7 +1619,7 @@ const db = {
       
     if (clientErr) console.error("Error al liquidar cliente en Supabase:", clientErr);
 
-    // 2. Actualizar tabla credits si aplica
+    // 4. Actualizar tabla credits si aplica
     try {
       await supabase
         .from('credits')
@@ -1556,78 +1632,6 @@ const db = {
         .or(`client_id.eq.${String(cedula)},clientCedula.eq.${String(cedula)}`);
     } catch (e) {
       console.warn("Tabla credits no disponible al liquidar crédito:", e.message);
-    }
-
-    // 3. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado' (sin inyectar en capital_injections)
-    if (isPaid) {
-      try {
-        // Eliminar registros de cuotas pendientes previos para este cliente
-        await supabase
-          .from('payments')
-          .delete()
-          .eq('clientCedula', String(cedula))
-          .eq('status', 'Pendiente');
-
-        // Obtener cliente previo para calcular cuotas faltantes antes de resetear
-        const { data: clientData } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('cedula', String(cedula))
-          .maybeSingle();
-
-        if (clientData) {
-          const totalDebt = Math.round(Number(clientData.totalDebt || clientData.monto_total || 0));
-          const installmentsCount = Number(clientData.installmentsCount || 30);
-          const installmentAmount = Math.round(Number(clientData.installmentAmount || (installmentsCount > 0 ? totalDebt / installmentsCount : 0)));
-
-          // Consultar pagos ya registrados para este cliente
-          const existingPayments = await this.getGlobalPaymentsByClient(cedula);
-          const existingMap = new Map();
-          let currentPaidTotal = 0;
-
-          existingPayments.forEach(p => {
-            if (p.status !== 'Pendiente') {
-              existingMap.set(Number(p.installmentNumber), p);
-              currentPaidTotal += Math.round(Number(p.amount) || 0);
-            }
-          });
-
-          // Generar pagos de cuotas faltantes si aplican
-          const currentUser = this.getCurrentUser();
-          const supId = this.getSupervisorId();
-          const todayStr = new Date().toISOString().split('T')[0];
-          const newPayments = [];
-
-          let remainingDebt = Math.max(0, totalDebt - currentPaidTotal);
-
-          for (let i = 1; i <= installmentsCount; i++) {
-            if (!existingMap.has(i)) {
-              const paymentAmount = Math.min(installmentAmount, remainingDebt);
-              remainingDebt -= paymentAmount;
-
-              newPayments.push({
-                id: 'pay_liq_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                clientCedula: String(cedula),
-                installmentNumber: i,
-                amount: paymentAmount > 0 ? paymentAmount : installmentAmount,
-                date: todayStr,
-                agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
-                agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
-                status: 'Pagado',
-                signature: `BulaPay-SIG-${cedula}-LIQ-${i}`,
-                supervisor_id: supId
-              });
-            }
-          }
-
-          if (newPayments.length > 0) {
-            const { error: insErr } = await supabase.from('payments').insert(newPayments);
-            if (insErr) console.error("Error al insertar cuotas pagadas en liquidación:", insErr);
-          }
-        }
-      } catch (errPay) {
-        console.error("Error al asegurar cuotas en 'pagado' durante liquidación:", errPay);
-      }
     }
     
     return true;
