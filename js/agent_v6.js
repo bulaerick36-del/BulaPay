@@ -297,17 +297,7 @@ const agentModule = {
           if (recaudoReal >= capitalPrestado) {
             gananciaReal = recaudoReal - capitalPrestado;
             nuevoEstado = 'Liquidado_Pagado';
-            const currentUser = window.BulaPayDB.getCurrentUser();
-            const routeId = currentUser ? currentUser.routeId : null;
-            const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
-            
-            if (gananciaReal > 0) {
-              // Sumar ganancia real al Capital Base automáticamente
-              await window.BulaPayDB.injectCapital(routeId, agentId, gananciaReal);
-              alert(`🎉 ¡Cartón Liquidado Exitosamente!\nGanancia Real de $${gananciaReal.toLocaleString('es-CO')} ha sido sumada al Capital Base.`);
-            } else {
-              alert('🎉 ¡Cartón Liquidado Exitosamente! No hubo ganancia para sumar al Capital Base.');
-            }
+            alert('🎉 ¡Cartón Liquidado Exitosamente!');
           } 
           // Escenario B: Default / Pérdida (Mala Paga -> Lista Negra - Regla 4)
           else {
@@ -315,7 +305,7 @@ const agentModule = {
             alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda no pagada de $${saldoRestante.toLocaleString('es-CO')}. El crédito desaparece de la vista diaria y de Cartera en Calle.`);
           }
 
-          // Actualizar estado del cliente y crédito en DB
+          // Actualizar estado del cliente y crédito en DB, asegurando que sus cuotas queden pagadas
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: nuevoEstado,

@@ -1488,44 +1488,18 @@ const db = {
 
   async getDashboardFinancialMetrics(routeId) {
     try {
-      const currentUser = this.getCurrentUser();
-      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
-      const supabase = await initSupabase();
-
-      let creditsList = [];
-
-      // 1. Consultar de la tabla 'credits' si está disponible
-      try {
-        let query = supabase.from('credits').select('*');
-        if (routeId) {
-          query = query.eq('routeId', routeId);
-        } else if (agentId) {
-          query = query.eq('agent_id', agentId);
-        }
-        const { data: creditsData, error: creditsErr } = await query;
-        if (!creditsErr && creditsData && creditsData.length > 0) {
-          creditsList = creditsData;
-        }
-      } catch (e) {
-        console.warn("Tabla credits no disponible en métricas:", e.message);
-      }
-
-      // 2. Fallback: Consultar clientes activos desde la tabla 'clients'
-      if (creditsList.length === 0) {
-        const clients = await this.getClients();
-        creditsList = clients;
-      }
+      // Usar la lista actualizada de clientes de la ruta
+      const clients = await this.getClients();
 
       let carteraEnCalle = 0; // Regla 1: Suma de outstanding ÚNICAMENTE de status = 'Activo'
-      let posibleGanancia = 0; // Regla 2: Suma de intereses (totalDebt - amount) ÚNICAMENTE de status = 'Activo'
+      let posibleGanancia = 0; // Regla 2: Suma de intereses (totalDebt - amount) ÚNICAMENTE de status estrictamente 'Activo'
 
-      creditsList.forEach(c => {
-        const rawStatus = String(c.status || c.estado || 'Activo').toUpperCase();
-        // Un crédito cuenta para Cartera y Posible Ganancia SOLO si su estado es Activo
-        const isActivo = (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA') &&
-                          rawStatus !== 'LIQUIDADO' && 
-                          rawStatus !== 'LIQUIDADO_PAGADO' && 
-                          rawStatus !== 'LIQUIDADO_MORA' && 
+      clients.forEach(c => {
+        const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
+        // Un crédito cuenta para Cartera y Posible Ganancia SOLO si su estado es estrictamente Activo
+        const isActivo = (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
+                          !rawStatus.includes('LIQUIDADO') && 
+                          !rawStatus.includes('CANCELAD') && 
                           rawStatus !== 'MOROSO';
 
         if (isActivo) {
@@ -1536,7 +1510,7 @@ const db = {
           // Regla 1: Dinero activo en calle
           carteraEnCalle += Math.max(0, outstanding);
 
-          // Regla 2: Intereses proyectados
+          // Regla 2: Intereses proyectados de créditos activos
           const interesCredito = Math.max(0, totalDebt - amount);
           posibleGanancia += interesCredito;
         }
@@ -1555,12 +1529,15 @@ const db = {
   async liquidateCredit({ cedula, status, outstanding }) {
     const supabase = await initSupabase();
     
+    const isPaid = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
     const updatePayload = {
       status: status,
       risk: (status === 'Liquidado_Mora' || status === 'MOROSO') ? 'Rojo' : 'Verde'
     };
     if (outstanding !== undefined) {
       updatePayload.outstanding = Math.round(Number(outstanding || 0));
+    } else if (isPaid) {
+      updatePayload.outstanding = 0;
     }
     
     // 1. Actualizar tabla clients
@@ -1575,10 +1552,82 @@ const db = {
     try {
       await supabase
         .from('credits')
-        .update({ status: status, outstanding: Math.round(Number(outstanding || 0)) })
-        .eq('client_id', String(cedula));
+        .update({ status: status, outstanding: isPaid ? 0 : Math.round(Number(outstanding || 0)) })
+        .or(`client_id.eq.${String(cedula)},clientCedula.eq.${String(cedula)}`);
     } catch (e) {
       console.warn("Tabla credits no disponible al liquidar crédito:", e.message);
+    }
+
+    // 3. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado'
+    if (isPaid) {
+      try {
+        // Eliminar registros de cuotas pendientes previos para este cliente
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('clientCedula', String(cedula))
+          .eq('status', 'Pendiente');
+
+        // Obtener cliente para calcular cuotas faltantes
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('cedula', String(cedula))
+          .maybeSingle();
+
+        if (clientData) {
+          const totalDebt = Math.round(Number(clientData.totalDebt || clientData.monto_total || 0));
+          const installmentsCount = Number(clientData.installmentsCount || 30);
+          const installmentAmount = Math.round(Number(clientData.installmentAmount || (installmentsCount > 0 ? totalDebt / installmentsCount : 0)));
+
+          // Consultar pagos ya registrados para este cliente
+          const existingPayments = await this.getGlobalPaymentsByClient(cedula);
+          const existingMap = new Map();
+          let currentPaidTotal = 0;
+
+          existingPayments.forEach(p => {
+            if (p.status !== 'Pendiente') {
+              existingMap.set(Number(p.installmentNumber), p);
+              currentPaidTotal += Math.round(Number(p.amount) || 0);
+            }
+          });
+
+          // Si falta dinero para cubrir el total esperable, generar las cuotas faltantes como Pagado
+          const currentUser = this.getCurrentUser();
+          const supId = this.getSupervisorId();
+          const todayStr = new Date().toISOString().split('T')[0];
+          const newPayments = [];
+
+          let remainingDebt = Math.max(0, totalDebt - currentPaidTotal);
+
+          for (let i = 1; i <= installmentsCount; i++) {
+            if (!existingMap.has(i)) {
+              const paymentAmount = Math.min(installmentAmount, remainingDebt);
+              remainingDebt -= paymentAmount;
+
+              newPayments.push({
+                id: 'pay_liq_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                clientCedula: String(cedula),
+                installmentNumber: i,
+                amount: paymentAmount > 0 ? paymentAmount : installmentAmount,
+                date: todayStr,
+                agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
+                agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
+                status: 'Pagado',
+                signature: `BulaPay-SIG-${cedula}-LIQ-${i}`,
+                supervisor_id: supId
+              });
+            }
+          }
+
+          if (newPayments.length > 0) {
+            const { error: insErr } = await supabase.from('payments').insert(newPayments);
+            if (insErr) console.error("Error al insertar cuotas pagadas en liquidación:", insErr);
+          }
+        }
+      } catch (errPay) {
+        console.error("Error al asegurar cuotas en 'pagado' durante liquidación:", errPay);
+      }
     }
     
     return true;
