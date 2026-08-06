@@ -1488,29 +1488,20 @@ const db = {
 
   async getDashboardFinancialMetrics(routeId) {
     try {
-      // Usar la lista actualizada de clientes de la ruta
+      // Consultar clientes de la ruta desde la tabla clients
       const clients = await this.getClients();
 
-      let carteraEnCalle = 0; // Regla 1: Suma de outstanding ÚNICAMENTE de status = 'Activo'
-      let posibleGanancia = 0; // Regla 2: Suma de intereses (totalDebt - amount) ÚNICAMENTE de status estrictamente 'Activo'
+      let carteraEnCalle = 0; // Suma de outstanding ÚNICAMENTE de clientes con saldo pendiente
+      let posibleGanancia = 0; // Suma de ganancia esperada (totalDebt - amount) ÚNICAMENTE de clientes con outstanding > 0
 
       clients.forEach(c => {
-        const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
-        // Un crédito cuenta para Cartera y Posible Ganancia SOLO si su estado es estrictamente Activo
-        const isActivo = (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
-                          !rawStatus.includes('LIQUIDADO') && 
-                          !rawStatus.includes('CANCELAD') && 
-                          rawStatus !== 'MOROSO';
+        const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
+        const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
+        const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
 
-        if (isActivo) {
-          const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
-          const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
-          const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-          
-          // Regla 1: Dinero activo en calle
-          carteraEnCalle += Math.max(0, outstanding);
-
-          // Regla 2: Intereses proyectados de créditos activos
+        // Regla matemática estricta: Solo sumar si el cliente tiene saldo pendiente activo (outstanding > 0)
+        if (outstanding > 0) {
+          carteraEnCalle += outstanding;
           const interesCredito = Math.max(0, totalDebt - amount);
           posibleGanancia += interesCredito;
         }
@@ -1534,13 +1525,17 @@ const db = {
       status: status,
       risk: (status === 'Liquidado_Mora' || status === 'MOROSO') ? 'Rojo' : 'Verde'
     };
-    if (outstanding !== undefined) {
-      updatePayload.outstanding = Math.round(Number(outstanding || 0));
-    } else if (isPaid) {
+    
+    if (isPaid) {
+      // Resetear saldos numéricos del cliente al liquidar/cancelar
       updatePayload.outstanding = 0;
+      updatePayload.totalDebt = 0;
+      updatePayload.amount = 0;
+    } else if (outstanding !== undefined) {
+      updatePayload.outstanding = Math.round(Number(outstanding || 0));
     }
     
-    // 1. Actualizar tabla clients
+    // 1. Actualizar registro en la tabla clients
     const { error: clientErr } = await supabase
       .from('clients')
       .update(updatePayload)
@@ -1552,13 +1547,18 @@ const db = {
     try {
       await supabase
         .from('credits')
-        .update({ status: status, outstanding: isPaid ? 0 : Math.round(Number(outstanding || 0)) })
+        .update({ 
+          status: status, 
+          outstanding: isPaid ? 0 : updatePayload.outstanding,
+          totalDebt: isPaid ? 0 : (updatePayload.totalDebt || 0),
+          amount: isPaid ? 0 : (updatePayload.amount || 0)
+        })
         .or(`client_id.eq.${String(cedula)},clientCedula.eq.${String(cedula)}`);
     } catch (e) {
       console.warn("Tabla credits no disponible al liquidar crédito:", e.message);
     }
 
-    // 3. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado'
+    // 3. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado' (sin inyectar en capital_injections)
     if (isPaid) {
       try {
         // Eliminar registros de cuotas pendientes previos para este cliente
@@ -1568,7 +1568,7 @@ const db = {
           .eq('clientCedula', String(cedula))
           .eq('status', 'Pendiente');
 
-        // Obtener cliente para calcular cuotas faltantes
+        // Obtener cliente previo para calcular cuotas faltantes antes de resetear
         const { data: clientData } = await supabase
           .from('clients')
           .select('*')
@@ -1592,7 +1592,7 @@ const db = {
             }
           });
 
-          // Si falta dinero para cubrir el total esperable, generar las cuotas faltantes como Pagado
+          // Generar pagos de cuotas faltantes si aplican
           const currentUser = this.getCurrentUser();
           const supId = this.getSupervisorId();
           const todayStr = new Date().toISOString().split('T')[0];
