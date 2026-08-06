@@ -1426,44 +1426,34 @@ const agentModule = {
     const rawStatus = String(client.status || client.estado || '').trim().toUpperCase();
     const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
 
-    // El cliente NO tiene deuda activa si outstanding <= 0 o sus saldos numéricos son 0 o su estado es liquidado
-    const isFullyPaid = (outstanding <= 0 || (amount <= 0 && totalDebt <= 0) || isLiquidadoStatus);
+    // Condición: El cliente no tiene deuda activa si outstanding <= 0 o sus saldos numéricos son 0 o su estado es liquidado
+    const isWithoutActiveDebt = (outstanding <= 0 || (amount <= 0 && totalDebt <= 0) || isLiquidadoStatus);
 
     const cobroFormFields = document.getElementById('cobro-form-fields');
     const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');
-    const cobroLiquidateActionContainer = document.getElementById('cobro-liquidate-action-container');
 
-    if (isFullyPaid) {
-      // Bloqueo Inteligente: Ocultar el formulario de cobro (monto y botón de confirmar pago)
+    if (isWithoutActiveDebt) {
+      // 1. Ocultar el formulario de cobro (monto y botón de confirmar pago)
       if (cobroFormFields) cobroFormFields.style.setProperty('display', 'none', 'important');
-      // Mostrar letrero grande verde "✅ Cartón Liquidado / Cliente sin deuda activa"
+      // 2. Mostrar letrero verde claro "✅ Cartón Liquidado / Cliente sin deuda activa"
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'block', 'important');
-      if (cobroLiquidateActionContainer) cobroLiquidateActionContainer.style.setProperty('display', 'block', 'important');
-    } else {
-      // Mostrar el formulario de cobro
-      if (cobroFormFields) cobroFormFields.style.setProperty('display', 'block', 'important');
-      // Ocultar letrero de liquidado
-      if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
-      if (cobroLiquidateActionContainer) cobroLiquidateActionContainer.style.setProperty('display', 'none', 'important');
-    }
 
-    // Habilitar instantáneamente el botón 'Liquidar Cartón' si el cliente ya no tiene deuda
-    const liquidateButtons = [
-      this.btnLiquidarCarton,
-      document.getElementById('btn-liquidar-carton-main')
-    ].filter(Boolean);
-
-    liquidateButtons.forEach(btn => {
-      if (isFullyPaid) {
-        btn.disabled = false;
-        btn.style.cursor = 'pointer';
-        btn.style.opacity = '1';
-      } else {
-        btn.disabled = true;
-        btn.style.cursor = 'not-allowed';
-        btn.style.opacity = '0.5';
+      // 3. Renderizado Condicional: Ocultar por completo el botón 'Liquidar Cartón' cuando outstanding == 0
+      if (this.btnLiquidarCarton) {
+        this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
       }
-    });
+    } else {
+      // Cliente con deuda activa (outstanding > 0)
+      if (cobroFormFields) cobroFormFields.style.setProperty('display', 'block', 'important');
+      if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
+
+      if (this.btnLiquidarCarton) {
+        this.btnLiquidarCarton.style.removeProperty('display');
+        this.btnLiquidarCarton.disabled = true;
+        this.btnLiquidarCarton.style.cursor = 'not-allowed';
+        this.btnLiquidarCarton.style.opacity = '0.5';
+      }
+    }
   },
 
   async searchClient() {
