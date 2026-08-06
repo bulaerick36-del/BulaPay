@@ -1404,7 +1404,7 @@ const db = {
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
 
-      // 1. Capital Inicial Inyectado (inyecciones + movimientos manuales de caja)
+      // 1. Capital Inicial Inyectado Neto (Inyecciones + Entradas de caja - Salidas/Gastos de caja)
       const injections = await this.getCapitalInjections(routeId);
       let totalInjected = 0;
       for (const inj of injections) {
@@ -1423,65 +1423,56 @@ const db = {
         }
       }
 
-      const capitalInicialInyectado = Math.round(totalInjected + totalAdditions - totalExpenses);
+      const capitalInyectadoNeto = Math.round(totalInjected + totalAdditions - totalExpenses);
 
-      // 2. Suma del Capital Prestado de los créditos activos y Suma de Descuentos/Seguros retenidos
-      let creditsList = [];
-      const supabase = await initSupabase();
-      try {
-        let query = supabase.from('credits').select('*');
-        if (routeId) {
-          query = query.eq('routeId', routeId);
-        } else if (agentId) {
-          query = query.eq('agent_id', agentId);
+      // 2. Suma de Descuentos/Seguros retenidos y Ganancias Reales de cartones liquidados
+      const clients = await this.getClients();
+      let totalDiscounts = 0;
+      let totalGananciasLiquidadas = 0;
+
+      const payments = await this.getPayments();
+      const paymentsByClientMap = new Map();
+      payments.forEach(p => {
+        if (p.status !== 'Pendiente') {
+          const ced = String(p.clientCedula);
+          const currentSum = paymentsByClientMap.get(ced) || 0;
+          paymentsByClientMap.set(ced, currentSum + Math.round(parseFloat(p.amount) || 0));
         }
-        const { data: creditsData, error: creditsErr } = await query;
-        if (!creditsErr && creditsData && creditsData.length > 0) {
-          creditsList = creditsData;
-        }
-      } catch (e) {
-        // credits table optional
-      }
+      });
 
-      if (creditsList.length === 0) {
-        creditsList = await this.getClients();
-      }
-
-      let sumaCapitalPrestadoActivos = 0;
-      let sumaDescuentosRetenidos = 0;
-
-      creditsList.forEach(c => {
+      clients.forEach(c => {
         const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
         if (belongsToUser || !routeId) {
-          const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
-          const isActivo = (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
-                           !rawStatus.includes('LIQUIDADO') && 
-                           rawStatus !== 'MOROSO';
+          // Seguros/retenciones cobrados
+          const discount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
+          totalDiscounts += discount;
 
-          if (isActivo) {
-            const amount = Math.round(parseFloat(c.amount || c.monto_prestado || c.capital_prestado) || 0);
-            const discount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
-            sumaCapitalPrestadoActivos += amount;
-            sumaDescuentosRetenidos += discount;
+          // Ganancias reales de cartones liquidados
+          const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+          const isLiquidado = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || Number(c.outstanding || 0) === 0;
+
+          if (isLiquidado) {
+            const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
+            if (gananciaRegistrada > 0) {
+              totalGananciasLiquidadas += Math.round(gananciaRegistrada);
+            } else {
+              const cedula = String(c.cedula);
+              const totalPagado = paymentsByClientMap.get(cedula) || 0;
+              const capitalPrestadoOriginal = Math.round(Number(c.original_amount || c.amount || c.capital_prestado || 0));
+              if (totalPagado > capitalPrestadoOriginal && capitalPrestadoOriginal > 0) {
+                totalGananciasLiquidadas += (totalPagado - capitalPrestadoOriginal);
+              }
+            }
           }
         }
       });
 
-      // 3. Suma de Cuotas Pagadas
-      const payments = await this.getPayments();
-      let sumaCuotasPagadas = 0;
-      for (const p of payments) {
-        const pStatus = String(p.status || '').trim();
-        if (pStatus !== 'Pendiente') {
-          sumaCuotasPagadas += Math.round(parseFloat(p.amount) || 0);
-        }
-      }
-
-      // Matemática exacta: Efectivo Real = (Capital Inicial Inyectado) - (Suma del Capital Prestado de los créditos activos) + (Suma de Descuentos/Seguros retenidos) + (Suma de Cuotas Pagadas)
-      const efectivoReal = Math.round(capitalInicialInyectado - sumaCapitalPrestadoActivos + sumaDescuentosRetenidos + sumaCuotasPagadas);
-      return efectivoReal;
+      // PATRIMONIO = Inyecciones Netas + Seguros Retenidos + Ganancias de Cartones Liquidados
+      // REGLA ESTRICTA: NUNCA se le resta el capital de préstamos activos.
+      const patrimonio = Math.round(capitalInyectadoNeto + totalDiscounts + totalGananciasLiquidadas);
+      return patrimonio;
     } catch (err) {
-      console.error('Error fetching real base capital:', err);
+      console.error('Error fetching real base capital (Patrimonio):', err);
       return 0;
     }
   },
@@ -1535,9 +1526,16 @@ const db = {
       console.warn("No se pudo obtener datos previos del cliente:", e.message);
     }
 
+    let gananciaReal = 0;
+    let originalAmount = 0;
+
     // 2. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments (sin tocar capital_injections)
     if (isPaid && clientData) {
       try {
+        const totalDebt = Math.round(Number(clientData.totalDebt || clientData.monto_total || 0));
+        originalAmount = Math.round(Number(clientData.amount || clientData.capital_prestado || 0));
+        gananciaReal = Math.max(0, totalDebt - originalAmount);
+
         // Eliminar registros de cuotas pendientes previos para este cliente
         await supabase
           .from('payments')
@@ -1545,7 +1543,6 @@ const db = {
           .eq('clientCedula', String(cedula))
           .eq('status', 'Pendiente');
 
-        const totalDebt = Math.round(Number(clientData.totalDebt || clientData.monto_total || 0));
         const installmentsCount = Number(clientData.installmentsCount || 30);
         const installmentAmount = Math.round(Number(clientData.installmentAmount || (installmentsCount > 0 ? totalDebt / installmentsCount : 0)));
 
@@ -1598,7 +1595,7 @@ const db = {
       }
     }
 
-    // 3. Resetear saldos numéricos exactamente a 0 en la tabla clients (o actualizar outstanding si es moroso)
+    // 3. Resetear saldos numéricos exactamente a 0 en la tabla clients y almacenar ganancia real
     const updatePayload = {
       status: status,
       risk: (status === 'Liquidado_Mora' || status === 'MOROSO') ? 'Rojo' : 'Verde'
@@ -1608,6 +1605,8 @@ const db = {
       updatePayload.outstanding = 0;
       updatePayload.totalDebt = 0;
       updatePayload.amount = 0;
+      if (gananciaReal > 0) updatePayload.liquidated_profit = gananciaReal;
+      if (originalAmount > 0) updatePayload.original_amount = originalAmount;
     } else if (outstanding !== undefined) {
       updatePayload.outstanding = Math.round(Number(outstanding || 0));
     }
@@ -1642,48 +1641,47 @@ const db = {
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
 
-      // 1. Suma (capital_injections)
-      const injections = await this.getCapitalInjections(routeId);
-      let totalInjected = 0;
-      for (const inj of injections) {
-        const belongsToUser = routeId ? (inj.routeId === routeId) : (inj.agent_id === agentId);
-        if (belongsToUser) totalInjected += Math.round(parseFloat(inj.amount) || 0);
-      }
+      // 1. Mi Capital Base (Patrimonio)
+      const baseCapital = Math.round(await this.getRealBaseCapital(routeId));
 
-      // 2. Suma (Todas las cuotas pagadas por clientes) y 4. Suma (Total de capital entregado/desembolsado)
-      let totalPaidByClients = 0;
-      let totalCapitalLent = 0;
+      // 2. Capital puro prestado en la calle de créditos ACTIVOS (sin intereses)
       const clients = await this.getClients();
-      for (const c of clients) {
-        const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId);
-        if (belongsToUser) {
-          const debt = Math.round(parseFloat(c.totalDebt) || 0);
-          const outstanding = Math.round(parseFloat(c.outstanding) || 0);
-          const totalPaid = Math.max(0, debt - outstanding);
-          totalPaidByClients += totalPaid;
+      let capitalPrestadoActivos = 0;
+      const activeClientCedulas = new Set();
 
-          const amountLent = Math.round(parseFloat(c.amount) || 0);
-          const discount = Math.round(parseFloat(c.discount_amount) || 0);
-          // Capital realmente entregado (descontando el seguro/papelería retenido)
-          totalCapitalLent += Math.max(0, amountLent - discount);
+      clients.forEach(c => {
+        const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
+        if (belongsToUser || !routeId) {
+          const outstanding = Math.round(Number(c.outstanding || 0));
+          const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
+          const isActivo = outstanding > 0 &&
+                           (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
+                           !rawStatus.includes('LIQUIDADO') && 
+                           !rawStatus.includes('CANCELAD') && 
+                           rawStatus !== 'MOROSO';
+
+          if (isActivo) {
+            const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+            capitalPrestadoActivos += amountPuro;
+            activeClientCedulas.add(String(c.cedula));
+          }
+        }
+      });
+
+      // 3. Cuotas diarias cobradas de cartones activos
+      const payments = await this.getPayments();
+      let cuotasCobradasActivos = 0;
+      for (const p of payments) {
+        if (p.status !== 'Pendiente' && activeClientCedulas.has(String(p.clientCedula))) {
+          cuotasCobradasActivos += Math.round(parseFloat(p.amount) || 0);
         }
       }
 
-      // 3. Suma (Gastos/Retiros)
-      const movements = await this.getCashMovements();
-      let totalExpenses = 0;
-      for (const m of movements) {
-        const belongsToUser = routeId ? (m.routeId === routeId) : (m.agent_id === agentId);
-        if (belongsToUser && m.type === 'salida') {
-          totalExpenses += Math.round(parseFloat(m.amount) || 0);
-        }
-      }
-
-      // Fórmula: Inyecciones + Pagos - Gastos - Desembolsos
-      const liquidCash = Math.round(totalInjected + totalPaidByClients - totalExpenses - totalCapitalLent);
-      return liquidCash;
+      // REGLA ESTRICTA: Efectivo Disponible (Liquidez) = Mi Capital Base - Capital puro prestado activo + Cuotas cobradas activas
+      const efectivoDisponible = Math.round(baseCapital - capitalPrestadoActivos + cuotasCobradasActivos);
+      return efectivoDisponible;
     } catch (err) {
-      console.error('Error calculating Liquid Cash:', err);
+      console.error('Error fetching liquid cash (Liquidez):', err);
       return 0;
     }
   },
@@ -1736,7 +1734,7 @@ const db = {
       const currentUser = this.getCurrentUser();
       if (!currentUser) return { baseCapital: 0, totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
       
-      // Capital Base inyectado de la ruta (incluye inyecciones y descuenta salidas globales de caja)
+      // Capital Base (Patrimonio)
       const baseCapital = Math.round(await this.getRealBaseCapital(currentUser.routeId));
 
       const agentId = currentUser.id || currentUser.username;
@@ -1780,7 +1778,7 @@ const db = {
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
       const massPaymentsTotal = Math.round(todaysPayments.reduce((acc, p) => (p.is_mass_payment || (p.status && p.status.includes('Masivo'))) ? acc + Math.round(Number(p.amount) || 0) : acc, 0));
       
-      // Prestado hoy (clientes nuevos o créditos re-otorgados hoy)
+      // Prestado hoy
       const todaysClients = clients.filter(c => {
          if (!c.created_at && !c.date) return false;
          const cDate = getCleanDateStr(c.created_at || c.date);
@@ -1797,7 +1795,6 @@ const db = {
          return isToday && belongsToAgent;
       });
 
-      // También consultar registros secundarios de 'credits' si existen para el día de hoy
       let secondaryCreditsToday = [];
       try {
         const supabase = await initSupabase();
@@ -1834,13 +1831,13 @@ const db = {
         });
       }
 
-      // Movimientos de caja (entradas y salidas del día)
+      // Movimientos de caja
       const todaysMovements = movements.filter(m => m.date && getCleanDateStr(m.date) === todayStr);
       const totalIn = Math.round(todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       const totalOut = Math.round(todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       
-      // Efectivo Disponible / Efectivo en Caja es el Efectivo Real calculado dinámicamente
-      const onHand = Math.round(baseCapital);
+      // Efectivo Disponible / Liquidez Diaria en Caja calculada dinámicamente según la nueva arquitectura
+      const onHand = Math.round(await this.getLiquidCash(currentUser.routeId));
 
       return {
         baseCapital: Math.round(baseCapital),
