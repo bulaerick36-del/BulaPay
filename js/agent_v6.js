@@ -1392,8 +1392,9 @@ const agentModule = {
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       this.currentClient = updatedClient;
       
-      // Actualizar la interfaz principal del cobrador y Cartón
+      // Actualizar la interfaz principal del cobrador, Cartón y estado de liquidación
       await this.renderClientInfo(updatedClient);
+      this.updateCobroViewState(updatedClient);
       
       // Actualizar saldo mostrado en el modal
       if (this.paymentCardClientOutstanding) {
@@ -1414,6 +1415,55 @@ const agentModule = {
         this.btnProcessMassPayment.disabled = false;
       }
     }
+  },
+
+  updateCobroViewState(client) {
+    if (!client) return;
+
+    const outstanding = Number(client.outstanding || 0);
+    const amount = Number(client.amount || 0);
+    const totalDebt = Number(client.totalDebt || 0);
+    const rawStatus = String(client.status || client.estado || '').trim().toUpperCase();
+    const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
+
+    // El cliente NO tiene deuda activa si outstanding <= 0 o sus saldos numéricos son 0 o su estado es liquidado
+    const isFullyPaid = (outstanding <= 0 || (amount <= 0 && totalDebt <= 0) || isLiquidadoStatus);
+
+    const cobroFormFields = document.getElementById('cobro-form-fields');
+    const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');
+    const cobroLiquidateActionContainer = document.getElementById('cobro-liquidate-action-container');
+
+    if (isFullyPaid) {
+      // Bloqueo Inteligente: Ocultar el formulario de cobro (monto y botón de confirmar pago)
+      if (cobroFormFields) cobroFormFields.style.setProperty('display', 'none', 'important');
+      // Mostrar letrero grande verde "✅ Cartón Liquidado / Cliente sin deuda activa"
+      if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'block', 'important');
+      if (cobroLiquidateActionContainer) cobroLiquidateActionContainer.style.setProperty('display', 'block', 'important');
+    } else {
+      // Mostrar el formulario de cobro
+      if (cobroFormFields) cobroFormFields.style.setProperty('display', 'block', 'important');
+      // Ocultar letrero de liquidado
+      if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
+      if (cobroLiquidateActionContainer) cobroLiquidateActionContainer.style.setProperty('display', 'none', 'important');
+    }
+
+    // Habilitar instantáneamente el botón 'Liquidar Cartón' si el cliente ya no tiene deuda
+    const liquidateButtons = [
+      this.btnLiquidarCarton,
+      document.getElementById('btn-liquidar-carton-main')
+    ].filter(Boolean);
+
+    liquidateButtons.forEach(btn => {
+      if (isFullyPaid) {
+        btn.disabled = false;
+        btn.style.cursor = 'pointer';
+        btn.style.opacity = '1';
+      } else {
+        btn.disabled = true;
+        btn.style.cursor = 'not-allowed';
+        btn.style.opacity = '0.5';
+      }
+    });
   },
 
   async searchClient() {
@@ -1449,8 +1499,11 @@ const agentModule = {
       if (this.cobroClientOutstanding) this.cobroClientOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
       
       if (this.inputCobroAmount) {
-        this.inputCobroAmount.value = Math.min(Number(client.installmentAmount), Number(client.outstanding));
+        this.inputCobroAmount.value = Math.min(Number(client.installmentAmount), Math.max(0, Number(client.outstanding)));
       }
+
+      // Aplicar reactivamente el estado visual y bloqueo inteligente según el saldo del cliente
+      this.updateCobroViewState(client);
 
       // Preparar el Cartón Interactivo (Flujo B)
       if (this.cobroOverdueDaysList) {
@@ -1458,18 +1511,8 @@ const agentModule = {
           const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
           const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
           
-          // Lógica del Botón Liquidar Cartón
-          if (this.btnLiquidarCarton) {
-            if (Number(client.outstanding) <= 0) {
-              this.btnLiquidarCarton.disabled = false;
-              this.btnLiquidarCarton.style.cursor = 'pointer';
-              this.btnLiquidarCarton.style.opacity = '1';
-            } else {
-              this.btnLiquidarCarton.disabled = true;
-              this.btnLiquidarCarton.style.cursor = 'not-allowed';
-              this.btnLiquidarCarton.style.opacity = '0.5';
-            }
-          }
+          // Re-evaluar estado del botón Liquidar Cartón
+          this.updateCobroViewState(client);
 
           // Lógica Candado Inteligente: Excepción para Morosos
           if (this.btnCobroInvoice) {
@@ -1720,6 +1763,7 @@ const agentModule = {
 
   async renderClientInfo(client) {
     this.currentClient = client;
+    this.updateCobroViewState(client);
     
     // Ocultar placeholder y mostrar resultados
     if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';

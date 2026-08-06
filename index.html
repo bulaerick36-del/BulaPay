@@ -605,17 +605,34 @@
                     <span id="cobro-client-outstanding" style="font-size: 2rem; font-weight: 900; color: var(--color-rojo); display: block; letter-spacing: -0.5px;">$0</span>
                   </div>
 
-                  <div class="form-group" style="margin-bottom: 1.5rem;">
-                    <label for="input-cobro-amount" style="font-size: 0.75rem; font-weight: 800; color: var(--text-primary); text-transform: uppercase; margin-bottom: 0.5rem; display: block; text-align: center;">Monto a Recibir ($)</label>
-                    <input type="number" id="input-cobro-amount" placeholder="Ej. 10000" style="padding: 1rem; font-size: 1.5rem; font-weight: 900; width: 100%; border: 2px solid var(--border-color); border-radius: 10px; background-color: var(--bg-secondary); color: var(--text-primary); text-align: center; outline: none; transition: var(--transition-smooth);">
+                  <!-- LETRERO CARTÓN LIQUIDADO / SIN DEUDA ACTIVA -->
+                  <div id="cobro-liquidated-banner" style="display: none; padding: 1.25rem 1rem; text-align: center; background: rgba(16, 185, 129, 0.12); border: 2px solid #10b981; border-radius: 12px; margin-top: 1rem; margin-bottom: 1rem;">
+                    <div style="font-size: 2.2rem; margin-bottom: 0.25rem;">✅</div>
+                    <h3 style="font-size: 1.25rem; font-weight: 900; color: #10b981; margin-bottom: 0.25rem; text-transform: uppercase;">Cartón Liquidado</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-primary); margin: 0; font-weight: 600;">Cliente sin deuda activa</p>
                   </div>
-                  
-                  <div style="display: flex; gap: 0.5rem; flex-direction: column;">
-                    <button type="button" class="btn btn-primary" id="btn-cobro-carton" style="width: 100%; padding: 1rem; font-size: 1.15rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 10px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); cursor: pointer; transition: transform 0.1s;">
-                      Registrar Pago
-                    </button>
-                    <button type="button" class="btn btn-secondary" id="btn-cobro-invoice" style="width: 100%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer; transition: background 0.2s;">
-                      Confirmar Pago
+
+                  <!-- FORMULARIO REGISTRAR PAGO -->
+                  <div id="cobro-form-fields">
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                      <label for="input-cobro-amount" style="font-size: 0.75rem; font-weight: 800; color: var(--text-primary); text-transform: uppercase; margin-bottom: 0.5rem; display: block; text-align: center;">Monto a Recibir ($)</label>
+                      <input type="number" id="input-cobro-amount" placeholder="Ej. 10000" style="padding: 1rem; font-size: 1.5rem; font-weight: 900; width: 100%; border: 2px solid var(--border-color); border-radius: 10px; background-color: var(--bg-secondary); color: var(--text-primary); text-align: center; outline: none; transition: var(--transition-smooth);">
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.5rem; flex-direction: column;">
+                      <button type="button" class="btn btn-primary" id="btn-cobro-carton" style="width: 100%; padding: 1rem; font-size: 1.15rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 10px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); cursor: pointer; transition: transform 0.1s;">
+                        Registrar Pago
+                      </button>
+                      <button type="button" class="btn btn-secondary" id="btn-cobro-invoice" style="width: 100%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer; transition: background 0.2s;">
+                        Confirmar Pago
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- BOTÓN DIRECTO DE LIQUIDAR CARTÓN EN VISTA PRINCIPAL -->
+                  <div id="cobro-liquidate-action-container" style="display: none; margin-top: 1rem;">
+                    <button type="button" class="btn btn-primary" id="btn-liquidar-carton-main" disabled style="width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 10px; cursor: not-allowed; opacity: 0.5; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);">
+                      ✅ Liquidar Cartón
                     </button>
                   </div>
                 </div>
