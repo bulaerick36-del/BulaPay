@@ -2098,10 +2098,11 @@ const agentModule = {
       console.log('Guardado exitoso:', savedResult);
       this.currentClient = payload;
 
-      // Actualización de la Interfaz (Refetch) para el contador
+      // Actualización de la Interfaz (Refetch) para el contador y métricas financieras
       if (typeof this.updateRouteTracking === 'function') {
         this.updateRouteTracking();
       }
+      await this.renderFinancialDashboard();
 
       // Envío de email de bienvenida (Resend placeholder)
       this.sendWelcomeEmail(payload);
@@ -2546,6 +2547,9 @@ const agentModule = {
       const metrics = await window.BulaPayDB.getDashboardFinancialMetrics(currentUser.routeId);
       if (carteraEl) carteraEl.textContent = `$${Number(metrics.carteraEnCalle).toLocaleString('es-CO')}`;
       if (gananciaEl) gananciaEl.textContent = `$${Number(metrics.posibleGanancia).toLocaleString('es-CO')}`;
+
+      // Sincronizar siempre las vistas del modal de Caja (Efectivo Disponible)
+      await this.updateCashViews();
     } catch (err) {
       console.error("Error al renderizar Dashboard financiero:", err);
       if (capitalEl) capitalEl.textContent = 'Error';

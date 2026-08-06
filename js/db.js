@@ -1404,7 +1404,7 @@ const db = {
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
 
-      // 1. Suma Total Inyectada (Capital inicial, manual y ganancias realizadas)
+      // 1. Capital Inicial Inyectado (inyecciones + movimientos manuales de caja)
       const injections = await this.getCapitalInjections(routeId);
       let totalInjected = 0;
       for (const inj of injections) {
@@ -1412,19 +1412,74 @@ const db = {
         if (belongsToUser) totalInjected += Math.round(parseFloat(inj.amount) || 0);
       }
 
-      // 2. Gastos / Retiros (Exclusivamente 'salida')
       const movements = await this.getCashMovements();
       let totalExpenses = 0;
+      let totalAdditions = 0;
       for (const m of movements) {
         const belongsToUser = routeId ? (m.routeId === routeId) : (m.agent_id === agentId);
-        if (belongsToUser && m.type === 'salida') {
-          totalExpenses += Math.round(parseFloat(m.amount) || 0);
+        if (belongsToUser) {
+          if (m.type === 'salida') totalExpenses += Math.round(parseFloat(m.amount) || 0);
+          if (m.type === 'entrada') totalAdditions += Math.round(parseFloat(m.amount) || 0);
         }
       }
 
-      // El Capital Base es estático y estricto. Las ganancias de cartera se inyectan al liquidar.
-      const realBaseCapital = Math.round(totalInjected - totalExpenses);
-      return realBaseCapital;
+      const capitalInicialInyectado = Math.round(totalInjected + totalAdditions - totalExpenses);
+
+      // 2. Suma del Capital Prestado de los créditos activos y Suma de Descuentos/Seguros retenidos
+      let creditsList = [];
+      const supabase = await initSupabase();
+      try {
+        let query = supabase.from('credits').select('*');
+        if (routeId) {
+          query = query.eq('routeId', routeId);
+        } else if (agentId) {
+          query = query.eq('agent_id', agentId);
+        }
+        const { data: creditsData, error: creditsErr } = await query;
+        if (!creditsErr && creditsData && creditsData.length > 0) {
+          creditsList = creditsData;
+        }
+      } catch (e) {
+        // credits table optional
+      }
+
+      if (creditsList.length === 0) {
+        creditsList = await this.getClients();
+      }
+
+      let sumaCapitalPrestadoActivos = 0;
+      let sumaDescuentosRetenidos = 0;
+
+      creditsList.forEach(c => {
+        const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
+        if (belongsToUser || !routeId) {
+          const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
+          const isActivo = (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
+                           !rawStatus.includes('LIQUIDADO') && 
+                           rawStatus !== 'MOROSO';
+
+          if (isActivo) {
+            const amount = Math.round(parseFloat(c.amount || c.monto_prestado || c.capital_prestado) || 0);
+            const discount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
+            sumaCapitalPrestadoActivos += amount;
+            sumaDescuentosRetenidos += discount;
+          }
+        }
+      });
+
+      // 3. Suma de Cuotas Pagadas
+      const payments = await this.getPayments();
+      let sumaCuotasPagadas = 0;
+      for (const p of payments) {
+        const pStatus = String(p.status || '').trim();
+        if (pStatus !== 'Pendiente') {
+          sumaCuotasPagadas += Math.round(parseFloat(p.amount) || 0);
+        }
+      }
+
+      // Matemática exacta: Efectivo Real = (Capital Inicial Inyectado) - (Suma del Capital Prestado de los créditos activos) + (Suma de Descuentos/Seguros retenidos) + (Suma de Cuotas Pagadas)
+      const efectivoReal = Math.round(capitalInicialInyectado - sumaCapitalPrestadoActivos + sumaDescuentosRetenidos + sumaCuotasPagadas);
+      return efectivoReal;
     } catch (err) {
       console.error('Error fetching real base capital:', err);
       return 0;
@@ -1731,9 +1786,8 @@ const db = {
       const totalIn = Math.round(todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       const totalOut = Math.round(todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       
-      // Efectivo Disponible: Capital Base Inyectado + Cobros del día - Créditos Entregados Hoy (Netos) + Entradas adicionales de caja - Salidas adicionales de caja
-      const netLent = Math.max(0, totalLent - totalDiscounts);
-      const onHand = Math.round(baseCapital + totalCollected - netLent + totalIn - totalOut);
+      // Efectivo Disponible / Efectivo en Caja es el Efectivo Real calculado dinámicamente
+      const onHand = Math.round(baseCapital);
 
       return {
         baseCapital: Math.round(baseCapital),
