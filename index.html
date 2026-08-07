@@ -904,6 +904,58 @@
             </div>
           </div>
 
+          <!-- MODAL ÉXITO: LIQUIDACIÓN AUTOMÁTICA POR ATAJO -->
+          <div class="overlay-modal" id="cobro-success-liquidation-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.9); z-index: 260;">
+            <div style="background-color: var(--bg-primary); border-radius: 14px; width: 90%; max-width: 340px; padding: 2rem; display: flex; flex-direction: column; align-items: center; text-align: center; border: 1px solid var(--border-color); box-shadow: var(--shadow-lg);">
+              <div style="font-size: 3rem; margin-bottom: 0.5rem;">🎉</div>
+              <h3 style="margin: 0 0 0.5rem 0; font-size: 1.2rem; font-weight: 900; color: #10b981; text-transform: uppercase;">
+                ¡Cartón pagado en su totalidad!
+              </h3>
+              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.4;">
+                El cliente ha alcanzado un saldo de $0. ¿Deseas ejecutar la liquidación oficial del cartón?
+              </p>
+
+              <div style="display: flex; flex-direction: column; gap: 0.6rem; width: 100%;">
+                <button type="button" id="btn-success-liquidate-confirm" class="btn btn-primary" style="width: 100%; padding: 0.85rem; font-size: 1rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(16,185,129,0.3);">
+                  Liquidar Cartón
+                </button>
+                <button type="button" id="btn-success-liquidate-close" class="btn btn-secondary" style="width: 100%; padding: 0.75rem; font-size: 0.85rem; font-weight: 700; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer;">
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- MODAL CARTÓN VENCIDO (LÓGICA 3 BOTONES) -->
+          <div class="overlay-modal" id="cobro-overdue-carton-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.92); z-index: 270;">
+            <div style="background-color: var(--bg-primary); border-radius: 14px; width: 92%; max-width: 360px; padding: 1.75rem 1.5rem; display: flex; flex-direction: column; align-items: center; text-align: center; border: 2px solid #ef4444; box-shadow: var(--shadow-lg);">
+              <div style="font-size: 2.8rem; margin-bottom: 0.25rem;">⚠️</div>
+              <h3 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 900; color: #ef4444; text-transform: uppercase;">
+                Este cartón está vencido y tiene saldo pendiente.
+              </h3>
+              <p id="overdue-carton-modal-info" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.4;">
+                El plazo de cuotas ha expirado y el cliente conserva deuda activa.
+              </p>
+
+              <div style="display: flex; flex-direction: column; gap: 0.6rem; width: 100%;">
+                <!-- Botón 3: Renovar (Azul/Verde) -->
+                <button type="button" id="btn-overdue-renew" class="btn btn-primary" style="width: 100%; padding: 0.85rem; font-size: 0.9rem; font-weight: 800; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(59,130,246,0.3);">
+                  🔄 Renovar
+                </button>
+
+                <!-- Botón 2: Liquidar y enviar a Lista Negra (Rojo) -->
+                <button type="button" id="btn-overdue-blacklist" class="btn btn-danger" style="width: 100%; padding: 0.85rem; font-size: 0.9rem; font-weight: 800; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(239,68,68,0.3);">
+                  ⛔ Liquidar y enviar a Lista Negra
+                </button>
+
+                <!-- Botón 1: Revisar más tarde (Gris) -->
+                <button type="button" id="btn-overdue-later" class="btn btn-secondary" style="width: 100%; padding: 0.75rem; font-size: 0.85rem; font-weight: 700; background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer;">
+                  🕒 Revisar más tarde
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- MODAL DE INSTRUCCIONES DE GPS -->
           <div class="overlay-modal" id="gps-instructions-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.85); z-index: 210;">
             <div class="payment-card-mockup" style="background-color: var(--bg-primary); border-radius: 16px; padding: 1.5rem; width: 90%; max-width: 320px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); display: flex; flex-direction: column; position: relative;">

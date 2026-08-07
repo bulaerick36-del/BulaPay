@@ -1557,6 +1557,15 @@ const agentModule = {
             dailyStatusList, 
             (status) => this.handleCartonPayment(status) // Callback interactivo solo aquí
           );
+
+          // Modulo de Cartón Vencido (Lógica 3 Botones)
+          const totalInstallmentsCount = client.installmentsCount || 30;
+          const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
+          const isOverdueCarton = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
+
+          if (isOverdueCarton) {
+            this.showOverdueCartonModal(client, lastInstallment);
+          }
         } catch (e) {
           console.error("Error al preparar cartón interactivo:", e);
         }
@@ -1674,8 +1683,13 @@ const agentModule = {
       
       await this.searchClient(); // Recarga y repinta los datos completos
 
-      // Mostrar modal obligatorio SMS para notificar el pago
-      this.showMandatorySmsPrompt(updatedClient, 'payment');
+      // Modal de Éxito: Liquidación Automática por Atajo si la deuda llega a $0
+      if (Number(updatedClient.outstanding) <= 0) {
+        this.showSuccessLiquidationModal(updatedClient);
+      } else {
+        // Mostrar modal obligatorio SMS para notificar el pago
+        this.showMandatorySmsPrompt(updatedClient, 'payment');
+      }
       
     } catch (e) {
       console.error("Error capturado en Confirmar Pago:", e);
@@ -2778,6 +2792,115 @@ const agentModule = {
     } catch (e) {
       console.error("Error al actualizar seguimiento de ruta:", e);
     }
+  },
+
+  showSuccessLiquidationModal(client) {
+    const modal = document.getElementById('cobro-success-liquidation-modal');
+    if (!modal) return;
+
+    const btnConfirm = document.getElementById('btn-success-liquidate-confirm');
+    const btnClose = document.getElementById('btn-success-liquidate-close');
+
+    if (btnConfirm) {
+      btnConfirm.onclick = async () => {
+        modal.style.display = 'none';
+        try {
+          await window.BulaPayDB.liquidateCredit({
+            cedula: client.cedula,
+            status: 'Liquidado_Pagado',
+            outstanding: 0
+          });
+          alert('🎉 ¡Cartón Liquidado Exitosamente!');
+          await this.renderFinancialDashboard();
+          await this.searchClient();
+        } catch (e) {
+          console.error("Error al liquidar cartón desde modal de éxito:", e);
+          alert('Error al liquidar cartón: ' + (e.message || e));
+        }
+      };
+    }
+
+    if (btnClose) {
+      btnClose.onclick = () => {
+        modal.style.display = 'none';
+      };
+    }
+
+    modal.style.display = 'flex';
+  },
+
+  showOverdueCartonModal(client, lastInstallment) {
+    const modal = document.getElementById('cobro-overdue-carton-modal');
+    if (!modal) return;
+
+    const infoEl = document.getElementById('overdue-carton-modal-info');
+    if (infoEl) {
+      const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
+      infoEl.textContent = `El cliente ${client.name} (C.C. ${client.cedula}) tiene la cuota 30 vencida desde el ${lastInstallment ? lastInstallment.dateStr : 'fecha límite'} y mantiene un saldo pendiente de $${outstandingFmt}.`;
+    }
+
+    const btnLater = document.getElementById('btn-overdue-later');
+    const btnBlacklist = document.getElementById('btn-overdue-blacklist');
+    const btnRenew = document.getElementById('btn-overdue-renew');
+
+    // Botón 1: Revisar más tarde (Gris) -> Solo cierra el modal
+    if (btnLater) {
+      btnLater.onclick = () => {
+        modal.style.display = 'none';
+      };
+    }
+
+    // Botón 2: Liquidar y enviar a Lista Negra (Rojo)
+    if (btnBlacklist) {
+      btnBlacklist.onclick = async () => {
+        modal.style.display = 'none';
+        try {
+          const outstanding = Number(client.outstanding || 0);
+          await window.BulaPayDB.liquidateCredit({
+            cedula: client.cedula,
+            status: 'Liquidado_Mora',
+            outstanding: outstanding
+          });
+          alert(`⚠️ El cliente ${client.name} ha sido enviado a Lista Negra (Moroso) con deuda no pagada de $${outstanding.toLocaleString('es-CO')}.`);
+          await this.renderFinancialDashboard();
+          await this.searchClient();
+        } catch (e) {
+          console.error("Error al enviar a Lista Negra:", e);
+          alert('Error al liquidar y enviar a Lista Negra: ' + (e.message || e));
+        }
+      };
+    }
+
+    // Botón 3: Renovar (Azul) -> Liquida crédito actual y redirige a Registro pre-llenando datos
+    if (btnRenew) {
+      btnRenew.onclick = async () => {
+        modal.style.display = 'none';
+        try {
+          await window.BulaPayDB.liquidateCredit({
+            cedula: client.cedula,
+            status: 'Liquidado_Pagado',
+            outstanding: 0
+          });
+          
+          this.switchTab('register');
+
+          const inputName = document.getElementById('new-client-name');
+          const inputCedula = document.getElementById('new-client-cedula');
+          const inputPhone = document.getElementById('new-client-phone');
+          
+          if (inputName) inputName.value = client.name || '';
+          if (inputCedula) inputCedula.value = client.cedula || '';
+          if (inputPhone) inputPhone.value = client.phone || '';
+
+          alert(`🔄 Cartón anterior de ${client.name} liquidado. Procede a registrar el nuevo crédito de renovación.`);
+        } catch (e) {
+          console.error("Error al renovar cartón:", e);
+          alert('Error al procesar renovación: ' + (e.message || e));
+        }
+      };
+    }
+
+    modal.style.display = 'flex';
   },
 
   async openRouteTrackingModal() {
