@@ -255,6 +255,11 @@ const agentModule = {
     if (this.btnCobroInvoice) {
       this.btnCobroInvoice.addEventListener('click', () => this.handleInvoiceRequest());
     }
+    if (this.inputCobroAmount) {
+      this.inputCobroAmount.addEventListener('input', () => this.updateCobroInvoiceButtonState());
+      this.inputCobroAmount.addEventListener('change', () => this.updateCobroInvoiceButtonState());
+      this.inputCobroAmount.addEventListener('keyup', () => this.updateCobroInvoiceButtonState());
+    }
     if (this.btnCobroCarton) {
       this.btnCobroCarton.addEventListener('click', () => {
         if (this.cobroInputState && this.cobroCartonState) {
@@ -1417,6 +1422,30 @@ const agentModule = {
     }
   },
 
+  updateCobroInvoiceButtonState() {
+    if (!this.btnCobroInvoice) return;
+    if (!this.currentClient) {
+      this.btnCobroInvoice.disabled = true;
+      this.btnCobroInvoice.style.cursor = 'not-allowed';
+      this.btnCobroInvoice.style.opacity = '0.5';
+      return;
+    }
+
+    const outstanding = Number(this.currentClient.outstanding || 0);
+    const amountVal = this.inputCobroAmount ? parseFloat(this.inputCobroAmount.value) : 0;
+
+    // Regla simple y reactiva: Si el cliente tiene deuda activa (outstanding > 0) y hay un monto válido (>0 o ingresándose), se habilita.
+    if (outstanding > 0 && (!this.inputCobroAmount || (!isNaN(amountVal) && amountVal > 0) || this.inputCobroAmount.value === '')) {
+      this.btnCobroInvoice.disabled = false;
+      this.btnCobroInvoice.style.cursor = 'pointer';
+      this.btnCobroInvoice.style.opacity = '1';
+    } else {
+      this.btnCobroInvoice.disabled = true;
+      this.btnCobroInvoice.style.cursor = 'not-allowed';
+      this.btnCobroInvoice.style.opacity = '0.5';
+    }
+  },
+
   updateCobroViewState(client) {
     if (!client) return;
 
@@ -1454,6 +1483,8 @@ const agentModule = {
         this.btnLiquidarCarton.style.opacity = '0.5';
       }
     }
+
+    this.updateCobroInvoiceButtonState();
   },
 
   async searchClient() {
@@ -1501,21 +1532,8 @@ const agentModule = {
           const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
           const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
           
-          // Re-evaluar estado del botón Liquidar Cartón
+          // Re-evaluar estado del botón Liquidar Cartón y Confirmar Pago
           this.updateCobroViewState(client);
-
-          // Habilitar botón de Confirmar Pago si tiene deuda activa
-          if (this.btnCobroInvoice) {
-            if (Number(client.outstanding) > 0) {
-              this.btnCobroInvoice.disabled = false;
-              this.btnCobroInvoice.style.cursor = 'pointer';
-              this.btnCobroInvoice.style.opacity = '1';
-            } else {
-              this.btnCobroInvoice.disabled = true;
-              this.btnCobroInvoice.style.cursor = 'not-allowed';
-              this.btnCobroInvoice.style.opacity = '0.5';
-            }
-          }
 
           window.BulaPayDB.renderOverdueDaysList(
             this.cobroOverdueDaysList, 
@@ -1646,9 +1664,9 @@ const agentModule = {
     } finally {
       this.isLoadingPayment = false;
       if (this.btnCobroInvoice) {
-        this.btnCobroInvoice.disabled = false;
         this.btnCobroInvoice.innerHTML = 'Confirmar Pago';
       }
+      this.updateCobroInvoiceButtonState();
     }
   },
 
