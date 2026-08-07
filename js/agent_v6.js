@@ -252,21 +252,13 @@ const agentModule = {
     }
 
     // Botones Flujo Doble (Factura y Cartón)
-    if (this.btnCobroInvoice) {
-      this.btnCobroInvoice.addEventListener('click', () => this.handleInvoiceRequest());
+    if (this.btnCobroCarton) {
+      this.btnCobroCarton.addEventListener('click', () => this.handleInvoiceRequest());
     }
     if (this.inputCobroAmount) {
-      this.inputCobroAmount.addEventListener('input', () => this.updateCobroInvoiceButtonState());
-      this.inputCobroAmount.addEventListener('change', () => this.updateCobroInvoiceButtonState());
-      this.inputCobroAmount.addEventListener('keyup', () => this.updateCobroInvoiceButtonState());
-    }
-    if (this.btnCobroCarton) {
-      this.btnCobroCarton.addEventListener('click', () => {
-        if (this.cobroInputState && this.cobroCartonState) {
-          this.cobroInputState.style.setProperty('display', 'none', 'important');
-          this.cobroCartonState.style.setProperty('display', 'block', 'important');
-        }
-      });
+      this.inputCobroAmount.addEventListener('input', () => this.updateCobroCartonButtonState());
+      this.inputCobroAmount.addEventListener('change', () => this.updateCobroCartonButtonState());
+      this.inputCobroAmount.addEventListener('keyup', () => this.updateCobroCartonButtonState());
     }
     if (this.btnCobroBack) {
       this.btnCobroBack.addEventListener('click', () => {
@@ -1422,12 +1414,12 @@ const agentModule = {
     }
   },
 
-  updateCobroInvoiceButtonState() {
-    if (!this.btnCobroInvoice) return;
+  updateCobroCartonButtonState() {
+    if (!this.btnCobroCarton) return;
     if (!this.currentClient) {
-      this.btnCobroInvoice.disabled = true;
-      this.btnCobroInvoice.style.cursor = 'not-allowed';
-      this.btnCobroInvoice.style.opacity = '0.5';
+      this.btnCobroCarton.disabled = true;
+      this.btnCobroCarton.style.cursor = 'not-allowed';
+      this.btnCobroCarton.style.opacity = '0.5';
       return;
     }
 
@@ -1436,13 +1428,13 @@ const agentModule = {
 
     // Regla simple y reactiva: Si el cliente tiene deuda activa (outstanding > 0) y hay un monto válido (>0 o ingresándose), se habilita.
     if (outstanding > 0 && (!this.inputCobroAmount || (!isNaN(amountVal) && amountVal > 0) || this.inputCobroAmount.value === '')) {
-      this.btnCobroInvoice.disabled = false;
-      this.btnCobroInvoice.style.cursor = 'pointer';
-      this.btnCobroInvoice.style.opacity = '1';
+      this.btnCobroCarton.disabled = false;
+      this.btnCobroCarton.style.cursor = 'pointer';
+      this.btnCobroCarton.style.opacity = '1';
     } else {
-      this.btnCobroInvoice.disabled = true;
-      this.btnCobroInvoice.style.cursor = 'not-allowed';
-      this.btnCobroInvoice.style.opacity = '0.5';
+      this.btnCobroCarton.disabled = true;
+      this.btnCobroCarton.style.cursor = 'not-allowed';
+      this.btnCobroCarton.style.opacity = '0.5';
     }
   },
 
@@ -1484,7 +1476,7 @@ const agentModule = {
       }
     }
 
-    this.updateCobroInvoiceButtonState();
+    this.updateCobroCartonButtonState();
   },
 
   async searchClient() {
@@ -1597,9 +1589,9 @@ const agentModule = {
     if (this.isLoadingPayment) return;
     this.isLoadingPayment = true;
 
-    if (this.btnCobroInvoice) {
-      this.btnCobroInvoice.disabled = true;
-      this.btnCobroInvoice.innerHTML = 'Procesando...';
+    if (this.btnInvoiceConfirm) {
+      this.btnInvoiceConfirm.disabled = true;
+      this.btnInvoiceConfirm.innerHTML = 'Procesando...';
     }
 
     try {
@@ -1615,6 +1607,7 @@ const agentModule = {
       // Búsqueda de la primera cuota pendiente
       if (!firstPending) {
         alert('⚠️ El cliente no tiene cuotas pendientes por cobrar.');
+        if (this.cobroInvoiceModal) this.cobroInvoiceModal.style.display = 'none';
         return;
       }
 
@@ -1622,6 +1615,7 @@ const agentModule = {
 
       if (firstPending.isFuture && hasPaidRecordToday) {
         alert('Operación denegada: Ya se adelantó una cuota individual hoy. Use Pago Masivo para adelantar más días, o espere a mañana.');
+        if (this.cobroInvoiceModal) this.cobroInvoiceModal.style.display = 'none';
         return;
       }
 
@@ -1640,6 +1634,11 @@ const agentModule = {
       // Si llega aquí, es porque NO hubo error en Supabase
       this.captureAndSendLocation();
 
+      // Cerrar Modal de Factura / Ticket al tener éxito
+      if (this.cobroInvoiceModal) {
+        this.cobroInvoiceModal.style.display = 'none';
+      }
+
       // Forzar re-render descargando las cuotas nuevamente (El Fix visual)
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       this.currentClient = updatedClient;
@@ -1648,12 +1647,7 @@ const agentModule = {
         this.inputCobroAmount.value = '';
       }
       
-      await this.searchClient(); // Recarga y repinta el cartón completo ANTES del alert
-
-      // Evaluar estado general del cliente para la alerta dinámica
-      const allPayments = await window.BulaPayDB.getPaymentsByClient(updatedClient.cedula);
-      const updatedDailyStatusList = window.BulaPayDB.getDailyPaymentStatus(updatedClient, allPayments);
-      const hasOverdue = updatedDailyStatusList.some(s => s.isOverdue);
+      await this.searchClient(); // Recarga y repinta los datos completos
 
       // Mostrar modal obligatorio SMS para notificar el pago
       this.showMandatorySmsPrompt(updatedClient, 'payment');
@@ -1663,10 +1657,11 @@ const agentModule = {
       alert('Error REAL: ' + (e.message || 'Fallo desconocido al registrar el pago.'));
     } finally {
       this.isLoadingPayment = false;
-      if (this.btnCobroInvoice) {
-        this.btnCobroInvoice.innerHTML = 'Confirmar Pago';
+      if (this.btnInvoiceConfirm) {
+        this.btnInvoiceConfirm.disabled = false;
+        this.btnInvoiceConfirm.innerHTML = 'Pagar';
       }
-      this.updateCobroInvoiceButtonState();
+      this.updateCobroCartonButtonState();
     }
   },
 
