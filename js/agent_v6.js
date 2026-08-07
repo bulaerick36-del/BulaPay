@@ -252,13 +252,21 @@ const agentModule = {
     }
 
     // Botones Flujo Doble (Factura y Cartón)
-    if (this.btnCobroCarton) {
-      this.btnCobroCarton.addEventListener('click', () => this.handleInvoiceRequest());
+    if (this.btnCobroInvoice) {
+      this.btnCobroInvoice.addEventListener('click', () => this.handleInvoiceRequest());
     }
     if (this.inputCobroAmount) {
-      this.inputCobroAmount.addEventListener('input', () => this.updateCobroCartonButtonState());
-      this.inputCobroAmount.addEventListener('change', () => this.updateCobroCartonButtonState());
-      this.inputCobroAmount.addEventListener('keyup', () => this.updateCobroCartonButtonState());
+      this.inputCobroAmount.addEventListener('input', () => this.updateCobroInvoiceButtonState());
+      this.inputCobroAmount.addEventListener('change', () => this.updateCobroInvoiceButtonState());
+      this.inputCobroAmount.addEventListener('keyup', () => this.updateCobroInvoiceButtonState());
+    }
+    if (this.btnCobroCarton) {
+      this.btnCobroCarton.addEventListener('click', () => {
+        if (this.cobroInputState && this.cobroCartonState) {
+          this.cobroInputState.style.setProperty('display', 'none', 'important');
+          this.cobroCartonState.style.setProperty('display', 'block', 'important');
+        }
+      });
     }
     if (this.btnCobroBack) {
       this.btnCobroBack.addEventListener('click', () => {
@@ -1414,27 +1422,27 @@ const agentModule = {
     }
   },
 
-  updateCobroCartonButtonState() {
-    if (!this.btnCobroCarton) return;
+  updateCobroInvoiceButtonState() {
+    if (!this.btnCobroInvoice) return;
     if (!this.currentClient) {
-      this.btnCobroCarton.disabled = true;
-      this.btnCobroCarton.style.cursor = 'not-allowed';
-      this.btnCobroCarton.style.opacity = '0.5';
+      this.btnCobroInvoice.disabled = true;
+      this.btnCobroInvoice.style.cursor = 'not-allowed';
+      this.btnCobroInvoice.style.opacity = '0.5';
       return;
     }
 
     const outstanding = Number(this.currentClient.outstanding || 0);
     const amountVal = this.inputCobroAmount ? parseFloat(this.inputCobroAmount.value) : 0;
 
-    // Regla simple y reactiva: Si el cliente tiene deuda activa (outstanding > 0) y hay un monto válido (>0 o ingresándose), se habilita.
+    // Regla simple y reactiva: Si el cliente tiene deuda activa (outstanding > 0) y el monto es mayor a 0 (o ingresándose), el atajo se HABILITA.
     if (outstanding > 0 && (!this.inputCobroAmount || (!isNaN(amountVal) && amountVal > 0) || this.inputCobroAmount.value === '')) {
-      this.btnCobroCarton.disabled = false;
-      this.btnCobroCarton.style.cursor = 'pointer';
-      this.btnCobroCarton.style.opacity = '1';
+      this.btnCobroInvoice.disabled = false;
+      this.btnCobroInvoice.style.cursor = 'pointer';
+      this.btnCobroInvoice.style.opacity = '1';
     } else {
-      this.btnCobroCarton.disabled = true;
-      this.btnCobroCarton.style.cursor = 'not-allowed';
-      this.btnCobroCarton.style.opacity = '0.5';
+      this.btnCobroInvoice.disabled = true;
+      this.btnCobroInvoice.style.cursor = 'not-allowed';
+      this.btnCobroInvoice.style.opacity = '0.5';
     }
   },
 
@@ -1476,7 +1484,7 @@ const agentModule = {
       }
     }
 
-    this.updateCobroCartonButtonState();
+    this.updateCobroInvoiceButtonState();
   },
 
   async searchClient() {
@@ -1661,7 +1669,7 @@ const agentModule = {
         this.btnInvoiceConfirm.disabled = false;
         this.btnInvoiceConfirm.innerHTML = 'Pagar';
       }
-      this.updateCobroCartonButtonState();
+      this.updateCobroInvoiceButtonState();
     }
   },
 
