@@ -2719,7 +2719,7 @@ const agentModule = {
     btn.style.display = 'inline-flex';
 
     try {
-      const clients = await window.BulaPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
@@ -2729,12 +2729,20 @@ const agentModule = {
           .map(p => p.clientCedula)
       );
 
-      const totalClientsCount = clients.length;
+      const activeClients = allClients.filter(c => {
+        const outstanding = Number(c.outstanding || 0);
+        const amount = Number(c.amount || 0);
+        const totalDebt = Number(c.totalDebt || 0);
+        const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+        const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
+        return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isLiquidadoStatus;
+      });
+
+      const totalClientsCount = activeClients.length;
       let paidClientsCount = 0;
 
-      clients.forEach(c => {
-        const isCancelled = Number(c.outstanding) <= 0;
-        if (todayPaymentsMap.has(c.cedula) || isCancelled) {
+      activeClients.forEach(c => {
+        if (todayPaymentsMap.has(c.cedula)) {
           paidClientsCount++;
         }
       });
@@ -2783,7 +2791,7 @@ const agentModule = {
     modal.style.display = 'flex';
 
     try {
-      const clients = await window.BulaPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
@@ -2793,8 +2801,18 @@ const agentModule = {
           .map(p => p.clientCedula)
       );
 
+      // Excluir estrictamente clientes con cartón liquidado o cancelado (outstanding <= 0)
+      const clients = allClients.filter(c => {
+        const outstanding = Number(c.outstanding || 0);
+        const amount = Number(c.amount || 0);
+        const totalDebt = Number(c.totalDebt || 0);
+        const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+        const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
+        return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isLiquidadoStatus;
+      });
+
       if (clients.length === 0) {
-        content.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No tiene clientes asignados hoy.</p>';
+        content.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No tiene clientes activos pendientes de cobro.</p>';
         return;
       }
 
