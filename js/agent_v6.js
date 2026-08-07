@@ -1344,6 +1344,11 @@ const agentModule = {
   async processMassPayment() {
     if (!this.selectedInstallments || this.selectedInstallments.length === 0) return;
     
+    if (this.selectedInstallments.length < 2) {
+      alert('Operación denegada: El Pago Masivo requiere seleccionar 2 o más cuotas. Para pagos individuales, espere a mañana.');
+      return;
+    }
+    
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
     const todayStr = this.getLocalDateString();
     
@@ -1431,6 +1436,16 @@ const agentModule = {
       return;
     }
 
+    // Bloqueo Inteligente: Si el cliente YA hizo un pago físico hoy, se deshabilita el atajo directo (en gris)
+    if (this.hasPaidRecordToday) {
+      this.btnCobroInvoice.disabled = true;
+      this.btnCobroInvoice.style.cursor = 'not-allowed';
+      this.btnCobroInvoice.style.opacity = '0.5';
+      this.btnCobroInvoice.title = 'Ya existe un pago registrado hoy. Use Registrar Pago para ir al Cartón (Pago Masivo).';
+      return;
+    }
+
+    this.btnCobroInvoice.title = '';
     const outstanding = Number(this.currentClient.outstanding || 0);
     const amountVal = this.inputCobroAmount ? parseFloat(this.inputCobroAmount.value) : 0;
 
@@ -1531,6 +1546,8 @@ const agentModule = {
         try {
           const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
           const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+          const todayStr = this.getLocalDateString();
+          this.hasPaidRecordToday = payments ? payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago') : false;
           
           // Re-evaluar estado del botón Liquidar Cartón y Confirmar Pago
           this.updateCobroViewState(client);
