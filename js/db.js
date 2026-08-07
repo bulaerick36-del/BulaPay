@@ -1205,15 +1205,6 @@ const db = {
       });
     }
 
-    // Configurar el generador de fechas adelantadas (advancedDate)
-    let advancedDate = null;
-    if (maxPaymentDateStr) {
-      const parts = maxPaymentDateStr.split('-');
-      if (parts.length === 3) {
-        advancedDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      }
-    }
-
     const dailyStatus = [];
     const totalInstallments = client.installmentsCount || 30; // Mostrar todo el cartón
     
@@ -1246,29 +1237,6 @@ const db = {
         const parts = finalDateStr.split('-');
         if (parts.length === 3) {
           finalDateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-        }
-      } else {
-        // REGLA DE ADELANTO: Si es una cuota pendiente y hubo pagos anteriores
-        if (!hasPaid && advancedDate) {
-          // Mirar cuál sería el siguiente día hábil adelantado
-          let peekDate = new Date(advancedDate);
-          peekDate.setDate(peekDate.getDate() + 1);
-          while (peekDate.getDay() === 0) {
-            peekDate.setDate(peekDate.getDate() + 1);
-          }
-          
-          const advYear = peekDate.getFullYear();
-          const advMonth = String(peekDate.getMonth() + 1).padStart(2, '0');
-          const advDay = String(peekDate.getDate()).padStart(2, '0');
-          const advDateStr = `${advYear}-${advMonth}-${advDay}`;
-          
-          // Solo usamos y consumimos el espacio adelantado si mejora (acerca) la fecha de la cuota
-          if (advDateStr < mathDateStr) {
-            finalDateStr = advDateStr;
-            finalDateObj = new Date(advYear, advMonth - 1, advDay);
-            // Confirmamos que consumimos este día
-            advancedDate = peekDate;
-          }
         }
       }
 

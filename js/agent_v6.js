@@ -1600,6 +1600,13 @@ const agentModule = {
         return;
       }
 
+      const hasPaidRecordToday = payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago');
+
+      if (firstPending.isFuture && hasPaidRecordToday) {
+        alert('Operación denegada: Ya se adelantó una cuota individual hoy. Use Pago Masivo para adelantar más días, o espere a mañana.');
+        return;
+      }
+
       // Ejecución del pago apuntando a la primera cuota pendiente
       const newPayment = {
         clientCedula: this.currentClient.cedula,
@@ -1682,6 +1689,14 @@ const agentModule = {
     const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
     const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
     const firstPending = dailyStatusList.find(s => !s.hasPaid);
+
+    const todayStr = this.getLocalDateString();
+    const hasPaidRecordToday = payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago');
+
+    if (firstPending && firstPending.isFuture && hasPaidRecordToday) {
+      alert('Operación denegada: Ya se adelantó una cuota individual hoy. Use Pago Masivo para adelantar más días, o espere a mañana.');
+      return;
+    }
 
     if (status.isFuture) {
       // Excepción de Días Futuros: SIEMPRE permitir cobrar la primera cuota pendiente
