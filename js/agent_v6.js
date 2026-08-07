@@ -1504,21 +1504,16 @@ const agentModule = {
           // Re-evaluar estado del botón Liquidar Cartón
           this.updateCobroViewState(client);
 
-          // Lógica Candado Inteligente: Excepción para Morosos
+          // Habilitar botón de Confirmar Pago si tiene deuda activa
           if (this.btnCobroInvoice) {
-            const hasOverdue = dailyStatusList.some(s => s.isOverdue);
-            const todayStr = this.getLocalDateString();
-            const paidToday = payments.some(p => p.date === todayStr);
-            const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
-
-            if (!cuotaDeHoy || cuotaDeHoy.hasPaid || (!hasOverdue && paidToday)) {
-              this.btnCobroInvoice.disabled = true;
-              this.btnCobroInvoice.style.cursor = 'not-allowed';
-              this.btnCobroInvoice.style.opacity = '0.5';
-            } else {
+            if (Number(client.outstanding) > 0) {
               this.btnCobroInvoice.disabled = false;
               this.btnCobroInvoice.style.cursor = 'pointer';
               this.btnCobroInvoice.style.opacity = '1';
+            } else {
+              this.btnCobroInvoice.disabled = true;
+              this.btnCobroInvoice.style.cursor = 'not-allowed';
+              this.btnCobroInvoice.style.opacity = '0.5';
             }
           }
 
@@ -1597,23 +1592,18 @@ const agentModule = {
       const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
       
       const todayStr = this.getLocalDateString();
-      const cuotaDeHoy = dailyStatusList.find(c => c.dateStr === todayStr);
+      const firstPending = dailyStatusList.find(c => !c.hasPaid);
 
-      // 1. Búsqueda Única y Exclusiva (HOY)
-      if (!cuotaDeHoy) {
-        return; // Detiene el proceso si no hay cuota exacta para hoy
+      // Búsqueda de la primera cuota pendiente
+      if (!firstPending) {
+        alert('⚠️ El cliente no tiene cuotas pendientes por cobrar.');
+        return;
       }
 
-      // 2. El Mensaje de Servicio (Bloqueo de Futuro)
-      if (cuotaDeHoy.hasPaid) {
-        alert('No puede pagar el día de hoy porque ya está pago. Lo invitamos a ponerse al día con sus cuotas atrasadas.');
-        return; // Aborta la transacción
-      }
-
-      // 3. Ejecución del pago apuntando EXCLUSIVAMENTE a la cuota de hoy
+      // Ejecución del pago apuntando a la primera cuota pendiente
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        installmentNumber: cuotaDeHoy.dayNumber,
+        installmentNumber: firstPending.dayNumber,
         amount: amount,
         date: todayStr,
         agentName: currentUser.name,
@@ -1689,9 +1679,16 @@ const agentModule = {
       return;
     }
     
+    const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+    const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+    const firstPending = dailyStatusList.find(s => !s.hasPaid);
+
     if (status.isFuture) {
-      alert('Operación denegada: No se puede registrar pagos en días futuros. Active el modo Pago Masivo para adelantar pagos.');
-      return;
+      // Excepción de Días Futuros: SIEMPRE permitir cobrar la primera cuota pendiente
+      if (!firstPending || status.dayNumber !== firstPending.dayNumber) {
+        alert('Operación denegada: Solo se puede cobrar la primera cuota pendiente o activar el modo Pago Masivo para adelantar múltiples pagos.');
+        return;
+      }
     }
 
     // Confirmación nativa
@@ -2683,7 +2680,8 @@ const agentModule = {
       let paidClientsCount = 0;
 
       clients.forEach(c => {
-        if (todayPaymentsMap.has(c.cedula)) {
+        const isCancelled = Number(c.outstanding) <= 0;
+        if (todayPaymentsMap.has(c.cedula) || isCancelled) {
           paidClientsCount++;
         }
       });
@@ -2752,14 +2750,10 @@ const agentModule = {
         let htmlContent = '';
         clients.forEach(c => {
           const hasPaidRecordToday = todayPaymentsMap.has(c.cedula);
-          
           const isCancelled = Number(c.outstanding) <= 0;
-          const clientPayments = allPayments.filter(p => String(p.clientCedula) === String(c.cedula));
-          const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(c, clientPayments);
-          const todayStatus = dailyStatusList.find(s => s.isToday);
-          const hasPaidTodayQuota = todayStatus ? todayStatus.hasPaid : false;
           
-          const hasPaid = isCancelled || hasPaidRecordToday || hasPaidTodayQuota;
+          // Estado real de cobro: Solo es 'Pagó' si existe recibo registrado hoy o si el préstamo está cancelado
+          const hasPaid = isCancelled || hasPaidRecordToday;
 
           const clientCreatedAt = c.created_at ? new Date(c.created_at) : new Date(0);
           const msIn24Hours = 24 * 60 * 60 * 1000;
