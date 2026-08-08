@@ -782,12 +782,14 @@ const db = {
 
     // 3. Limpiar pagos del cartón anterior para que el nuevo cartón inicie 100% en blanco / pendiente
     try {
-      await supabase
-        .from('payments')
-        .delete()
-        .eq('clientCedula', clientId);
+      await supabase.from('payments').delete().eq('clientCedula', String(clientId));
     } catch (e) {
-      console.warn("Omitiendo borrado de pagos anteriores:", e.message);
+      console.warn("Omitiendo borrado por clientCedula:", e.message);
+    }
+    try {
+      await supabase.from('payments').delete().eq('client_cedula', String(clientId));
+    } catch (e) {
+      console.warn("Omitiendo borrado por client_cedula:", e.message);
     }
 
     // 4. Actualizar la información activa en la tabla 'clients' con el nuevo crédito/cartón
@@ -829,7 +831,8 @@ const db = {
           agentName: payload.agent_id || 'Sistema',
           agent_id: payload.agent_id,
           status: 'Pendiente',
-          supervisor_id: supId
+          supervisor_id: supId,
+          created_at: nowIso
         });
       }
 
@@ -1228,10 +1231,18 @@ const db = {
     const pendingRecordsMap = new Map();
 
     if (payments) {
-      const clientCreatedDateStr = client.created_at ? new Date(client.created_at).toISOString().split('T')[0] : null;
+      const clientCreatedTime = client.created_at ? new Date(client.created_at).getTime() : 0;
       payments.forEach(p => {
-        const pDateStr = p.date ? String(p.date).split('T')[0] : '';
-        const isFromOlderCarton = clientCreatedDateStr && pDateStr && pDateStr < clientCreatedDateStr;
+        let pTime = 0;
+        if (p.created_at) {
+          pTime = new Date(p.created_at).getTime();
+        } else if (p.date) {
+          const dStr = String(p.date).trim();
+          pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
+        }
+
+        // Si el pago pertenece a un cartón anterior (creado antes del nuevo crédito) o es un registro de liquidación, se excluye obligatoriamente
+        const isFromOlderCarton = clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000);
         const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || p.status === 'Liquidado_Pagado' || p.status === 'Liquidado_Mora';
 
         if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidationRecord && !isFromOlderCarton) {
@@ -1242,7 +1253,7 @@ const db = {
             }
           }
         }
-        if (p.status === 'Pendiente') {
+        if (p.status === 'Pendiente' && !isFromOlderCarton) {
           pendingRecordsMap.set(Number(p.installmentNumber), p.date);
         }
       });
