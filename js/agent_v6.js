@@ -2530,6 +2530,7 @@ const agentModule = {
     const debtInput = document.getElementById('new-client-debt');
     const installmentsInput = document.getElementById('new-client-installments');
     const installmentValInput = document.getElementById('new-client-installment-val');
+    const netCashInput = document.getElementById('new-client-net-cash');
 
     if (!capitalInput || !interestInput || !debtInput || !installmentsInput || !installmentValInput) return;
 
@@ -2540,6 +2541,32 @@ const agentModule = {
     const cbPapeleria = document.getElementById('new-client-discount-reason-papeleria');
     const cbOtros = document.getElementById('new-client-discount-reason-otros');
     const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
+
+    const formatNumber = (num) => {
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    };
+
+    const calculate = () => {
+      const capitalRaw = capitalInput.value.replace(/\./g, '');
+      const capital = parseFloat(capitalRaw) || 0;
+      const interest = parseFloat(interestInput.value) || 0;
+      const installments = parseInt(installmentsInput.value) || 1;
+
+      const totalDebt = Math.round(capital + (capital * (interest / 100)));
+      const installmentVal = Math.round(totalDebt / installments);
+
+      debtInput.value = totalDebt ? formatNumber(totalDebt) : "";
+      installmentValInput.value = installmentVal ? formatNumber(installmentVal) : "";
+
+      // Recáclulo reactivo de Efectivo a Entregar (Capital - Descuento Inicial)
+      const discountRaw = (discountCheckbox && discountCheckbox.checked && discountAmountInput) ? discountAmountInput.value.replace(/\./g, '') : '0';
+      const discountVal = parseFloat(discountRaw) || 0;
+      const netCash = Math.max(0, capital - discountVal);
+
+      if (netCashInput) {
+        netCashInput.value = (capital > 0 || discountVal > 0) ? `$${formatNumber(netCash)}` : "";
+      }
+    };
 
     if (discountCheckbox && discountPanel) {
       discountCheckbox.addEventListener('change', (e) => {
@@ -2559,6 +2586,7 @@ const agentModule = {
             inputOtrosText.value = '';
           }
         }
+        calculate();
       });
     }
 
@@ -2575,23 +2603,6 @@ const agentModule = {
       });
     }
 
-    const formatNumber = (num) => {
-      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-    };
-
-    const calculate = () => {
-      const capitalRaw = capitalInput.value.replace(/\./g, '');
-      const capital = parseFloat(capitalRaw) || 0;
-      const interest = parseFloat(interestInput.value) || 0;
-      const installments = parseInt(installmentsInput.value) || 1;
-
-      const totalDebt = Math.round(capital + (capital * (interest / 100)));
-      const installmentVal = Math.round(totalDebt / installments);
-
-      debtInput.value = totalDebt ? formatNumber(totalDebt) : "";
-      installmentValInput.value = installmentVal ? formatNumber(installmentVal) : "";
-    };
-
     capitalInput.addEventListener('input', (e) => {
       let val = e.target.value.replace(/\D/g, '');
       e.target.value = val ? formatNumber(val) : '';
@@ -2602,6 +2613,7 @@ const agentModule = {
       discountAmountInput.addEventListener('input', (e) => {
         let val = e.target.value.replace(/\D/g, '');
         e.target.value = val ? formatNumber(val) : '';
+        calculate();
       });
     }
 
@@ -2871,11 +2883,13 @@ const agentModule = {
       };
     }
 
-    // Botón 3: Renovar (Azul) -> Liquida crédito actual y redirige a Registro pre-llenando datos
+    // Botón 3: Renovar (Azul) -> Liquida crédito actual, redirige a Registro pre-llenando datos y auto-descuento
     if (btnRenew) {
       btnRenew.onclick = async () => {
         modal.style.display = 'none';
         try {
+          const oldOutstanding = Number(client.outstanding || 0);
+
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: 'Liquidado_Pagado',
@@ -2884,6 +2898,7 @@ const agentModule = {
           
           this.switchTab('register');
 
+          // 1. Datos Personales
           const inputName = document.getElementById('new-client-name');
           const inputCedula = document.getElementById('new-client-cedula');
           const inputPhone = document.getElementById('new-client-phone');
@@ -2892,7 +2907,37 @@ const agentModule = {
           if (inputCedula) inputCedula.value = client.cedula || '';
           if (inputPhone) inputPhone.value = client.phone || '';
 
-          alert(`🔄 Cartón anterior de ${client.name} liquidado. Procede a registrar el nuevo crédito de renovación.`);
+          // 2. Auto-Descuento de Deuda Vieja
+          const discountCheckbox = document.getElementById('new-client-apply-discount');
+          const discountPanel = document.getElementById('new-client-discount-panel');
+          const discountAmountInput = document.getElementById('new-client-discount-amount');
+          const cbOtros = document.getElementById('new-client-discount-reason-otros');
+          const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
+
+          if (discountCheckbox) {
+            discountCheckbox.checked = true;
+            if (discountPanel) discountPanel.style.display = 'flex';
+            if (discountAmountInput) {
+              discountAmountInput.required = true;
+              discountAmountInput.value = oldOutstanding ? oldOutstanding.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '0';
+            }
+            if (cbOtros) {
+              cbOtros.checked = true;
+              if (inputOtrosText) {
+                inputOtrosText.style.display = 'block';
+                inputOtrosText.required = true;
+                inputOtrosText.value = 'Saldo Cartón Anterior (Renovación)';
+              }
+            }
+          }
+
+          // 3. Forzar recálculo reactivo de Efectivo a Entregar
+          const capitalInput = document.getElementById('new-client-capital');
+          if (capitalInput) {
+            capitalInput.dispatchEvent(new Event('input'));
+          }
+
+          alert(`🔄 Cartón anterior de ${client.name} liquidado. Se pre-llenaron los datos del cliente y un descuento automático de $${oldOutstanding.toLocaleString('es-CO')} por la deuda anterior.`);
         } catch (e) {
           console.error("Error al renovar cartón:", e);
           alert('Error al procesar renovación: ' + (e.message || e));
