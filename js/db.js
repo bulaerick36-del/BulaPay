@@ -1393,16 +1393,17 @@ const db = {
 
       const capitalInyectadoNeto = Math.round(totalInjected + totalAdditions - totalExpenses);
 
-      // 2. Suma de Descuentos/Seguros retenidos y Ganancias Reales de cartones liquidados
+      // 2. Suma de Descuentos/Seguros retenidos, Ganancias Reales de cartones liquidados por pago y Pérdidas de Capital por Mora
       const clients = await this.getClients();
       let totalDiscounts = 0;
       let totalGananciasLiquidadas = 0;
+      let totalPerdidasMora = 0;
 
       const payments = await this.getPayments();
       const paymentsByClientMap = new Map();
       payments.forEach(p => {
-        if (p.status !== 'Pendiente') {
-          const ced = String(p.clientCedula);
+        if (p.status !== 'Pendiente' && p.status !== 'No Pago' && String(p.status || '').toUpperCase() !== 'LIQUIDADO_MORA') {
+          const ced = String(p.clientCedula || p.client_cedula || p.cedula || '');
           const currentSum = paymentsByClientMap.get(ced) || 0;
           paymentsByClientMap.set(ced, currentSum + Math.round(parseFloat(p.amount) || 0));
         }
@@ -1415,23 +1416,31 @@ const db = {
           const discount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
           totalDiscounts += discount;
 
-          // Ganancias reales de cartones liquidados por PAGO (excluyendo mora/lista negra)
           const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
           const isMoroso = c.risk === 'Rojo' || 
                            String(c.risk || '').trim().toLowerCase() === 'rojo' || 
                            rawStatus.includes('MORA') || 
                            rawStatus.includes('NEGRA');
-          const isLiquidadoPagado = !isMoroso && (rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || Number(c.outstanding || 0) === 0);
 
-          if (isLiquidadoPagado) {
-            const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
-            if (gananciaRegistrada > 0) {
-              totalGananciasLiquidadas += Math.round(gananciaRegistrada);
-            } else {
-              const cedula = String(c.cedula);
-              const totalPagado = paymentsByClientMap.get(cedula) || 0;
-              const capitalPrestadoOriginal = Math.round(Number(c.original_amount || c.amount || c.capital_prestado || 0));
-              if (totalPagado > capitalPrestadoOriginal && capitalPrestadoOriginal > 0) {
+          const cedula = String(c.cedula);
+          const totalPagado = paymentsByClientMap.get(cedula) || 0;
+          const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
+          const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+          const capitalPrestadoOriginal = amountPuro > 0 ? amountPuro : (totalDebt > 0 ? Math.round(totalDebt / 1.2) : 0);
+
+          if (isMoroso) {
+            // Regla Contable: Al liquidar un crédito por mora (risk === 'Rojo'),
+            // el capital inicial prestado no recuperado se resta contablemente del patrimonio/Capital Base.
+            const capitalPerdidoNeto = Math.max(0, capitalPrestadoOriginal - totalPagado);
+            totalPerdidasMora += capitalPerdidoNeto;
+          } else {
+            const isLiquidadoPagado = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || Number(c.outstanding || 0) === 0;
+
+            if (isLiquidadoPagado) {
+              const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
+              if (gananciaRegistrada > 0) {
+                totalGananciasLiquidadas += Math.round(gananciaRegistrada);
+              } else if (totalPagado > capitalPrestadoOriginal && capitalPrestadoOriginal > 0) {
                 totalGananciasLiquidadas += (totalPagado - capitalPrestadoOriginal);
               }
             }
@@ -1439,9 +1448,8 @@ const db = {
         }
       });
 
-      // PATRIMONIO = Inyecciones Netas + Seguros Retenidos + Ganancias de Cartones Liquidados
-      // REGLA ESTRICTA: NUNCA se le resta el capital de préstamos activos.
-      const patrimonio = Math.round(capitalInyectadoNeto + totalDiscounts + totalGananciasLiquidadas);
+      // PATRIMONIO = Inyecciones Netas + Seguros Retenidos + Ganancias de Cartones Liquidados - Pérdidas Reales de Capital por Mora
+      const patrimonio = Math.round(capitalInyectadoNeto + totalDiscounts + totalGananciasLiquidadas - totalPerdidasMora);
       return patrimonio;
     } catch (err) {
       console.error('Error fetching real base capital (Patrimonio):', err);
