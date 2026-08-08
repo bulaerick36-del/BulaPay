@@ -1542,6 +1542,8 @@ const db = {
 
         let remainingDebt = Math.max(0, totalDebt - currentPaidTotal);
 
+        const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
+
         for (let i = 1; i <= installmentsCount; i++) {
           if (!existingMap.has(i)) {
             const paymentAmount = Math.min(installmentAmount, remainingDebt);
@@ -1555,7 +1557,7 @@ const db = {
               date: todayStr,
               agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
               agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
-              status: 'Pagado',
+              status: isMora ? 'Liquidado_Mora' : 'Pagado',
               signature: `BulaPay-SIG-${cedula}-LIQ-${i}`,
               supervisor_id: supId
             });
@@ -1579,7 +1581,8 @@ const db = {
     }
 
     const updatePayload = {
-      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde'
+      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde',
+      status: isMora ? 'Liquidado_Mora' : 'Liquidado'
     };
 
     if (isPaid) {
@@ -1743,7 +1746,20 @@ const db = {
         return `${yyyy}-${mm}-${dd}`;
       };
 
-      // Cobrado hoy
+      // Mapa/Set de cédulas de clientes en Lista Negra / Mora (risk === 'Rojo')
+      const blacklistedCedulas = new Set(
+        clients
+          .filter(c => {
+            const rawStatus = String(c.status || c.estado || '').toUpperCase();
+            return c.risk === 'Rojo' || 
+                   String(c.risk || '').trim().toLowerCase() === 'rojo' || 
+                   rawStatus.includes('NEGRA') || 
+                   rawStatus.includes('MORA');
+          })
+          .map(c => String(c.cedula))
+      );
+
+      // Cobrado hoy (EXCLUYENDO transacciones de clientes en Lista Negra o liquidaciones por mora)
       const todaysPayments = payments.filter(p => {
          if (!p.date) return false;
          const pDate = getCleanDateStr(p.date);
@@ -1758,8 +1774,18 @@ const db = {
                 (agentNameLower && pAgentNameLower === agentNameLower) ||
                 (supId && p.supervisor_id === supId)
               );
-         const isRealPayment = p.status !== 'Pendiente';
-         return isToday && isMine && isRealPayment;
+         const isRealPayment = p.status !== 'Pendiente' && p.status !== 'No Pago';
+
+         const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
+         const isBlacklistedClient = blacklistedCedulas.has(pCedula);
+
+         const pStatusUpper = String(p.status || '').toUpperCase();
+         const isMoraPayment = pStatusUpper.includes('MORA') || 
+                               pStatusUpper.includes('LIQUIDADO_MORA') || 
+                               pStatusUpper.includes('NEGRA') ||
+                               (p.id && String(p.id).startsWith('pay_liq_') && isBlacklistedClient);
+
+         return isToday && isMine && isRealPayment && !isBlacklistedClient && !isMoraPayment;
       });
       
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));

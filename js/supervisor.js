@@ -3031,16 +3031,32 @@ const supervisorModule = {
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
-      // Filtrar cobros globales de hoy
-      const todayPayments = allPayments.filter(p => 
-        p.date === todayStr && 
-        Number(p.amount) > 0 && 
-        p.status !== 'No Pago'
+      const allClients = await window.BulaPayDB.getClients();
+      const blacklistedCedulas = new Set(
+        allClients
+          .filter(c => {
+            const rawStatus = String(c.status || c.estado || '').toUpperCase();
+            return c.risk === 'Rojo' || String(c.risk || '').trim().toLowerCase() === 'rojo' || rawStatus.includes('NEGRA') || rawStatus.includes('MORA');
+          })
+          .map(c => String(c.cedula))
       );
+
+      // Filtrar cobros globales de hoy (excluyendo lista negra y mora)
+      const todayPayments = allPayments.filter(p => {
+        const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
+        const pStatusUpper = String(p.status || '').toUpperCase();
+        const isMoraPayment = pStatusUpper.includes('MORA') || pStatusUpper.includes('NEGRA') || (p.id && String(p.id).startsWith('pay_liq_') && blacklistedCedulas.has(pCedula));
+
+        return p.date === todayStr && 
+               Number(p.amount) > 0 && 
+               p.status !== 'No Pago' &&
+               p.status !== 'Pendiente' &&
+               !isMoraPayment &&
+               !blacklistedCedulas.has(pCedula);
+      });
       const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
       // Obtener clientes creados hoy globalmente
-      const allClients = await window.BulaPayDB.getClients();
       const todayClients = allClients.filter(c => {
         if (!c.created_at) return false;
         const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
@@ -3187,17 +3203,33 @@ const supervisorModule = {
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
-      // Filtrar cobros del agente específico para hoy
-      const todayPayments = allPayments.filter(p => 
-        p.date === todayStr && 
-        Number(p.amount) > 0 && 
-        p.status !== 'No Pago' &&
-        p.agentName && p.agentName.toLowerCase().trim() === agentName.toLowerCase().trim()
+      const allClients = await window.BulaPayDB.getClients();
+      const blacklistedCedulas = new Set(
+        allClients
+          .filter(c => {
+            const rawStatus = String(c.status || c.estado || '').toUpperCase();
+            return c.risk === 'Rojo' || String(c.risk || '').trim().toLowerCase() === 'rojo' || rawStatus.includes('NEGRA') || rawStatus.includes('MORA');
+          })
+          .map(c => String(c.cedula))
       );
+
+      // Filtrar cobros del agente específico para hoy (excluyendo lista negra y mora)
+      const todayPayments = allPayments.filter(p => {
+        const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
+        const pStatusUpper = String(p.status || '').toUpperCase();
+        const isMoraPayment = pStatusUpper.includes('MORA') || pStatusUpper.includes('NEGRA') || (p.id && String(p.id).startsWith('pay_liq_') && blacklistedCedulas.has(pCedula));
+
+        return p.date === todayStr && 
+               Number(p.amount) > 0 && 
+               p.status !== 'No Pago' &&
+               p.status !== 'Pendiente' &&
+               !isMoraPayment &&
+               !blacklistedCedulas.has(pCedula) &&
+               p.agentName && p.agentName.toLowerCase().trim() === agentName.toLowerCase().trim();
+      });
       const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
       // Obtener clientes de hoy asociados al ID del agente activo
-      const allClients = await window.BulaPayDB.getClients();
       const todayClients = allClients.filter(c => {
         if (!c.created_at) return false;
         const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
