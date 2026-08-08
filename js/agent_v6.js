@@ -2898,14 +2898,29 @@ const agentModule = {
           
           this.switchTab('register');
 
-          // 1. Datos Personales
+          // 1. Datos Personales y Ubicación
           const inputName = document.getElementById('new-client-name');
           const inputCedula = document.getElementById('new-client-cedula');
           const inputPhone = document.getElementById('new-client-phone');
+          const inputDept = document.getElementById('new-client-department');
+          const inputCity = document.getElementById('new-client-city');
+          const inputZone = document.getElementById('new-client-zone');
           
           if (inputName) inputName.value = client.name || '';
           if (inputCedula) inputCedula.value = client.cedula || '';
           if (inputPhone) inputPhone.value = client.phone || '';
+          if (inputZone) inputZone.value = client.zone || client.barrio || client.direccion || client.address || '';
+
+          if (inputDept && (client.department || client.departamento)) {
+            const targetDept = client.department || client.departamento;
+            inputDept.value = targetDept;
+            inputDept.dispatchEvent(new Event('change'));
+            
+            if (inputCity && (client.city || client.ciudad || client.municipio)) {
+              const targetCity = client.city || client.ciudad || client.municipio;
+              inputCity.value = targetCity;
+            }
+          }
 
           // 2. Auto-Descuento de Deuda Vieja
           const discountCheckbox = document.getElementById('new-client-apply-discount');
