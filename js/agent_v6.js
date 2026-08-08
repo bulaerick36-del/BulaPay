@@ -970,8 +970,8 @@ const agentModule = {
           const badClients = clients.filter(c => {
             const isMyClient = !c.agent_id || c.agent_id === agentId || c.routeId === currentUser.routeId;
             const statusUpper = String(c.status || '').toUpperCase();
-            const isMoroso = statusUpper === 'LIQUIDADO_MORA' || statusUpper === 'MOROSO' || c.risk === 'Rojo';
-            return isMyClient && isMoroso && Number(c.outstanding) > 0;
+            const isMoroso = statusUpper.includes('MORA') || statusUpper.includes('NEGRA') || c.risk === 'Rojo';
+            return isMyClient && isMoroso;
           });
           
           if (badClients.length === 0) {
@@ -980,18 +980,21 @@ const agentModule = {
           }
           
           // Renderizar lista negra
-          container.innerHTML = badClients.map(c => `
+          container.innerHTML = badClients.map(c => {
+            const moraDebt = Number(c.mora_outstanding || c.outstanding || c.totalDebt || c.amount || 0);
+            return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
               <div>
                 <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${c.name}</h4>
                 <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">CC: ${c.cedula} | ${c.city || ''} ${c.zone ? '(' + c.zone + ')' : ''}</p>
-                <span style="font-size: 0.72rem; color: #ef4444; font-weight: 600;">Estado: Liquidado por Mora (Default)</span>
+                <span style="font-size: 0.72rem; color: #ef4444; font-weight: 600;">Estado: Liquidado por Mora (Lista Negra)</span>
               </div>
               <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">
-                Deuda: $${Number(c.outstanding).toLocaleString('es-CO')}
+                Deuda en Calle: $${moraDebt.toLocaleString('es-CO')}
               </span>
             </div>
-          `).join('');
+            `;
+          }).join('');
           
         } catch (e) {
           console.error("Error al cargar Lista Negra:", e);
