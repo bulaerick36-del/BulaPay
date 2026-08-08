@@ -1566,7 +1566,6 @@ const db = {
     // 3. Resetear saldos numéricos a 0 en la tabla clients al liquidar (pagado o por mora) y almacenar ganancia real
     const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
     const updatePayload = {
-      status: status,
       risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde'
     };
 
