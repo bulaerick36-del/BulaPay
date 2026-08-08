@@ -1455,7 +1455,6 @@ const db = {
 
       clients.forEach(c => {
         const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
-        const moraOutstanding = Math.round(Number(c.mora_outstanding || 0));
         const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
         const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
         const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
@@ -1463,10 +1462,10 @@ const db = {
 
         if (isMoroso) {
           // Reglas de Negocio Lista Negra / Mora:
-          // 1. Mantener en Cartera en Calle: NO restar el saldo pendiente de la métrica global (el dinero físicamente sigue afuera)
-          const debtInStreet = moraOutstanding > 0 ? moraOutstanding : (outstanding > 0 ? outstanding : totalDebt);
+          // 1. Mantener en Cartera en Calle: NO restar el saldo pendiente de la métrica global
+          const debtInStreet = outstanding > 0 ? outstanding : totalDebt;
           carteraEnCalle += debtInStreet;
-          // 2. Restar Posible Ganancia: Se perdió la ganancia/interés esperada de este moroso (sumar 0 a posibleGanancia)
+          // 2. Restar Posible Ganancia: Se perdió la ganancia/interés esperada de este moroso
         } else if (outstanding > 0) {
           carteraEnCalle += outstanding;
           const interesCredito = Math.max(0, totalDebt - amount);
@@ -1573,27 +1572,19 @@ const db = {
       }
     }
 
-    // 3. Resetear saldos numéricos a 0 en la tabla clients al liquidar (pagado o por mora) y almacenar ganancia/deuda
+    // 3. Resetear saldos numéricos a 0 en la tabla clients al liquidar (pagado o por mora)
     const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
-    let moraOutstanding = 0;
-    if (isMora && clientData) {
-      moraOutstanding = Math.round(Number(clientData.outstanding || clientData.totalDebt || 0));
-    }
 
     const updatePayload = {
-      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde',
-      status: isMora ? 'Liquidado_Mora' : 'Liquidado'
+      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde'
     };
 
-    if (isPaid) {
+    if (isPaid || isMora) {
       updatePayload.outstanding = 0;
-      updatePayload.totalDebt = 0;
-      updatePayload.amount = 0;
-      if (gananciaReal > 0) updatePayload.liquidated_profit = gananciaReal;
-      if (originalAmount > 0) updatePayload.original_amount = originalAmount;
-    } else if (isMora) {
-      updatePayload.outstanding = 0;
-      if (moraOutstanding > 0) updatePayload.mora_outstanding = moraOutstanding;
+      if (isPaid) {
+        updatePayload.totalDebt = 0;
+        updatePayload.amount = 0;
+      }
     } else if (outstanding !== undefined) {
       updatePayload.outstanding = Math.round(Number(outstanding || 0));
     }

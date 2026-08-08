@@ -981,7 +981,7 @@ const agentModule = {
           
           // Renderizar lista negra
           container.innerHTML = badClients.map(c => {
-            const moraDebt = Number(c.mora_outstanding || c.outstanding || c.totalDebt || c.amount || 0);
+            const moraDebt = Number(c.outstanding || c.totalDebt || c.amount || 0);
             return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
               <div>
