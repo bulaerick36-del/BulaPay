@@ -1394,7 +1394,18 @@ const db = {
       const capitalInyectadoNeto = Math.round(totalInjected + totalAdditions - totalExpenses);
 
       // 2. Suma de Descuentos/Seguros retenidos, Ganancias Reales de cartones liquidados por pago y Pérdidas de Capital por Mora
-      const clients = await this.getClients();
+      const rawClients = await this.getClients();
+      
+      // Deduplicar estrictamente por cédula de cliente para evitar procesamiento duplicado
+      const clientsMap = new Map();
+      rawClients.forEach(c => {
+        if (c && c.cedula) {
+          const ced = String(c.cedula).trim();
+          if (!clientsMap.has(ced)) clientsMap.set(ced, c);
+        }
+      });
+      const clients = Array.from(clientsMap.values());
+
       let totalDiscounts = 0;
       let totalGananciasLiquidadas = 0;
       let totalPerdidasMora = 0;
@@ -1403,7 +1414,7 @@ const db = {
       const paymentsByClientMap = new Map();
       payments.forEach(p => {
         if (p.status !== 'Pendiente' && p.status !== 'No Pago' && String(p.status || '').toUpperCase() !== 'LIQUIDADO_MORA') {
-          const ced = String(p.clientCedula || p.client_cedula || p.cedula || '');
+          const ced = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
           const currentSum = paymentsByClientMap.get(ced) || 0;
           paymentsByClientMap.set(ced, currentSum + Math.round(parseFloat(p.amount) || 0));
         }
@@ -1422,16 +1433,17 @@ const db = {
                            rawStatus.includes('MORA') || 
                            rawStatus.includes('NEGRA');
 
-          const cedula = String(c.cedula);
+          const cedula = String(c.cedula).trim();
           const totalPagado = paymentsByClientMap.get(cedula) || 0;
           const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
           const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-          const capitalPrestadoOriginal = amountPuro > 0 ? amountPuro : (totalDebt > 0 ? Math.round(totalDebt / 1.2) : 0);
+          
+          // Capital principal del crédito (monto prestado sin intereses)
+          const capitalPrincipal = amountPuro > 0 ? amountPuro : (totalDebt > 0 ? Math.round(totalDebt / 1.2) : 0);
 
           if (isMoroso) {
-            // Regla Contable: Al liquidar un crédito por mora (risk === 'Rojo'),
-            // el capital inicial prestado no recuperado se resta contablemente del patrimonio/Capital Base.
-            const capitalPerdidoNeto = Math.max(0, capitalPrestadoOriginal - totalPagado);
+            // Regla Contable Estricta: Restar única y exclusivamente el capital principal del moroso (sin intereses), descontando abonos previos
+            const capitalPerdidoNeto = Math.max(0, capitalPrincipal - totalPagado);
             totalPerdidasMora += capitalPerdidoNeto;
           } else {
             const isLiquidadoPagado = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || Number(c.outstanding || 0) === 0;
@@ -1440,8 +1452,8 @@ const db = {
               const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
               if (gananciaRegistrada > 0) {
                 totalGananciasLiquidadas += Math.round(gananciaRegistrada);
-              } else if (totalPagado > capitalPrestadoOriginal && capitalPrestadoOriginal > 0) {
-                totalGananciasLiquidadas += (totalPagado - capitalPrestadoOriginal);
+              } else if (totalPagado > capitalPrincipal && capitalPrincipal > 0) {
+                totalGananciasLiquidadas += (totalPagado - capitalPrincipal);
               }
             }
           }
@@ -1460,7 +1472,17 @@ const db = {
   async getDashboardFinancialMetrics(routeId) {
     try {
       // Consultar clientes de la ruta desde la tabla clients
-      const clients = await this.getClients();
+      const rawClients = await this.getClients();
+
+      // Deduplicar estrictamente por cédula de cliente
+      const clientsMap = new Map();
+      rawClients.forEach(c => {
+        if (c && c.cedula) {
+          const ced = String(c.cedula).trim();
+          if (!clientsMap.has(ced)) clientsMap.set(ced, c);
+        }
+      });
+      const clients = Array.from(clientsMap.values());
 
       let carteraEnCalle = 0; // Suma de outstanding ÚNICAMENTE de clientes ACTIVOS (NO Lista Negra) con saldo pendiente
       let posibleGanancia = 0; // Suma de ganancia esperada (totalDebt - amount) ÚNICAMENTE de clientes ACTIVOS con outstanding > 0
