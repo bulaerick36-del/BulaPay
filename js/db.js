@@ -780,7 +780,18 @@ const db = {
       console.warn("Omitiendo inserción secundaria en 'credits':", e.message);
     }
 
-    // 3. Actualizar la información activa en la tabla 'clients' con el nuevo crédito/cartón
+    // 3. Limpiar pagos del cartón anterior para que el nuevo cartón inicie 100% en blanco / pendiente
+    try {
+      await supabase
+        .from('payments')
+        .delete()
+        .eq('clientCedula', clientId);
+    } catch (e) {
+      console.warn("Omitiendo borrado de pagos anteriores:", e.message);
+    }
+
+    // 4. Actualizar la información activa en la tabla 'clients' con el nuevo crédito/cartón
+    const nowIso = new Date().toISOString();
     await supabase.from('clients').update({
       name: payload.name,
       phone: payload.phone,
@@ -797,10 +808,37 @@ const db = {
       agent_id: payload.agent_id,
       supervisor_id: payload.supervisor_id,
       risk: 'Verde',
-      created_at: new Date().toISOString()
+      created_at: nowIso
     }).eq('cedula', clientId);
+
+    // 5. Insertar los registros iniciales de las cuotas del nuevo cartón obligatoriamente con status: 'Pendiente'
+    try {
+      const installmentsCount = Number(payload.installmentsCount || 30);
+      const installmentAmount = Math.round(Number(payload.installmentAmount || (payload.totalDebt / installmentsCount)));
+      const todayStr = nowIso.split('T')[0];
+      const supId = this.getSupervisorId();
+      const initialPendingPayments = [];
+
+      for (let i = 1; i <= installmentsCount; i++) {
+        initialPendingPayments.push({
+          id: 'pay_init_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          clientCedula: clientId,
+          installmentNumber: i,
+          amount: installmentAmount,
+          date: todayStr,
+          agentName: payload.agent_id || 'Sistema',
+          agent_id: payload.agent_id,
+          status: 'Pendiente',
+          supervisor_id: supId
+        });
+      }
+
+      await supabase.from('payments').insert(initialPendingPayments);
+    } catch (e) {
+      console.warn("Inserción inicial de cuotas pendientes:", e.message);
+    }
     
-    return { ...payload, cedula: clientId };
+    return { ...payload, cedula: clientId, created_at: nowIso };
   },
 
   async getCommerceBuyers() {
@@ -1190,8 +1228,13 @@ const db = {
     const pendingRecordsMap = new Map();
 
     if (payments) {
+      const clientCreatedDateStr = client.created_at ? new Date(client.created_at).toISOString().split('T')[0] : null;
       payments.forEach(p => {
-        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente') {
+        const pDateStr = p.date ? String(p.date).split('T')[0] : '';
+        const isFromOlderCarton = clientCreatedDateStr && pDateStr && pDateStr < clientCreatedDateStr;
+        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || p.status === 'Liquidado_Pagado' || p.status === 'Liquidado_Mora';
+
+        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidationRecord && !isFromOlderCarton) {
           paidInstallments.add(Number(p.installmentNumber));
           if (p.date) {
             if (!maxPaymentDateStr || p.date > maxPaymentDateStr) {
