@@ -1095,30 +1095,38 @@ const agentModule = {
       this.historyError.style.display = 'none';
       this.historyClientName.textContent = client.name;
 
-      // Calcular riesgo dinámico basado en pagos
-      try {
-        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
-        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
-        
-        if (Number(client.outstanding) === 0) {
-          client.risk = 'Verde';
-        } else if (overdueCount >= 3) {
-          client.risk = 'Rojo';
-        } else if (overdueCount > 0) {
-          client.risk = 'Amarillo';
-        } else {
-          client.risk = 'Verde';
+      // Evaluación de riesgo incondicional si el cliente está en Lista Negra (risk === 'Rojo')
+      const isDbBlacklisted = client.risk === 'Rojo' || 
+                              String(client.risk || '').trim().toLowerCase() === 'rojo' || 
+                              String(client.status || client.estado || '').toUpperCase().includes('NEGRA') || 
+                              String(client.status || client.estado || '').toUpperCase().includes('MORA');
+
+      if (isDbBlacklisted) {
+        client.risk = 'Rojo';
+      } else {
+        // Calcular riesgo dinámico basado en pagos solo si NO está en Lista Negra
+        try {
+          const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+          const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+          const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
+          
+          if (overdueCount >= 3) {
+            client.risk = 'Rojo';
+          } else if (overdueCount > 0) {
+            client.risk = 'Amarillo';
+          } else {
+            client.risk = 'Verde';
+          }
+        } catch (e) {
+          console.error("Error al calcular riesgo dinámico en historial:", e);
         }
-      } catch (e) {
-        console.error("Error al calcular riesgo dinámico en historial:", e);
       }
 
       const hasOutstanding = Number(client.outstanding) > 0;
       
       if (client.risk === 'Rojo') {
         this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo)';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Mal Cliente / Lista Negra)';
       } else if (client.risk === 'Amarillo') {
         this.historyTrafficLight.className = 'traffic-light-header amarillo';
         this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
@@ -1473,11 +1481,32 @@ const agentModule = {
     const rawStatus = String(client.status || client.estado || '').trim().toUpperCase();
     const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
 
-    // Condición: El cliente no tiene deuda activa si outstanding <= 0 o sus saldos numéricos son 0 o su estado es liquidado
-    const isWithoutActiveDebt = (outstanding <= 0 || (amount <= 0 && totalDebt <= 0) || isLiquidadoStatus);
+    const isBlacklisted = client.risk === 'Rojo' || 
+                          String(client.risk || '').trim().toLowerCase() === 'rojo' || 
+                          rawStatus.includes('MORA') || 
+                          rawStatus.includes('NEGRA');
 
     const cobroFormFields = document.getElementById('cobro-form-fields');
     const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');
+    const cobroBlacklistBanner = document.getElementById('cobro-blacklist-banner');
+
+    // RENDERIZADO CONDICIONAL DE MÁXIMA PRIORIDAD: Cliente en Lista Negra (risk === 'Rojo')
+    if (isBlacklisted) {
+      if (cobroFormFields) cobroFormFields.style.setProperty('display', 'none', 'important');
+      if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
+      if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'block', 'important');
+
+      if (this.btnLiquidarCarton) {
+        this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
+      }
+      this.updateCobroInvoiceButtonState();
+      return;
+    } else {
+      if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'none', 'important');
+    }
+
+    // Condición: El cliente no tiene deuda activa si outstanding <= 0 o sus saldos numéricos son 0 o su estado es liquidado
+    const isWithoutActiveDebt = (outstanding <= 0 || (amount <= 0 && totalDebt <= 0) || isLiquidadoStatus);
 
     if (isWithoutActiveDebt) {
       // 1. Ocultar el formulario de cobro (monto y botón de confirmar pago)
@@ -1833,24 +1862,31 @@ const agentModule = {
     if (this.detailOutstanding) this.detailOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
     if (this.detailInstallment) this.detailInstallment.textContent = `$${Number(client.installmentAmount).toLocaleString('es-CO')}`;
     
-    // Calcular riesgo dinámico basado en pagos
+    // Preservar riesgo si el cliente está en Lista Negra (risk === 'Rojo')
     let dailyStatusList = [];
-    try {
-      const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
-      dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-      const overdueCount = dailyStatusList.filter(s => s.isOverdue).length;
-      
-      if (Number(client.outstanding) === 0) {
-        client.risk = 'Verde';
-      } else if (overdueCount >= 3) {
-        client.risk = 'Rojo';
-      } else if (overdueCount > 0) {
-        client.risk = 'Amarillo';
-      } else {
-        client.risk = 'Verde';
+    const isDbBlacklistedDetail = client.risk === 'Rojo' || 
+                                  String(client.risk || '').trim().toLowerCase() === 'rojo' || 
+                                  String(client.status || client.estado || '').toUpperCase().includes('NEGRA') || 
+                                  String(client.status || client.estado || '').toUpperCase().includes('MORA');
+
+    if (isDbBlacklistedDetail) {
+      client.risk = 'Rojo';
+    } else {
+      try {
+        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+        const overdueCount = dailyStatusList.filter(s => s.isOverdue).length;
+        
+        if (overdueCount >= 3) {
+          client.risk = 'Rojo';
+        } else if (overdueCount > 0) {
+          client.risk = 'Amarillo';
+        } else {
+          client.risk = 'Verde';
+        }
+      } catch (e) {
+        console.error("Error al calcular riesgo dinámico en renderClientInfo:", e);
       }
-    } catch (e) {
-      console.error("Error al calcular riesgo dinámico en renderClientInfo:", e);
     }
 
     // Semáforo de Riesgo
@@ -1865,7 +1901,7 @@ const agentModule = {
         if (this.riskStatus) this.riskStatus.textContent = '🟡 Pago con Retrasos (Riesgo Medio)';
       } else if (client.risk === 'Rojo') {
         this.riskHeader.classList.add('rojo');
-        if (this.riskStatus) this.riskStatus.textContent = '🔴 Cartera Castigada (Alto Riesgo)';
+        if (this.riskStatus) this.riskStatus.textContent = '🔴 ROJO (Mal Cliente / Lista Negra)';
       }
     }
 
