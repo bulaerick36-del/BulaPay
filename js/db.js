@@ -1415,11 +1415,15 @@ const db = {
           const discount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
           totalDiscounts += discount;
 
-          // Ganancias reales de cartones liquidados
+          // Ganancias reales de cartones liquidados por PAGO (excluyendo mora/lista negra)
           const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-          const isLiquidado = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || Number(c.outstanding || 0) === 0;
+          const isMoroso = c.risk === 'Rojo' || 
+                           String(c.risk || '').trim().toLowerCase() === 'rojo' || 
+                           rawStatus.includes('MORA') || 
+                           rawStatus.includes('NEGRA');
+          const isLiquidadoPagado = !isMoroso && (rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || Number(c.outstanding || 0) === 0);
 
-          if (isLiquidado) {
+          if (isLiquidadoPagado) {
             const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
             if (gananciaRegistrada > 0) {
               totalGananciasLiquidadas += Math.round(gananciaRegistrada);
@@ -1450,26 +1454,28 @@ const db = {
       // Consultar clientes de la ruta desde la tabla clients
       const clients = await this.getClients();
 
-      let carteraEnCalle = 0; // Suma de outstanding ÚNICAMENTE de clientes con saldo pendiente
-      let posibleGanancia = 0; // Suma de ganancia esperada (totalDebt - amount) ÚNICAMENTE de clientes con outstanding > 0
+      let carteraEnCalle = 0; // Suma de outstanding ÚNICAMENTE de clientes ACTIVOS (NO Lista Negra) con saldo pendiente
+      let posibleGanancia = 0; // Suma de ganancia esperada (totalDebt - amount) ÚNICAMENTE de clientes ACTIVOS con outstanding > 0
 
       clients.forEach(c => {
-        const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
-        const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
-        const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-        const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-        const isMoroso = c.risk === 'Rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA');
+        const belongsToUser = routeId ? (c.routeId === routeId) : true;
+        if (belongsToUser) {
+          const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
+          const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
+          const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+          const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+          const isMoroso = c.risk === 'Rojo' || 
+                           String(c.risk || '').trim().toLowerCase() === 'rojo' || 
+                           rawStatus.includes('MORA') || 
+                           rawStatus.includes('NEGRA');
 
-        if (isMoroso) {
-          // Reglas de Negocio Lista Negra / Mora:
-          // 1. Mantener en Cartera en Calle: NO restar el saldo pendiente de la métrica global
-          const debtInStreet = outstanding > 0 ? outstanding : totalDebt;
-          carteraEnCalle += debtInStreet;
-          // 2. Restar Posible Ganancia: Se perdió la ganancia/interés esperada de este moroso
-        } else if (outstanding > 0) {
-          carteraEnCalle += outstanding;
-          const interesCredito = Math.max(0, totalDebt - amount);
-          posibleGanancia += interesCredito;
+          // Regla: Si el cliente fue enviado a Lista Negra (isMoroso) o no tiene deuda activa (outstanding <= 0),
+          // SE EXCLUYE por completo de Cartera en Calle y Posible Ganancia.
+          if (!isMoroso && outstanding > 0) {
+            carteraEnCalle += outstanding;
+            const interesCredito = Math.max(0, totalDebt - amount);
+            posibleGanancia += interesCredito;
+          }
         }
       });
 
