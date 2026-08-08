@@ -2862,23 +2862,40 @@ const agentModule = {
       };
     }
 
-    // Botón 2: Liquidar y enviar a Lista Negra (Rojo)
+    // Botón 2: Liquidar y enviar a Lista Negra (Rojo) - Operación Atómica en DB
     if (btnBlacklist) {
       btnBlacklist.onclick = async () => {
-        modal.style.display = 'none';
         try {
-          const outstanding = Number(client.outstanding || 0);
+          btnBlacklist.disabled = true;
+          btnBlacklist.innerHTML = 'Procesando...';
+
+          // 1. Ejecutar Update DB y esperar respuesta OK de Supabase
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: 'Liquidado_Mora',
-            outstanding: outstanding
+            outstanding: 0
           });
-          alert(`⚠️ El cliente ${client.name} ha sido enviado a Lista Negra (Moroso) con deuda no pagada de $${outstanding.toLocaleString('es-CO')}.`);
+
+          // 2. Limpieza y Recarga Local SOLO si la DB responde OK
+          modal.style.display = 'none';
+
+          this.currentClient = null;
+          if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
+          if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
+          if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+
+          // Recargar lista global de clientes y vista de seguimiento diario
+          await this.updateRouteTracking();
           await this.renderFinancialDashboard();
-          await this.searchClient();
+
+          // 3. Notificación de éxito
+          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora) y removido de la ruta de cobro.`);
         } catch (e) {
           console.error("Error al enviar a Lista Negra:", e);
-          alert('Error al liquidar y enviar a Lista Negra: ' + (e.message || e));
+          alert('❌ ERROR EN BASE DE DATOS: No se pudo enviar a Lista Negra. ' + (e.message || e));
+        } finally {
+          btnBlacklist.disabled = false;
+          btnBlacklist.innerHTML = '⛔ Liquidar y enviar a Lista Negra';
         }
       };
     }

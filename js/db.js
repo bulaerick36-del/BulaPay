@@ -1563,18 +1563,19 @@ const db = {
       }
     }
 
-    // 3. Resetear saldos numéricos exactamente a 0 en la tabla clients y almacenar ganancia real
+    // 3. Resetear saldos numéricos a 0 en la tabla clients al liquidar (pagado o por mora) y almacenar ganancia real
+    const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
     const updatePayload = {
       status: status,
-      risk: (status === 'Liquidado_Mora' || status === 'MOROSO') ? 'Rojo' : 'Verde'
+      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde'
     };
 
-    if (isPaid) {
+    if (isPaid || isMora) {
       updatePayload.outstanding = 0;
       updatePayload.totalDebt = 0;
       updatePayload.amount = 0;
-      if (gananciaReal > 0) updatePayload.liquidated_profit = gananciaReal;
-      if (originalAmount > 0) updatePayload.original_amount = originalAmount;
+      if (isPaid && gananciaReal > 0) updatePayload.liquidated_profit = gananciaReal;
+      if (isPaid && originalAmount > 0) updatePayload.original_amount = originalAmount;
     } else if (outstanding !== undefined) {
       updatePayload.outstanding = Math.round(Number(outstanding || 0));
     }
@@ -1584,7 +1585,10 @@ const db = {
       .update(updatePayload)
       .eq('cedula', String(cedula));
       
-    if (clientErr) console.error("Error al liquidar cliente en Supabase:", clientErr);
+    if (clientErr) {
+      console.error("Error al liquidar cliente en Supabase:", clientErr);
+      throw new Error(`Error Supabase: ${clientErr.message || clientErr.details || JSON.stringify(clientErr)}`);
+    }
 
     // 4. Actualizar tabla credits si aplica
     try {
