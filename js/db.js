@@ -1625,7 +1625,10 @@ const db = {
             const capitalPerdidoNeto = Math.max(0, capitalPrincipal - totalPagado);
             totalPerdidasMora += capitalPerdidoNeto;
           } else {
-            const isLiquidadoPagado = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || Number(c.outstanding || 0) === 0;
+            const isLiquidadoPagado = rawStatus.includes('LIQUIDADO_PAGADO') || 
+                                      (rawStatus.includes('LIQUIDADO') && !rawStatus.includes('MORA')) || 
+                                      (rawStatus.includes('CANCELAD')) ||
+                                      (Number(c.outstanding || 0) === 0 && rawStatus !== 'ACTIVO');
 
             if (isLiquidadoPagado) {
               const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
@@ -1639,11 +1642,12 @@ const db = {
         }
       });
 
-      // REGLA DE SEGURIDAD Y AUDITORÍA: El Capital Base jamás debe ser inferior al capital inyectado neto original
+      // FÓRMULA CONTABLE ESTRICTA:
+      // Capital Base (Patrimonio) = Capital Inyectado Neto + Ingresos Retenidos (Seguro/Papelería) + Ganancias Reales Liquidadas - Pérdidas Reales por Mora
       const patrimonioCalculado = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas - totalPerdidasMora);
       const patrimonioFinal = Math.max(capitalInyectadoNeto, patrimonioCalculado);
 
-      console.log('[AUDITORÍA FINANCIERA CAPITAL BASE]', {
+      console.log('[AUDITORÍA FINANCIERA CAPITAL BASE ESTRICTO]', {
         routeId,
         capitalInyectadoNeto,
         totalRetainedFees,
