@@ -1477,49 +1477,16 @@ const db = {
       return Math.round(explicitRetained);
     }
 
-    // 2. Si existen campos explícitos de seguro / papeleria en el objeto c
-    const explicitSeg = Math.round(parseFloat(c.seguro || c.segVal || c.val_seguro) || 0);
-    const explicitPap = Math.round(parseFloat(c.papeleria || c.papVal || c.val_papeleria || c.software) || 0);
+    // 2. SOLO sumar los valores numéricos explícitos de segVal/papVal (o seguro/papelería/software) en el objeto c
+    const explicitSeg = Math.round(parseFloat(c.segVal || c.seguro || c.val_seguro) || 0);
+    const explicitPap = Math.round(parseFloat(c.papVal || c.papeleria || c.val_papeleria || c.software) || 0);
     if (explicitSeg > 0 || explicitPap > 0) {
       return explicitSeg + explicitPap;
     }
 
-    const totalDiscount = Math.round(parseFloat(c.discount_amount || c.descuento) || 0);
-    if (totalDiscount <= 0) return 0;
-
-    const reason = String(c.discount_reason || c.motivo_descuento || '').toLowerCase().trim();
-    // REGLA ESTRICTA: Si no hay un motivo explícito que especifique Seguro o Papelería, NO ES INGRESO RETENIDO -> Retornar 0!
-    if (!reason) return 0;
-
-    let retainedSum = 0;
-    let foundExplicitFee = false;
-
-    // Extraer Seguro ($X.XXX) o Seguro ($X)
-    const seguroMatch = reason.match(/seguro\s*\(\$?\s*([\d\.]+)\)/i);
-    if (seguroMatch && seguroMatch[1]) {
-      retainedSum += parseFloat(seguroMatch[1].replace(/\./g, '')) || 0;
-      foundExplicitFee = true;
-    }
-
-    // Extraer Papelería/Software ($X.XXX) o Papelería ($X)
-    const papeleriaMatch = reason.match(/papeler[íi]a(?:[^\$]*)\(\$?\s*([\d\.]+)\)/i);
-    if (papeleriaMatch && papeleriaMatch[1]) {
-      retainedSum += parseFloat(papeleriaMatch[1].replace(/\./g, '')) || 0;
-      foundExplicitFee = true;
-    }
-
-    if (foundExplicitFee) {
-      return Math.min(totalDiscount, Math.round(retainedSum));
-    }
-
-    // Si el motivo menciona Seguro o Papelería explícitamente sin monto en paréntesis, y NO menciona cruces/saldo anterior
-    const mentionsFee = reason.includes('seguro') || reason.includes('papeler') || reason.includes('software');
-    const mentionsRollover = reason.includes('saldo') || reason.includes('deuda anterior') || reason.includes('renovaci') || reason.includes('cruce') || reason.includes('otros');
-
-    if (mentionsFee && !mentionsRollover && totalDiscount <= 50000) {
-      return totalDiscount;
-    }
-
+    // FALLBACK ESTRICTO SOLICITADO (CERO TOLERANCIA):
+    // Si no existen campos numéricos explícitos de seguro/papelería/retained_amount, RETORNAR 0.
+    // NUNCA leer discount_reason ni discount_amount para evitar refinanciaciones o saldos anteriores falsos.
     return 0;
   },
 
@@ -1532,22 +1499,23 @@ const db = {
       const rawInjections = await this.getCapitalInjections(routeId);
       const uniqueInjectionsMap = new Map();
       rawInjections.forEach(inj => {
-        if (inj && inj.id) {
-          if (!uniqueInjectionsMap.has(inj.id)) uniqueInjectionsMap.set(inj.id, inj);
-        } else {
-          uniqueInjectionsMap.set(JSON.stringify(inj), inj);
+        if (inj) {
+          const statusStr = String(inj.status || '').toLowerCase();
+          if (statusStr.includes('rechaz') || statusStr.includes('cancel')) return;
+          const injId = String(inj.id || (inj.routeId + '_' + inj.amount + '_' + inj.date));
+          if (!uniqueInjectionsMap.has(injId)) uniqueInjectionsMap.set(injId, inj);
         }
       });
       const injections = Array.from(uniqueInjectionsMap.values());
 
       let totalInjected = 0;
       for (const inj of injections) {
-        const belongsToUser = routeId ? (inj.routeId === routeId) : (inj.agent_id === agentId);
+        const belongsToUser = routeId ? (String(inj.routeId) === String(routeId)) : (String(inj.agent_id) === String(agentId));
         if (belongsToUser) totalInjected += Math.round(parseFloat(inj.amount) || 0);
       }
 
-      // Si no hay registros explícitos en capital_injections pero la ruta tiene capital asignado en 'routes'
-      if (totalInjected === 0 && routeId) {
+      // Solo si NO hay inyecciones registradas en la tabla capital_injections, usar route.capital como fallback
+      if (injections.length === 0 && totalInjected === 0 && routeId) {
         const route = await this.getRouteById(routeId);
         if (route && route.capital) {
           totalInjected = Math.round(parseFloat(route.capital) || 0);
