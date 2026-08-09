@@ -239,7 +239,10 @@ const agentModule = {
     // Alternancia de Pestañas
     this.tabCollect.addEventListener('click', () => this.switchTab('collect'));
     this.tabHistory.addEventListener('click', () => this.switchTab('history'));
-    this.tabRegister.addEventListener('click', () => this.switchTab('register'));
+    this.tabRegister.addEventListener('click', () => {
+      this.setRenewalMode(false);
+      this.switchTab('register');
+    });
 
     // Botón Búsqueda Cobro
     if (this.btnSearch) {
@@ -2206,36 +2209,47 @@ const agentModule = {
       const applyDiscount = document.getElementById('new-client-apply-discount')?.checked;
       let discountAmount = 0;
       let discountReason = null;
+      let segVal = 0;
+      let papVal = 0;
+      let otrVal = 0;
 
       if (applyDiscount) {
-        const segVal = document.getElementById('new-client-discount-reason-seguro')?.checked
-          ? (parseFloat(document.getElementById('new-client-discount-val-seguro')?.value.replace(/\./g, '') || '0') || 0)
-          : 0;
-        const papVal = document.getElementById('new-client-discount-reason-papeleria')?.checked
-          ? (parseFloat(document.getElementById('new-client-discount-val-papeleria')?.value.replace(/\./g, '') || '0') || 0)
-          : 0;
-        const otrVal = document.getElementById('new-client-discount-reason-otros')?.checked
-          ? (parseFloat(document.getElementById('new-client-discount-val-otros')?.value.replace(/\./g, '') || '0') || 0)
-          : 0;
+        if (this.isRenewalMode) {
+          segVal = document.getElementById('new-client-discount-reason-seguro')?.checked
+            ? (parseFloat(document.getElementById('new-client-discount-val-seguro')?.value.replace(/\./g, '') || '0') || 0)
+            : 0;
+          papVal = document.getElementById('new-client-discount-reason-papeleria')?.checked
+            ? (parseFloat(document.getElementById('new-client-discount-val-papeleria')?.value.replace(/\./g, '') || '0') || 0)
+            : 0;
+          otrVal = document.getElementById('new-client-discount-reason-otros')?.checked
+            ? (parseFloat(document.getElementById('new-client-discount-val-otros')?.value.replace(/\./g, '') || '0') || 0)
+            : 0;
 
-        const manualRaw = document.getElementById('new-client-discount-amount')?.value.replace(/\./g, '') || '0';
-        const manualVal = parseFloat(manualRaw) || 0;
+          discountAmount = Math.round(segVal + papVal + otrVal);
 
-        discountAmount = Math.round((segVal + papVal + otrVal) > 0 ? (segVal + papVal + otrVal) : manualVal);
-
-        let reasons = [];
-        if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
-          reasons.push(segVal > 0 ? `Seguro ($${segVal.toLocaleString('es-CO')})` : 'Seguro');
+          let reasons = [];
+          if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
+            reasons.push(segVal > 0 ? `Seguro ($${segVal.toLocaleString('es-CO')})` : 'Seguro');
+          }
+          if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
+            reasons.push(papVal > 0 ? `Papelería/Software ($${papVal.toLocaleString('es-CO')})` : 'Papelería o Software');
+          }
+          if (document.getElementById('new-client-discount-reason-otros')?.checked) {
+            const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Saldo Cartón Anterior (Renovación)';
+            const formatVal = otrVal > 0 ? ` ($${otrVal.toLocaleString('es-CO')})` : '';
+            reasons.push(`${otrosText}${formatVal}`);
+          }
+          discountReason = reasons.length > 0 ? reasons.join(', ') : null;
+        } else {
+          // MODO REGISTRO NORMAL: Descuento Simple General (Sin retención de seguro/papelería ni rollover)
+          const simpleRaw = document.getElementById('new-client-discount-amount-simple')?.value.replace(/\./g, '') || '0';
+          discountAmount = Math.round(parseFloat(simpleRaw) || 0);
+          const simpleReason = document.getElementById('new-client-discount-reason-simple')?.value.trim() || '';
+          discountReason = simpleReason || 'Descuento Inicial Directo';
+          segVal = 0;
+          papVal = 0;
+          otrVal = 0;
         }
-        if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
-          reasons.push(papVal > 0 ? `Papelería/Software ($${papVal.toLocaleString('es-CO')})` : 'Papelería o Software');
-        }
-        if (document.getElementById('new-client-discount-reason-otros')?.checked) {
-          const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Deuda Anterior / Otros';
-          const formatVal = otrVal > 0 ? ` ($${otrVal.toLocaleString('es-CO')})` : '';
-          reasons.push(`${otrosText}${formatVal}`);
-        }
-        discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       }
 
       const emailEl = document.getElementById('new-client-email');
@@ -2585,6 +2599,24 @@ const agentModule = {
     }
   },
 
+  setRenewalMode(isRenewal) {
+    this.isRenewalMode = !!isRenewal;
+    const simpleSection = document.getElementById('new-client-discount-simple-section');
+    const breakdownSection = document.getElementById('new-client-discount-breakdown-section');
+    const discountPanel = document.getElementById('new-client-discount-panel');
+    const discountCheckbox = document.getElementById('new-client-apply-discount');
+
+    if (simpleSection && breakdownSection) {
+      if (this.isRenewalMode) {
+        simpleSection.style.display = 'none';
+        breakdownSection.style.display = 'flex';
+      } else {
+        simpleSection.style.display = 'flex';
+        breakdownSection.style.display = 'none';
+      }
+    }
+  },
+
   initCalculator() {
     const capitalInput = document.getElementById('new-client-capital');
     const interestInput = document.getElementById('new-client-interest-percent');
@@ -2597,6 +2629,11 @@ const agentModule = {
 
     const discountCheckbox = document.getElementById('new-client-apply-discount');
     const discountPanel = document.getElementById('new-client-discount-panel');
+    const simpleSection = document.getElementById('new-client-discount-simple-section');
+    const breakdownSection = document.getElementById('new-client-discount-breakdown-section');
+    const simpleAmountInput = document.getElementById('new-client-discount-amount-simple');
+    const simpleReasonInput = document.getElementById('new-client-discount-reason-simple');
+
     const discountAmountInput = document.getElementById('new-client-discount-amount');
     const cbSeguro = document.getElementById('new-client-discount-reason-seguro');
     const valSeguroInput = document.getElementById('new-client-discount-val-seguro');
@@ -2625,14 +2662,19 @@ const agentModule = {
       // Recálculo reactivo de Total Descuentos y Efectivo a Entregar
       let totalDiscount = 0;
       if (discountCheckbox && discountCheckbox.checked) {
-        const segVal = (cbSeguro && cbSeguro.checked && valSeguroInput) ? (parseFloat(valSeguroInput.value.replace(/\./g, '')) || 0) : 0;
-        const papVal = (cbPapeleria && cbPapeleria.checked && valPapeleriaInput) ? (parseFloat(valPapeleriaInput.value.replace(/\./g, '')) || 0) : 0;
-        const otrVal = (cbOtros && cbOtros.checked && valOtrosInput) ? (parseFloat(valOtrosInput.value.replace(/\./g, '')) || 0) : 0;
-        
-        totalDiscount = segVal + papVal + otrVal;
+        if (this.isRenewalMode) {
+          const segVal = (cbSeguro && cbSeguro.checked && valSeguroInput) ? (parseFloat(valSeguroInput.value.replace(/\./g, '')) || 0) : 0;
+          const papVal = (cbPapeleria && cbPapeleria.checked && valPapeleriaInput) ? (parseFloat(valPapeleriaInput.value.replace(/\./g, '')) || 0) : 0;
+          const otrVal = (cbOtros && cbOtros.checked && valOtrosInput) ? (parseFloat(valOtrosInput.value.replace(/\./g, '')) || 0) : 0;
+          
+          totalDiscount = segVal + papVal + otrVal;
 
-        if (discountAmountInput) {
-          discountAmountInput.value = totalDiscount > 0 ? formatNumber(totalDiscount) : "";
+          if (discountAmountInput) {
+            discountAmountInput.value = totalDiscount > 0 ? formatNumber(totalDiscount) : "";
+          }
+        } else {
+          const simpleVal = simpleAmountInput ? (parseFloat(simpleAmountInput.value.replace(/\./g, '')) || 0) : 0;
+          totalDiscount = simpleVal;
         }
       }
 
@@ -2647,8 +2689,11 @@ const agentModule = {
       discountCheckbox.addEventListener('change', (e) => {
         if (e.target.checked) {
           discountPanel.style.display = 'flex';
+          this.setRenewalMode(this.isRenewalMode);
         } else {
           discountPanel.style.display = 'none';
+          if (simpleAmountInput) simpleAmountInput.value = '';
+          if (simpleReasonInput) simpleReasonInput.value = '';
           if (discountAmountInput) discountAmountInput.value = '';
           if (cbSeguro) cbSeguro.checked = false;
           if (valSeguroInput) { valSeguroInput.style.display = 'none'; valSeguroInput.value = ''; }
@@ -2658,6 +2703,14 @@ const agentModule = {
           if (inputOtrosText) { inputOtrosText.style.display = 'none'; inputOtrosText.value = ''; }
           if (valOtrosInput) { valOtrosInput.style.display = 'none'; valOtrosInput.value = ''; }
         }
+        calculate();
+      });
+    }
+
+    if (simpleAmountInput) {
+      simpleAmountInput.addEventListener('input', (e) => {
+        let val = e.target.value.replace(/\D/g, '');
+        e.target.value = val ? formatNumber(val) : '';
         calculate();
       });
     }
@@ -3036,6 +3089,7 @@ const agentModule = {
           });
           
           this.switchTab('register');
+          this.setRenewalMode(true);
 
           // 1. Datos Personales y Ubicación
           const inputName = document.getElementById('new-client-name');
