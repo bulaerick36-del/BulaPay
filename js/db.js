@@ -1470,45 +1470,53 @@ const db = {
 
   getRetainedFeesFromCredit(c) {
     if (!c) return 0;
+
+    // 1. Si existe la propiedad explícita retained_amount > 0, usarla de inmediato
     const explicitRetained = Number(c.retained_amount);
     if (!isNaN(explicitRetained) && explicitRetained > 0) {
       return Math.round(explicitRetained);
     }
 
-    const totalDiscount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
-    if (totalDiscount <= 0) return 0;
-
-    const reason = String(c.discount_reason || c.motivo_descuento || '').toLowerCase();
-    if (!reason) return totalDiscount;
-
-    const isRollover = reason.includes('saldo') || reason.includes('deuda anterior') || reason.includes('renovaci') || reason.includes('otros');
-    if (!isRollover) {
-      return totalDiscount;
+    // 2. Si existen campos explícitos de seguro / papeleria en el objeto c
+    const explicitSeg = Math.round(parseFloat(c.seguro || c.segVal || c.val_seguro) || 0);
+    const explicitPap = Math.round(parseFloat(c.papeleria || c.papVal || c.val_papeleria || c.software) || 0);
+    if (explicitSeg > 0 || explicitPap > 0) {
+      return explicitSeg + explicitPap;
     }
 
-    let retainedSum = 0;
-    let foundSpecific = false;
+    const totalDiscount = Math.round(parseFloat(c.discount_amount || c.descuento) || 0);
+    if (totalDiscount <= 0) return 0;
 
-    // Buscar Seguro ($X.XXX) o Seguro ($X)
+    const reason = String(c.discount_reason || c.motivo_descuento || '').toLowerCase().trim();
+    // REGLA ESTRICTA: Si no hay un motivo explícito que especifique Seguro o Papelería, NO ES INGRESO RETENIDO -> Retornar 0!
+    if (!reason) return 0;
+
+    let retainedSum = 0;
+    let foundExplicitFee = false;
+
+    // Extraer Seguro ($X.XXX) o Seguro ($X)
     const seguroMatch = reason.match(/seguro\s*\(\$?\s*([\d\.]+)\)/i);
     if (seguroMatch && seguroMatch[1]) {
       retainedSum += parseFloat(seguroMatch[1].replace(/\./g, '')) || 0;
-      foundSpecific = true;
+      foundExplicitFee = true;
     }
 
-    // Buscar Papelería ($X.XXX) o Papelería ($X)
+    // Extraer Papelería/Software ($X.XXX) o Papelería ($X)
     const papeleriaMatch = reason.match(/papeler[íi]a(?:[^\$]*)\(\$?\s*([\d\.]+)\)/i);
     if (papeleriaMatch && papeleriaMatch[1]) {
       retainedSum += parseFloat(papeleriaMatch[1].replace(/\./g, '')) || 0;
-      foundSpecific = true;
+      foundExplicitFee = true;
     }
 
-    if (foundSpecific) {
+    if (foundExplicitFee) {
       return Math.min(totalDiscount, Math.round(retainedSum));
     }
 
-    // Si menciona Seguro/Papelería/Software sin monto explícito en paréntesis pero hay rollover
-    if ((reason.includes('seguro') || reason.includes('papeler') || reason.includes('software')) && totalDiscount <= 50000) {
+    // Si el motivo menciona Seguro o Papelería explícitamente sin monto en paréntesis, y NO menciona cruces/saldo anterior
+    const mentionsFee = reason.includes('seguro') || reason.includes('papeler') || reason.includes('software');
+    const mentionsRollover = reason.includes('saldo') || reason.includes('deuda anterior') || reason.includes('renovaci') || reason.includes('cruce') || reason.includes('otros');
+
+    if (mentionsFee && !mentionsRollover && totalDiscount <= 50000) {
       return totalDiscount;
     }
 
@@ -1520,8 +1528,18 @@ const db = {
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
 
-      // 1. Capital Inicial Inyectado Neto (Inyecciones + Entradas de caja - Salidas/Gastos de caja)
-      const injections = await this.getCapitalInjections(routeId);
+      // 1. Capital Inicial Inyectado Neto (Inyecciones deduplicadas + Entradas de caja - Salidas/Gastos de caja)
+      const rawInjections = await this.getCapitalInjections(routeId);
+      const uniqueInjectionsMap = new Map();
+      rawInjections.forEach(inj => {
+        if (inj && inj.id) {
+          if (!uniqueInjectionsMap.has(inj.id)) uniqueInjectionsMap.set(inj.id, inj);
+        } else {
+          uniqueInjectionsMap.set(JSON.stringify(inj), inj);
+        }
+      });
+      const injections = Array.from(uniqueInjectionsMap.values());
+
       let totalInjected = 0;
       for (const inj of injections) {
         const belongsToUser = routeId ? (inj.routeId === routeId) : (inj.agent_id === agentId);
