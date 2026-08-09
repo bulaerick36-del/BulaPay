@@ -620,6 +620,7 @@ const db = {
       // Verificación estricta de tipos de datos y redondeo a entero absoluto (Payload)
       client.amount = Math.round(Number(client.amount) || 0);
       client.discount_amount = Math.round(Number(client.discount_amount) || 0);
+      client.retained_amount = Math.round(Number(client.retained_amount) || 0);
       client.totalDebt = Math.round(Number(client.totalDebt) || 0);
       client.outstanding = Math.round(Number(client.outstanding) || 0);
       client.installmentsCount = Math.round(Number(client.installmentsCount) || 1);
@@ -694,6 +695,7 @@ const db = {
           clientCedula: String(client.cedula),
           amount: client.amount,
           discount_amount: client.discount_amount || 0,
+          retained_amount: client.retained_amount || 0,
           discount_reason: client.discount_reason || null,
           totalDebt: client.totalDebt,
           outstanding: client.outstanding,
@@ -800,6 +802,7 @@ const db = {
       clientCedula: clientId,
       amount: payload.amount,
       discount_amount: payload.discount_amount || 0,
+      retained_amount: payload.retained_amount || 0,
       discount_reason: payload.discount_reason || null,
       totalDebt: payload.totalDebt,
       outstanding: payload.outstanding,
@@ -843,6 +846,7 @@ const db = {
       zone: payload.zone,
       amount: payload.amount,
       discount_amount: payload.discount_amount || 0,
+      retained_amount: payload.retained_amount || 0,
       discount_reason: payload.discount_reason || null,
       totalDebt: payload.totalDebt,
       outstanding: payload.outstanding,
@@ -1464,6 +1468,51 @@ const db = {
     return true;
   },
 
+  getRetainedFeesFromCredit(c) {
+    if (!c) return 0;
+    if (c.retained_amount !== undefined && c.retained_amount !== null && !isNaN(Number(c.retained_amount))) {
+      return Math.round(Number(c.retained_amount));
+    }
+    const totalDiscount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
+    if (totalDiscount <= 0) return 0;
+
+    const reason = String(c.discount_reason || '').toLowerCase();
+    if (!reason) return totalDiscount;
+
+    const isRollover = reason.includes('saldo') || reason.includes('deuda anterior') || reason.includes('renovaci') || reason.includes('otros');
+    if (!isRollover) {
+      return totalDiscount;
+    }
+
+    let retainedSum = 0;
+    let foundSpecific = false;
+
+    // Buscar Seguro ($X.XXX) o Seguro ($X)
+    const seguroMatch = reason.match(/seguro\s*\(\$?\s*([\d\.]+)\)/i);
+    if (seguroMatch && seguroMatch[1]) {
+      retainedSum += parseFloat(seguroMatch[1].replace(/\./g, '')) || 0;
+      foundSpecific = true;
+    }
+
+    // Buscar Papelería ($X.XXX) o Papelería ($X)
+    const papeleriaMatch = reason.match(/papeler[íi]a(?:[^\$]*)\(\$?\s*([\d\.]+)\)/i);
+    if (papeleriaMatch && papeleriaMatch[1]) {
+      retainedSum += parseFloat(papeleriaMatch[1].replace(/\./g, '')) || 0;
+      foundSpecific = true;
+    }
+
+    if (foundSpecific) {
+      return Math.min(totalDiscount, Math.round(retainedSum));
+    }
+
+    // Si menciona Seguro/Papelería/Software sin monto explícito en paréntesis pero hay rollover
+    if ((reason.includes('seguro') || reason.includes('papeler') || reason.includes('software')) && totalDiscount <= 50000) {
+      return totalDiscount;
+    }
+
+    return 0;
+  },
+
   async getRealBaseCapital(routeId) {
     try {
       const currentUser = this.getCurrentUser();
@@ -1490,20 +1539,39 @@ const db = {
 
       const capitalInyectadoNeto = Math.round(totalInjected + totalAdditions - totalExpenses);
 
-      // 2. Suma de Descuentos/Seguros retenidos, Ganancias Reales de cartones liquidados por pago y Pérdidas de Capital por Mora
+      // 2. Obtener créditos de la tabla 'credits' (historial completo) y de 'clients'
+      let creditsList = [];
+      try {
+        const supabase = await initSupabase();
+        let q = supabase.from('credits').select('*');
+        if (routeId) {
+          q = q.eq('routeId', routeId);
+        } else if (agentId) {
+          q = q.eq('agent_id', agentId);
+        }
+        const { data: creditsData } = await q;
+        if (creditsData && creditsData.length > 0) {
+          creditsList = creditsData;
+        }
+      } catch (e) {
+        console.warn("Tabla credits no disponible en getRealBaseCapital, usando clients:", e.message);
+      }
+
       const rawClients = await this.getClients();
       
-      // Deduplicar estrictamente por cédula de cliente para evitar procesamiento duplicado
-      const clientsMap = new Map();
-      rawClients.forEach(c => {
-        if (c && c.cedula) {
-          const ced = String(c.cedula).trim();
-          if (!clientsMap.has(ced)) clientsMap.set(ced, c);
-        }
-      });
-      const clients = Array.from(clientsMap.values());
+      if (creditsList.length === 0) {
+        creditsList = rawClients;
+      } else {
+        // Combinar créditos de 'credits' con cualquier cliente de 'clients' que no esté registrado aún en 'credits'
+        const existingCreditIds = new Set(creditsList.map(c => String(c.id || c.client_id || c.clientCedula || '')));
+        rawClients.forEach(c => {
+          if (c && c.cedula && !existingCreditIds.has(String(c.cedula))) {
+            creditsList.push(c);
+          }
+        });
+      }
 
-      let totalDiscounts = 0;
+      let totalRetainedFees = 0;
       let totalGananciasLiquidadas = 0;
       let totalPerdidasMora = 0;
 
@@ -1517,12 +1585,12 @@ const db = {
         }
       });
 
-      clients.forEach(c => {
+      creditsList.forEach(c => {
         const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
         if (belongsToUser || !routeId) {
-          // Seguros/retenciones cobrados
-          const discount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
-          totalDiscounts += discount;
+          // Seguros/retenciones cobrados (INGRESOS RETENIDOS A FAVOR DEL NEGOCIO - NUNCA RESTAR)
+          const retainedFee = this.getRetainedFeesFromCredit(c);
+          totalRetainedFees += Math.round(retainedFee);
 
           const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
           const isMoroso = c.risk === 'Rojo' || 
@@ -1530,16 +1598,14 @@ const db = {
                            rawStatus.includes('MORA') || 
                            rawStatus.includes('NEGRA');
 
-          const cedula = String(c.cedula).trim();
+          const cedula = String(c.client_id || c.clientCedula || c.cedula || '').trim();
           const totalPagado = paymentsByClientMap.get(cedula) || 0;
           const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
           const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
           
-          // Capital principal del crédito (monto prestado sin intereses)
           const capitalPrincipal = amountPuro > 0 ? amountPuro : (totalDebt > 0 ? Math.round(totalDebt / 1.2) : 0);
 
           if (isMoroso) {
-            // Regla Contable Estricta: Restar única y exclusivamente el capital principal del moroso (sin intereses), descontando abonos previos
             const capitalPerdidoNeto = Math.max(0, capitalPrincipal - totalPagado);
             totalPerdidasMora += capitalPerdidoNeto;
           } else {
@@ -1549,16 +1615,16 @@ const db = {
               const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
               if (gananciaRegistrada > 0) {
                 totalGananciasLiquidadas += Math.round(gananciaRegistrada);
-              } else if (totalPagado > capitalPrincipal && capitalPrincipal > 0) {
-                totalGananciasLiquidadas += (totalPagado - capitalPrincipal);
+              } else if (totalDebt > capitalPrincipal && capitalPrincipal > 0) {
+                totalGananciasLiquidadas += (totalDebt - capitalPrincipal);
               }
             }
           }
         }
       });
 
-      // PATRIMONIO = Inyecciones Netas + Seguros Retenidos + Ganancias de Cartones Liquidados - Pérdidas Reales de Capital por Mora
-      const patrimonio = Math.round(capitalInyectadoNeto + totalDiscounts + totalGananciasLiquidadas - totalPerdidasMora);
+      // PATRIMONIO = Inyecciones Netas + Ingresos Retenidos por Seguro/Papelería + Ganancias Liquidadas - Pérdidas Reales de Capital por Mora
+      const patrimonio = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas - totalPerdidasMora);
       return patrimonio;
     } catch (err) {
       console.error('Error fetching real base capital (Patrimonio):', err);
@@ -1776,7 +1842,9 @@ const db = {
 
           if (isActivo) {
             const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-            capitalPrestadoActivos += amountPuro;
+            const retainedFee = this.getRetainedFeesFromCredit(c);
+            const efectivoNetoSalido = Math.max(0, amountPuro - retainedFee);
+            capitalPrestadoActivos += efectivoNetoSalido;
             activeClientCedulas.add(String(c.cedula));
           }
         }
@@ -1956,14 +2024,14 @@ const db = {
       }
 
       let totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount) || 0), 0));
-      let totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.discount_amount) || 0), 0));
+      let totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + this.getRetainedFeesFromCredit(c), 0));
 
       if (secondaryCreditsToday.length > 0) {
         secondaryCreditsToday.forEach(sc => {
           const alreadyInClients = todaysClients.some(tc => String(tc.cedula) === String(sc.client_id));
           if (!alreadyInClients) {
             totalLent += Math.round(Number(sc.amount) || 0);
-            totalDiscounts += Math.round(Number(sc.discount_amount) || 0);
+            totalDiscounts += Math.round(this.getRetainedFeesFromCredit(sc));
           }
         });
       }
