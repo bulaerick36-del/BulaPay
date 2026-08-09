@@ -1470,13 +1470,15 @@ const db = {
 
   getRetainedFeesFromCredit(c) {
     if (!c) return 0;
-    if (c.retained_amount !== undefined && c.retained_amount !== null && !isNaN(Number(c.retained_amount))) {
-      return Math.round(Number(c.retained_amount));
+    const explicitRetained = Number(c.retained_amount);
+    if (!isNaN(explicitRetained) && explicitRetained > 0) {
+      return Math.round(explicitRetained);
     }
+
     const totalDiscount = Math.round(parseFloat(c.discount_amount || c.descuento || c.seguro) || 0);
     if (totalDiscount <= 0) return 0;
 
-    const reason = String(c.discount_reason || '').toLowerCase();
+    const reason = String(c.discount_reason || c.motivo_descuento || '').toLowerCase();
     if (!reason) return totalDiscount;
 
     const isRollover = reason.includes('saldo') || reason.includes('deuda anterior') || reason.includes('renovaci') || reason.includes('otros');
@@ -1539,7 +1541,17 @@ const db = {
 
       const capitalInyectadoNeto = Math.round(totalInjected + totalAdditions - totalExpenses);
 
-      // 2. Obtener créditos de la tabla 'credits' (historial completo) y de 'clients'
+      // 2. Obtener clientes de la tabla 'clients' (donde están la cédula, el estado actual y la gestión de riesgo)
+      const rawClients = await this.getClients();
+      const clientsMap = new Map();
+      rawClients.forEach(c => {
+        if (c && c.cedula) {
+          const ced = String(c.cedula).trim();
+          if (!clientsMap.has(ced)) clientsMap.set(ced, c);
+        }
+      });
+
+      // 3. Obtener créditos de la tabla 'credits' (historial completo de la ruta/agente)
       let creditsList = [];
       try {
         const supabase = await initSupabase();
@@ -1557,17 +1569,20 @@ const db = {
         console.warn("Tabla credits no disponible en getRealBaseCapital, usando clients:", e.message);
       }
 
-      const rawClients = await this.getClients();
-      
+      // Si no hay tabla credits o está vacía, usar clients
       if (creditsList.length === 0) {
-        creditsList = rawClients;
+        creditsList = Array.from(clientsMap.values());
       } else {
-        // Combinar créditos de 'credits' con cualquier cliente de 'clients' que no esté registrado aún en 'credits'
-        const existingCreditIds = new Set(creditsList.map(c => String(c.id || c.client_id || c.clientCedula || '')));
-        rawClients.forEach(c => {
-          if (c && c.cedula && !existingCreditIds.has(String(c.cedula))) {
-            creditsList.push(c);
-          }
+        // Enriquecer cada crédito con los datos actuales del cliente en 'clients' (si aplica)
+        creditsList = creditsList.map(c => {
+          const ced = String(c.client_id || c.clientCedula || c.cedula || '').trim();
+          const clientObj = clientsMap.get(ced);
+          return {
+            ...c,
+            clientRisk: clientObj ? clientObj.risk : c.risk,
+            clientStatus: clientObj ? clientObj.status : c.status,
+            cedula: ced
+          };
         });
       }
 
@@ -1588,15 +1603,16 @@ const db = {
       creditsList.forEach(c => {
         const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
         if (belongsToUser || !routeId) {
-          // Seguros/retenciones cobrados (INGRESOS RETENIDOS A FAVOR DEL NEGOCIO - NUNCA RESTAR)
+          // A) Seguros/retenciones cobrados (INGRESOS RETENIDOS A FAVOR DEL NEGOCIO - NUNCA RESTAR)
           const retainedFee = this.getRetainedFeesFromCredit(c);
           totalRetainedFees += Math.round(retainedFee);
 
           const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-          const isMoroso = c.risk === 'Rojo' || 
-                           String(c.risk || '').trim().toLowerCase() === 'rojo' || 
-                           rawStatus.includes('MORA') || 
-                           rawStatus.includes('NEGRA');
+          const isExplicitMoraStatus = rawStatus.includes('MORA') || rawStatus.includes('NEGRA');
+          const isCurrentClientMoroso = (Number(c.outstanding || 0) > 0 || !rawStatus.includes('LIQUIDADO')) && 
+                                        (c.clientRisk === 'Rojo' || String(c.clientRisk || '').trim().toLowerCase() === 'rojo');
+
+          const isMoroso = isExplicitMoraStatus || isCurrentClientMoroso;
 
           const cedula = String(c.client_id || c.clientCedula || c.cedula || '').trim();
           const totalPagado = paymentsByClientMap.get(cedula) || 0;
@@ -1623,9 +1639,21 @@ const db = {
         }
       });
 
-      // PATRIMONIO = Inyecciones Netas + Ingresos Retenidos por Seguro/Papelería + Ganancias Liquidadas - Pérdidas Reales de Capital por Mora
-      const patrimonio = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas - totalPerdidasMora);
-      return patrimonio;
+      // REGLA DE SEGURIDAD Y AUDITORÍA: El Capital Base jamás debe ser inferior al capital inyectado neto original
+      const patrimonioCalculado = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas - totalPerdidasMora);
+      const patrimonioFinal = Math.max(capitalInyectadoNeto, patrimonioCalculado);
+
+      console.log('[AUDITORÍA FINANCIERA CAPITAL BASE]', {
+        routeId,
+        capitalInyectadoNeto,
+        totalRetainedFees,
+        totalGananciasLiquidadas,
+        totalPerdidasMora,
+        patrimonioCalculado,
+        patrimonioFinal
+      });
+
+      return patrimonioFinal;
     } catch (err) {
       console.error('Error fetching real base capital (Patrimonio):', err);
       return 0;
