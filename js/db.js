@@ -696,6 +696,10 @@ const db = {
           amount: client.amount,
           discount_amount: client.discount_amount || 0,
           retained_amount: client.retained_amount || 0,
+          retained_fees: client.retained_fees || client.retained_amount || 0,
+          rollover_amount: client.rollover_amount || 0,
+          segVal: client.segVal || 0,
+          papVal: client.papVal || 0,
           discount_reason: client.discount_reason || null,
           totalDebt: client.totalDebt,
           outstanding: client.outstanding,
@@ -803,6 +807,10 @@ const db = {
       amount: payload.amount,
       discount_amount: payload.discount_amount || 0,
       retained_amount: payload.retained_amount || 0,
+      retained_fees: payload.retained_fees || payload.retained_amount || 0,
+      rollover_amount: payload.rollover_amount || 0,
+      segVal: payload.segVal || 0,
+      papVal: payload.papVal || 0,
       discount_reason: payload.discount_reason || null,
       totalDebt: payload.totalDebt,
       outstanding: payload.outstanding,
@@ -847,6 +855,10 @@ const db = {
       amount: payload.amount,
       discount_amount: payload.discount_amount || 0,
       retained_amount: payload.retained_amount || 0,
+      retained_fees: payload.retained_fees || payload.retained_amount || 0,
+      rollover_amount: payload.rollover_amount || 0,
+      segVal: payload.segVal || 0,
+      papVal: payload.papVal || 0,
       discount_reason: payload.discount_reason || null,
       totalDebt: payload.totalDebt,
       outstanding: payload.outstanding,
@@ -1471,22 +1483,22 @@ const db = {
   getRetainedFeesFromCredit(c) {
     if (!c) return 0;
 
-    // 1. Si existe la propiedad explícita retained_amount > 0, usarla de inmediato
-    const explicitRetained = Number(c.retained_amount);
-    if (!isNaN(explicitRetained) && explicitRetained > 0) {
-      return Math.round(explicitRetained);
+    // 1. Buscar valores numéricos explícitos de segVal y papVal (o seguro/papelería/val_seguro)
+    const segVal = Math.round(parseFloat(c.segVal || c.seguro || c.val_seguro) || 0);
+    const papVal = Math.round(parseFloat(c.papVal || c.papeleria || c.val_papeleria || c.software) || 0);
+    if (segVal > 0 || papVal > 0) {
+      return segVal + papVal;
     }
 
-    // 2. SOLO sumar los valores numéricos explícitos de segVal/papVal (o seguro/papelería/software) en el objeto c
-    const explicitSeg = Math.round(parseFloat(c.segVal || c.seguro || c.val_seguro) || 0);
-    const explicitPap = Math.round(parseFloat(c.papVal || c.papeleria || c.val_papeleria || c.software) || 0);
-    if (explicitSeg > 0 || explicitPap > 0) {
-      return explicitSeg + explicitPap;
+    // 2. Buscar campo aislado de retained_fees / retained_amount
+    const retainedFees = Math.round(parseFloat(c.retained_fees || c.retained_amount) || 0);
+    if (retainedFees > 0) {
+      return retainedFees;
     }
 
-    // FALLBACK ESTRICTO SOLICITADO (CERO TOLERANCIA):
-    // Si no existen campos numéricos explícitos de seguro/papelería/retained_amount, RETORNAR 0.
-    // NUNCA leer discount_reason ni discount_amount para evitar refinanciaciones o saldos anteriores falsos.
+    // FALLBACK HISTÓRICO ESTRICTO:
+    // Para cartones viejos de la base de datos con data mezclada, RETORNAR CERO (0).
+    // Jamás leer discount_amount ni discount_reason para evitar inflar con refinanciaciones o saldos anteriores.
     return 0;
   },
 

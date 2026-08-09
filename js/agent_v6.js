@@ -2250,8 +2250,12 @@ const agentModule = {
         zone,
         risk: 'Verde', // Inicia excelente
         amount: montoPrestamo, // Guardamos el capital prestado para la caja diaria
-        discount_amount: discountAmount, // Guardamos el descuento inicial
-        retained_amount: Math.round(segVal + papVal), // Ingresos retenidos a favor del negocio (Seguro + Papelería)
+        discount_amount: discountAmount, // Guardamos el descuento inicial total
+        retained_amount: Math.round(segVal + papVal), // Campo legado
+        retained_fees: Math.round(segVal + papVal), // AISLADO: Únicamente cobros por Seguro y Papelería
+        rollover_amount: Math.round(otrVal), // AISLADO: Saldo refinanciado / cartón anterior
+        segVal: Math.round(segVal),
+        papVal: Math.round(papVal),
         discount_reason: discountReason, // Motivo del descuento
         totalDebt: debt,
         outstanding: debt,
