@@ -1528,6 +1528,14 @@ const db = {
         if (belongsToUser) totalInjected += Math.round(parseFloat(inj.amount) || 0);
       }
 
+      // Si no hay registros explícitos en capital_injections pero la ruta tiene capital asignado en 'routes'
+      if (totalInjected === 0 && routeId) {
+        const route = await this.getRouteById(routeId);
+        if (route && route.capital) {
+          totalInjected = Math.round(parseFloat(route.capital) || 0);
+        }
+      }
+
       const movements = await this.getCashMovements();
       let totalExpenses = 0;
       let totalAdditions = 0;
@@ -1541,7 +1549,7 @@ const db = {
 
       const capitalInyectadoNeto = Math.round(totalInjected + totalAdditions - totalExpenses);
 
-      // 2. Obtener clientes de la tabla 'clients' (donde están la cédula, el estado actual y la gestión de riesgo)
+      // 2. Obtener clientes de la tabla 'clients'
       const rawClients = await this.getClients();
       const clientsMap = new Map();
       rawClients.forEach(c => {
@@ -1569,11 +1577,26 @@ const db = {
         console.warn("Tabla credits no disponible en getRealBaseCapital, usando clients:", e.message);
       }
 
-      // Si no hay tabla credits o está vacía, usar clients
+      // Si no hay créditos en la tabla 'credits', usar la tabla 'clients'
       if (creditsList.length === 0) {
         creditsList = Array.from(clientsMap.values());
       } else {
-        // Enriquecer cada crédito con los datos actuales del cliente en 'clients' (si aplica)
+        // DEDUPLICACIÓN ESTRICTA: Registrar todas las cédulas representadas en la tabla 'credits'
+        const representedCedulas = new Set();
+        creditsList.forEach(c => {
+          if (c.client_id) representedCedulas.add(String(c.client_id).trim());
+          if (c.clientCedula) representedCedulas.add(String(c.clientCedula).trim());
+          if (c.cedula) representedCedulas.add(String(c.cedula).trim());
+        });
+
+        // Solo agregar clientes de 'clients' si su cédula NO está en ninguna entrada de 'credits'
+        rawClients.forEach(c => {
+          if (c && c.cedula && !representedCedulas.has(String(c.cedula).trim())) {
+            creditsList.push(c);
+          }
+        });
+
+        // Enriquecer cada crédito con los datos actuales del cliente en 'clients' (risk, status)
         creditsList = creditsList.map(c => {
           const ced = String(c.client_id || c.clientCedula || c.cedula || '').trim();
           const clientObj = clientsMap.get(ced);
@@ -1647,14 +1670,14 @@ const db = {
       const patrimonioCalculado = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas - totalPerdidasMora);
       const patrimonioFinal = Math.max(capitalInyectadoNeto, patrimonioCalculado);
 
-      console.log('[AUDITORÍA FINANCIERA CAPITAL BASE ESTRICTO]', {
-        routeId,
-        capitalInyectadoNeto,
-        totalRetainedFees,
-        totalGananciasLiquidadas,
-        totalPerdidasMora,
-        patrimonioCalculado,
-        patrimonioFinal
+      // DESGLOSE Y AUDITORÍA EN CONSOLA SOLICITADA
+      console.log('=== [AUDITORÍA DESGLOSE CAPITAL BASE] ===', {
+        'Total Inyectado': capitalInyectadoNeto,
+        'Total Ganancias Liquidadas': totalGananciasLiquidadas,
+        'Total Ingresos Retenidos (Seguros/Papelería)': totalRetainedFees,
+        'Total Pérdidas': totalPerdidasMora,
+        'PATRIMONIO CALCULADO': patrimonioCalculado,
+        'PATRIMONIO FINAL': patrimonioFinal
       });
 
       return patrimonioFinal;
