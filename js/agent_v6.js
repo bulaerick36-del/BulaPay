@@ -2842,11 +2842,35 @@ const agentModule = {
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
-      const todayPaymentsMap = new Set(
-        allPayments
-          .filter(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago')
-          .map(p => p.clientCedula)
-      );
+      const clientMap = new Map(allClients.map(c => [String(c.cedula), c]));
+      const todayPaymentsMap = new Set();
+      allPayments.forEach(p => {
+        const clientCedula = String(p.clientCedula || p.client_cedula || '');
+        const client = clientMap.get(clientCedula);
+        
+        const isLiquidation = (p.id && String(p.id).startsWith('pay_liq_')) || 
+                              p.status === 'Liquidado_Pagado' || 
+                              p.status === 'Liquidado_Mora' || 
+                              String(p.status || '').includes('Liquidado');
+                              
+        if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
+          if (client) {
+            const clientTime = client.created_at ? new Date(client.created_at).getTime() : 0;
+            let pTime = 0;
+            if (p.created_at) {
+              pTime = new Date(p.created_at).getTime();
+            } else if (p.date) {
+              const dStr = String(p.date).trim();
+              pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
+            }
+            if (!clientTime || !pTime || (pTime >= clientTime - 2000)) {
+              todayPaymentsMap.add(clientCedula);
+            }
+          } else {
+            todayPaymentsMap.add(clientCedula);
+          }
+        }
+      });
 
       const activeClients = allClients.filter(c => {
         const outstanding = Number(c.outstanding || 0);
@@ -3087,11 +3111,35 @@ const agentModule = {
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
       
-      const todayPaymentsMap = new Set(
-        allPayments
-          .filter(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago')
-          .map(p => p.clientCedula)
-      );
+      const clientMap = new Map(allClients.map(c => [String(c.cedula), c]));
+      const todayPaymentsMap = new Set();
+      allPayments.forEach(p => {
+        const clientCedula = String(p.clientCedula || p.client_cedula || '');
+        const client = clientMap.get(clientCedula);
+        
+        const isLiquidation = (p.id && String(p.id).startsWith('pay_liq_')) || 
+                              p.status === 'Liquidado_Pagado' || 
+                              p.status === 'Liquidado_Mora' || 
+                              String(p.status || '').includes('Liquidado');
+                              
+        if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
+          if (client) {
+            const clientTime = client.created_at ? new Date(client.created_at).getTime() : 0;
+            let pTime = 0;
+            if (p.created_at) {
+              pTime = new Date(p.created_at).getTime();
+            } else if (p.date) {
+              const dStr = String(p.date).trim();
+              pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
+            }
+            if (!clientTime || !pTime || (pTime >= clientTime - 2000)) {
+              todayPaymentsMap.add(clientCedula);
+            }
+          } else {
+            todayPaymentsMap.add(clientCedula);
+          }
+        }
+      });
 
       // Excluir estrictamente clientes con cartón liquidado o cancelado (outstanding <= 0)
       const clients = allClients.filter(c => {

@@ -564,9 +564,22 @@ const supervisorModule = {
       }
 
       clients.forEach(client => {
-        // Verificar si el cliente hizo un abono hoy
-        const clientTodayPayments = todayPayments.filter(p => p.clientCedula === client.cedula);
-        const madePaymentToday = clientTodayPayments.some(p => p.status === 'Pagado' || p.status === 'Abonado');
+        // Verificar si el cliente hizo un abono hoy en su crédito activo
+        const clientTodayPayments = todayPayments.filter(p => {
+          if (String(p.clientCedula || p.client_cedula) !== String(client.cedula)) return false;
+          const isLiquidation = (p.id && String(p.id).startsWith('pay_liq_')) || String(p.status || '').includes('Liquidado');
+          if (isLiquidation) return false;
+          const clientTime = client.created_at ? new Date(client.created_at).getTime() : 0;
+          let pTime = 0;
+          if (p.created_at) {
+            pTime = new Date(p.created_at).getTime();
+          } else if (p.date) {
+            const dStr = String(p.date).trim();
+            pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
+          }
+          return !clientTime || !pTime || (pTime >= clientTime - 2000);
+        });
+        const madePaymentToday = clientTodayPayments.some(p => (p.status === 'Pagado' || p.status === 'Abonado') && Number(p.amount) > 0);
         const statusIcon = madePaymentToday ? '✅' : '❌';
         const statusColor = madePaymentToday ? 'var(--color-verde)' : 'var(--color-rojo)';
         const statusLabel = madePaymentToday ? 'Recaudado Hoy' : 'Sin Cobro Hoy';
