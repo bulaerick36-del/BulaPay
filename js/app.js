@@ -594,3 +594,22 @@ window.applyDynamicTheme = function() {
     agentLoginSubtitle.innerText = `Inicio de Sesión Autorizado - ${roleLabel}`;
   }
 };
+
+// Registro y auto-actualización forzada de Service Worker PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js?v=65').then((reg) => {
+      reg.onupdatefound = () => {
+        const installingWorker = reg.installing;
+        if (installingWorker) {
+          installingWorker.onstatechange = () => {
+            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('[PWA] Nueva versión instalada. Recargando página...');
+              window.location.reload();
+            }
+          };
+        }
+      };
+    }).catch((err) => console.warn('[PWA] Error al registrar SW:', err));
+  });
+}
