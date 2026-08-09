@@ -1646,10 +1646,12 @@ const db = {
             const capitalPerdidoNeto = Math.max(0, capitalPrincipal - totalPagado);
             totalPerdidasMora += capitalPerdidoNeto;
           } else {
-            const isLiquidadoPagado = rawStatus.includes('LIQUIDADO_PAGADO') || 
-                                      (rawStatus.includes('LIQUIDADO') && !rawStatus.includes('MORA')) || 
-                                      (rawStatus.includes('CANCELAD')) ||
-                                      (Number(c.outstanding || 0) === 0 && rawStatus !== 'ACTIVO');
+            const isLiquidadoPagado = rawStatus === 'LIQUIDADO_PAGADO' || 
+                                      rawStatus === 'PAGADO' || 
+                                      rawStatus === 'PAGADO_TOTAL' ||
+                                      (rawStatus.includes('LIQUIDADO') && !rawStatus.includes('MORA') && !rawStatus.includes('RENOVAC'));
+
+            const isLiquidadoRenovacion = rawStatus.includes('RENOVAC') || rawStatus.includes('RENOVADO');
 
             if (isLiquidadoPagado) {
               const gananciaRegistrada = Number(c.liquidated_profit || c.ganancia_real || 0);
@@ -1657,6 +1659,12 @@ const db = {
                 totalGananciasLiquidadas += Math.round(gananciaRegistrada);
               } else if (totalDebt > capitalPrincipal && capitalPrincipal > 0) {
                 totalGananciasLiquidadas += (totalDebt - capitalPrincipal);
+              }
+            } else if (isLiquidadoRenovacion) {
+              // Si fue renovado con saldo a favor/anterior, solo la utilidad cobrada realmente en efectivo antes de la renovación genera ganancia real
+              const gananciaEfectivoCobrada = Math.max(0, totalPagado - capitalPrincipal);
+              if (gananciaEfectivoCobrada > 0) {
+                totalGananciasLiquidadas += Math.round(gananciaEfectivoCobrada);
               }
             }
           }

@@ -3031,7 +3031,7 @@ const agentModule = {
 
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
-            status: 'Liquidado_Pagado',
+            status: 'Liquidado_Renovacion',
             outstanding: 0
           });
           
