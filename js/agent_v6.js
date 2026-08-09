@@ -2214,42 +2214,42 @@ const agentModule = {
       let otrVal = 0;
 
       if (applyDiscount) {
-        if (this.isRenewalMode) {
-          segVal = document.getElementById('new-client-discount-reason-seguro')?.checked
-            ? (parseFloat(document.getElementById('new-client-discount-val-seguro')?.value.replace(/\./g, '') || '0') || 0)
-            : 0;
-          papVal = document.getElementById('new-client-discount-reason-papeleria')?.checked
-            ? (parseFloat(document.getElementById('new-client-discount-val-papeleria')?.value.replace(/\./g, '') || '0') || 0)
-            : 0;
-          otrVal = document.getElementById('new-client-discount-reason-otros')?.checked
-            ? (parseFloat(document.getElementById('new-client-discount-val-otros')?.value.replace(/\./g, '') || '0') || 0)
-            : 0;
+        segVal = document.getElementById('new-client-discount-reason-seguro')?.checked
+          ? (parseFloat(document.getElementById('new-client-discount-val-seguro')?.value.replace(/\./g, '') || '0') || 0)
+          : 0;
+        papVal = document.getElementById('new-client-discount-reason-papeleria')?.checked
+          ? (parseFloat(document.getElementById('new-client-discount-val-papeleria')?.value.replace(/\./g, '') || '0') || 0)
+          : 0;
+        const otroConcVal = document.getElementById('new-client-discount-reason-otro-concepto')?.checked
+          ? (parseFloat(document.getElementById('new-client-discount-val-otro-concepto')?.value.replace(/\./g, '') || '0') || 0)
+          : 0;
+        
+        // Saldo Cartón Anterior SOLO si es modo Renovación
+        otrVal = (this.isRenewalMode && document.getElementById('new-client-discount-reason-otros')?.checked)
+          ? (parseFloat(document.getElementById('new-client-discount-val-otros')?.value.replace(/\./g, '') || '0') || 0)
+          : 0;
 
-          discountAmount = Math.round(segVal + papVal + otrVal);
+        const manualVal = parseFloat(document.getElementById('new-client-discount-amount')?.value.replace(/\./g, '') || '0') || 0;
+        discountAmount = Math.round((segVal + papVal + otroConcVal + otrVal) > 0 ? (segVal + papVal + otroConcVal + otrVal) : manualVal);
 
-          let reasons = [];
-          if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
-            reasons.push(segVal > 0 ? `Seguro ($${segVal.toLocaleString('es-CO')})` : 'Seguro');
-          }
-          if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
-            reasons.push(papVal > 0 ? `Papelería/Software ($${papVal.toLocaleString('es-CO')})` : 'Papelería o Software');
-          }
-          if (document.getElementById('new-client-discount-reason-otros')?.checked) {
-            const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Saldo Cartón Anterior (Renovación)';
-            const formatVal = otrVal > 0 ? ` ($${otrVal.toLocaleString('es-CO')})` : '';
-            reasons.push(`${otrosText}${formatVal}`);
-          }
-          discountReason = reasons.length > 0 ? reasons.join(', ') : null;
-        } else {
-          // MODO REGISTRO NORMAL: Descuento Simple General (Sin retención de seguro/papelería ni rollover)
-          const simpleRaw = document.getElementById('new-client-discount-amount-simple')?.value.replace(/\./g, '') || '0';
-          discountAmount = Math.round(parseFloat(simpleRaw) || 0);
-          const simpleReason = document.getElementById('new-client-discount-reason-simple')?.value.trim() || '';
-          discountReason = simpleReason || 'Descuento Inicial Directo';
-          segVal = 0;
-          papVal = 0;
-          otrVal = 0;
+        let reasons = [];
+        if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
+          reasons.push(segVal > 0 ? `Seguro ($${segVal.toLocaleString('es-CO')})` : 'Seguro');
         }
+        if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
+          reasons.push(papVal > 0 ? `Papelería/Software ($${papVal.toLocaleString('es-CO')})` : 'Papelería o Software');
+        }
+        if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
+          const concText = document.getElementById('new-client-discount-reason-otro-concepto-text')?.value.trim() || 'Otro Concepto';
+          const formatVal = otroConcVal > 0 ? ` ($${otroConcVal.toLocaleString('es-CO')})` : '';
+          reasons.push(`${concText}${formatVal}`);
+        }
+        if (this.isRenewalMode && document.getElementById('new-client-discount-reason-otros')?.checked) {
+          const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Saldo Cartón Anterior (Renovación)';
+          const formatVal = otrVal > 0 ? ` ($${otrVal.toLocaleString('es-CO')})` : '';
+          reasons.push(`${otrosText}${formatVal}`);
+        }
+        discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       }
 
       const emailEl = document.getElementById('new-client-email');
@@ -2601,19 +2601,9 @@ const agentModule = {
 
   setRenewalMode(isRenewal) {
     this.isRenewalMode = !!isRenewal;
-    const simpleSection = document.getElementById('new-client-discount-simple-section');
-    const breakdownSection = document.getElementById('new-client-discount-breakdown-section');
-    const discountPanel = document.getElementById('new-client-discount-panel');
-    const discountCheckbox = document.getElementById('new-client-apply-discount');
-
-    if (simpleSection && breakdownSection) {
-      if (this.isRenewalMode) {
-        simpleSection.style.display = 'none';
-        breakdownSection.style.display = 'flex';
-      } else {
-        simpleSection.style.display = 'flex';
-        breakdownSection.style.display = 'none';
-      }
+    const rolloverContainer = document.getElementById('new-client-discount-rollover-container');
+    if (rolloverContainer) {
+      rolloverContainer.style.display = this.isRenewalMode ? 'flex' : 'none';
     }
   },
 
@@ -2629,16 +2619,15 @@ const agentModule = {
 
     const discountCheckbox = document.getElementById('new-client-apply-discount');
     const discountPanel = document.getElementById('new-client-discount-panel');
-    const simpleSection = document.getElementById('new-client-discount-simple-section');
-    const breakdownSection = document.getElementById('new-client-discount-breakdown-section');
-    const simpleAmountInput = document.getElementById('new-client-discount-amount-simple');
-    const simpleReasonInput = document.getElementById('new-client-discount-reason-simple');
-
     const discountAmountInput = document.getElementById('new-client-discount-amount');
     const cbSeguro = document.getElementById('new-client-discount-reason-seguro');
     const valSeguroInput = document.getElementById('new-client-discount-val-seguro');
     const cbPapeleria = document.getElementById('new-client-discount-reason-papeleria');
     const valPapeleriaInput = document.getElementById('new-client-discount-val-papeleria');
+    const cbOtroConcepto = document.getElementById('new-client-discount-reason-otro-concepto');
+    const inputOtroConceptoText = document.getElementById('new-client-discount-reason-otro-concepto-text');
+    const valOtroConceptoInput = document.getElementById('new-client-discount-val-otro-concepto');
+
     const cbOtros = document.getElementById('new-client-discount-reason-otros');
     const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
     const valOtrosInput = document.getElementById('new-client-discount-val-otros');
@@ -2662,19 +2651,18 @@ const agentModule = {
       // Recálculo reactivo de Total Descuentos y Efectivo a Entregar
       let totalDiscount = 0;
       if (discountCheckbox && discountCheckbox.checked) {
-        if (this.isRenewalMode) {
-          const segVal = (cbSeguro && cbSeguro.checked && valSeguroInput) ? (parseFloat(valSeguroInput.value.replace(/\./g, '')) || 0) : 0;
-          const papVal = (cbPapeleria && cbPapeleria.checked && valPapeleriaInput) ? (parseFloat(valPapeleriaInput.value.replace(/\./g, '')) || 0) : 0;
-          const otrVal = (cbOtros && cbOtros.checked && valOtrosInput) ? (parseFloat(valOtrosInput.value.replace(/\./g, '')) || 0) : 0;
-          
-          totalDiscount = segVal + papVal + otrVal;
+        const segVal = (cbSeguro && cbSeguro.checked && valSeguroInput) ? (parseFloat(valSeguroInput.value.replace(/\./g, '')) || 0) : 0;
+        const papVal = (cbPapeleria && cbPapeleria.checked && valPapeleriaInput) ? (parseFloat(valPapeleriaInput.value.replace(/\./g, '')) || 0) : 0;
+        const otroConcVal = (cbOtroConcepto && cbOtroConcepto.checked && valOtroConceptoInput) ? (parseFloat(valOtroConceptoInput.value.replace(/\./g, '')) || 0) : 0;
+        const otrVal = (this.isRenewalMode && cbOtros && cbOtros.checked && valOtrosInput) ? (parseFloat(valOtrosInput.value.replace(/\./g, '')) || 0) : 0;
 
-          if (discountAmountInput) {
-            discountAmountInput.value = totalDiscount > 0 ? formatNumber(totalDiscount) : "";
-          }
-        } else {
-          const simpleVal = simpleAmountInput ? (parseFloat(simpleAmountInput.value.replace(/\./g, '')) || 0) : 0;
-          totalDiscount = simpleVal;
+        totalDiscount = segVal + papVal + otroConcVal + otrVal;
+
+        const manualRaw = discountAmountInput ? (parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0) : 0;
+        if (totalDiscount === 0 && manualRaw > 0) {
+          totalDiscount = manualRaw;
+        } else if (discountAmountInput && totalDiscount > 0) {
+          discountAmountInput.value = formatNumber(totalDiscount);
         }
       }
 
@@ -2692,13 +2680,14 @@ const agentModule = {
           this.setRenewalMode(this.isRenewalMode);
         } else {
           discountPanel.style.display = 'none';
-          if (simpleAmountInput) simpleAmountInput.value = '';
-          if (simpleReasonInput) simpleReasonInput.value = '';
           if (discountAmountInput) discountAmountInput.value = '';
           if (cbSeguro) cbSeguro.checked = false;
           if (valSeguroInput) { valSeguroInput.style.display = 'none'; valSeguroInput.value = ''; }
           if (cbPapeleria) cbPapeleria.checked = false;
           if (valPapeleriaInput) { valPapeleriaInput.style.display = 'none'; valPapeleriaInput.value = ''; }
+          if (cbOtroConcepto) cbOtroConcepto.checked = false;
+          if (inputOtroConceptoText) { inputOtroConceptoText.style.display = 'none'; inputOtroConceptoText.value = ''; }
+          if (valOtroConceptoInput) { valOtroConceptoInput.style.display = 'none'; valOtroConceptoInput.value = ''; }
           if (cbOtros) cbOtros.checked = false;
           if (inputOtrosText) { inputOtrosText.style.display = 'none'; inputOtrosText.value = ''; }
           if (valOtrosInput) { valOtrosInput.style.display = 'none'; valOtrosInput.value = ''; }
@@ -2707,8 +2696,26 @@ const agentModule = {
       });
     }
 
-    if (simpleAmountInput) {
-      simpleAmountInput.addEventListener('input', (e) => {
+    if (discountAmountInput) {
+      discountAmountInput.addEventListener('input', (e) => {
+        let val = e.target.value.replace(/\D/g, '');
+        e.target.value = val ? formatNumber(val) : '';
+        calculate();
+      });
+    }
+
+    if (cbOtroConcepto && valOtroConceptoInput) {
+      cbOtroConcepto.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        if (inputOtroConceptoText) inputOtroConceptoText.style.display = isChecked ? 'block' : 'none';
+        valOtroConceptoInput.style.display = isChecked ? 'block' : 'none';
+        if (!isChecked) {
+          if (inputOtroConceptoText) inputOtroConceptoText.value = '';
+          valOtroConceptoInput.value = '';
+        }
+        calculate();
+      });
+      valOtroConceptoInput.addEventListener('input', (e) => {
         let val = e.target.value.replace(/\D/g, '');
         e.target.value = val ? formatNumber(val) : '';
         calculate();
