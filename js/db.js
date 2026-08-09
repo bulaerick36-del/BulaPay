@@ -684,6 +684,31 @@ const db = {
       }
 
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
+      
+      // Registrar contrato inicial en la tabla 'credits'
+      try {
+        const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+        await supabase.from('credits').insert([{
+          id: newCreditId,
+          client_id: String(client.cedula),
+          clientCedula: String(client.cedula),
+          amount: client.amount,
+          discount_amount: client.discount_amount || 0,
+          discount_reason: client.discount_reason || null,
+          totalDebt: client.totalDebt,
+          outstanding: client.outstanding,
+          installmentsCount: client.installmentsCount,
+          installmentAmount: client.installmentAmount,
+          routeId: client.routeId,
+          agent_id: client.agent_id,
+          supervisor_id: client.supervisor_id,
+          status: 'Activo',
+          created_at: new Date().toISOString()
+        }]);
+      } catch (eCredit) {
+        console.warn("Tabla credits al guardar nuevo cliente:", eCredit.message);
+      }
+
       return data[0];
     } catch (err) {
       console.error('Error de ejecución en saveClient:', err);
@@ -742,7 +767,7 @@ const db = {
   async registerCreditToExistingClient(payload) {
     const supabase = await initSupabase();
     
-    // 1. Buscar únicamente por Cédula (los datos de contacto se pueden repetir libremente)
+    // 1. Recuperar únicamente por Cédula (los datos de contacto se pueden repetir libremente)
     const { data: existing, error: searchErr } = await supabase
       .from('clients')
       .select('cedula, name')
@@ -752,15 +777,30 @@ const db = {
     if (searchErr) console.error("Error buscando por cédula:", searchErr);
 
     const clientId = (existing && existing.length > 0) ? existing[0].cedula : String(payload.cedula);
+    const nowIso = new Date().toISOString();
+    const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
     console.log('-> ID/Cédula del cliente recuperado:', clientId);
-    console.log('-> Intentando registrar nuevo crédito para el cliente...');
+    console.log('-> Generando nuevo crédito independiente ID:', newCreditId);
+
+    // 2. Marcar créditos anteriores del cliente como Liquidados en la tabla 'credits'
+    try {
+      await supabase
+        .from('credits')
+        .update({ status: 'Liquidado_Pagado', outstanding: 0 })
+        .or(`client_id.eq.${String(clientId)},clientCedula.eq.${String(clientId)}`)
+        .eq('status', 'Activo');
+    } catch (e) {
+      console.warn("Actualizando créditos anteriores en 'credits':", e.message);
+    }
     
-    // 2. Registrar crédito secundario en tabla 'credits' si está configurada
+    // 3. Registrar nuevo crédito independiente en tabla 'credits'
     const creditPayload = {
+      id: newCreditId,
       client_id: clientId,
+      clientCedula: clientId,
       amount: payload.amount,
-      discount_amount: payload.discount_amount,
-      discount_reason: payload.discount_reason,
+      discount_amount: payload.discount_amount || 0,
+      discount_reason: payload.discount_reason || null,
       totalDebt: payload.totalDebt,
       outstanding: payload.outstanding,
       installmentsCount: payload.installmentsCount,
@@ -768,19 +808,22 @@ const db = {
       routeId: payload.routeId,
       agent_id: payload.agent_id,
       supervisor_id: payload.supervisor_id,
-      created_at: new Date().toISOString()
+      status: 'Activo',
+      created_at: nowIso
     };
 
     try {
       const { error: insertError } = await supabase.from('credits').insert([creditPayload]);
       if (insertError) {
-        console.warn("Tabla 'credits' no disponible o no requerida:", insertError.message);
+        console.warn("Tabla 'credits' error al insertar:", insertError.message);
+      } else {
+        console.log("✅ Nuevo crédito registrado exitosamente en 'credits' id:", newCreditId);
       }
     } catch (e) {
-      console.warn("Omitiendo inserción secundaria en 'credits':", e.message);
+      console.warn("Omitiendo inserción en 'credits':", e.message);
     }
 
-    // 3. Limpiar pagos del cartón anterior para que el nuevo cartón inicie 100% en blanco / pendiente
+    // 4. Limpiar pagos del cartón anterior para aislar las cuotas del nuevo cartón
     try {
       await supabase.from('payments').delete().eq('clientCedula', String(clientId));
     } catch (e) {
@@ -792,16 +835,15 @@ const db = {
       console.warn("Omitiendo borrado por client_cedula:", e.message);
     }
 
-    // 4. Actualizar la información activa en la tabla 'clients' con el nuevo crédito/cartón
-    const nowIso = new Date().toISOString();
+    // 5. Preservar y actualizar la ficha del cliente y crédito activo en la tabla 'clients'
     await supabase.from('clients').update({
       name: payload.name,
       phone: payload.phone,
       city: payload.city,
       zone: payload.zone,
       amount: payload.amount,
-      discount_amount: payload.discount_amount,
-      discount_reason: payload.discount_reason,
+      discount_amount: payload.discount_amount || 0,
+      discount_reason: payload.discount_reason || null,
       totalDebt: payload.totalDebt,
       outstanding: payload.outstanding,
       installmentsCount: payload.installmentsCount,
@@ -813,7 +855,7 @@ const db = {
       created_at: nowIso
     }).eq('cedula', clientId);
 
-    // 5. Insertar los registros iniciales de las cuotas del nuevo cartón obligatoriamente con status: 'Pendiente'
+    // 6. Insertar los registros iniciales de las cuotas del nuevo cartón vinculados al nuevo crédito
     try {
       const installmentsCount = Number(payload.installmentsCount || 30);
       const installmentAmount = Math.round(Number(payload.installmentAmount || (payload.totalDebt / installmentsCount)));
@@ -825,6 +867,7 @@ const db = {
         initialPendingPayments.push({
           id: 'pay_init_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
           clientCedula: clientId,
+          credit_id: newCreditId,
           installmentNumber: i,
           amount: installmentAmount,
           date: todayStr,
@@ -841,7 +884,7 @@ const db = {
       console.warn("Inserción inicial de cuotas pendientes:", e.message);
     }
     
-    return { ...payload, cedula: clientId, created_at: nowIso };
+    return { ...payload, cedula: clientId, credit_id: newCreditId, created_at: nowIso };
   },
 
   async getCommerceBuyers() {
