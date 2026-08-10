@@ -173,7 +173,30 @@ CREATE TABLE IF NOT EXISTS capital_injections (
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE capital_injections ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Permitir todo a anonimos en capital_injections" ON capital_injections FOR ALL TO anon USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE capital_injections TO anon, authenticated;
+-- Nueva tabla de cartones (Aislamiento de Préstamos Individuales)
+CREATE TABLE IF NOT EXISTS cartones (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "cliente_id" TEXT REFERENCES clients("cedula") ON DELETE CASCADE,
+  "numero_carton" SERIAL,
+  "fecha_apertura" TIMESTAMPTZ DEFAULT NOW(),
+  "monto_prestado" NUMERIC NOT NULL DEFAULT 0,
+  "estado" TEXT NOT NULL DEFAULT 'activo',
+  "total_debt" NUMERIC DEFAULT 0,
+  "outstanding" NUMERIC DEFAULT 0,
+  "installments_count" INTEGER DEFAULT 1,
+  "installment_amount" NUMERIC DEFAULT 0,
+  "discount_amount" NUMERIC DEFAULT 0,
+  "discount_reason" TEXT,
+  "net_cash" NUMERIC DEFAULT 0,
+  "route_id" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL,
+  "supervisor_id" TEXT,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE cartones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en cartones" ON cartones;
+CREATE POLICY "Permitir todo a anonimos en cartones" ON cartones FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE cartones TO anon, authenticated;
+
 

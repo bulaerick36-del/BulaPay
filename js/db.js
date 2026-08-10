@@ -35,6 +35,77 @@ async function initSupabase() {
 const db = {
   async init() {
     await initSupabase();
+    await this.mapExistingClientsToCartones();
+  },
+
+  async mapExistingClientsToCartones() {
+    try {
+      const supabase = await initSupabase();
+      // 1. Obtener clientes de la tabla 'clients'
+      const { data: clients, error: clientsErr } = await supabase.from('clients').select('*');
+      if (clientsErr || !clients || clients.length === 0) return;
+
+      // 2. Obtener cartones existentes para no duplicar
+      const { data: cartones, error: cartonesErr } = await supabase.from('cartones').select('cliente_id, estado');
+      const existingCartonsSet = new Set();
+      if (!cartonesErr && cartones) {
+        cartones.forEach(c => {
+          if (c.cliente_id) existingCartonsSet.add(String(c.cliente_id).trim());
+        });
+      }
+
+      // 3. Mapear cada cliente que aún no esté en la tabla 'cartones'
+      const newCartones = [];
+      for (const client of clients) {
+        const cedula = String(client.cedula).trim();
+        if (!existingCartonsSet.has(cedula)) {
+          const amount = Number(client.amount || 0);
+          const outstanding = Number(client.outstanding || 0);
+          const totalDebt = Number(client.totalDebt || 0);
+          newCartones.push({
+            cliente_id: cedula,
+            fecha_apertura: client.created_at || new Date().toISOString(),
+            monto_prestado: amount > 0 ? amount : (totalDebt > 0 ? totalDebt : 0),
+            estado: outstanding > 0 ? 'activo' : 'liquidado',
+            total_debt: totalDebt,
+            outstanding: outstanding,
+            installments_count: Number(client.installmentsCount || 1),
+            installment_amount: Number(client.installmentAmount || 0),
+            discount_amount: Number(client.discount_amount || 0),
+            discount_reason: client.discount_reason || null,
+            net_cash: Math.max(0, amount - Number(client.discount_amount || 0)),
+            route_id: client.routeId || null,
+            agent_id: client.agent_id || null,
+            supervisor_id: client.supervisor_id || null,
+            created_at: client.created_at || new Date().toISOString()
+          });
+        }
+      }
+
+      if (newCartones.length > 0) {
+        console.log(`[MIGRACIÓN] Mapeando ${newCartones.length} préstamos actuales a la tabla 'cartones'...`);
+        const { error: insertErr } = await supabase.from('cartones').insert(newCartones);
+        if (insertErr) {
+          console.warn("[MIGRACIÓN] Aviso al mapear a 'cartones':", insertErr.message);
+        } else {
+          console.log("✅ [MIGRACIÓN] Mapeo a 'cartones' completado con éxito.");
+        }
+      }
+    } catch (e) {
+      console.warn("Tabla cartones no disponible para mapeo automático:", e.message);
+    }
+  },
+
+  async getCartones() {
+    try {
+      const supabase = await initSupabase();
+      const { data, error } = await supabase.from('cartones').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.warn("Error consultando la tabla cartones:", e.message);
+      return [];
+    }
   },
 
   async reseed() {
@@ -686,33 +757,28 @@ const db = {
 
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
       
-      // Registrar contrato inicial en la tabla 'credits'
+      // Registrar cartón inicial en la nueva tabla 'cartones' (aislamiento de préstamos)
       try {
-        const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-        await supabase.from('credits').insert([{
-          id: newCreditId,
-          client_id: String(client.cedula),
-          clientCedula: String(client.cedula),
-          amount: client.amount,
-          discount_amount: client.discount_amount || 0,
-          retained_amount: client.retained_amount || 0,
-          retained_fees: client.retained_fees || client.retained_amount || 0,
-          rollover_amount: client.rollover_amount || 0,
-          segVal: client.segVal || 0,
-          papVal: client.papVal || 0,
+        await supabase.from('cartones').insert([{
+          cliente_id: String(client.cedula),
+          fecha_apertura: new Date().toISOString(),
+          monto_prestado: Number(client.amount || 0),
+          estado: 'activo',
+          total_debt: Number(client.totalDebt || 0),
+          outstanding: Number(client.outstanding || 0),
+          installments_count: Number(client.installmentsCount || 1),
+          installment_amount: Number(client.installmentAmount || 0),
+          discount_amount: Number(client.discount_amount || 0),
           discount_reason: client.discount_reason || null,
-          totalDebt: client.totalDebt,
-          outstanding: client.outstanding,
-          installmentsCount: client.installmentsCount,
-          installmentAmount: client.installmentAmount,
-          routeId: client.routeId,
-          agent_id: client.agent_id,
-          supervisor_id: client.supervisor_id,
-          status: 'Activo',
+          net_cash: Number(client.amount || 0) - Number(client.discount_amount || 0),
+          route_id: client.routeId || null,
+          agent_id: client.agent_id || null,
+          supervisor_id: client.supervisor_id || null,
           created_at: new Date().toISOString()
         }]);
-      } catch (eCredit) {
-        console.warn("Tabla credits al guardar nuevo cliente:", eCredit.message);
+        console.log("✅ Cartón inicial creado exitosamente en 'cartones' para cliente:", client.cedula);
+      } catch (eCarton) {
+        console.warn("Tabla cartones al guardar nuevo cliente:", eCarton.message);
       }
 
       return data[0];
@@ -788,50 +854,39 @@ const db = {
     console.log('-> ID/Cédula del cliente recuperado:', clientId);
     console.log('-> Generando nuevo crédito independiente ID:', newCreditId);
 
-    // 2. Marcar créditos anteriores del cliente como Liquidados en la tabla 'credits'
+    // 2. Marcar cartones anteriores del cliente como Liquidados en la tabla 'cartones'
     try {
       await supabase
-        .from('credits')
-        .update({ status: 'Liquidado_Pagado', outstanding: 0 })
-        .or(`client_id.eq.${String(clientId)},clientCedula.eq.${String(clientId)}`)
-        .eq('status', 'Activo');
+        .from('cartones')
+        .update({ estado: 'liquidado', outstanding: 0 })
+        .eq('cliente_id', String(clientId))
+        .eq('estado', 'activo');
     } catch (e) {
-      console.warn("Actualizando créditos anteriores en 'credits':", e.message);
+      console.warn("Actualizando cartones anteriores en 'cartones':", e.message);
     }
     
-    // 3. Registrar nuevo crédito independiente en tabla 'credits'
-    const creditPayload = {
-      id: newCreditId,
-      client_id: clientId,
-      clientCedula: clientId,
-      amount: payload.amount,
-      discount_amount: payload.discount_amount || 0,
-      retained_amount: payload.retained_amount || 0,
-      retained_fees: payload.retained_fees || payload.retained_amount || 0,
-      rollover_amount: payload.rollover_amount || 0,
-      segVal: payload.segVal || 0,
-      papVal: payload.papVal || 0,
-      discount_reason: payload.discount_reason || null,
-      totalDebt: payload.totalDebt,
-      outstanding: payload.outstanding,
-      installmentsCount: payload.installmentsCount,
-      installmentAmount: payload.installmentAmount,
-      routeId: payload.routeId,
-      agent_id: payload.agent_id,
-      supervisor_id: payload.supervisor_id,
-      status: 'Activo',
-      created_at: nowIso
-    };
-
+    // 3. Registrar nuevo cartón independiente en la tabla 'cartones'
     try {
-      const { error: insertError } = await supabase.from('credits').insert([creditPayload]);
-      if (insertError) {
-        console.warn("Tabla 'credits' error al insertar:", insertError.message);
-      } else {
-        console.log("✅ Nuevo crédito registrado exitosamente en 'credits' id:", newCreditId);
-      }
+      await supabase.from('cartones').insert([{
+        cliente_id: String(clientId),
+        fecha_apertura: nowIso,
+        monto_prestado: Number(payload.amount || 0),
+        estado: 'activo',
+        total_debt: Number(payload.totalDebt || 0),
+        outstanding: Number(payload.outstanding || 0),
+        installments_count: Number(payload.installmentsCount || 1),
+        installment_amount: Number(payload.installmentAmount || 0),
+        discount_amount: Number(payload.discount_amount || 0),
+        discount_reason: payload.discount_reason || null,
+        net_cash: Number(payload.amount || 0) - Number(payload.discount_amount || 0),
+        route_id: payload.routeId || null,
+        agent_id: payload.agent_id || null,
+        supervisor_id: payload.supervisor_id || null,
+        created_at: nowIso
+      }]);
+      console.log("✅ Nuevo cartón registrado exitosamente en 'cartones' para cliente:", clientId);
     } catch (e) {
-      console.warn("Omitiendo inserción en 'credits':", e.message);
+      console.warn("Omitiendo inserción en 'cartones':", e.message);
     }
 
     // 4. Limpiar pagos del cartón anterior para aislar las cuotas del nuevo cartón
@@ -1859,19 +1914,19 @@ const db = {
       throw new Error(`Error Supabase: ${clientErr.message || clientErr.details || JSON.stringify(clientErr)}`);
     }
 
-    // 4. Actualizar tabla credits si aplica
+    // 4. Actualizar tabla cartones si aplica
     try {
       await supabase
-        .from('credits')
+        .from('cartones')
         .update({ 
-          status: status, 
+          estado: isPaid ? 'liquidado' : 'liquidado_mora', 
           outstanding: isPaid ? 0 : updatePayload.outstanding,
-          totalDebt: isPaid ? 0 : (updatePayload.totalDebt || 0),
-          amount: isPaid ? 0 : (updatePayload.amount || 0)
+          total_debt: isPaid ? 0 : (updatePayload.totalDebt || 0)
         })
-        .or(`client_id.eq.${String(cedula)},clientCedula.eq.${String(cedula)}`);
-    } catch (e) {
-      console.warn("Tabla credits no disponible al liquidar crédito:", e.message);
+        .eq('cliente_id', String(cedula))
+        .eq('estado', 'activo');
+    } catch (eCarton) {
+      console.warn("Tabla cartones al liquidar crédito:", eCarton.message);
     }
     
     return true;

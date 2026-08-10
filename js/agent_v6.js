@@ -1011,9 +1011,9 @@ const agentModule = {
     this.tabCollect.classList.remove('active');
     this.tabHistory.classList.remove('active');
     this.tabRegister.classList.remove('active');
-    this.panelCollect.style.display = 'none';
-    this.panelHistory.style.display = 'none';
-    this.panelRegister.style.display = 'none';
+    if (this.panelCollect) this.panelCollect.style.setProperty('display', 'none', 'important');
+    if (this.panelHistory) this.panelHistory.style.setProperty('display', 'none', 'important');
+    if (this.panelRegister) this.panelRegister.style.setProperty('display', 'none', 'important');
 
     const blockedPanel = document.getElementById('gps-blocked-panel');
 
@@ -1040,7 +1040,7 @@ const agentModule = {
       if (blockedPanel) blockedPanel.style.display = 'none';
       if (tab === 'history') {
         this.tabHistory.classList.add('active');
-        this.panelHistory.style.display = 'block';
+        if (this.panelHistory) this.panelHistory.style.setProperty('display', 'block', 'important');
         
         // Limpiar Estado Historial
         this.historyResults.style.display = 'none';
@@ -1049,7 +1049,7 @@ const agentModule = {
         if (this.inputHistoryCedula) this.inputHistoryCedula.value = '';
       } else if (tab === 'register') {
         this.tabRegister.classList.add('active');
-        this.panelRegister.style.display = 'block';
+        if (this.panelRegister) this.panelRegister.style.setProperty('display', 'block', 'important');
         
         // Limpiar Estado Registro
         if (this.formRegisterClient) this.formRegisterClient.reset();
