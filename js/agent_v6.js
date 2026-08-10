@@ -2581,11 +2581,41 @@ const agentModule = {
     }
   },
 
-  setRenewalMode(isRenewal) {
+  setRenewalMode(isRenewal, oldOutstanding = 0) {
     this.isRenewalMode = !!isRenewal;
     const rolloverContainer = document.getElementById('new-client-discount-rollover-container');
+    const discountCheckbox = document.getElementById('new-client-apply-discount');
+    const discountPanel = document.getElementById('new-client-discount-panel');
+    const discountAmountInput = document.getElementById('new-client-discount-amount');
+    const cbOtros = document.getElementById('new-client-discount-reason-otros');
+    const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
+
+    const formatNum = (num) => num ? num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
+
     if (rolloverContainer) {
       rolloverContainer.style.display = this.isRenewalMode ? 'flex' : 'none';
+    }
+
+    if (this.isRenewalMode && oldOutstanding > 0) {
+      if (discountCheckbox) {
+        discountCheckbox.checked = true;
+        if (discountPanel) discountPanel.style.display = 'flex';
+      }
+      if (cbOtros) {
+        cbOtros.checked = true;
+        if (inputOtrosText) {
+          inputOtrosText.style.display = 'block';
+          inputOtrosText.value = `Saldo Cartón Anterior: $${formatNum(oldOutstanding)}`;
+        }
+      }
+      if (discountAmountInput) {
+        discountAmountInput.value = formatNum(oldOutstanding);
+        discountAmountInput.dispatchEvent(new Event('input'));
+      }
+      const capitalInput = document.getElementById('new-client-capital');
+      if (capitalInput) {
+        capitalInput.dispatchEvent(new Event('input'));
+      }
     }
   },
 
@@ -3000,7 +3030,7 @@ const agentModule = {
       btnRenew.onclick = async () => {
         modal.style.display = 'none';
         try {
-          const oldOutstanding = Number(client.outstanding || 0);
+          const oldOutstanding = Number(client.outstanding || client.totalDebt || 0);
 
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
@@ -3009,7 +3039,7 @@ const agentModule = {
           });
           
           this.switchTab('register');
-          this.setRenewalMode(true);
+          this.setRenewalMode(true, oldOutstanding);
 
           // 1. Datos Personales y Ubicación
           const inputName = document.getElementById('new-client-name');
@@ -3035,36 +3065,7 @@ const agentModule = {
             }
           }
 
-          // 2. Auto-Descuento de Deuda Vieja
-          const discountCheckbox = document.getElementById('new-client-apply-discount');
-          const discountPanel = document.getElementById('new-client-discount-panel');
-          const cbOtros = document.getElementById('new-client-discount-reason-otros');
-          const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
-          const valOtrosInput = document.getElementById('new-client-discount-val-otros');
-
-          if (discountCheckbox) {
-            discountCheckbox.checked = true;
-            if (discountPanel) discountPanel.style.display = 'flex';
-            if (cbOtros) {
-              cbOtros.checked = true;
-              if (inputOtrosText) {
-                inputOtrosText.style.display = 'block';
-                inputOtrosText.value = 'Saldo Cartón Anterior (Renovación)';
-              }
-              if (valOtrosInput) {
-                valOtrosInput.style.display = 'block';
-                valOtrosInput.value = oldOutstanding ? oldOutstanding.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '0';
-              }
-            }
-          }
-
-          // 3. Forzar recálculo reactivo de Efectivo a Entregar
-          const capitalInput = document.getElementById('new-client-capital');
-          if (capitalInput) {
-            capitalInput.dispatchEvent(new Event('input'));
-          }
-
-          alert(`🔄 Cartón anterior de ${client.name} liquidado. Se pre-llenaron los datos del cliente y un descuento automático de $${oldOutstanding.toLocaleString('es-CO')} por la deuda anterior.`);
+          alert(`🔄 Cartón anterior de ${client.name} liquidado. Se pre-llenaron los datos del cliente y el saldo anterior de $${oldOutstanding.toLocaleString('es-CO')} en el campo de descuento.`);
         } catch (e) {
           console.error("Error al renovar cartón:", e);
           alert('Error al procesar renovación: ' + (e.message || e));
