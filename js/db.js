@@ -1848,43 +1848,67 @@ const db = {
 
   async getDashboardFinancialMetrics(routeId) {
     try {
-      // Consultar clientes de la ruta desde la tabla clients
-      const rawClients = await this.getClients();
+      const supabase = await initSupabase();
+      const currentUser = this.getCurrentUser();
+      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
 
-      // Deduplicar estrictamente por cédula de cliente
-      const clientsMap = new Map();
-      rawClients.forEach(c => {
-        if (c && c.cedula) {
-          const ced = String(c.cedula).trim();
-          if (!clientsMap.has(ced)) clientsMap.set(ced, c);
-        }
-      });
-      const clients = Array.from(clientsMap.values());
+      let assignedRouteId = routeId || (currentUser ? currentUser.routeId : null);
+      if (!assignedRouteId && currentUser && typeof this.getActiveRouteIdForUser === 'function') {
+        assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
+      }
 
-      let carteraEnCalle = 0; // Suma de outstanding ÚNICAMENTE de clientes ACTIVOS (NO Lista Negra) con saldo pendiente
-      let posibleGanancia = 0; // Suma de ganancia esperada (totalDebt - amount) ÚNICAMENTE de clientes ACTIVOS con outstanding > 0
+      // Consulta directa a la tabla 'cartones' con estado = 'activo'
+      let query = supabase
+        .from('cartones')
+        .select('*')
+        .eq('estado', 'activo');
 
-      clients.forEach(c => {
-        const belongsToUser = routeId ? (c.routeId === routeId) : true;
-        if (belongsToUser) {
-          const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
-          const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
-          const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-          const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-          const isMoroso = c.risk === 'Rojo' || 
-                           String(c.risk || '').trim().toLowerCase() === 'rojo' || 
-                           rawStatus.includes('MORA') || 
-                           rawStatus.includes('NEGRA');
+      if (assignedRouteId) {
+        query = query.eq('route_id', assignedRouteId);
+      } else if (agentId) {
+        query = query.eq('agent_id', agentId);
+      }
 
-          // Regla: Si el cliente fue enviado a Lista Negra (isMoroso) o no tiene deuda activa (outstanding <= 0),
-          // SE EXCLUYE por completo de Cartera en Calle y Posible Ganancia.
-          if (!isMoroso && outstanding > 0) {
+      const { data: cartonesActivos, error } = await query;
+
+      let carteraEnCalle = 0; // Suma de outstanding ÚNICAMENTE de cartones ACTIVOS
+      let posibleGanancia = 0; // Suma de ganancia esperada (total_debt - monto_prestado) ÚNICAMENTE de cartones ACTIVOS
+
+      if (!error && cartonesActivos && cartonesActivos.length > 0) {
+        cartonesActivos.forEach(c => {
+          const outstanding = Math.round(Number(c.outstanding || 0));
+          const totalDebt = Math.round(Number(c.total_debt || c.totalDebt || 0));
+          const amount = Math.round(Number(c.monto_prestado || c.amount || 0));
+
+          if (outstanding > 0) {
             carteraEnCalle += outstanding;
             const interesCredito = Math.max(0, totalDebt - amount);
             posibleGanancia += interesCredito;
           }
-        }
-      });
+        });
+      } else {
+        // Fallback en caso de que la tabla cartones no tenga registros aún
+        const rawClients = await this.getClients();
+        rawClients.forEach(c => {
+          const belongsToUser = assignedRouteId ? (c.routeId === assignedRouteId) : true;
+          if (belongsToUser) {
+            const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
+            const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
+            const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+            const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+            const isMoroso = c.risk === 'Rojo' || 
+                             String(c.risk || '').trim().toLowerCase() === 'rojo' || 
+                             rawStatus.includes('MORA') || 
+                             rawStatus.includes('NEGRA');
+
+            if (!isMoroso && outstanding > 0) {
+              carteraEnCalle += outstanding;
+              const interesCredito = Math.max(0, totalDebt - amount);
+              posibleGanancia += interesCredito;
+            }
+          }
+        });
+      }
 
       return {
         carteraEnCalle: Math.round(carteraEnCalle),
@@ -2032,43 +2056,67 @@ const db = {
 
   async getLiquidCash(routeId) {
     try {
+      const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+      const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
       // 1. Mi Capital Base (Patrimonio)
-      const baseCapital = Math.round(await this.getRealBaseCapital(routeId));
+      const baseCapital = Math.round(await this.getRealBaseCapital(targetRouteId));
 
-      // 2. Capital puro prestado en la calle de créditos ACTIVOS (sin intereses)
-      const clients = await this.getClients();
+      // 2. Capital puro prestado en la calle de cartones ACTIVOS de la tabla 'cartones' (sin intereses)
+      let qCartones = supabase.from('cartones').select('*').eq('estado', 'activo');
+      if (targetRouteId) {
+        qCartones = qCartones.eq('route_id', targetRouteId);
+      } else if (agentId) {
+        qCartones = qCartones.eq('agent_id', agentId);
+      }
+      const { data: activeCartones, error: actErr } = await qCartones;
+
       let capitalPrestadoActivos = 0;
       const activeClientCedulas = new Set();
 
-      clients.forEach(c => {
-        const belongsToUser = routeId ? (c.routeId === routeId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
-        if (belongsToUser || !routeId) {
+      if (!actErr && activeCartones && activeCartones.length > 0) {
+        activeCartones.forEach(c => {
           const outstanding = Math.round(Number(c.outstanding || 0));
-          const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
-          const isActivo = outstanding > 0 &&
-                           (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
-                           !rawStatus.includes('LIQUIDADO') && 
-                           !rawStatus.includes('CANCELAD') && 
-                           rawStatus !== 'MOROSO';
-
-          if (isActivo) {
-            const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-            const retainedFee = this.getRetainedFeesFromCredit(c);
-            const efectivoNetoSalido = Math.max(0, amountPuro - retainedFee);
+          if (outstanding > 0) {
+            const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
+            const discountAmt = Math.round(Number(c.discount_amount || 0));
+            const efectivoNetoSalido = Math.max(0, amountPuro - discountAmt);
             capitalPrestadoActivos += efectivoNetoSalido;
-            activeClientCedulas.add(String(c.cedula));
+            if (c.cliente_id) activeClientCedulas.add(String(c.cliente_id));
           }
-        }
-      });
+        });
+      } else {
+        const clients = await this.getClients();
+        clients.forEach(c => {
+          const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
+          if (belongsToUser || !targetRouteId) {
+            const outstanding = Math.round(Number(c.outstanding || 0));
+            const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
+            const isActivo = outstanding > 0 &&
+                             (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
+                             !rawStatus.includes('LIQUIDADO') && 
+                             !rawStatus.includes('CANCELAD') && 
+                             rawStatus !== 'MOROSO';
+
+            if (isActivo) {
+              const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+              const retainedFee = this.getRetainedFeesFromCredit(c);
+              const efectivoNetoSalido = Math.max(0, amountPuro - retainedFee);
+              capitalPrestadoActivos += efectivoNetoSalido;
+              activeClientCedulas.add(String(c.cedula));
+            }
+          }
+        });
+      }
 
       // 3. Cuotas diarias cobradas de cartones activos
       const payments = await this.getPayments();
       let cuotasCobradasActivos = 0;
       for (const p of payments) {
-        if (p.status !== 'Pendiente' && activeClientCedulas.has(String(p.clientCedula))) {
+        const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '');
+        if (p.status !== 'Pendiente' && activeClientCedulas.has(pCed)) {
           cuotasCobradasActivos += Math.round(parseFloat(p.amount) || 0);
         }
       }
@@ -2214,38 +2262,38 @@ const db = {
          return isToday && belongsToAgent;
       });
 
-      let secondaryCreditsToday = [];
+      let secondaryCartonesToday = [];
       try {
         const supabase = await initSupabase();
-        let q = supabase.from('credits').select('*');
+        let q = supabase.from('cartones').select('*');
         if (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor') {
           q = q.eq('supervisor_id', currentUser.username);
         } else if (currentUser.routeId) {
-          q = q.eq('routeId', currentUser.routeId);
+          q = q.eq('route_id', currentUser.routeId);
         } else {
           q = q.eq('agent_id', agentId);
         }
-        const { data: creditsData } = await q;
-        if (creditsData && creditsData.length > 0) {
-          secondaryCreditsToday = creditsData.filter(c => {
-            if (!c.created_at && !c.date) return false;
-            const cDate = getCleanDateStr(c.created_at || c.date);
+        const { data: cartonesData } = await q;
+        if (cartonesData && cartonesData.length > 0) {
+          secondaryCartonesToday = cartonesData.filter(c => {
+            if (!c.created_at && !c.fecha_apertura) return false;
+            const cDate = getCleanDateStr(c.created_at || c.fecha_apertura);
             return cDate === todayStr;
           });
         }
       } catch (e) {
-        // credits table optional
+        // cartones query fallback
       }
 
       let totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount) || 0), 0));
       let totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + this.getRetainedFeesFromCredit(c), 0));
 
-      if (secondaryCreditsToday.length > 0) {
-        secondaryCreditsToday.forEach(sc => {
-          const alreadyInClients = todaysClients.some(tc => String(tc.cedula) === String(sc.client_id));
+      if (secondaryCartonesToday.length > 0) {
+        secondaryCartonesToday.forEach(sc => {
+          const alreadyInClients = todaysClients.some(tc => String(tc.cedula) === String(sc.cliente_id));
           if (!alreadyInClients) {
-            totalLent += Math.round(Number(sc.amount) || 0);
-            totalDiscounts += Math.round(this.getRetainedFeesFromCredit(sc));
+            totalLent += Math.round(Number(sc.monto_prestado || sc.amount) || 0);
+            totalDiscounts += Math.round(Number(sc.discount_amount) || 0);
           }
         });
       }
