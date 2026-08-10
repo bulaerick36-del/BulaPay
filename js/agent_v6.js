@@ -2169,23 +2169,28 @@ const agentModule = {
         console.warn('[DEBUG] Cédula ya existente registrada:', existing);
         let proceed = false;
         
-        const warningMsg = `La Cédula N° ${cedula} ya se encuentra registrada a nombre de ${existing.name || 'un cliente'}.\n\n¿Desea registrarle un nuevo crédito / cartón a este cliente o cancelar y verificar en el historial?`;
-        
-        if (typeof Swal !== 'undefined') {
-          const result = await Swal.fire({
-            title: 'Cédula Registrada',
-            text: warningMsg,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Continuar con el registro',
-            cancelButtonText: 'Ver Historial / Cancelar',
-            confirmButtonColor: '#10b981',
-            cancelButtonColor: '#d33',
-            reverseButtons: true
-          });
-          proceed = result.isConfirmed;
+        if (this.isRenewalMode) {
+          // En modo renovación, omitir confirmación interactiva y proceder directamente
+          proceed = true;
         } else {
-          proceed = confirm(warningMsg);
+          const warningMsg = `La Cédula N° ${cedula} ya se encuentra registrada a nombre de ${existing.name || 'un cliente'}.\n\n¿Desea registrarle un nuevo crédito / cartón a este cliente o cancelar y verificar en el historial?`;
+          
+          if (typeof Swal !== 'undefined') {
+            const result = await Swal.fire({
+              title: 'Cédula Registrada',
+              text: warningMsg,
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonText: 'Continuar con el registro',
+              cancelButtonText: 'Ver Historial / Cancelar',
+              confirmButtonColor: '#10b981',
+              cancelButtonColor: '#d33',
+              reverseButtons: true
+            });
+            proceed = result.isConfirmed;
+          } else {
+            proceed = confirm(warningMsg);
+          }
         }
 
         if (!proceed) {
@@ -2227,11 +2232,14 @@ const agentModule = {
           const concText = document.getElementById('new-client-discount-reason-otro-concepto-text')?.value.trim() || 'Otro Motivo';
           reasons.push(concText);
         }
-        if (this.isRenewalMode && document.getElementById('new-client-discount-reason-otros')?.checked) {
+        if (this.isRenewalMode || document.getElementById('new-client-discount-reason-otros')?.checked) {
           const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Saldo Cartón Anterior (Renovación)';
           reasons.push(otrosText);
+          otrVal = discountAmount || this.currentRenewalOutstanding || 0;
         }
         discountReason = reasons.length > 0 ? reasons.join(', ') : null;
+      } else if (this.isRenewalMode && (this.currentRenewalOutstanding > 0)) {
+        otrVal = this.currentRenewalOutstanding;
       }
 
       const emailEl = document.getElementById('new-client-email');
@@ -2265,7 +2273,7 @@ const agentModule = {
       console.log('Intentando enviar a Supabase la tabla clients...', payload);
 
       let savedResult;
-      if (existing) {
+      if (existing || this.isRenewalMode) {
         savedResult = await window.BulaPayDB.registerCreditToExistingClient(payload);
       } else {
         savedResult = await window.BulaPayDB.saveClient(payload);
@@ -2277,6 +2285,10 @@ const agentModule = {
       if (typeof Swal !== 'undefined' && Swal.isVisible()) {
         Swal.close();
       }
+
+      // Resetear estado de renovación tras guardado exitoso
+      this.setRenewalMode(false);
+      this.currentRenewalOutstanding = 0;
 
       // Actualización de la Interfaz (Refetch) para el contador y métricas financieras
       if (typeof this.updateRouteTracking === 'function') {
@@ -2296,6 +2308,24 @@ const agentModule = {
       console.error('Error durante la inserción del cliente:', err);
       const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
       if (dupMsg === 'DUPLICATE_CEDULA' || dupMsg === 'DUPLICATE_DATA') {
+        if (this.isRenewalMode) {
+          try {
+            const updatedPayload = await window.BulaPayDB.registerCreditToExistingClient(payload);
+            this.currentClient = updatedPayload;
+            if (typeof this.updateRouteTracking === 'function') {
+              this.updateRouteTracking();
+            }
+            await this.renderFinancialDashboard();
+            this.sendWelcomeEmail(updatedPayload);
+            if (this.formRegisterClient) this.formRegisterClient.reset();
+            this.setRenewalMode(false);
+            this.currentRenewalOutstanding = 0;
+            this.showMandatorySmsPrompt(updatedPayload, 'register');
+            return;
+          } catch (renewErr) {
+            console.error('Error en renovación fallback:', renewErr);
+          }
+        }
         const warningMsg = `La Cédula N° ${payload?.cedula || ''} ya se encuentra registrada en el sistema.\n\n¿Desea continuar con el registro del nuevo crédito o cancelar y verificar en el historial?`;
         if (typeof Swal !== 'undefined') {
           Swal.fire({
@@ -2583,6 +2613,11 @@ const agentModule = {
 
   setRenewalMode(isRenewal, oldOutstanding = 0) {
     this.isRenewalMode = !!isRenewal;
+    if (oldOutstanding > 0) {
+      this.currentRenewalOutstanding = oldOutstanding;
+    }
+    const effectiveOutstanding = oldOutstanding || this.currentRenewalOutstanding || 0;
+
     const rolloverContainer = document.getElementById('new-client-discount-rollover-container');
     const discountCheckbox = document.getElementById('new-client-apply-discount');
     const discountPanel = document.getElementById('new-client-discount-panel');
@@ -2596,7 +2631,7 @@ const agentModule = {
       rolloverContainer.style.display = this.isRenewalMode ? 'flex' : 'none';
     }
 
-    if (this.isRenewalMode && oldOutstanding > 0) {
+    if (this.isRenewalMode && effectiveOutstanding > 0) {
       if (discountCheckbox) {
         discountCheckbox.checked = true;
         if (discountPanel) discountPanel.style.display = 'flex';
@@ -2605,17 +2640,19 @@ const agentModule = {
         cbOtros.checked = true;
         if (inputOtrosText) {
           inputOtrosText.style.display = 'block';
-          inputOtrosText.value = `Saldo Cartón Anterior: $${formatNum(oldOutstanding)}`;
+          inputOtrosText.value = `Saldo Cartón Anterior: $${formatNum(effectiveOutstanding)}`;
         }
       }
       if (discountAmountInput) {
-        discountAmountInput.value = formatNum(oldOutstanding);
+        discountAmountInput.value = formatNum(effectiveOutstanding);
         discountAmountInput.dispatchEvent(new Event('input'));
       }
       const capitalInput = document.getElementById('new-client-capital');
       if (capitalInput) {
         capitalInput.dispatchEvent(new Event('input'));
       }
+    } else if (!this.isRenewalMode) {
+      this.currentRenewalOutstanding = 0;
     }
   },
 

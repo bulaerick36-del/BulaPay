@@ -951,8 +951,22 @@ const db = {
         await supabase.from('cartones').insert([{
           cliente_id: String(clientId),
           numero_carton: Math.floor(Date.now() % 100000000),
+          fecha_apertura: nowIso,
           monto_prestado: Number(payload.amount || 0),
-          estado: 'activo'
+          estado: 'activo',
+          saldo_anterior: rolloverVal,
+          rollover_amount: rolloverVal,
+          total_debt: Number(payload.totalDebt || 0),
+          outstanding: Number(payload.outstanding || payload.totalDebt || 0),
+          installments_count: Number(payload.installmentsCount || 1),
+          installment_amount: Number(payload.installmentAmount || 0),
+          discount_amount: Number(payload.discount_amount || 0),
+          discount_reason: payload.discount_reason || null,
+          net_cash: Number(payload.amount || 0) - Number(payload.discount_amount || 0),
+          route_id: payload.routeId || payload.route_id || null,
+          agent_id: payload.agent_id || payload.agentId || null,
+          supervisor_id: payload.supervisor_id || null,
+          created_at: nowIso
         }]);
       } else {
         console.log("✅ Nuevo cartón (Renovación Atómica) registrado exitosamente en 'cartones' para cliente:", clientId);
