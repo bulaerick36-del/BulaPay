@@ -757,28 +757,48 @@ const db = {
 
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
       
-      // Registrar cartón inicial en la nueva tabla 'cartones' (aislamiento de préstamos)
+      // Registrar cartón inicial obligatorio en la nueva tabla 'cartones' (aislamiento de préstamos)
       try {
-        await supabase.from('cartones').insert([{
+        const cartonPayload = {
           cliente_id: String(client.cedula),
           fecha_apertura: new Date().toISOString(),
           monto_prestado: Number(client.amount || 0),
           estado: 'activo',
+          saldo_anterior: Number(client.rollover_amount || client.saldo_anterior || 0),
+          rollover_amount: Number(client.rollover_amount || client.saldo_anterior || 0),
           total_debt: Number(client.totalDebt || 0),
-          outstanding: Number(client.outstanding || 0),
+          outstanding: Number(client.outstanding || client.totalDebt || 0),
           installments_count: Number(client.installmentsCount || 1),
           installment_amount: Number(client.installmentAmount || 0),
           discount_amount: Number(client.discount_amount || 0),
           discount_reason: client.discount_reason || null,
           net_cash: Number(client.amount || 0) - Number(client.discount_amount || 0),
-          route_id: client.routeId || null,
-          agent_id: client.agent_id || null,
+          route_id: client.routeId || client.route_id || null,
+          agent_id: client.agent_id || client.agentId || null,
           supervisor_id: client.supervisor_id || null,
           created_at: new Date().toISOString()
-        }]);
-        console.log("✅ Cartón inicial creado exitosamente en 'cartones' para cliente:", client.cedula);
+        };
+
+        let { data: cData, error: cErr } = await supabase.from('cartones').insert([cartonPayload]).select();
+        
+        if (cErr) {
+          console.warn("⚠️ Advertencia al insertar cartón en 'cartones'. Reintentando con payload esencial...", cErr);
+          const essentialCartonPayload = {
+            cliente_id: String(client.cedula),
+            monto_prestado: Number(client.amount || 0),
+            estado: 'activo'
+          };
+          const retryRes = await supabase.from('cartones').insert([essentialCartonPayload]).select();
+          if (retryRes.error) {
+            console.error("❌ Error definitivo al insertar cartón en 'cartones':", retryRes.error);
+          } else {
+            console.log("✅ Cartón esencial creado exitosamente en 'cartones' para el cliente:", client.cedula);
+          }
+        } else {
+          console.log("✅ Cartón completo creado exitosamente en 'cartones' para el cliente:", client.cedula, cData);
+        }
       } catch (eCarton) {
-        console.warn("Tabla cartones al guardar nuevo cliente:", eCarton.message);
+        console.error("Excepción al registrar cartón en 'cartones':", eCarton);
       }
 
       return data[0];
@@ -826,6 +846,39 @@ const db = {
           .select();
         
         if (updateErr) throw updateErr;
+
+        // Registrar/Renovar cartón en la tabla 'cartones'
+        try {
+          await supabase
+            .from('cartones')
+            .update({ estado: 'liquidado', outstanding: 0 })
+            .eq('cliente_id', String(clienteExistenteId))
+            .eq('estado', 'activo');
+
+          const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
+          await supabase.from('cartones').insert([{
+            cliente_id: String(clienteExistenteId),
+            fecha_apertura: new Date().toISOString(),
+            monto_prestado: Number(payload.amount || 0),
+            estado: 'activo',
+            saldo_anterior: rolloverVal,
+            rollover_amount: rolloverVal,
+            total_debt: Number(payload.totalDebt || 0),
+            outstanding: Number(payload.outstanding || payload.totalDebt || 0),
+            installments_count: Number(payload.installmentsCount || 1),
+            installment_amount: Number(payload.installmentAmount || 0),
+            discount_amount: Number(payload.discount_amount || 0),
+            discount_reason: payload.discount_reason || null,
+            net_cash: Number(payload.amount || 0) - Number(payload.discount_amount || 0),
+            route_id: payload.routeId || payload.route_id || null,
+            agent_id: payload.agent_id || payload.agentId || null,
+            supervisor_id: payload.supervisor_id || null,
+            created_at: new Date().toISOString()
+          }]);
+        } catch (eCarton) {
+          console.warn("Fallo al registrar cartón en forceUpdateExistingClient:", eCarton);
+        }
+
         return { ...payload, cedula: clienteExistenteId };
       } else {
         return await this.saveClient(payload);
@@ -868,7 +921,7 @@ const db = {
     // 3. Registrar nuevo cartón independiente (Renovación Atómica) en la tabla 'cartones'
     const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
     try {
-      await supabase.from('cartones').insert([{
+      const cartonPayload = {
         cliente_id: String(clientId),
         fecha_apertura: nowIso,
         monto_prestado: Number(payload.amount || 0),
@@ -876,18 +929,29 @@ const db = {
         saldo_anterior: rolloverVal,
         rollover_amount: rolloverVal,
         total_debt: Number(payload.totalDebt || 0),
-        outstanding: Number(payload.outstanding || 0),
+        outstanding: Number(payload.outstanding || payload.totalDebt || 0),
         installments_count: Number(payload.installmentsCount || 1),
         installment_amount: Number(payload.installmentAmount || 0),
         discount_amount: Number(payload.discount_amount || 0),
         discount_reason: payload.discount_reason || null,
         net_cash: Number(payload.amount || 0) - Number(payload.discount_amount || 0),
-        route_id: payload.routeId || null,
-        agent_id: payload.agent_id || null,
+        route_id: payload.routeId || payload.route_id || null,
+        agent_id: payload.agent_id || payload.agentId || null,
         supervisor_id: payload.supervisor_id || null,
         created_at: nowIso
-      }]);
-      console.log("✅ Nuevo cartón registrado exitosamente en 'cartones' (Renovación Atómica) para cliente:", clientId);
+      };
+
+      const { error: cartonErr } = await supabase.from('cartones').insert([cartonPayload]);
+      if (cartonErr) {
+        console.warn("⚠️ Error al insertar cartón en 'cartones'. Reintentando con payload esencial...", cartonErr);
+        await supabase.from('cartones').insert([{
+          cliente_id: String(clientId),
+          monto_prestado: Number(payload.amount || 0),
+          estado: 'activo'
+        }]);
+      } else {
+        console.log("✅ Nuevo cartón (Renovación Atómica) registrado exitosamente en 'cartones' para cliente:", clientId);
+      }
     } catch (e) {
       console.warn("Omitiendo inserción en 'cartones':", e.message);
     }
