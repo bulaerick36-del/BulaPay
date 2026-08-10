@@ -2214,40 +2214,22 @@ const agentModule = {
       let otrVal = 0;
 
       if (applyDiscount) {
-        segVal = document.getElementById('new-client-discount-reason-seguro')?.checked
-          ? (parseFloat(document.getElementById('new-client-discount-val-seguro')?.value.replace(/\./g, '') || '0') || 0)
-          : 0;
-        papVal = document.getElementById('new-client-discount-reason-papeleria')?.checked
-          ? (parseFloat(document.getElementById('new-client-discount-val-papeleria')?.value.replace(/\./g, '') || '0') || 0)
-          : 0;
-        const otroConcVal = document.getElementById('new-client-discount-reason-otro-concepto')?.checked
-          ? (parseFloat(document.getElementById('new-client-discount-val-otro-concepto')?.value.replace(/\./g, '') || '0') || 0)
-          : 0;
-        
-        // Saldo Cartón Anterior SOLO si es modo Renovación
-        otrVal = (this.isRenewalMode && document.getElementById('new-client-discount-reason-otros')?.checked)
-          ? (parseFloat(document.getElementById('new-client-discount-val-otros')?.value.replace(/\./g, '') || '0') || 0)
-          : 0;
-
-        const manualVal = parseFloat(document.getElementById('new-client-discount-amount')?.value.replace(/\./g, '') || '0') || 0;
-        discountAmount = Math.round((segVal + papVal + otroConcVal + otrVal) > 0 ? (segVal + papVal + otroConcVal + otrVal) : manualVal);
+        discountAmount = Math.round(parseFloat(document.getElementById('new-client-discount-amount')?.value.replace(/\./g, '') || '0') || 0);
 
         let reasons = [];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
-          reasons.push(segVal > 0 ? `Seguro ($${segVal.toLocaleString('es-CO')})` : 'Seguro');
+          reasons.push('Seguro');
         }
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
-          reasons.push(papVal > 0 ? `Papelería/Software ($${papVal.toLocaleString('es-CO')})` : 'Papelería o Software');
+          reasons.push('Papelería / Software');
         }
         if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
-          const concText = document.getElementById('new-client-discount-reason-otro-concepto-text')?.value.trim() || 'Otro Concepto';
-          const formatVal = otroConcVal > 0 ? ` ($${otroConcVal.toLocaleString('es-CO')})` : '';
-          reasons.push(`${concText}${formatVal}`);
+          const concText = document.getElementById('new-client-discount-reason-otro-concepto-text')?.value.trim() || 'Otro Motivo';
+          reasons.push(concText);
         }
         if (this.isRenewalMode && document.getElementById('new-client-discount-reason-otros')?.checked) {
           const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Saldo Cartón Anterior (Renovación)';
-          const formatVal = otrVal > 0 ? ` ($${otrVal.toLocaleString('es-CO')})` : '';
-          reasons.push(`${otrosText}${formatVal}`);
+          reasons.push(otrosText);
         }
         discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       }
@@ -2621,16 +2603,12 @@ const agentModule = {
     const discountPanel = document.getElementById('new-client-discount-panel');
     const discountAmountInput = document.getElementById('new-client-discount-amount');
     const cbSeguro = document.getElementById('new-client-discount-reason-seguro');
-    const valSeguroInput = document.getElementById('new-client-discount-val-seguro');
     const cbPapeleria = document.getElementById('new-client-discount-reason-papeleria');
-    const valPapeleriaInput = document.getElementById('new-client-discount-val-papeleria');
     const cbOtroConcepto = document.getElementById('new-client-discount-reason-otro-concepto');
     const inputOtroConceptoText = document.getElementById('new-client-discount-reason-otro-concepto-text');
-    const valOtroConceptoInput = document.getElementById('new-client-discount-val-otro-concepto');
 
     const cbOtros = document.getElementById('new-client-discount-reason-otros');
     const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
-    const valOtrosInput = document.getElementById('new-client-discount-val-otros');
 
     const formatNumber = (num) => {
       return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -2648,22 +2626,10 @@ const agentModule = {
       debtInput.value = totalDebt ? formatNumber(totalDebt) : "";
       installmentValInput.value = installmentVal ? formatNumber(installmentVal) : "";
 
-      // Recálculo reactivo de Total Descuentos y Efectivo a Entregar
+      // La matemática del descuento depende ÚNICAMENTE de la cifra global ingresada arriba
       let totalDiscount = 0;
-      if (discountCheckbox && discountCheckbox.checked) {
-        const segVal = (cbSeguro && cbSeguro.checked && valSeguroInput) ? (parseFloat(valSeguroInput.value.replace(/\./g, '')) || 0) : 0;
-        const papVal = (cbPapeleria && cbPapeleria.checked && valPapeleriaInput) ? (parseFloat(valPapeleriaInput.value.replace(/\./g, '')) || 0) : 0;
-        const otroConcVal = (cbOtroConcepto && cbOtroConcepto.checked && valOtroConceptoInput) ? (parseFloat(valOtroConceptoInput.value.replace(/\./g, '')) || 0) : 0;
-        const otrVal = (this.isRenewalMode && cbOtros && cbOtros.checked && valOtrosInput) ? (parseFloat(valOtrosInput.value.replace(/\./g, '')) || 0) : 0;
-
-        totalDiscount = segVal + papVal + otroConcVal + otrVal;
-
-        const manualRaw = discountAmountInput ? (parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0) : 0;
-        if (totalDiscount === 0 && manualRaw > 0) {
-          totalDiscount = manualRaw;
-        } else if (discountAmountInput && totalDiscount > 0) {
-          discountAmountInput.value = formatNumber(totalDiscount);
-        }
+      if (discountCheckbox && discountCheckbox.checked && discountAmountInput) {
+        totalDiscount = parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0;
       }
 
       const netCash = Math.max(0, capital - totalDiscount);
@@ -2682,15 +2648,11 @@ const agentModule = {
           discountPanel.style.display = 'none';
           if (discountAmountInput) discountAmountInput.value = '';
           if (cbSeguro) cbSeguro.checked = false;
-          if (valSeguroInput) { valSeguroInput.style.display = 'none'; valSeguroInput.value = ''; }
           if (cbPapeleria) cbPapeleria.checked = false;
-          if (valPapeleriaInput) { valPapeleriaInput.style.display = 'none'; valPapeleriaInput.value = ''; }
           if (cbOtroConcepto) cbOtroConcepto.checked = false;
           if (inputOtroConceptoText) { inputOtroConceptoText.style.display = 'none'; inputOtroConceptoText.value = ''; }
-          if (valOtroConceptoInput) { valOtroConceptoInput.style.display = 'none'; valOtroConceptoInput.value = ''; }
           if (cbOtros) cbOtros.checked = false;
           if (inputOtrosText) { inputOtrosText.style.display = 'none'; inputOtrosText.value = ''; }
-          if (valOtrosInput) { valOtrosInput.style.display = 'none'; valOtrosInput.value = ''; }
         }
         calculate();
       });
@@ -2704,68 +2666,19 @@ const agentModule = {
       });
     }
 
-    if (cbOtroConcepto && valOtroConceptoInput) {
+    if (cbOtroConcepto) {
       cbOtroConcepto.addEventListener('change', (e) => {
         const isChecked = e.target.checked;
         if (inputOtroConceptoText) inputOtroConceptoText.style.display = isChecked ? 'block' : 'none';
-        valOtroConceptoInput.style.display = isChecked ? 'block' : 'none';
-        if (!isChecked) {
-          if (inputOtroConceptoText) inputOtroConceptoText.value = '';
-          valOtroConceptoInput.value = '';
-        }
-        calculate();
-      });
-      valOtroConceptoInput.addEventListener('input', (e) => {
-        let val = e.target.value.replace(/\D/g, '');
-        e.target.value = val ? formatNumber(val) : '';
-        calculate();
+        if (!isChecked && inputOtroConceptoText) inputOtroConceptoText.value = '';
       });
     }
 
-    // Event listeners para Seguro
-    if (cbSeguro && valSeguroInput) {
-      cbSeguro.addEventListener('change', (e) => {
-        valSeguroInput.style.display = e.target.checked ? 'block' : 'none';
-        if (!e.target.checked) valSeguroInput.value = '';
-        calculate();
-      });
-      valSeguroInput.addEventListener('input', (e) => {
-        let val = e.target.value.replace(/\D/g, '');
-        e.target.value = val ? formatNumber(val) : '';
-        calculate();
-      });
-    }
-
-    // Event listeners para Papelería o Software
-    if (cbPapeleria && valPapeleriaInput) {
-      cbPapeleria.addEventListener('change', (e) => {
-        valPapeleriaInput.style.display = e.target.checked ? 'block' : 'none';
-        if (!e.target.checked) valPapeleriaInput.value = '';
-        calculate();
-      });
-      valPapeleriaInput.addEventListener('input', (e) => {
-        let val = e.target.value.replace(/\D/g, '');
-        e.target.value = val ? formatNumber(val) : '';
-        calculate();
-      });
-    }
-
-    // Event listeners para Saldo Cartón Anterior / Otros
-    if (cbOtros && valOtrosInput) {
+    if (cbOtros) {
       cbOtros.addEventListener('change', (e) => {
         const isChecked = e.target.checked;
         if (inputOtrosText) inputOtrosText.style.display = isChecked ? 'block' : 'none';
-        valOtrosInput.style.display = isChecked ? 'block' : 'none';
-        if (!isChecked) {
-          if (inputOtrosText) inputOtrosText.value = '';
-          valOtrosInput.value = '';
-        }
-        calculate();
-      });
-      valOtrosInput.addEventListener('input', (e) => {
-        let val = e.target.value.replace(/\D/g, '');
-        e.target.value = val ? formatNumber(val) : '';
-        calculate();
+        if (!isChecked && inputOtrosText) inputOtrosText.value = '';
       });
     }
 
