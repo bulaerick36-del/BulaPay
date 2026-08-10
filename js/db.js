@@ -761,6 +761,7 @@ const db = {
       try {
         const cartonPayload = {
           cliente_id: String(client.cedula),
+          numero_carton: Math.floor(Date.now() % 100000000),
           fecha_apertura: new Date().toISOString(),
           monto_prestado: Number(client.amount || 0),
           estado: 'activo',
@@ -785,6 +786,7 @@ const db = {
           console.warn("⚠️ Advertencia al insertar cartón en 'cartones'. Reintentando con payload esencial...", cErr);
           const essentialCartonPayload = {
             cliente_id: String(client.cedula),
+            numero_carton: Math.floor(Date.now() % 100000000),
             monto_prestado: Number(client.amount || 0),
             estado: 'activo'
           };
@@ -858,6 +860,7 @@ const db = {
           const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
           await supabase.from('cartones').insert([{
             cliente_id: String(clienteExistenteId),
+            numero_carton: Math.floor(Date.now() % 100000000),
             fecha_apertura: new Date().toISOString(),
             monto_prestado: Number(payload.amount || 0),
             estado: 'activo',
@@ -923,6 +926,7 @@ const db = {
     try {
       const cartonPayload = {
         cliente_id: String(clientId),
+        numero_carton: Math.floor(Date.now() % 100000000),
         fecha_apertura: nowIso,
         monto_prestado: Number(payload.amount || 0),
         estado: 'activo',
@@ -946,6 +950,7 @@ const db = {
         console.warn("⚠️ Error al insertar cartón en 'cartones'. Reintentando con payload esencial...", cartonErr);
         await supabase.from('cartones').insert([{
           cliente_id: String(clientId),
+          numero_carton: Math.floor(Date.now() % 100000000),
           monto_prestado: Number(payload.amount || 0),
           estado: 'activo'
         }]);

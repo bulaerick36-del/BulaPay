@@ -203,6 +203,8 @@ ALTER TABLE cartones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir todo a anonimos en cartones" ON cartones;
 CREATE POLICY "Permitir todo a anonimos en cartones" ON cartones FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE cartones TO anon, authenticated;
+GRANT ALL ON SEQUENCE cartones_numero_carton_seq TO anon, authenticated;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
 
 
