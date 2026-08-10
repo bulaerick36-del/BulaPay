@@ -181,6 +181,8 @@ CREATE TABLE IF NOT EXISTS cartones (
   "fecha_apertura" TIMESTAMPTZ DEFAULT NOW(),
   "monto_prestado" NUMERIC NOT NULL DEFAULT 0,
   "estado" TEXT NOT NULL DEFAULT 'activo',
+  "saldo_anterior" NUMERIC DEFAULT 0,
+  "rollover_amount" NUMERIC DEFAULT 0,
   "total_debt" NUMERIC DEFAULT 0,
   "outstanding" NUMERIC DEFAULT 0,
   "installments_count" INTEGER DEFAULT 1,
@@ -194,9 +196,13 @@ CREATE TABLE IF NOT EXISTS cartones (
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "saldo_anterior" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "rollover_amount" NUMERIC DEFAULT 0;
+
 ALTER TABLE cartones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir todo a anonimos en cartones" ON cartones;
 CREATE POLICY "Permitir todo a anonimos en cartones" ON cartones FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE cartones TO anon, authenticated;
+
 
 

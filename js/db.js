@@ -865,13 +865,16 @@ const db = {
       console.warn("Actualizando cartones anteriores en 'cartones':", e.message);
     }
     
-    // 3. Registrar nuevo cartón independiente en la tabla 'cartones'
+    // 3. Registrar nuevo cartón independiente (Renovación Atómica) en la tabla 'cartones'
+    const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
     try {
       await supabase.from('cartones').insert([{
         cliente_id: String(clientId),
         fecha_apertura: nowIso,
         monto_prestado: Number(payload.amount || 0),
         estado: 'activo',
+        saldo_anterior: rolloverVal,
+        rollover_amount: rolloverVal,
         total_debt: Number(payload.totalDebt || 0),
         outstanding: Number(payload.outstanding || 0),
         installments_count: Number(payload.installmentsCount || 1),
@@ -884,7 +887,7 @@ const db = {
         supervisor_id: payload.supervisor_id || null,
         created_at: nowIso
       }]);
-      console.log("✅ Nuevo cartón registrado exitosamente en 'cartones' para cliente:", clientId);
+      console.log("✅ Nuevo cartón registrado exitosamente en 'cartones' (Renovación Atómica) para cliente:", clientId);
     } catch (e) {
       console.warn("Omitiendo inserción en 'cartones':", e.message);
     }
@@ -1612,25 +1615,37 @@ const db = {
         }
       });
 
-      // 3. Obtener créditos de la tabla 'credits' (historial completo de la ruta/agente)
+      // 3. Obtener cartones de la tabla 'cartones' (historial completo e independiente de la ruta/agente)
       let creditsList = [];
       try {
         const supabase = await initSupabase();
-        let q = supabase.from('credits').select('*');
+        let q = supabase.from('cartones').select('*');
         if (routeId) {
-          q = q.eq('routeId', routeId);
+          q = q.eq('route_id', routeId);
         } else if (agentId) {
           q = q.eq('agent_id', agentId);
         }
-        const { data: creditsData } = await q;
-        if (creditsData && creditsData.length > 0) {
-          creditsList = creditsData;
+        const { data: cartonesData } = await q;
+        if (cartonesData && cartonesData.length > 0) {
+          creditsList = cartonesData.map(c => ({
+            ...c,
+            cedula: c.cliente_id,
+            client_id: c.cliente_id,
+            clientCedula: c.cliente_id,
+            amount: c.monto_prestado,
+            totalDebt: c.total_debt,
+            outstanding: c.outstanding,
+            installmentsCount: c.installments_count,
+            installmentAmount: c.installment_amount,
+            discount_amount: c.discount_amount,
+            status: c.estado === 'activo' ? 'Activo' : (c.estado === 'liquidado_mora' ? 'Liquidado_Mora' : 'Liquidado_Pagado')
+          }));
         }
       } catch (e) {
-        console.warn("Tabla credits no disponible en getRealBaseCapital, usando clients:", e.message);
+        console.warn("Tabla cartones no disponible en getRealBaseCapital, usando clients:", e.message);
       }
 
-      // Si no hay créditos en la tabla 'credits', usar la tabla 'clients'
+      // Si no hay registros en 'cartones', usar la tabla 'clients'
       if (creditsList.length === 0) {
         creditsList = Array.from(clientsMap.values());
       } else {
