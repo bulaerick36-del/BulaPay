@@ -595,21 +595,11 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Registro y auto-actualización forzada de Service Worker PWA
+// Registro de Service Worker PWA (sin recargas automáticas)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=65').then((reg) => {
-      reg.onupdatefound = () => {
-        const installingWorker = reg.installing;
-        if (installingWorker) {
-          installingWorker.onstatechange = () => {
-            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('[PWA] Nueva versión instalada. Recargando página...');
-              window.location.reload();
-            }
-          };
-        }
-      };
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      console.log('[PWA] Service Worker registrado exitosamente');
     }).catch((err) => console.warn('[PWA] Error al registrar SW:', err));
   });
 }
