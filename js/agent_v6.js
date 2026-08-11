@@ -890,49 +890,53 @@ const agentModule = {
       if (btnCloseBlacklist) btnCloseBlacklist.onclick = () => blacklistModal.style.display = 'none';
     }
 
-    // Modal de Cierre y Cuadre de Caja (Incluye Acciones Operativas de Caja)
-    if (btnCash && cashModal) {
-      btnCash.onclick = async () => {
-        cashModal.style.display = 'flex';
-        const elCollected = document.getElementById('private-cash-collected');
-        const elLent = document.getElementById('private-cash-lent');
-        const elDiscounts = document.getElementById('private-cash-discounts');
-        const elOnHand = document.getElementById('private-cash-on-hand');
-        
-        elCollected.textContent = 'Cargando...';
-        elLent.textContent = 'Cargando...';
-        if (elDiscounts) elDiscounts.textContent = 'Cargando...';
-        elOnHand.textContent = 'Cargando...';
-        
-        const movementForm = document.getElementById('cash-movement-form');
-        if (movementForm) movementForm.style.display = 'none';
-        const movementAmount = document.getElementById('cash-movement-amount');
-        if (movementAmount) movementAmount.value = '';
+    // Función unificada para abrir el modal de Cierre / Gestión de Caja
+    const openCashModalWithMovement = async (type = null) => {
+      if (!cashModal) return;
+      cashModal.style.display = 'flex';
+      
+      const elCollected = document.getElementById('private-cash-collected');
+      const elLent = document.getElementById('private-cash-lent');
+      const elDiscounts = document.getElementById('private-cash-discounts');
+      const elOnHand = document.getElementById('private-cash-on-hand');
+      
+      if (elCollected) elCollected.textContent = 'Cargando...';
+      if (elLent) elLent.textContent = 'Cargando...';
+      if (elDiscounts) elDiscounts.textContent = 'Cargando...';
+      if (elOnHand) elOnHand.textContent = 'Cargando...';
+      
+      const movementForm = document.getElementById('cash-movement-form');
+      if (movementForm) movementForm.style.display = 'none';
+      const movementAmount = document.getElementById('cash-movement-amount');
+      if (movementAmount) movementAmount.value = '';
 
-        try {
-          const { totalCollected, totalLent, totalDiscounts, onHand, massPaymentsTotal } = await window.BulaPayDB.getEfectivoEnCajaDia();
-          
-          elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
-          
-          const elMass = document.getElementById('private-cash-mass-payments');
-          if (elMass) {
-            if (massPaymentsTotal && massPaymentsTotal > 0) {
-              elMass.textContent = `$${Math.abs(massPaymentsTotal).toLocaleString('es-CO')}`;
-              elMass.style.color = 'var(--color-verde, #10b981)';
-            } else {
-              elMass.textContent = '$0';
-              elMass.style.color = 'var(--text-muted)';
-            }
+      try {
+        const { totalCollected, totalLent, totalDiscounts, onHand, massPaymentsTotal } = await window.BulaPayDB.getEfectivoEnCajaDia();
+        
+        if (elCollected) elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
+        
+        const elMass = document.getElementById('private-cash-mass-payments');
+        if (elMass) {
+          if (massPaymentsTotal && massPaymentsTotal > 0) {
+            elMass.textContent = `$${Math.abs(massPaymentsTotal).toLocaleString('es-CO')}`;
+            elMass.style.color = 'var(--color-verde, #10b981)';
+          } else {
+            elMass.textContent = '$0';
+            elMass.style.color = 'var(--text-muted)';
           }
-          
+        }
+        
+        if (elLent) {
           const prestadoFormateado = totalLent === 0 ? "$0" : "-$" + Math.abs(totalLent).toLocaleString('es-CO');
           elLent.textContent = prestadoFormateado;
+        }
 
-          if (elDiscounts) {
-            const discountsFormateado = totalDiscounts === 0 ? "$0" : "+$" + Math.abs(totalDiscounts).toLocaleString('es-CO');
-            elDiscounts.textContent = discountsFormateado;
-          }
-          
+        if (elDiscounts) {
+          const discountsFormateado = totalDiscounts === 0 ? "$0" : "+$" + Math.abs(totalDiscounts).toLocaleString('es-CO');
+          elDiscounts.textContent = discountsFormateado;
+        }
+        
+        if (elOnHand) {
           if (onHand < 0) {
             elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
             elOnHand.style.color = 'var(--color-rojo)';
@@ -940,135 +944,142 @@ const agentModule = {
             elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
             elOnHand.style.color = 'var(--text-primary)';
           }
-        } catch (e) {
-          console.error(e);
-          elCollected.textContent = 'Error';
         }
-      // Manejadores de los botones de acción rápida de caja en la tarjeta del panel principal
-      const btnQuickAdd = document.getElementById('btn-quick-cash-add');
-      if (btnQuickAdd && btnCash) {
-        btnQuickAdd.onclick = async () => {
-          if (btnCash.onclick) await btnCash.onclick();
-          const btnAdd = document.getElementById('btn-cash-add');
-          if (btnAdd && btnAdd.onclick) btnAdd.onclick();
-          const inputAmt = document.getElementById('cash-movement-amount');
-          if (inputAmt) inputAmt.focus();
+      } catch (e) {
+        console.error(e);
+        if (elCollected) elCollected.textContent = 'Error';
+      }
+
+      if (type) {
+        window._currentCashMovementType = type;
+        if (movementForm) movementForm.style.display = 'flex';
+        const movementTitle = document.getElementById('cash-movement-title');
+        if (movementTitle) {
+          movementTitle.textContent = type === 'entrada' ? 'Ingresar Dinero a Caja (Entrada)' : 'Retirar Dinero de Caja (Salida)';
+        }
+        if (movementAmount) movementAmount.focus();
+      }
+    };
+
+    if (btnCash) {
+      btnCash.onclick = () => openCashModalWithMovement(null);
+    }
+
+    const btnQuickAdd = document.getElementById('btn-quick-cash-add');
+    if (btnQuickAdd) {
+      btnQuickAdd.onclick = () => openCashModalWithMovement('entrada');
+    }
+
+    const btnQuickRemove = document.getElementById('btn-quick-cash-remove');
+    if (btnQuickRemove) {
+      btnQuickRemove.onclick = () => openCashModalWithMovement('salida');
+    }
+
+    const cashMovementAmountInput = document.getElementById('cash-movement-amount');
+    if (cashMovementAmountInput) {
+      cashMovementAmountInput.addEventListener('input', (e) => {
+        let val = e.target.value.replace(/\D/g, '');
+        e.target.value = val ? val.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '';
+      });
+    }
+
+    const btnAdd = document.getElementById('btn-cash-add');
+    if (btnAdd) {
+      btnAdd.onclick = () => {
+        window._currentCashMovementType = 'entrada';
+        const movementForm = document.getElementById('cash-movement-form');
+        if (movementForm) movementForm.style.display = 'flex';
+        const movementTitle = document.getElementById('cash-movement-title');
+        if (movementTitle) movementTitle.textContent = 'Ingresar Dinero a Caja (Entrada)';
+        const inputAmt = document.getElementById('cash-movement-amount');
+        if (inputAmt) inputAmt.focus();
+      };
+    }
+
+    const btnRemove = document.getElementById('btn-cash-remove');
+    if (btnRemove) {
+      btnRemove.onclick = () => {
+        window._currentCashMovementType = 'salida';
+        const movementForm = document.getElementById('cash-movement-form');
+        if (movementForm) movementForm.style.display = 'flex';
+        const movementTitle = document.getElementById('cash-movement-title');
+        if (movementTitle) movementTitle.textContent = 'Retirar Dinero de Caja (Salida)';
+        const inputAmt = document.getElementById('cash-movement-amount');
+        if (inputAmt) inputAmt.focus();
+      };
+    }
+
+    const btnConfirmMov = document.getElementById('btn-cash-movement-confirm');
+    if (btnConfirmMov) {
+      btnConfirmMov.onclick = async () => {
+        const amountRaw = document.getElementById('cash-movement-amount').value.replace(/\./g, '');
+        const amount = Math.round(parseFloat(amountRaw) || 0);
+        if (!amount || amount <= 0) {
+          alert('Por favor ingrese un monto válido mayor a 0.');
+          return;
+        }
+        
+        const currentUser = window.BulaPayDB.getCurrentUser();
+        if (!currentUser) return;
+
+        btnConfirmMov.disabled = true;
+        btnConfirmMov.textContent = 'Procesando...';
+
+        const movType = window._currentCashMovementType || 'entrada';
+
+        if (movType === 'salida') {
+           const onHand = await window.BulaPayDB.getLiquidCash(currentUser.routeId);
+           if (amount > onHand) {
+             alert(`❌ Fondos insuficientes. Solo hay $${onHand.toLocaleString('es-CO')} en caja actualmente.`);
+             btnConfirmMov.disabled = false;
+             btnConfirmMov.textContent = 'Confirmar Movimiento';
+             return;
+           }
+        }
+
+        const movement = {
+          id: 'mov_' + Date.now(),
+          agent_id: currentUser.id || currentUser.username,
+          routeId: currentUser.routeId,
+          type: movType,
+          amount: amount,
+          date: new Date().toISOString().split('T')[0]
         };
-      }
 
-      const btnQuickRemove = document.getElementById('btn-quick-cash-remove');
-      if (btnQuickRemove && btnCash) {
-        btnQuickRemove.onclick = async () => {
-          if (btnCash.onclick) await btnCash.onclick();
-          const btnRemove = document.getElementById('btn-cash-remove');
-          if (btnRemove && btnRemove.onclick) btnRemove.onclick();
-          const inputAmt = document.getElementById('cash-movement-amount');
-          if (inputAmt) inputAmt.focus();
-        };
-      }
-
-      const cashMovementAmountInput = document.getElementById('cash-movement-amount');
-      if (cashMovementAmountInput) {
-        cashMovementAmountInput.addEventListener('input', (e) => {
-          let val = e.target.value.replace(/\D/g, '');
-          e.target.value = val ? val.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '';
-        });
-      }
-
-      let currentMovementType = '';
-      
-      const btnAdd = document.getElementById('btn-cash-add');
-      if (btnAdd) {
-        btnAdd.onclick = () => {
-          currentMovementType = 'entrada';
-          const movementForm = document.getElementById('cash-movement-form');
-          if (movementForm) movementForm.style.display = 'flex';
-          const movementTitle = document.getElementById('cash-movement-title');
-          if (movementTitle) movementTitle.textContent = 'Ingresar Dinero a Caja (Entrada)';
-        };
-      }
-
-      const btnRemove = document.getElementById('btn-cash-remove');
-      if (btnRemove) {
-        btnRemove.onclick = () => {
-          currentMovementType = 'salida';
-          const movementForm = document.getElementById('cash-movement-form');
-          if (movementForm) movementForm.style.display = 'flex';
-          const movementTitle = document.getElementById('cash-movement-title');
-          if (movementTitle) movementTitle.textContent = 'Retirar Dinero de Caja (Salida)';
-        };
-      }
-
-      const btnConfirmMov = document.getElementById('btn-cash-movement-confirm');
-      if (btnConfirmMov) {
-        btnConfirmMov.onclick = async () => {
-          const amountRaw = document.getElementById('cash-movement-amount').value.replace(/\./g, '');
-          const amount = Math.round(parseFloat(amountRaw) || 0);
-          if (!amount || amount <= 0) {
-            alert('Por favor ingrese un monto válido mayor a 0.');
-            return;
-          }
+        try {
+          const success = await window.BulaPayDB.saveCashMovement(movement);
           
-          const currentUser = window.BulaPayDB.getCurrentUser();
-          if (!currentUser) return;
-
-          btnConfirmMov.disabled = true;
-          btnConfirmMov.textContent = 'Procesando...';
-
-          if (currentMovementType === 'salida') {
-             const onHand = await window.BulaPayDB.getLiquidCash(currentUser.routeId);
-             if (amount > onHand) {
-               alert(`❌ Fondos insuficientes. Solo hay $${onHand.toLocaleString('es-CO')} en caja actualmente.`);
-               btnConfirmMov.disabled = false;
-               btnConfirmMov.textContent = 'Confirmar Movimiento';
-               return;
-             }
-          }
-
-          const movement = {
-            id: 'mov_' + Date.now(),
-            agent_id: currentUser.id || currentUser.username,
-            routeId: currentUser.routeId,
-            type: currentMovementType,
-            amount: amount,
-            date: new Date().toISOString().split('T')[0]
-          };
-
-          try {
-            const success = await window.BulaPayDB.saveCashMovement(movement);
+          if (success) {
+            alert('✅ Movimiento registrado exitosamente.');
+            document.getElementById('cash-movement-amount').value = '';
+            document.getElementById('cash-movement-form').style.display = 'none';
             
-            if (success) {
-              alert('✅ Movimiento registrado exitosamente.');
-              document.getElementById('cash-movement-amount').value = '';
-              document.getElementById('cash-movement-form').style.display = 'none';
-              
-              // Actualizar datos del modal de Cierre de Caja
-              const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
-              const elOnHand = document.getElementById('private-cash-on-hand');
-              if (elOnHand) {
-                if (onHand < 0) {
-                  elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
-                  elOnHand.style.color = 'var(--color-rojo)';
-                } else {
-                  elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
-                  elOnHand.style.color = 'var(--text-primary)';
-                }
+            // Actualizar datos del modal de Cierre de Caja
+            const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+            const elOnHand = document.getElementById('private-cash-on-hand');
+            if (elOnHand) {
+              if (onHand < 0) {
+                elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
+                elOnHand.style.color = 'var(--color-rojo)';
+              } else {
+                elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+                elOnHand.style.color = 'var(--text-primary)';
               }
-
-              // Actualizar vistas y dashboard financiero global
-              await window.AgentV6.renderFinancialDashboard();
-            } else {
-              alert('❌ Error al guardar el movimiento de caja.');
             }
-          } catch (error) {
-            console.error(error);
-            alert('❌ Error de conexión.');
+
+            // Actualizar vistas y dashboard financiero global
+            await window.AgentV6.renderFinancialDashboard();
+          } else {
+            alert('❌ Error al guardar el movimiento de caja.');
           }
-          
-          btnConfirmMov.disabled = false;
-          btnConfirmMov.textContent = 'Confirmar Movimiento';
-        };
-      }
+        } catch (error) {
+          console.error(error);
+          alert('❌ Error de conexión.');
+        }
+        
+        btnConfirmMov.disabled = false;
+        btnConfirmMov.textContent = 'Confirmar Movimiento';
+      };
     }
 
     // Modal de Patrimonio Real del Negocio (Informativo Consolidado)
