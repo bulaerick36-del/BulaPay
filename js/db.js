@@ -566,57 +566,131 @@ const db = {
     return data || [];
   },
 
-  // CLIENTS
-  async getClients() {
-    const supabase = await initSupabase();
-    const currentUser = this.getCurrentUser();
-    if (!currentUser) return [];
-    
-    let query = supabase.from('clients').select('*');
+  // CLIENTS & CARTONES JOIN
+  async loadActiveCredits(options = {}) {
+    try {
+      const supabase = await initSupabase();
+      const currentUser = this.getCurrentUser();
+      if (!currentUser) return [];
 
-    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
+      let query = supabase.from('cartones').select('*, clients(*)').eq('estado', 'activo');
+
       const supId = await this.getSupervisorIdForUser(currentUser);
       if (supId) {
         query = query.eq('supervisor_id', supId);
       }
-      
-      let assignedRouteId = currentUser.routeId;
-      if (!assignedRouteId) {
-        assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
+
+      if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
+        let assignedRouteId = currentUser.routeId;
+        if (!assignedRouteId) {
+          assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
+        }
+        const agentId = currentUser.id || currentUser.username;
+        if (assignedRouteId) {
+          query = query.or(`route_id.eq.${assignedRouteId},agent_id.eq.${agentId}`);
+        } else {
+          query = query.eq('agent_id', agentId);
+        }
       }
 
-      const agentId = currentUser.id || currentUser.username;
-      if (assignedRouteId) {
-        query = query.or(`routeId.eq.${assignedRouteId},agent_id.eq.${agentId}`);
-      } else {
-        query = query.eq('agent_id', agentId);
+      const { data: cartonesData, error: cartonesErr } = await query;
+      if (cartonesErr) {
+        console.error("Error al obtener cartones activos en Supabase:", cartonesErr);
       }
-    } else {
-      // Supervisor o Comercio
-      const supId = await this.getSupervisorIdForUser(currentUser);
-      if (supId) {
-        query = query.eq('supervisor_id', supId);
-      } else {
-        return [];
-      }
-    }
 
-    const { data, error } = await query;
-    console.log('Payload de Supabase en Seguimiento Diario (getClients):', data);
-    
-    if (error) {
-      console.error("Error al obtener clientes en Supabase:", error);
+      // Pre-cargar mapa de la tabla clients para asegurar información completa
+      const clientsMap = new Map();
+      try {
+        let clientsQuery = supabase.from('clients').select('*');
+        if (supId) clientsQuery = clientsQuery.eq('supervisor_id', supId);
+        const { data: rawClients } = await clientsQuery;
+        if (rawClients) {
+          rawClients.forEach(c => {
+            if (c && c.cedula) clientsMap.set(String(c.cedula).trim(), c);
+          });
+        }
+      } catch (eCl) {
+        console.warn("Aviso cargando tabla clients para fallback:", eCl);
+      }
+
+      const activeCreditsList = [];
+      const cartones = cartonesData || [];
+
+      cartones.forEach(carton => {
+        const cedula = String(carton.cliente_id || '').trim();
+        if (!cedula) return;
+
+        const joinedClient = (carton.clients && typeof carton.clients === 'object' && carton.clients.name)
+          ? carton.clients
+          : (clientsMap.get(cedula) || {});
+
+        const montoPrestado = Number(carton.monto_prestado || 0);
+        const totalDebt = Number(carton.total_debt || 0);
+        const outstanding = Number(carton.outstanding || 0);
+        const installmentsCount = Number(carton.installments_count || 1);
+        const installmentAmount = Number(carton.installment_amount || 0);
+        const discountAmount = Number(carton.discount_amount || 0);
+        const netCash = Number(carton.net_cash || (montoPrestado - discountAmount));
+
+        activeCreditsList.push({
+          ...joinedClient,
+          ...carton,
+          cedula: cedula,
+          cliente_id: cedula,
+          client_id: cedula,
+          name: joinedClient.name || carton.nombre_cliente || `Cliente ${cedula}`,
+          phone: joinedClient.phone || '',
+          email: joinedClient.email || '',
+          city: joinedClient.city || '',
+          zone: joinedClient.zone || '',
+          risk: joinedClient.risk || 'Verde',
+          monto_prestado: montoPrestado,
+          amount: montoPrestado,
+          total_debt: totalDebt,
+          totalDebt: totalDebt,
+          outstanding: outstanding,
+          installments_count: installmentsCount,
+          installmentsCount: installmentsCount,
+          installment_amount: installmentAmount,
+          installmentAmount: installmentAmount,
+          discount_amount: discountAmount,
+          discount_reason: carton.discount_reason || null,
+          net_cash: netCash,
+          estado: 'activo',
+          status: 'Activo',
+          routeId: carton.route_id || joinedClient.routeId || null,
+          agent_id: carton.agent_id || joinedClient.agent_id || null,
+          supervisor_id: carton.supervisor_id || joinedClient.supervisor_id || null,
+          carton_id: carton.id,
+          numero_carton: carton.numero_carton,
+          created_at: carton.created_at || carton.fecha_apertura || joinedClient.created_at
+        });
+      });
+
+      console.log('✅ [BulaPay DB] Cartones activos re-mapeados con clients (loadActiveCredits):', activeCreditsList);
+      return activeCreditsList;
+    } catch (err) {
+      console.error("Excepción en loadActiveCredits:", err);
       return [];
     }
-    return data || [];
+  },
+
+  async getClients() {
+    return await this.loadActiveCredits();
   },
 
   async getClientByCedula(cedula) {
     try {
-      // Buscar solo dentro de los clientes que le pertenecen al agente/supervisor actual
-      const clients = await this.getClients();
-      const client = clients.find(c => String(c.cedula) === String(cedula));
-      return client || null;
+      const activeCredits = await this.loadActiveCredits();
+      const activeCredit = activeCredits.find(c => String(c.cedula).trim() === String(cedula).trim());
+      if (activeCredit) return activeCredit;
+
+      // Si no hay un cartón activo para esa cédula, consultar clients y reportar "Sin deuda activa"
+      const globalClient = await this.getGlobalClientByCedula(cedula);
+      if (globalClient) {
+        return globalClient;
+      }
+      return null;
     } catch (err) {
       console.error(`Excepción en getClientByCedula para cédula "${cedula}":`, err);
       return null;
@@ -625,7 +699,7 @@ const db = {
 
   async getGlobalClientByCedula(cedula) {
     const supabase = await initSupabase();
-    const { data, error } = await supabase
+    const { data: client, error } = await supabase
       .from('clients')
       .select('*')
       .eq('cedula', String(cedula))
@@ -634,7 +708,49 @@ const db = {
       console.error(`Error al obtener cliente global por cédula "${cedula}":`, error);
       return null;
     }
-    return data;
+    if (!client) return null;
+
+    // Verificar cartón activo en la tabla 'cartones'
+    try {
+      const { data: carton } = await supabase
+        .from('cartones')
+        .select('*')
+        .eq('cliente_id', String(cedula))
+        .eq('estado', 'activo')
+        .maybeSingle();
+
+      if (carton) {
+        return {
+          ...client,
+          ...carton,
+          cedula: client.cedula,
+          name: client.name,
+          amount: Number(carton.monto_prestado || 0),
+          monto_prestado: Number(carton.monto_prestado || 0),
+          totalDebt: Number(carton.total_debt || 0),
+          total_debt: Number(carton.total_debt || 0),
+          outstanding: Number(carton.outstanding || 0),
+          installmentsCount: Number(carton.installments_count || 1),
+          installmentAmount: Number(carton.installment_amount || 0),
+          status: 'Activo',
+          estado: 'activo'
+        };
+      } else {
+        return {
+          ...client,
+          outstanding: 0,
+          totalDebt: 0,
+          amount: 0,
+          monto_prestado: 0,
+          installmentsCount: 1,
+          installmentAmount: 0,
+          status: 'Sin deuda activa',
+          estado: 'Sin deuda activa'
+        };
+      }
+    } catch (eCarton) {
+      return client;
+    }
   },
 
   async getGlobalRouteById(routeId) {
@@ -1126,7 +1242,21 @@ const db = {
         .eq('cedula', String(cedula));
       if (error) {
         console.error(`Error al actualizar saldo pendiente de cliente "${cedula}":`, error);
-        throw error;
+      }
+
+      // Actualizar la tabla cartones en tiempo real para mantener sincronización total
+      try {
+        const cartonStateUpdate = { outstanding: newOutstanding };
+        if (newOutstanding === 0) {
+          cartonStateUpdate.estado = 'liquidado';
+        }
+        await supabase
+          .from('cartones')
+          .update(cartonStateUpdate)
+          .eq('cliente_id', String(cedula))
+          .eq('estado', 'activo');
+      } catch (eCarton) {
+        console.warn(`Aviso actualizando saldo en cartón para "${cedula}":`, eCarton);
       }
     }
   },
@@ -1732,21 +1862,6 @@ const db = {
       if (creditsList.length === 0) {
         creditsList = Array.from(clientsMap.values());
       } else {
-        // DEDUPLICACIÓN ESTRICTA: Registrar todas las cédulas representadas en la tabla 'credits'
-        const representedCedulas = new Set();
-        creditsList.forEach(c => {
-          if (c.client_id) representedCedulas.add(String(c.client_id).trim());
-          if (c.clientCedula) representedCedulas.add(String(c.clientCedula).trim());
-          if (c.cedula) representedCedulas.add(String(c.cedula).trim());
-        });
-
-        // Solo agregar clientes de 'clients' si su cédula NO está en ninguna entrada de 'credits'
-        rawClients.forEach(c => {
-          if (c && c.cedula && !representedCedulas.has(String(c.cedula).trim())) {
-            creditsList.push(c);
-          }
-        });
-
         // Enriquecer cada crédito con los datos actuales del cliente en 'clients' (risk, status)
         creditsList = creditsList.map(c => {
           const ced = String(c.client_id || c.clientCedula || c.cedula || '').trim();
