@@ -1709,6 +1709,54 @@ const agentModule = {
 
     this.updateCobroInvoiceButtonState();
     this.updateCobroActionButtonsState(client, dailyStatusList, isWithoutActiveDebt);
+    this.renderOverdueBanner(client, dailyStatusList);
+  },
+
+  renderOverdueBanner(client, dailyStatusList = null) {
+    const banner = document.getElementById('cobro-overdue-banner');
+    if (!banner) return;
+
+    if (!client) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    const isOverdue = this.isCartonOverdue(client, dailyStatusList);
+
+    if (isOverdue && Number(client.outstanding) > 0) {
+      banner.style.display = 'block';
+      const infoEl = document.getElementById('overdue-banner-info');
+      if (infoEl) {
+        const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
+        infoEl.textContent = `El cliente ${client.name} (C.C. ${client.cedula}) tiene el plazo vencido con un saldo de $${outstandingFmt}.`;
+      }
+
+      const btnRenew = document.getElementById('btn-overdue-banner-renew');
+      const btnBlacklist = document.getElementById('btn-overdue-banner-blacklist');
+      const btnDismiss = document.getElementById('btn-overdue-banner-dismiss');
+
+      if (btnRenew) {
+        btnRenew.onclick = () => {
+          const btnMainRenovar = document.getElementById('btn-cobro-renovar');
+          if (btnMainRenovar) btnMainRenovar.click();
+        };
+      }
+
+      if (btnBlacklist) {
+        btnBlacklist.onclick = () => {
+          const btnMainLiquidar = document.getElementById('btn-cobro-liquidar-mora');
+          if (btnMainLiquidar) btnMainLiquidar.click();
+        };
+      }
+
+      if (btnDismiss) {
+        btnDismiss.onclick = () => {
+          banner.style.display = 'none';
+        };
+      }
+    } else {
+      banner.style.display = 'none';
+    }
   },
 
   parseLocalDate(dateStr) {
@@ -1905,14 +1953,7 @@ const agentModule = {
             (status) => this.handleCartonPayment(status) // Callback interactivo solo aquí
           );
 
-          // Modulo de Cartón Vencido (Lógica 3 Botones)
-          const totalInstallmentsCount = client.installmentsCount || 30;
-          const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
-          const isOverdueCarton = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
 
-          if (isOverdueCarton) {
-            this.showOverdueCartonModal(client, lastInstallment);
-          }
         } catch (e) {
           console.error("Error al preparar cartón interactivo:", e);
         }
@@ -3364,115 +3405,7 @@ const agentModule = {
     modal.style.display = 'flex';
   },
 
-  showOverdueCartonModal(client, lastInstallment) {
-    const modal = document.getElementById('cobro-overdue-carton-modal');
-    if (!modal) return;
-
-    const infoEl = document.getElementById('overdue-carton-modal-info');
-    if (infoEl) {
-      const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
-      infoEl.textContent = `El cliente ${client.name} (C.C. ${client.cedula}) tiene la cuota 30 vencida desde el ${lastInstallment ? lastInstallment.dateStr : 'fecha límite'} y mantiene un saldo pendiente de $${outstandingFmt}.`;
-    }
-
-    const btnLater = document.getElementById('btn-overdue-later');
-    const btnBlacklist = document.getElementById('btn-overdue-blacklist');
-    const btnRenew = document.getElementById('btn-overdue-renew');
-
-    // Botón 1: Revisar más tarde (Gris) -> Solo cierra el modal
-    if (btnLater) {
-      btnLater.onclick = () => {
-        modal.style.display = 'none';
-      };
-    }
-
-    // Botón 2: Liquidar y enviar a Lista Negra (Rojo) - Operación Atómica en DB
-    if (btnBlacklist) {
-      btnBlacklist.onclick = async () => {
-        try {
-          btnBlacklist.disabled = true;
-          btnBlacklist.innerHTML = 'Procesando...';
-
-          // 1. Ejecutar Update DB y esperar respuesta OK de Supabase
-          await window.BulaPayDB.liquidateCredit({
-            cedula: client.cedula,
-            status: 'Liquidado_Mora',
-            outstanding: 0
-          });
-
-          // 2. Limpieza y Recarga Local SOLO si la DB responde OK
-          modal.style.display = 'none';
-
-          this.currentClient = null;
-          if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
-          if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
-          if (this.inputSearchCedula) this.inputSearchCedula.value = '';
-
-          // Recargar lista global de clientes y vista de seguimiento diario
-          await this.updateRouteTracking();
-          await this.renderFinancialDashboard();
-
-          // 3. Notificación de éxito
-          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora) y removido de la ruta de cobro.`);
-        } catch (e) {
-          console.error("Error al enviar a Lista Negra:", e);
-          alert('❌ ERROR EN BASE DE DATOS: No se pudo enviar a Lista Negra. ' + (e.message || e));
-        } finally {
-          btnBlacklist.disabled = false;
-          btnBlacklist.innerHTML = '⛔ Liquidar y enviar a Lista Negra';
-        }
-      };
-    }
-
-    // Botón 3: Renovar (Azul) -> Liquida crédito actual, redirige a Registro pre-llenando datos y auto-descuento
-    if (btnRenew) {
-      btnRenew.onclick = async () => {
-        modal.style.display = 'none';
-        try {
-          const oldOutstanding = Number(client.outstanding || client.totalDebt || 0);
-
-          await window.BulaPayDB.liquidateCredit({
-            cedula: client.cedula,
-            status: 'Liquidado_Renovacion',
-            outstanding: 0
-          });
-          
-          this.switchTab('register');
-          this.setRenewalMode(true, oldOutstanding);
-
-          // 1. Datos Personales y Ubicación
-          const inputName = document.getElementById('new-client-name');
-          const inputCedula = document.getElementById('new-client-cedula');
-          const inputPhone = document.getElementById('new-client-phone');
-          const inputDept = document.getElementById('new-client-department');
-          const inputCity = document.getElementById('new-client-city');
-          const inputZone = document.getElementById('new-client-zone');
-          
-          if (inputName) inputName.value = client.name || '';
-          if (inputCedula) inputCedula.value = client.cedula || '';
-          if (inputPhone) inputPhone.value = client.phone || '';
-          if (inputZone) inputZone.value = client.zone || client.barrio || client.direccion || client.address || '';
-
-          if (inputDept && (client.department || client.departamento)) {
-            const targetDept = client.department || client.departamento;
-            inputDept.value = targetDept;
-            inputDept.dispatchEvent(new Event('change'));
-            
-            if (inputCity && (client.city || client.ciudad || client.municipio)) {
-              const targetCity = client.city || client.ciudad || client.municipio;
-              inputCity.value = targetCity;
-            }
-          }
-
-          alert(`🔄 Cartón anterior de ${client.name} liquidado. Se pre-llenaron los datos del cliente y el saldo anterior de $${oldOutstanding.toLocaleString('es-CO')} en el campo de descuento.`);
-        } catch (e) {
-          console.error("Error al renovar cartón:", e);
-          alert('Error al procesar renovación: ' + (e.message || e));
-        }
-      };
-    }
-
-    modal.style.display = 'flex';
-  },
+  // Modal de cartón vencido deshabilitado y reemplazado por letrero integrado nativo (v87)
 
   async openRouteTrackingModal() {
     const modal = document.getElementById('agent-route-tracking-modal');
