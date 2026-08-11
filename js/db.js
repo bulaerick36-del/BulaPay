@@ -2137,47 +2137,62 @@ const db = {
       }
     }
 
-    // 3. Resetear saldos numéricos a 0 en la tabla clients al liquidar (pagado o por mora)
     const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
 
-    const updatePayload = {
-      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde',
-      status: isPaid ? 'Liquidado_Pagado' : (isMora ? 'Liquidado_Mora' : status)
-    };
-
-    if (isPaid || isMora) {
-      updatePayload.outstanding = 0;
-      if (isPaid) {
-        updatePayload.totalDebt = 0;
-        updatePayload.amount = 0;
-      }
-    } else if (outstanding !== undefined) {
-      updatePayload.outstanding = Math.round(Number(outstanding || 0));
-    }
-
-    const { error: clientErr } = await supabase
-      .from('clients')
-      .update(updatePayload)
-      .eq('cedula', String(cedula));
-      
-    if (clientErr) {
-      console.error("Error al liquidar cliente en Supabase:", clientErr);
-      throw new Error(`Error Supabase: ${clientErr.message || clientErr.details || JSON.stringify(clientErr)}`);
-    }
-
-    // 4. Actualizar tabla cartones si aplica
+    // 3. Actualizar la tabla 'cartones' (DONDE RESIDE EL ESTADO DEL CRÉDITO Y LA CARTERA)
+    const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_mora' : 'liquidado');
     try {
-      await supabase
+      const { error: cartonErr } = await supabase
         .from('cartones')
         .update({ 
-          estado: isPaid ? 'liquidado' : 'liquidado_mora', 
+          estado: cartonEstadoTarget, 
           outstanding: 0,
           total_debt: 0
         })
         .eq('cliente_id', String(cedula))
         .eq('estado', 'activo');
+
+      if (cartonErr) {
+        console.warn("Aviso al actualizar tabla cartones:", cartonErr.message);
+      }
     } catch (eCarton) {
-      console.warn("Tabla cartones al liquidar crédito:", eCarton.message);
+      console.warn("Excepción al actualizar tabla cartones:", eCarton.message);
+    }
+
+    // 4. Actualizar únicamente columnas VÁLIDAS en la tabla 'clients' (risk, y fallback seguro)
+    try {
+      const clientUpdatePayload = {
+        risk: isMora ? 'Rojo' : 'Verde'
+      };
+
+      if (isPaid || isMora) {
+        clientUpdatePayload.outstanding = 0;
+        if (isPaid) {
+          clientUpdatePayload.totalDebt = 0;
+          clientUpdatePayload.amount = 0;
+        }
+      } else if (outstanding !== undefined) {
+        clientUpdatePayload.outstanding = Math.round(Number(outstanding || 0));
+      }
+
+      const { error: clientErr } = await supabase
+        .from('clients')
+        .update(clientUpdatePayload)
+        .eq('cedula', String(cedula));
+
+      if (clientErr) {
+        if (clientErr.code === 'PGRST204' || (clientErr.message && (clientErr.message.includes('column') || clientErr.message.includes('does not exist')))) {
+          console.warn("Reintentando actualización de cliente solo con columna 'risk':", clientErr.message);
+          await supabase
+            .from('clients')
+            .update({ risk: isMora ? 'Rojo' : 'Verde' })
+            .eq('cedula', String(cedula));
+        } else {
+          console.warn("Aviso al actualizar tabla clients:", clientErr.message);
+        }
+      }
+    } catch (eClient) {
+      console.warn("Excepción al actualizar tabla clients:", eClient.message);
     }
 
     // 5. Si es mora, insertar registro explícito en la tabla payments
