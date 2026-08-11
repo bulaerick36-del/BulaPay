@@ -287,18 +287,13 @@ const agentModule = {
         if (!this.currentClient) return;
         const client = this.currentClient;
 
-        // Validación de Regla de Renovación (v83)
+        // Validación de Regla de Renovación (v85)
         const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
         const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const totalCount = client.installmentsCount || 30;
-        const paidCount = dailyStatusList ? dailyStatusList.filter(s => s.hasPaid).length : 0;
-        const todayStr = this.getLocalDateString();
-        const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalCount) || dailyStatusList[dailyStatusList.length - 1];
-        const isOverdue = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
-        const isWithoutDebt = Number(client.outstanding) <= 0;
+        const canRenovar = this.canRenovarCarton(client, dailyStatusList);
 
-        if (paidCount < Math.ceil(totalCount / 2) && !isOverdue && !isWithoutDebt) {
-          alert(`⚠️ No es posible renovar en este momento.\nEl cliente ${client.name} ha pagado ${paidCount} de ${totalCount} cuotas y se encuentra al día.\nSolo se habilita la opción de renovación si el cliente ha pagado la mitad o más de sus cuotas (mínimo ${Math.ceil(totalCount / 2)} cuotas) o si el cartón se encuentra vencido.`);
+        if (!canRenovar) {
+          alert(`⚠️ No es posible renovar en este momento.\nEl cliente ${client.name} se encuentra al día y no ha cumplido la mitad del plazo.\nSolo se habilita la opción de renovación si el cliente ha transcurrido/pagado la mitad o más de sus cuotas o si el cartón se encuentra vencido.`);
           return;
         }
 
@@ -350,13 +345,10 @@ const agentModule = {
         if (!this.currentClient) return;
         const client = this.currentClient;
 
-        // Validación de Regla de Liquidar por Mora (v83)
+        // Validación de Regla de Liquidar por Mora (v85)
         const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
         const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const totalCount = client.installmentsCount || 30;
-        const todayStr = this.getLocalDateString();
-        const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalCount) || dailyStatusList[dailyStatusList.length - 1];
-        const isOverdue = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
+        const isOverdue = this.isCartonOverdue(client, dailyStatusList);
 
         if (!isOverdue) {
           alert(`⚠️ No es posible enviar a Lista Negra / Liquidar por Mora.\nEl cartón de ${client.name} no se encuentra vencido. Esta acción únicamente está habilitada para cartones oficialmente vencidos.`);
@@ -1719,22 +1711,78 @@ const agentModule = {
     this.updateCobroActionButtonsState(client, dailyStatusList, isWithoutActiveDebt);
   },
 
-  updateCobroActionButtonsState(client, dailyStatusList, isWithoutActiveDebt) {
-    const btnRenovar = document.getElementById('btn-cobro-renovar');
-    const btnLiquidarMora = document.getElementById('btn-cobro-liquidar-mora');
+  parseLocalDate(dateStr) {
+    if (!dateStr) return new Date();
+    if (dateStr instanceof Date) return new Date(dateStr.getFullYear(), dateStr.getMonth(), dateStr.getDate());
+    const s = String(dateStr).trim();
+    if (s.includes('T')) {
+      const datePart = s.split('T')[0];
+      const parts = datePart.split('-');
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else if (s.includes('-')) {
+      const parts = s.split('-');
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? new Date() : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  },
 
-    if (!client) return;
-
-    const totalInstallmentsCount = client.installmentsCount || 30;
-    const todayStr = this.getLocalDateString();
+  calculateCartonDueDate(startDateObj, totalInstallments) {
+    let validDaysCounter = 0;
+    let calendarDaysOffset = 0;
+    let lastDate = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
     
-    let paidCount = 0;
-    let isOverdueCarton = false;
+    while (validDaysCounter < totalInstallments) {
+      const currentDayDate = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+      currentDayDate.setDate(currentDayDate.getDate() + calendarDaysOffset);
+      calendarDaysOffset++;
+      
+      if (currentDayDate.getDay() === 0) continue; // Saltar domingos
+      
+      validDaysCounter++;
+      lastDate = currentDayDate;
+    }
+    return lastDate;
+  },
 
+  isCartonOverdue(client, dailyStatusList = null) {
+    if (!client || Number(client.outstanding) <= 0) return false;
+
+    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    const today = new Date();
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayStr = `${todayZero.getFullYear()}-${String(todayZero.getMonth() + 1).padStart(2, '0')}-${String(todayZero.getDate()).padStart(2, '0')}`;
+
+    // 1. Chequeo por dailyStatusList si existe
+    if (dailyStatusList && dailyStatusList.length > 0) {
+      const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
+      if (lastInstallment && lastInstallment.dateStr && lastInstallment.dateStr < todayStr) {
+        return true;
+      }
+    }
+
+    // 2. Chequeo directo por fecha_apertura
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    if (!cartonDateStr) return false;
+
+    const startDate = this.parseLocalDate(cartonDateStr);
+    const dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+
+    const dueDateStr = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}`;
+
+    return todayStr > dueDateStr;
+  },
+
+  canRenovarCarton(client, dailyStatusList = null) {
+    if (!client) return false;
+    if (Number(client.outstanding) <= 0) return true; // Cliente sin deuda activa puede renovar
+
+    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    const halfTerm = Math.ceil(totalInstallmentsCount / 2);
+
+    let paidCount = 0;
     if (dailyStatusList && dailyStatusList.length > 0) {
       paidCount = dailyStatusList.filter(s => s.hasPaid).length;
-      const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
-      isOverdueCarton = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
     } else {
       const debt = Number(client.totalDebt || client.total_debt || (client.amount * 1.2) || 0);
       const out = Number(client.outstanding || 0);
@@ -1744,8 +1792,33 @@ const agentModule = {
       }
     }
 
-    const hasPaidHalfOrMore = paidCount >= Math.ceil(totalInstallmentsCount / 2);
-    const canRenovar = hasPaidHalfOrMore || isOverdueCarton || isWithoutActiveDebt;
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    let daysElapsed = 0;
+    if (cartonDateStr) {
+      const startDate = this.parseLocalDate(cartonDateStr);
+      const today = new Date();
+      const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let tempDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      while (tempDate < todayZero) {
+        if (tempDate.getDay() !== 0) daysElapsed++;
+        tempDate.setDate(tempDate.getDate() + 1);
+      }
+    }
+
+    const isOverdue = this.isCartonOverdue(client, dailyStatusList);
+    const hasPaidHalfOrMore = paidCount >= halfTerm || daysElapsed >= halfTerm;
+
+    return hasPaidHalfOrMore || isOverdue;
+  },
+
+  updateCobroActionButtonsState(client, dailyStatusList, isWithoutActiveDebt) {
+    const btnRenovar = document.getElementById('btn-cobro-renovar');
+    const btnLiquidarMora = document.getElementById('btn-cobro-liquidar-mora');
+
+    if (!client) return;
+
+    const canRenovar = this.canRenovarCarton(client, dailyStatusList) || isWithoutActiveDebt;
+    const isOverdueCarton = this.isCartonOverdue(client, dailyStatusList);
 
     if (btnRenovar) {
       if (canRenovar) {
@@ -1757,7 +1830,7 @@ const agentModule = {
         btnRenovar.disabled = true;
         btnRenovar.style.opacity = '0.4';
         btnRenovar.style.cursor = 'not-allowed';
-        btnRenovar.title = 'Solo disponible si ha pagado al menos el 50% de las cuotas o si el cartón está vencido.';
+        btnRenovar.title = 'Solo disponible si ha transcurrido/pagado al menos el 50% del plazo o si el cartón está vencido.';
       }
     }
 
@@ -1771,7 +1844,7 @@ const agentModule = {
         btnLiquidarMora.disabled = true;
         btnLiquidarMora.style.opacity = '0.4';
         btnLiquidarMora.style.cursor = 'not-allowed';
-        btnLiquidarMora.title = 'Solo disponible si el cartón se encuentra oficialmente vencido.';
+        btnLiquidarMora.title = 'Solo disponible si la fecha actual ha superado el plazo total del cartón (vencido).';
       }
     }
   },
