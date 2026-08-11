@@ -2303,62 +2303,74 @@ const db = {
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
-      // 1. Capital Base (Patrimonio)
-      const baseCapital = Math.round(await this.getRealBaseCapital(targetRouteId));
+      // 1. Capital Inicial Inyectado Neto en el sistema (Inyecciones de Capital)
+      const rawInjections = await this.getCapitalInjections(targetRouteId);
+      const uniqueInjectionsMap = new Map();
+      rawInjections.forEach(inj => {
+        if (inj) {
+          const statusStr = String(inj.status || '').toLowerCase();
+          if (statusStr.includes('rechaz') || statusStr.includes('cancel')) return;
+          const injId = String(inj.id || (inj.routeId + '_' + inj.amount + '_' + inj.date));
+          if (!uniqueInjectionsMap.has(injId)) uniqueInjectionsMap.set(injId, inj);
+        }
+      });
+      const injections = Array.from(uniqueInjectionsMap.values());
 
-      // 2. Capital puro prestado en la calle de cartones ACTIVOS de la tabla 'cartones' (sin intereses)
-      let qCartones = supabase.from('cartones').select('*').eq('estado', 'activo');
-      if (targetRouteId) {
-        qCartones = qCartones.eq('route_id', targetRouteId);
-      } else if (agentId) {
-        qCartones = qCartones.eq('agent_id', agentId);
+      let totalInjected = 0;
+      for (const inj of injections) {
+        const belongsToUser = targetRouteId ? (String(inj.routeId) === String(targetRouteId)) : (String(inj.agent_id) === String(agentId));
+        if (belongsToUser) totalInjected += Math.round(parseFloat(inj.amount) || 0);
       }
-      const { data: activeCartones, error: actErr } = await qCartones;
 
-      let capitalPrestadoActivos = 0;
-      const activeClientCedulas = new Set();
+      if (injections.length === 0 && totalInjected === 0 && targetRouteId) {
+        const route = await this.getRouteById(targetRouteId);
+        if (route && route.capital) {
+          totalInjected = Math.round(parseFloat(route.capital) || 0);
+        }
+      }
 
-      if (!actErr && activeCartones && activeCartones.length > 0) {
-        activeCartones.forEach(c => {
-          const outstanding = Math.round(Number(c.outstanding || 0));
-          if (outstanding > 0) {
-            const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
-            const discountAmt = Math.round(Number(c.discount_amount || 0));
-            const efectivoNetoSalido = Math.max(0, amountPuro - discountAmt);
-            capitalPrestadoActivos += efectivoNetoSalido;
-            if (c.cliente_id) activeClientCedulas.add(String(c.cliente_id));
-          }
+      // 2. Suma de Retenciones (Seguros/Papelería) y Capital Puro Prestado Entregado en la Calle (Histórico Total)
+      let totalRetainedFees = 0;
+      let totalCapitalPrestadoHistorico = 0;
+
+      let qCartonesAll = supabase.from('cartones').select('*');
+      if (targetRouteId) {
+        qCartonesAll = qCartonesAll.eq('route_id', targetRouteId);
+      } else if (agentId) {
+        qCartonesAll = qCartonesAll.eq('agent_id', agentId);
+      }
+      const { data: allCartones } = await qCartonesAll;
+
+      if (allCartones && allCartones.length > 0) {
+        allCartones.forEach(c => {
+          const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
+          const discountAmt = Math.round(Number(c.discount_amount || 0));
+          const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+          totalCapitalPrestadoHistorico += efectivoEntregado;
+
+          const retained = this.getRetainedFeesFromCredit(c);
+          totalRetainedFees += Math.round(retained);
         });
       } else {
         const clients = await this.getClients();
         clients.forEach(c => {
           const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
           if (belongsToUser || !targetRouteId) {
-            const outstanding = Math.round(Number(c.outstanding || 0));
-            const rawStatus = String(c.status || c.estado || 'Activo').trim().toUpperCase();
-            const isActivo = outstanding > 0 &&
-                             (rawStatus === 'ACTIVO' || rawStatus === 'EN RUTA' || rawStatus === 'ACTIVA') &&
-                             !rawStatus.includes('LIQUIDADO') && 
-                             !rawStatus.includes('CANCELAD') && 
-                             rawStatus !== 'MOROSO';
-
-            if (isActivo) {
-              const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-              const retainedFee = this.getRetainedFeesFromCredit(c);
-              const efectivoNetoSalido = Math.max(0, amountPuro - retainedFee);
-              capitalPrestadoActivos += efectivoNetoSalido;
-              activeClientCedulas.add(String(c.cedula));
-            }
+            const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+            const retainedFee = this.getRetainedFeesFromCredit(c);
+            const efectivoEntregado = Math.max(0, amountPuro - retainedFee);
+            totalCapitalPrestadoHistorico += efectivoEntregado;
+            totalRetainedFees += Math.round(retainedFee);
           }
         });
       }
 
-      // 3. Cuotas diarias cobradas en efectivo (pagos reales ingresados a caja)
+      // 3. Cuotas diarias cobradas en efectivo de la tabla payments (recaudos reales ingresados a caja)
       const payments = await this.getPayments();
-      let cuotasCobradasTotales = 0;
+      let totalCuotasCobradasEfectivo = 0;
       for (const p of payments) {
-        if (p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && p.status !== 'Liquidado_Mora') {
-          cuotasCobradasTotales += Math.round(parseFloat(p.amount) || 0);
+        if (p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && String(p.status || '').toUpperCase() !== 'LIQUIDADO_MORA') {
+          totalCuotasCobradasEfectivo += Math.round(parseFloat(p.amount) || 0);
         }
       }
 
@@ -2373,10 +2385,10 @@ const db = {
         });
       }
 
-      // REGLA CONTABLE DEFINITIVA (v90):
-      // Capital en Caja (Liquidez Disponible) = Capital Base - Capital prestado activo + Cuotas cobradas en efectivo + Movimientos manuales
-      const efectivoDisponible = Math.round(baseCapital - capitalPrestadoActivos + cuotasCobradasTotales + manualNetMovements);
-      return efectivoDisponible;
+      // REGLA MATEMÁTICA DEFINITIVA (v91):
+      // Capital en Caja (Físico en Mano) = Inyecciones + Retenciones + Cuotas Cobradas en Efectivo - Capital Entregado a Clientes + Movimientos Manuales
+      const efectivoDisponible = Math.round(totalInjected + totalRetainedFees + totalCuotasCobradasEfectivo - totalCapitalPrestadoHistorico + manualNetMovements);
+      return Math.max(0, efectivoDisponible);
     } catch (err) {
       console.error('Error fetching liquid cash (Liquidez):', err);
       return 0;
