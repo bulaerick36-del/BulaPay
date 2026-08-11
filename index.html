@@ -1336,18 +1336,28 @@
       <!-- Pestaña: Mi Negocio -->
       <div id="private-panel-business" style="display: none; flex-direction: column; gap: 1.5rem;">
         
-        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 16px; padding: 2rem; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 10px 15px -3px rgba(16,185,129,0.3);">
-          <span style="font-size: 2.5rem; margin-bottom: 0.5rem;">💰</span>
-          <h3 style="margin: 0 0 0.5rem 0; font-weight: 600; font-size: 1.1rem; opacity: 0.9;">Capital en Caja</h3>
-          <h1 id="private-panel-capital" style="margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: -1px;">$0</h1>
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 16px; padding: 1.75rem; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 10px 15px -3px rgba(16,185,129,0.3);">
+          <span style="font-size: 2.2rem; margin-bottom: 0.3rem;">💰</span>
+          <h3 style="margin: 0 0 0.3rem 0; font-weight: 600; font-size: 1.1rem; opacity: 0.9;">Capital en Caja</h3>
+          <h1 id="private-panel-capital" style="margin: 0; font-size: 2.8rem; font-weight: 800; letter-spacing: -1px;">$0</h1>
           
-          <div style="margin-top: 1.5rem; width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <!-- Acciones Rápidas de Movimiento de Caja -->
+          <div style="margin-top: 1.25rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; width: 100%;">
+            <button id="btn-quick-cash-add" style="padding: 0.45rem 0.85rem; background-color: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 20px; font-weight: 700; font-size: 0.8rem; cursor: pointer; transition: transform 0.15s, background-color 0.2s; display: flex; align-items: center; gap: 0.3rem;">
+              🟢 Agregar a Caja
+            </button>
+            <button id="btn-quick-cash-remove" style="padding: 0.45rem 0.85rem; background-color: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 20px; font-weight: 700; font-size: 0.8rem; cursor: pointer; transition: transform 0.15s, background-color 0.2s; display: flex; align-items: center; gap: 0.3rem;">
+              🔴 Sacar de Caja
+            </button>
+            <button id="btn-show-inject-modal" style="padding: 0.45rem 0.85rem; background-color: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 20px; font-weight: 600; font-size: 0.8rem; cursor: pointer; transition: background-color 0.2s; display: flex; align-items: center; gap: 0.3rem;">
+              ➕ Inyectar Capital
+            </button>
+          </div>
+
+          <div style="margin-top: 1.25rem; width: 100%; display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.2);">
             <div style="font-size: 0.85rem; color: rgba(255, 255, 255, 0.9); font-weight: 600; text-align: left;">
               Cartera en Calle:<br><span id="private-panel-cartera" style="color: white; font-weight: 800; font-size: 1rem;">$0</span>
             </div>
-            <button id="btn-show-inject-modal" style="padding: 0.5rem 1rem; background-color: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 20px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: background-color 0.2s; flex-shrink: 0;">
-              ➕ Inyectar Capital
-            </button>
             <div style="font-size: 0.85rem; color: rgba(255, 255, 255, 0.9); font-weight: 600; text-align: right;">
               Intereses Activos:<br><span id="private-panel-ganancia" style="color: white; font-weight: 800; font-size: 1rem;">$0</span>
             </div>
@@ -1534,13 +1544,13 @@
   <!-- MODULOS JAVASCRIPT DE BulaPay -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/db.js?v=79"></script>
-  <script src="js/auth.js?v=79"></script>
-  <script src="js/supervisor.js?v=79"></script>
-  <script src="js/agent_v6.js?v=79"></script>
-  <script src="js/customer.js?v=79"></script>
+  <script src="js/db.js?v=80"></script>
+  <script src="js/auth.js?v=80"></script>
+  <script src="js/supervisor.js?v=80"></script>
+  <script src="js/agent_v6.js?v=80"></script>
+  <script src="js/customer.js?v=80"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=79"></script>
+  <script src="js/app.js?v=80"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">

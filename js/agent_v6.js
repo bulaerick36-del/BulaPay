@@ -944,7 +944,28 @@ const agentModule = {
           console.error(e);
           elCollected.textContent = 'Error';
         }
-      };
+      // Manejadores de los botones de acción rápida de caja en la tarjeta del panel principal
+      const btnQuickAdd = document.getElementById('btn-quick-cash-add');
+      if (btnQuickAdd && btnCash) {
+        btnQuickAdd.onclick = async () => {
+          if (btnCash.onclick) await btnCash.onclick();
+          const btnAdd = document.getElementById('btn-cash-add');
+          if (btnAdd && btnAdd.onclick) btnAdd.onclick();
+          const inputAmt = document.getElementById('cash-movement-amount');
+          if (inputAmt) inputAmt.focus();
+        };
+      }
+
+      const btnQuickRemove = document.getElementById('btn-quick-cash-remove');
+      if (btnQuickRemove && btnCash) {
+        btnQuickRemove.onclick = async () => {
+          if (btnCash.onclick) await btnCash.onclick();
+          const btnRemove = document.getElementById('btn-cash-remove');
+          if (btnRemove && btnRemove.onclick) btnRemove.onclick();
+          const inputAmt = document.getElementById('cash-movement-amount');
+          if (inputAmt) inputAmt.focus();
+        };
+      }
 
       const cashMovementAmountInput = document.getElementById('cash-movement-amount');
       if (cashMovementAmountInput) {
