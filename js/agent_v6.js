@@ -1730,30 +1730,6 @@ const agentModule = {
         const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
         infoEl.textContent = `El cliente ${client.name} (C.C. ${client.cedula}) tiene el plazo vencido con un saldo de $${outstandingFmt}.`;
       }
-
-      const btnRenew = document.getElementById('btn-overdue-banner-renew');
-      const btnBlacklist = document.getElementById('btn-overdue-banner-blacklist');
-      const btnDismiss = document.getElementById('btn-overdue-banner-dismiss');
-
-      if (btnRenew) {
-        btnRenew.onclick = () => {
-          const btnMainRenovar = document.getElementById('btn-cobro-renovar');
-          if (btnMainRenovar) btnMainRenovar.click();
-        };
-      }
-
-      if (btnBlacklist) {
-        btnBlacklist.onclick = () => {
-          const btnMainLiquidar = document.getElementById('btn-cobro-liquidar-mora');
-          if (btnMainLiquidar) btnMainLiquidar.click();
-        };
-      }
-
-      if (btnDismiss) {
-        btnDismiss.onclick = () => {
-          banner.style.display = 'none';
-        };
-      }
     } else {
       banner.style.display = 'none';
     }

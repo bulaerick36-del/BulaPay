@@ -619,26 +619,15 @@
                     <p style="font-size: 0.85rem; color: var(--text-primary); margin: 0; font-weight: 600;">El saldo es $0 por castigo, no por pago.</p>
                   </div>
 
-                  <!-- LETRERO CARTÓN VENCIDO (INTEGRADO EN TARJETA - v87) -->
-                  <div id="cobro-overdue-banner" style="display: none; padding: 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.4); border-radius: 12px; margin-top: 1rem; margin-bottom: 1rem; text-align: center;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 0.35rem;">
-                      <span style="font-size: 1.25rem;">⚠️</span>
-                      <h4 style="font-size: 0.95rem; font-weight: 800; color: #ef4444; margin: 0; text-transform: uppercase;">Cartón Vencido</h4>
+                  <!-- LETRERO CARTÓN VENCIDO (INTEGRADO EN TARJETA - v88) -->
+                  <div id="cobro-overdue-banner" style="display: none; padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.4); border-radius: 12px; margin-top: 1rem; margin-bottom: 1rem; text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-bottom: 0.25rem;">
+                      <span style="font-size: 1.1rem;">⚠️</span>
+                      <h4 style="font-size: 0.9rem; font-weight: 800; color: #ef4444; margin: 0; text-transform: uppercase;">Cartón Vencido</h4>
                     </div>
-                    <p id="overdue-banner-info" style="font-size: 0.78rem; color: var(--text-secondary); margin: 0 0 0.85rem 0; line-height: 1.35;">
+                    <p id="overdue-banner-info" style="font-size: 0.8rem; color: var(--text-secondary); margin: 0; line-height: 1.35;">
                       El plazo de cuotas ha expirado y el cliente conserva deuda activa.
                     </p>
-                    <div style="display: flex; gap: 0.5rem; width: 100%;">
-                      <button type="button" id="btn-overdue-banner-renew" class="btn" style="flex: 1; padding: 0.65rem 0.5rem; font-size: 0.8rem; font-weight: 800; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; border: none; border-radius: 8px; cursor: pointer;">
-                        🔄 Renovar
-                      </button>
-                      <button type="button" id="btn-overdue-banner-blacklist" class="btn" style="flex: 1; padding: 0.65rem 0.5rem; font-size: 0.8rem; font-weight: 800; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: white; border: none; border-radius: 8px; cursor: pointer;">
-                        ⛔ Lista Negra
-                      </button>
-                      <button type="button" id="btn-overdue-banner-dismiss" class="btn" style="padding: 0.65rem 0.65rem; font-size: 0.8rem; font-weight: 700; background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer;" title="Ocultar aviso por ahora">
-                        ✕
-                      </button>
-                    </div>
                   </div>
 
                   <!-- FORMULARIO REGISTRAR PAGO -->
@@ -1535,13 +1524,13 @@
   <!-- MODULOS JAVASCRIPT DE BulaPay -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/db.js?v=87"></script>
-  <script src="js/auth.js?v=87"></script>
-  <script src="js/supervisor.js?v=87"></script>
-  <script src="js/agent_v6.js?v=87"></script>
-  <script src="js/customer.js?v=87"></script>
+  <script src="js/db.js?v=88"></script>
+  <script src="js/auth.js?v=88"></script>
+  <script src="js/supervisor.js?v=88"></script>
+  <script src="js/agent_v6.js?v=88"></script>
+  <script src="js/customer.js?v=88"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=87"></script>
+  <script src="js/app.js?v=88"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
