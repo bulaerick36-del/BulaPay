@@ -1986,8 +1986,8 @@ const db = {
 
       const { data: cartonesActivos, error } = await query;
 
-      let carteraEnCalle = 0; // Suma de outstanding ÚNICAMENTE de cartones ACTIVOS
-      let posibleGanancia = 0; // Suma de ganancia esperada (total_debt - monto_prestado) ÚNICAMENTE de cartones ACTIVOS
+      let carteraEnCalle = 0; // Suma del capital principal activo en poder de los clientes
+      let interesesActivos = 0; // Suma de ganancias proyectadas de cartones activos
 
       if (!error && cartonesActivos && cartonesActivos.length > 0) {
         cartonesActivos.forEach(c => {
@@ -1996,9 +1996,13 @@ const db = {
           const amount = Math.round(Number(c.monto_prestado || c.amount || 0));
 
           if (outstanding > 0) {
-            carteraEnCalle += outstanding;
-            const interesCredito = Math.max(0, totalDebt - amount);
-            posibleGanancia += interesCredito;
+            if (totalDebt > 0) {
+              const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
+              carteraEnCalle += Math.round(outstanding * capitalRatio);
+              interesesActivos += Math.round(outstanding * (1 - capitalRatio));
+            } else {
+              carteraEnCalle += outstanding;
+            }
           }
         });
       } else {
@@ -2017,9 +2021,13 @@ const db = {
                              rawStatus.includes('NEGRA');
 
             if (!isMoroso && outstanding > 0) {
-              carteraEnCalle += outstanding;
-              const interesCredito = Math.max(0, totalDebt - amount);
-              posibleGanancia += interesCredito;
+              if (totalDebt > 0) {
+                const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
+                carteraEnCalle += Math.round(outstanding * capitalRatio);
+                interesesActivos += Math.round(outstanding * (1 - capitalRatio));
+              } else {
+                carteraEnCalle += outstanding;
+              }
             }
           }
         });
@@ -2027,11 +2035,12 @@ const db = {
 
       return {
         carteraEnCalle: Math.round(carteraEnCalle),
-        posibleGanancia: Math.round(posibleGanancia)
+        interesesActivos: Math.round(interesesActivos),
+        posibleGanancia: Math.round(interesesActivos)
       };
     } catch (err) {
       console.error("Error al calcular métricas del Dashboard financiero:", err);
-      return { carteraEnCalle: 0, posibleGanancia: 0 };
+      return { carteraEnCalle: 0, interesesActivos: 0, posibleGanancia: 0 };
     }
   },
 
@@ -2176,7 +2185,7 @@ const db = {
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
-      // 1. Mi Capital Base (Patrimonio)
+      // 1. Capital Base (Patrimonio)
       const baseCapital = Math.round(await this.getRealBaseCapital(targetRouteId));
 
       // 2. Capital puro prestado en la calle de cartones ACTIVOS de la tabla 'cartones' (sin intereses)
@@ -2236,8 +2245,19 @@ const db = {
         }
       }
 
-      // REGLA ESTRICTA: Efectivo Disponible (Liquidez) = Mi Capital Base - Capital puro prestado activo + Cuotas cobradas activas
-      const efectivoDisponible = Math.round(baseCapital - capitalPrestadoActivos + cuotasCobradasActivos);
+      // 4. Movimientos manuales de caja (Entradas y Salidas)
+      const movements = await this.getCashMovements();
+      let manualNetMovements = 0;
+      if (movements && movements.length > 0) {
+        movements.forEach(m => {
+          const amt = Math.round(Number(m.amount) || 0);
+          if (m.type === 'entrada') manualNetMovements += amt;
+          else if (m.type === 'salida') manualNetMovements -= amt;
+        });
+      }
+
+      // REGLA ESTRICTA: Capital en Caja (Liquidez Disponible) = Capital Base - Capital prestado activo + Cuotas cobradas + Movimientos manuales
+      const efectivoDisponible = Math.round(baseCapital - capitalPrestadoActivos + cuotasCobradasActivos + manualNetMovements);
       return efectivoDisponible;
     } catch (err) {
       console.error('Error fetching liquid cash (Liquidez):', err);
