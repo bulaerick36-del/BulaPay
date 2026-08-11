@@ -157,6 +157,8 @@ const agentModule = {
     this.btnCobroCarton = document.getElementById('btn-cobro-carton');
     this.btnCobroBack = document.getElementById('btn-cobro-back');
     this.btnLiquidarCarton = document.getElementById('btn-liquidar-carton');
+    this.btnCobroRenovar = document.getElementById('btn-cobro-renovar');
+    this.btnCobroLiquidarMora = document.getElementById('btn-cobro-liquidar-mora');
     
     // Modal Factura
     this.cobroInvoiceModal = document.getElementById('cobro-invoice-modal');
@@ -276,6 +278,91 @@ const agentModule = {
         if (this.cobroInputState && this.cobroCartonState) {
           this.cobroCartonState.style.setProperty('display', 'none', 'important');
           this.cobroInputState.style.setProperty('display', 'block', 'important');
+        }
+      });
+    }
+
+    if (this.btnCobroRenovar) {
+      this.btnCobroRenovar.addEventListener('click', async () => {
+        if (!this.currentClient) return;
+        const client = this.currentClient;
+        const confirmMsg = `¿Estás seguro de renovar el préstamo para el cliente ${client.name} (C.C. ${client.cedula})?\nEsto liquidará el cartón actual y abrirá el formulario de registro pre-llenando sus datos.`;
+        if (!confirm(confirmMsg)) return;
+
+        try {
+          const oldOutstanding = Number(client.outstanding || client.totalDebt || 0);
+          await window.BulaPayDB.liquidateCredit({
+            cedula: client.cedula,
+            status: 'Liquidado_Renovacion',
+            outstanding: 0
+          });
+          
+          this.switchTab('register');
+          this.setRenewalMode(true, oldOutstanding);
+
+          const inputName = document.getElementById('new-client-name');
+          const inputCedula = document.getElementById('new-client-cedula');
+          const inputPhone = document.getElementById('new-client-phone');
+          const inputDept = document.getElementById('new-client-department');
+          const inputCity = document.getElementById('new-client-city');
+          const inputZone = document.getElementById('new-client-zone');
+          
+          if (inputName) inputName.value = client.name || '';
+          if (inputCedula) inputCedula.value = client.cedula || '';
+          if (inputPhone) inputPhone.value = client.phone || '';
+          if (inputZone) inputZone.value = client.zone || client.barrio || client.direccion || client.address || '';
+
+          if (inputDept && (client.department || client.departamento)) {
+            const targetDept = client.department || client.departamento;
+            inputDept.value = targetDept;
+            inputDept.dispatchEvent(new Event('change'));
+            if (inputCity && (client.city || client.ciudad || client.municipio)) {
+              inputCity.value = client.city || client.ciudad || client.municipio;
+            }
+          }
+
+          alert(`🔄 Cartón anterior de ${client.name} liquidado por renovación. Se pre-llenaron los datos en el formulario de registro.`);
+        } catch (e) {
+          console.error("Error al procesar renovación:", e);
+          alert('❌ Error al procesar renovación: ' + (e.message || e));
+        }
+      });
+    }
+
+    if (this.btnCobroLiquidarMora) {
+      this.btnCobroLiquidarMora.addEventListener('click', async () => {
+        if (!this.currentClient) return;
+        const client = this.currentClient;
+        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${client.name} y enviarlo a Lista Negra (Liquidado por Mora)?\nEsta acción es irreversible y removerá al cliente de la cartera activa.`;
+        if (!confirm(confirmMsg)) return;
+
+        try {
+          this.btnCobroLiquidarMora.disabled = true;
+          this.btnCobroLiquidarMora.textContent = 'Procesando...';
+
+          await window.BulaPayDB.liquidateCredit({
+            cedula: client.cedula,
+            status: 'Liquidado_Mora',
+            outstanding: 0
+          });
+
+          this.currentClient = null;
+          if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
+          if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
+          if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+
+          await this.updateRouteTracking();
+          await this.renderFinancialDashboard();
+
+          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora) y removido de la ruta de cobro.`);
+        } catch (e) {
+          console.error("Error al enviar a Lista Negra:", e);
+          alert('❌ Error al procesar liquidación: ' + (e.message || e));
+        } finally {
+          if (this.btnCobroLiquidarMora) {
+            this.btnCobroLiquidarMora.disabled = false;
+            this.btnCobroLiquidarMora.textContent = '⛔ Liquidar / Lista Negra';
+          }
         }
       });
     }
@@ -1479,10 +1566,10 @@ const agentModule = {
     if (!client) return;
 
     const outstanding = Number(client.outstanding || 0);
-    const amount = Number(client.amount || 0);
-    const totalDebt = Number(client.totalDebt || 0);
+    const amount = Number(client.amount || client.monto_prestado || 0);
+    const totalDebt = Number(client.totalDebt || client.total_debt || 0);
     const rawStatus = String(client.status || client.estado || '').trim().toUpperCase();
-    const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
+    const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || rawStatus === 'SIN DEUDA ACTIVA';
 
     const isBlacklisted = client.risk === 'Rojo' || 
                           String(client.risk || '').trim().toLowerCase() === 'rojo' || 
@@ -1492,6 +1579,12 @@ const agentModule = {
     const cobroFormFields = document.getElementById('cobro-form-fields');
     const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');
     const cobroBlacklistBanner = document.getElementById('cobro-blacklist-banner');
+    const cobroActionButtonsWrapper = document.getElementById('cobro-action-buttons-wrapper');
+
+    // RENDERIZADO OBLIGATORIO Y VISIBLE DE LOS BOTONES DE ACCIÓN (RENOVAR / LIQUIDAR)
+    if (cobroActionButtonsWrapper) {
+      cobroActionButtonsWrapper.style.setProperty('display', 'flex', 'important');
+    }
 
     // RENDERIZADO CONDICIONAL DE MÁXIMA PRIORIDAD: Cliente en Lista Negra (risk === 'Rojo')
     if (isBlacklisted) {
@@ -1517,7 +1610,6 @@ const agentModule = {
       // 2. Mostrar letrero verde claro "✅ Cartón Liquidado / Cliente sin deuda activa"
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'block', 'important');
 
-      // 3. Renderizado Condicional: Ocultar por completo el botón 'Liquidar Cartón' cuando outstanding == 0
       if (this.btnLiquidarCarton) {
         this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
       }
@@ -1528,9 +1620,9 @@ const agentModule = {
 
       if (this.btnLiquidarCarton) {
         this.btnLiquidarCarton.style.removeProperty('display');
-        this.btnLiquidarCarton.disabled = true;
-        this.btnLiquidarCarton.style.cursor = 'not-allowed';
-        this.btnLiquidarCarton.style.opacity = '0.5';
+        this.btnLiquidarCarton.disabled = false;
+        this.btnLiquidarCarton.style.cursor = 'pointer';
+        this.btnLiquidarCarton.style.opacity = '1';
       }
     }
 
