@@ -880,13 +880,17 @@ const agentModule = {
     const btnBlacklist = document.getElementById('btn-trigger-blacklist-modal');
     
     if (cashModal) {
-      document.getElementById('btn-close-private-cash').onclick = () => cashModal.style.display = 'none';
+      const btnClosePrivateCash = document.getElementById('btn-close-private-cash');
+      if (btnClosePrivateCash) btnClosePrivateCash.onclick = () => cashModal.style.display = 'none';
+      const btnClosePrivateCashX = document.getElementById('btn-close-private-cash-x');
+      if (btnClosePrivateCashX) btnClosePrivateCashX.onclick = () => cashModal.style.display = 'none';
     }
     if (blacklistModal) {
-      document.getElementById('btn-close-private-blacklist').onclick = () => blacklistModal.style.display = 'none';
+      const btnCloseBlacklist = document.getElementById('btn-close-private-blacklist');
+      if (btnCloseBlacklist) btnCloseBlacklist.onclick = () => blacklistModal.style.display = 'none';
     }
 
-    // Modal de Cierre de Caja
+    // Modal de Cierre y Cuadre de Caja (Incluye Acciones Operativas de Caja)
     if (btnCash && cashModal) {
       btnCash.onclick = async () => {
         cashModal.style.display = 'flex';
@@ -900,6 +904,11 @@ const agentModule = {
         if (elDiscounts) elDiscounts.textContent = 'Cargando...';
         elOnHand.textContent = 'Cargando...';
         
+        const movementForm = document.getElementById('cash-movement-form');
+        if (movementForm) movementForm.style.display = 'none';
+        const movementAmount = document.getElementById('cash-movement-amount');
+        if (movementAmount) movementAmount.value = '';
+
         try {
           const { totalCollected, totalLent, totalDiscounts, onHand, massPaymentsTotal } = await window.BulaPayDB.getEfectivoEnCajaDia();
           
@@ -936,27 +945,6 @@ const agentModule = {
           elCollected.textContent = 'Error';
         }
       };
-    }
-
-    // Modal de Patrimonio / Gestión de Caja
-    const cashMgmtModal = document.getElementById('agent-cash-management-modal');
-    const btnCashMgmt = document.getElementById('btn-trigger-cash-management-modal');
-    if (cashMgmtModal && btnCashMgmt) {
-      btnCashMgmt.onclick = async () => {
-        cashMgmtModal.style.display = 'flex';
-        await window.AgentV6.updateCashViews();
-        
-        const movementForm = document.getElementById('cash-movement-form');
-        if (movementForm) movementForm.style.display = 'none';
-        const movementAmount = document.getElementById('cash-movement-amount');
-        if (movementAmount) movementAmount.value = '';
-      };
-
-      const btnCloseMgmt = document.getElementById('btn-close-cash-management');
-      if (btnCloseMgmt) btnCloseMgmt.onclick = () => cashMgmtModal.style.display = 'none';
-
-      const btnCloseX = document.getElementById('btn-close-patrimonio-x');
-      if (btnCloseX) btnCloseX.onclick = () => cashMgmtModal.style.display = 'none';
 
       const cashMovementAmountInput = document.getElementById('cash-movement-amount');
       if (cashMovementAmountInput) {
@@ -1033,7 +1021,20 @@ const agentModule = {
               document.getElementById('cash-movement-amount').value = '';
               document.getElementById('cash-movement-form').style.display = 'none';
               
-              // Actualizar vistas y dashboard financiero
+              // Actualizar datos del modal de Cierre de Caja
+              const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+              const elOnHand = document.getElementById('private-cash-on-hand');
+              if (elOnHand) {
+                if (onHand < 0) {
+                  elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
+                  elOnHand.style.color = 'var(--color-rojo)';
+                } else {
+                  elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+                  elOnHand.style.color = 'var(--text-primary)';
+                }
+              }
+
+              // Actualizar vistas y dashboard financiero global
               await window.AgentV6.renderFinancialDashboard();
             } else {
               alert('❌ Error al guardar el movimiento de caja.');
@@ -1047,6 +1048,22 @@ const agentModule = {
           btnConfirmMov.textContent = 'Confirmar Movimiento';
         };
       }
+    }
+
+    // Modal de Patrimonio Real del Negocio (Informativo Consolidado)
+    const cashMgmtModal = document.getElementById('agent-cash-management-modal');
+    const btnCashMgmt = document.getElementById('btn-trigger-cash-management-modal');
+    if (cashMgmtModal && btnCashMgmt) {
+      btnCashMgmt.onclick = async () => {
+        cashMgmtModal.style.display = 'flex';
+        await window.AgentV6.updateCashViews();
+      };
+
+      const btnCloseMgmt = document.getElementById('btn-close-cash-management');
+      if (btnCloseMgmt) btnCloseMgmt.onclick = () => cashMgmtModal.style.display = 'none';
+
+      const btnCloseX = document.getElementById('btn-close-patrimonio-x');
+      if (btnCloseX) btnCloseX.onclick = () => cashMgmtModal.style.display = 'none';
     }
     
     // Modal de Lista Negra (Regla 4)
