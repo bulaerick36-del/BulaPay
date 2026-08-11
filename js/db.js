@@ -1946,7 +1946,7 @@ const db = {
       // FÓRMULA CONTABLE ESTRICTA:
       // Capital Base (Patrimonio) = Capital Inyectado Neto + Ingresos Retenidos (Seguro/Papelería) + Ganancias Reales Liquidadas - Pérdidas Reales por Mora
       const patrimonioCalculado = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas - totalPerdidasMora);
-      const patrimonioFinal = Math.max(capitalInyectadoNeto, patrimonioCalculado);
+      const patrimonioFinal = Math.max(0, patrimonioCalculado);
 
       // DESGLOSE Y AUDITORÍA EN CONSOLA SOLICITADA
       console.log('=== [AUDITORÍA DESGLOSE CAPITAL BASE] ===', {
@@ -2141,7 +2141,8 @@ const db = {
     const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
 
     const updatePayload = {
-      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde'
+      risk: (isMora || status === 'Liquidado_Mora') ? 'Rojo' : 'Verde',
+      status: isPaid ? 'Liquidado_Pagado' : (isMora ? 'Liquidado_Mora' : status)
     };
 
     if (isPaid || isMora) {
@@ -2170,16 +2171,115 @@ const db = {
         .from('cartones')
         .update({ 
           estado: isPaid ? 'liquidado' : 'liquidado_mora', 
-          outstanding: isPaid ? 0 : updatePayload.outstanding,
-          total_debt: isPaid ? 0 : (updatePayload.totalDebt || 0)
+          outstanding: 0,
+          total_debt: 0
         })
         .eq('cliente_id', String(cedula))
         .eq('estado', 'activo');
     } catch (eCarton) {
       console.warn("Tabla cartones al liquidar crédito:", eCarton.message);
     }
+
+    // 5. Si es mora, insertar registro explícito en la tabla payments
+    if (isMora) {
+      try {
+        const currentUser = this.getCurrentUser();
+        const supId = this.getSupervisorId();
+        const todayStr = new Date().toISOString().split('T')[0];
+        await supabase.from('payments').insert([{
+          id: 'pay_mora_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          clientCedula: String(cedula),
+          installmentNumber: 0,
+          amount: 0,
+          date: todayStr,
+          agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
+          agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
+          status: 'Liquidado_Mora',
+          signature: `BulaPay-SIG-${cedula}-MORA`,
+          supervisor_id: supId
+        }]);
+      } catch (eMoraPay) {
+        console.warn("No se pudo insertar registro de pago por mora:", eMoraPay);
+      }
+    }
     
     return true;
+  },
+
+  async getBlacklistedClients(routeId) {
+    try {
+      const supabase = await initSupabase();
+      const currentUser = this.getCurrentUser();
+      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+      const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
+
+      // 1. Obtener clientes de la tabla clients con risk = 'Rojo' o status moroso
+      let qClients = supabase.from('clients').select('*');
+      if (targetRouteId) {
+        qClients = qClients.eq('routeId', targetRouteId);
+      } else if (agentId) {
+        qClients = qClients.eq('agent_id', agentId);
+      }
+      const { data: clientsData } = await qClients;
+
+      // 2. Obtener cartones con estado = 'liquidado_mora' de la tabla cartones
+      let qCartones = supabase.from('cartones').select('*, clients(*)');
+      if (targetRouteId) {
+        qCartones = qCartones.eq('route_id', targetRouteId);
+      } else if (agentId) {
+        qCartones = qCartones.eq('agent_id', agentId);
+      }
+      const { data: cartonesData } = await qCartones;
+
+      const blacklistedMap = new Map();
+
+      if (clientsData) {
+        clientsData.forEach(c => {
+          const rawStatus = String(c.status || c.estado || '').toUpperCase();
+          if (c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA')) {
+            const ced = String(c.cedula).trim();
+            blacklistedMap.set(ced, {
+              ...c,
+              cedula: ced,
+              name: c.name || `Cliente ${ced}`,
+              status: 'Liquidado_Mora',
+              outstanding: Number(c.amount || c.totalDebt || c.outstanding || 0)
+            });
+          }
+        });
+      }
+
+      if (cartonesData) {
+        cartonesData.forEach(carton => {
+          const rawEstado = String(carton.estado || '').toLowerCase();
+          if (rawEstado === 'liquidado_mora' || rawEstado.includes('mora')) {
+            const ced = String(carton.cliente_id || carton.client_id || '').trim();
+            if (ced) {
+              const joinedClient = carton.clients || {};
+              const moraDebt = Number(carton.monto_prestado || carton.amount || joinedClient.amount || 0);
+              const existing = blacklistedMap.get(ced);
+              blacklistedMap.set(ced, {
+                ...joinedClient,
+                ...carton,
+                cedula: ced,
+                name: joinedClient.name || carton.nombre_cliente || (existing ? existing.name : `Cliente ${ced}`),
+                phone: joinedClient.phone || (existing ? existing.phone : ''),
+                city: joinedClient.city || (existing ? existing.city : ''),
+                zone: joinedClient.zone || (existing ? existing.zone : ''),
+                risk: 'Rojo',
+                status: 'Liquidado_Mora',
+                outstanding: moraDebt > 0 ? moraDebt : Number(existing ? existing.outstanding : 0)
+              });
+            }
+          }
+        });
+      }
+
+      return Array.from(blacklistedMap.values());
+    } catch (e) {
+      console.error("Error al obtener lista negra:", e);
+      return [];
+    }
   },
 
   async getLiquidCash(routeId) {

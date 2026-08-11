@@ -1136,17 +1136,9 @@ const agentModule = {
         container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Cargando morosos...</p>';
         
         try {
-          const clients = await window.BulaPayDB.getClients();
           const currentUser = window.BulaPayDB.getCurrentUser();
-          const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
-
-          // Regla 4: Filtrar créditos/clientes en default / lista negra
-          const badClients = clients.filter(c => {
-            const isMyClient = !c.agent_id || c.agent_id === agentId || c.routeId === currentUser.routeId;
-            const statusUpper = String(c.status || '').toUpperCase();
-            const isMoroso = statusUpper.includes('MORA') || statusUpper.includes('NEGRA') || c.risk === 'Rojo';
-            return isMyClient && isMoroso;
-          });
+          const targetRouteId = currentUser ? currentUser.routeId : null;
+          const badClients = await window.BulaPayDB.getBlacklistedClients(targetRouteId);
           
           if (badClients.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: #10b981; font-weight: bold;">🎉 ¡Felicidades! No tienes clientes en Lista Negra.</p>';
