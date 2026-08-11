@@ -286,6 +286,22 @@ const agentModule = {
       this.btnCobroRenovar.addEventListener('click', async () => {
         if (!this.currentClient) return;
         const client = this.currentClient;
+
+        // Validación de Regla de Renovación (v83)
+        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+        const totalCount = client.installmentsCount || 30;
+        const paidCount = dailyStatusList ? dailyStatusList.filter(s => s.hasPaid).length : 0;
+        const todayStr = this.getLocalDateString();
+        const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalCount) || dailyStatusList[dailyStatusList.length - 1];
+        const isOverdue = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
+        const isWithoutDebt = Number(client.outstanding) <= 0;
+
+        if (paidCount < Math.ceil(totalCount / 2) && !isOverdue && !isWithoutDebt) {
+          alert(`⚠️ No es posible renovar en este momento.\nEl cliente ${client.name} ha pagado ${paidCount} de ${totalCount} cuotas y se encuentra al día.\nSolo se habilita la opción de renovación si el cliente ha pagado la mitad o más de sus cuotas (mínimo ${Math.ceil(totalCount / 2)} cuotas) o si el cartón se encuentra vencido.`);
+          return;
+        }
+
         const confirmMsg = `¿Estás seguro de renovar el préstamo para el cliente ${client.name} (C.C. ${client.cedula})?\nEsto liquidará el cartón actual y abrirá el formulario de registro pre-llenando sus datos.`;
         if (!confirm(confirmMsg)) return;
 
@@ -333,6 +349,20 @@ const agentModule = {
       this.btnCobroLiquidarMora.addEventListener('click', async () => {
         if (!this.currentClient) return;
         const client = this.currentClient;
+
+        // Validación de Regla de Liquidar por Mora (v83)
+        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+        const totalCount = client.installmentsCount || 30;
+        const todayStr = this.getLocalDateString();
+        const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalCount) || dailyStatusList[dailyStatusList.length - 1];
+        const isOverdue = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
+
+        if (!isOverdue) {
+          alert(`⚠️ No es posible enviar a Lista Negra / Liquidar por Mora.\nEl cartón de ${client.name} no se encuentra vencido. Esta acción únicamente está habilitada para cartones oficialmente vencidos.`);
+          return;
+        }
+
         const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${client.name} y enviarlo a Lista Negra (Liquidado por Mora)?\nEsta acción es irreversible y removerá al cliente de la cartera activa.`;
         if (!confirm(confirmMsg)) return;
 
@@ -1557,20 +1587,31 @@ const agentModule = {
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       this.currentClient = updatedClient;
       
-      // Actualizar la interfaz principal del cobrador, Cartón y estado de liquidación
-      await this.renderClientInfo(updatedClient);
-      this.updateCobroViewState(updatedClient);
-      
-      // Actualizar saldo mostrado en el modal
-      if (this.paymentCardClientOutstanding) {
-        this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      if (Number(updatedClient.outstanding) <= 0) {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: updatedClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0
+        });
+        alert('🎉 ¡Felicitaciones! Esta es tu última cuota, el cartón se liquidará automáticamente, te invitamos a adquirir otro crédito');
+        await this.renderFinancialDashboard();
+        await this.searchClient();
+      } else {
+        // Actualizar la interfaz principal del cobrador, Cartón y estado de liquidación
+        await this.renderClientInfo(updatedClient);
+        this.updateCobroViewState(updatedClient);
+        
+        // Actualizar saldo mostrado en el modal
+        if (this.paymentCardClientOutstanding) {
+          this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+        }
+        
+        // Actualizar botón de seguimiento
+        await this.updateRouteTracking();
+        
+        // Mostrar modal obligatorio SMS para notificar el pago masivo
+        this.showMandatorySmsPrompt(updatedClient, 'payment');
       }
-      
-      // Actualizar botón de seguimiento
-      await this.updateRouteTracking();
-      
-      // Mostrar modal obligatorio SMS para notificar el pago masivo
-      this.showMandatorySmsPrompt(updatedClient, 'payment');
       
     } catch (err) {
       console.error("Error al procesar pago masivo:", err);
@@ -1616,7 +1657,7 @@ const agentModule = {
     }
   },
 
-  updateCobroViewState(client) {
+  updateCobroViewState(client, dailyStatusList = null) {
     if (!client) return;
 
     const outstanding = Number(client.outstanding || 0);
@@ -1650,6 +1691,7 @@ const agentModule = {
         this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
       }
       this.updateCobroInvoiceButtonState();
+      this.updateCobroActionButtonsState(client, dailyStatusList, true);
       return;
     } else {
       if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'none', 'important');
@@ -1681,6 +1723,64 @@ const agentModule = {
     }
 
     this.updateCobroInvoiceButtonState();
+    this.updateCobroActionButtonsState(client, dailyStatusList, isWithoutActiveDebt);
+  },
+
+  updateCobroActionButtonsState(client, dailyStatusList, isWithoutActiveDebt) {
+    const btnRenovar = document.getElementById('btn-cobro-renovar');
+    const btnLiquidarMora = document.getElementById('btn-cobro-liquidar-mora');
+
+    if (!client) return;
+
+    const totalInstallmentsCount = client.installmentsCount || 30;
+    const todayStr = this.getLocalDateString();
+    
+    let paidCount = 0;
+    let isOverdueCarton = false;
+
+    if (dailyStatusList && dailyStatusList.length > 0) {
+      paidCount = dailyStatusList.filter(s => s.hasPaid).length;
+      const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
+      isOverdueCarton = Number(client.outstanding) > 0 && lastInstallment && lastInstallment.dateStr < todayStr;
+    } else {
+      const debt = Number(client.totalDebt || client.total_debt || (client.amount * 1.2) || 0);
+      const out = Number(client.outstanding || 0);
+      const paidAmt = Math.max(0, debt - out);
+      if (debt > 0) {
+        paidCount = Math.round((paidAmt / debt) * totalInstallmentsCount);
+      }
+    }
+
+    const hasPaidHalfOrMore = paidCount >= Math.ceil(totalInstallmentsCount / 2);
+    const canRenovar = hasPaidHalfOrMore || isOverdueCarton || isWithoutActiveDebt;
+
+    if (btnRenovar) {
+      if (canRenovar) {
+        btnRenovar.disabled = false;
+        btnRenovar.style.opacity = '1';
+        btnRenovar.style.cursor = 'pointer';
+        btnRenovar.title = 'Renovar cartón';
+      } else {
+        btnRenovar.disabled = true;
+        btnRenovar.style.opacity = '0.4';
+        btnRenovar.style.cursor = 'not-allowed';
+        btnRenovar.title = 'Solo disponible si ha pagado al menos el 50% de las cuotas o si el cartón está vencido.';
+      }
+    }
+
+    if (btnLiquidarMora) {
+      if (isOverdueCarton) {
+        btnLiquidarMora.disabled = false;
+        btnLiquidarMora.style.opacity = '1';
+        btnLiquidarMora.style.cursor = 'pointer';
+        btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
+      } else {
+        btnLiquidarMora.disabled = true;
+        btnLiquidarMora.style.opacity = '0.4';
+        btnLiquidarMora.style.cursor = 'not-allowed';
+        btnLiquidarMora.title = 'Solo disponible si el cartón se encuentra oficialmente vencido.';
+      }
+    }
   },
 
   async searchClient() {
@@ -1730,8 +1830,8 @@ const agentModule = {
           const todayStr = this.getLocalDateString();
           this.hasPaidRecordToday = payments ? payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago') : false;
           
-          // Re-evaluar estado del botón Liquidar Cartón y Confirmar Pago
-          this.updateCobroViewState(client);
+          // Re-evaluar estado de los botones de pago, renovación y liquidación por mora
+          this.updateCobroViewState(client, dailyStatusList);
 
           window.BulaPayDB.renderOverdueDaysList(
             this.cobroOverdueDaysList, 
@@ -1864,9 +1964,16 @@ const agentModule = {
       
       await this.searchClient(); // Recarga y repinta los datos completos
 
-      // Modal de Éxito: Liquidación Automática por Atajo si la deuda llega a $0
+      // Liquidación Automática de Última Cuota (v83)
       if (Number(updatedClient.outstanding) <= 0) {
-        this.showSuccessLiquidationModal(updatedClient);
+        await window.BulaPayDB.liquidateCredit({
+          cedula: updatedClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0
+        });
+        alert('🎉 ¡Felicitaciones! Esta es tu última cuota, el cartón se liquidará automáticamente, te invitamos a adquirir otro crédito');
+        await this.renderFinancialDashboard();
+        await this.searchClient();
       } else {
         // Mostrar modal obligatorio SMS para notificar el pago
         this.showMandatorySmsPrompt(updatedClient, 'payment');
@@ -1981,9 +2088,19 @@ const agentModule = {
       const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       this.currentClient = updatedClient;
       
-      await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
-      
-      this.showMandatorySmsPrompt(updatedClient, 'payment');
+      if (Number(updatedClient.outstanding) <= 0) {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: updatedClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0
+        });
+        alert('🎉 ¡Felicitaciones! Esta es tu última cuota, el cartón se liquidará automáticamente, te invitamos a adquirir otro crédito');
+        await this.renderFinancialDashboard();
+        await this.searchClient();
+      } else {
+        await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
+        this.showMandatorySmsPrompt(updatedClient, 'payment');
+      }
       
     } catch (e) {
       console.error(e);
