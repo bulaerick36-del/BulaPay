@@ -663,7 +663,8 @@ const db = {
           supervisor_id: carton.supervisor_id || joinedClient.supervisor_id || null,
           carton_id: carton.id,
           numero_carton: carton.numero_carton,
-          created_at: carton.created_at || carton.fecha_apertura || joinedClient.created_at
+          fecha_apertura: carton.fecha_apertura || carton.fecha_inicio || carton.created_at || joinedClient.created_at,
+          created_at: carton.fecha_apertura || carton.fecha_inicio || carton.created_at || joinedClient.created_at
         });
       });
 
@@ -1550,7 +1551,8 @@ const db = {
   getDailyPaymentStatus(client, payments) {
     if (!client) return [];
     
-    const startDate = new Date(client.created_at || Date.now());
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    const startDate = cartonDateStr ? new Date(cartonDateStr) : new Date();
     const todayZero = new Date();
     todayZero.setHours(0,0,0,0);
     
@@ -1561,7 +1563,7 @@ const db = {
     const pendingRecordsMap = new Map();
 
     if (payments) {
-      const clientCreatedTime = client.created_at ? new Date(client.created_at).getTime() : 0;
+      const clientCreatedTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
       payments.forEach(p => {
         let pTime = 0;
         if (p.created_at) {
@@ -1851,6 +1853,8 @@ const db = {
             installmentsCount: c.installments_count,
             installmentAmount: c.installment_amount,
             discount_amount: c.discount_amount,
+            fecha_apertura: c.fecha_apertura || c.fecha_inicio || c.created_at,
+            created_at: c.fecha_apertura || c.fecha_inicio || c.created_at,
             status: c.estado === 'activo' ? 'Activo' : (c.estado === 'liquidado_mora' ? 'Liquidado_Mora' : 'Liquidado_Pagado')
           }));
         }
@@ -2411,8 +2415,8 @@ const db = {
         const { data: cartonesData } = await q;
         if (cartonesData && cartonesData.length > 0) {
           secondaryCartonesToday = cartonesData.filter(c => {
-            if (!c.created_at && !c.fecha_apertura) return false;
-            const cDate = getCleanDateStr(c.created_at || c.fecha_apertura);
+            if (!c.fecha_apertura && !c.fecha_inicio && !c.created_at) return false;
+            const cDate = getCleanDateStr(c.fecha_apertura || c.fecha_inicio || c.created_at);
             return cDate === todayStr;
           });
         }

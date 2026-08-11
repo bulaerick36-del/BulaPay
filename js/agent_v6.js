@@ -1375,7 +1375,8 @@ const agentModule = {
     // Obtener los pagos reales desde Supabase
     const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
     
-    const startDate = new Date(client.created_at || Date.now());
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    const startDate = cartonDateStr ? new Date(cartonDateStr) : new Date();
     const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
     
     const paymentDates = new Set();
@@ -3194,7 +3195,8 @@ const agentModule = {
                               
         if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
           if (client) {
-            const clientTime = client.created_at ? new Date(client.created_at).getTime() : 0;
+            const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+            const clientTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
             let pTime = 0;
             if (p.created_at) {
               pTime = new Date(p.created_at).getTime();
@@ -3435,7 +3437,8 @@ const agentModule = {
                               
         if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
           if (client) {
-            const clientTime = client.created_at ? new Date(client.created_at).getTime() : 0;
+            const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+            const clientTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
             let pTime = 0;
             if (p.created_at) {
               pTime = new Date(p.created_at).getTime();
