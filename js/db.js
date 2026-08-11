@@ -1943,17 +1943,16 @@ const db = {
         }
       });
 
-      // FÓRMULA CONTABLE ESTRICTA:
-      // Capital Base (Patrimonio) = Capital Inyectado Neto + Ingresos Retenidos (Seguro/Papelería) + Ganancias Reales Liquidadas - Pérdidas Reales por Mora
-      const patrimonioCalculado = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas - totalPerdidasMora);
-      const patrimonioFinal = Math.max(0, patrimonioCalculado);
+      // FÓRMULA CONTABLE DEFINITIVA (v90):
+      // Capital Base (Patrimonio Neto) = Capital Inyectado Neto + Ingresos Retenidos (Seguro/Papelería) + Ganancias Reales Liquidadas
+      const patrimonioCalculado = Math.round(capitalInyectadoNeto + totalRetainedFees + totalGananciasLiquidadas);
+      const patrimonioFinal = Math.max(capitalInyectadoNeto, patrimonioCalculado);
 
       // DESGLOSE Y AUDITORÍA EN CONSOLA SOLICITADA
       console.log('=== [AUDITORÍA DESGLOSE CAPITAL BASE] ===', {
         'Total Inyectado': capitalInyectadoNeto,
         'Total Ganancias Liquidadas': totalGananciasLiquidadas,
         'Total Ingresos Retenidos (Seguros/Papelería)': totalRetainedFees,
-        'Total Pérdidas': totalPerdidasMora,
         'PATRIMONIO CALCULADO': patrimonioCalculado,
         'PATRIMONIO FINAL': patrimonioFinal
       });
@@ -2354,13 +2353,12 @@ const db = {
         });
       }
 
-      // 3. Cuotas diarias cobradas de cartones activos
+      // 3. Cuotas diarias cobradas en efectivo (pagos reales ingresados a caja)
       const payments = await this.getPayments();
-      let cuotasCobradasActivos = 0;
+      let cuotasCobradasTotales = 0;
       for (const p of payments) {
-        const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '');
-        if (p.status !== 'Pendiente' && activeClientCedulas.has(pCed)) {
-          cuotasCobradasActivos += Math.round(parseFloat(p.amount) || 0);
+        if (p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && p.status !== 'Liquidado_Mora') {
+          cuotasCobradasTotales += Math.round(parseFloat(p.amount) || 0);
         }
       }
 
@@ -2375,8 +2373,9 @@ const db = {
         });
       }
 
-      // REGLA ESTRICTA: Capital en Caja (Liquidez Disponible) = Capital Base - Capital prestado activo + Cuotas cobradas + Movimientos manuales
-      const efectivoDisponible = Math.round(baseCapital - capitalPrestadoActivos + cuotasCobradasActivos + manualNetMovements);
+      // REGLA CONTABLE DEFINITIVA (v90):
+      // Capital en Caja (Liquidez Disponible) = Capital Base - Capital prestado activo + Cuotas cobradas en efectivo + Movimientos manuales
+      const efectivoDisponible = Math.round(baseCapital - capitalPrestadoActivos + cuotasCobradasTotales + manualNetMovements);
       return efectivoDisponible;
     } catch (err) {
       console.error('Error fetching liquid cash (Liquidez):', err);
