@@ -1738,17 +1738,45 @@ const db = {
 
   async injectCapital(routeId, agentId, amount) {
     const supabase = await initSupabase();
-    const injection = {
-      id: 'inj_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      routeId: routeId ? routeId : null,
-      agent_id: agentId ? agentId : null,
-      amount: Math.round(parseFloat(amount) || 0),
-      date: new Date().toISOString().split('T')[0]
+    const cleanAmount = Math.round(parseFloat(amount) || 0);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const injectionId = 'inj_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+
+    const injectionPayload = {
+      id: injectionId,
+      amount: cleanAmount,
+      routeId: routeId ? String(routeId) : null,
+      route_id: routeId ? String(routeId) : null,
+      agent_id: agentId ? String(agentId) : null,
+      date: todayStr,
+      created_at: new Date().toISOString(),
+      status: 'aprobado'
     };
-    const { error } = await supabase.from('capital_injections').insert([injection]);
+
+    let { error } = await supabase.from('capital_injections').insert([injectionPayload]);
+
     if (error) {
-      console.error('Error injecting capital DB:', error);
-      throw error;
+      console.warn("Aviso en inserción primaria de capital_injections:", error.message);
+      const payloadFallback1 = {
+        amount: cleanAmount,
+        route_id: routeId ? String(routeId) : null,
+        agent_id: agentId ? String(agentId) : null,
+        date: todayStr
+      };
+      const resFallback1 = await supabase.from('capital_injections').insert([payloadFallback1]);
+      if (resFallback1.error) {
+        console.warn("Aviso en fallback 1 capital_injections:", resFallback1.error.message);
+        const payloadFallback2 = {
+          amount: cleanAmount,
+          agent_id: agentId ? String(agentId) : null,
+          created_at: new Date().toISOString()
+        };
+        const resFallback2 = await supabase.from('capital_injections').insert([payloadFallback2]);
+        if (resFallback2.error) {
+          console.error("Error final en injectCapital DB:", resFallback2.error);
+          throw resFallback2.error;
+        }
+      }
     }
     return true;
   },

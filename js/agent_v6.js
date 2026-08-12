@@ -1047,56 +1047,47 @@ const agentModule = {
         btnConfirmMov.disabled = true;
         btnConfirmMov.textContent = 'Procesando...';
 
-        const movType = window._currentCashMovementType || 'entrada';
-
-        if (movType === 'salida') {
-           const onHand = await window.BulaPayDB.getLiquidCash(currentUser.routeId);
-           if (amount > onHand) {
-             alert(`❌ Fondos insuficientes. Solo hay $${onHand.toLocaleString('es-CO')} en caja actualmente.`);
-             btnConfirmMov.disabled = false;
-             btnConfirmMov.textContent = 'Confirmar Movimiento';
-             return;
-           }
-        }
-
-        const movement = {
-          id: 'mov_' + Date.now(),
-          agent_id: currentUser.id || currentUser.username,
-          routeId: currentUser.routeId,
-          type: movType,
-          amount: amount,
-          date: new Date().toISOString().split('T')[0]
-        };
+        const agentId = currentUser.id || currentUser.username;
 
         try {
-          const success = await window.BulaPayDB.saveCashMovement(movement);
-          
-          if (success) {
-            alert('✅ Movimiento registrado exitosamente.');
-            document.getElementById('cash-movement-amount').value = '';
-            document.getElementById('cash-movement-form').style.display = 'none';
-            
-            // Actualizar datos del modal de Cierre de Caja
-            const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
-            const elOnHand = document.getElementById('private-cash-on-hand');
-            if (elOnHand) {
-              if (onHand < 0) {
-                elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
-                elOnHand.style.color = 'var(--color-rojo)';
-              } else {
-                elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
-                elOnHand.style.color = 'var(--text-primary)';
-              }
-            }
+          // 1. Guardar la inyección directamente en la tabla oficial capital_injections
+          await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount);
 
-            // Actualizar vistas y dashboard financiero global
-            await window.AgentV6.renderFinancialDashboard();
-          } else {
-            alert('❌ Error al guardar el movimiento de caja.');
+          // 2. Guardar registro paralelo en caja_movimientos como respaldo
+          try {
+            await window.BulaPayDB.saveCashMovement({
+              id: 'mov_' + Date.now(),
+              agent_id: agentId,
+              routeId: currentUser.routeId,
+              type: 'entrada',
+              amount: amount,
+              date: new Date().toISOString().split('T')[0]
+            });
+          } catch (eMov) {
+            console.warn("Aviso en guardado secundario de caja_movimientos:", eMov);
           }
+
+          alert(`✅ Inyección de $${amount.toLocaleString('es-CO')} ingresada exitosamente a caja.`);
+          document.getElementById('cash-movement-amount').value = '';
+
+          // Actualizar datos del modal de Cierre de Caja
+          const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+          const elOnHand = document.getElementById('private-cash-on-hand');
+          if (elOnHand) {
+            if (onHand < 0) {
+              elOnHand.textContent = `-$${Math.abs(onHand).toLocaleString('es-CO')}`;
+              elOnHand.style.color = 'var(--color-rojo)';
+            } else {
+              elOnHand.textContent = `$${onHand.toLocaleString('es-CO')}`;
+              elOnHand.style.color = 'var(--text-primary)';
+            }
+          }
+
+          // Actualizar vistas y dashboard financiero global
+          await window.AgentV6.renderFinancialDashboard();
         } catch (error) {
-          console.error(error);
-          alert('❌ Error de conexión.');
+          console.error("Error al guardar inyección de capital:", error);
+          alert('❌ Error al guardar la inyección en la base de datos: ' + (error.message || 'Error de conexión'));
         }
         
         btnConfirmMov.disabled = false;

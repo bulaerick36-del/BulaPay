@@ -1417,18 +1417,12 @@
           <span id="private-cash-on-hand" style="font-size: 1.75rem; font-weight: 900; letter-spacing: -1px;">$0</span>
         </div>
 
-        <!-- Acciones Operativas de Caja -->
+        <!-- Inyección Directa a Caja -->
         <div style="margin-top: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-          <h4 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Acciones Operativas de Caja</h4>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-            <button id="btn-cash-add" class="btn btn-primary" style="background-color: var(--color-verde); border-color: var(--color-verde); color: white; padding: 0.75rem; border-radius: 10px; font-weight: 600;">➕ Agregar a Caja</button>
-            <button id="btn-cash-remove" class="btn btn-outline" style="color: var(--color-rojo); border-color: var(--color-rojo); padding: 0.75rem; border-radius: 10px; font-weight: 600;">➖ Sacar de Caja</button>
-          </div>
-
-          <div id="cash-movement-form" style="display: none; flex-direction: column; gap: 0.75rem; margin-top: 1rem; padding: 1rem; background-color: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
-            <h4 id="cash-movement-title" style="margin: 0; font-size: 0.9rem; color: var(--text-primary);">Nuevo Movimiento</h4>
-            <input type="text" id="cash-movement-amount" placeholder="Monto Ej: 50.000" style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-primary); color: var(--text-primary); font-size: 1rem;">
-            <button id="btn-cash-movement-confirm" class="btn btn-primary" style="width: 100%; padding: 0.75rem; border-radius: 8px; font-weight: bold;">Confirmar Movimiento</button>
+          <div id="cash-movement-form" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background-color: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+            <h4 id="cash-movement-title" style="margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">💵 Ingresar Dinero a Caja</h4>
+            <input type="text" id="cash-movement-amount" placeholder="Monto Ej: 1.000.000" inputmode="numeric" style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-primary); color: var(--text-primary); font-size: 1.1rem; font-weight: 700;">
+            <button id="btn-cash-movement-confirm" class="btn btn-primary" style="width: 100%; padding: 0.8rem; border-radius: 8px; font-weight: bold; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; font-size: 1rem; box-shadow: 0 4px 6px rgba(16,185,129,0.25);">Confirmar Movimiento</button>
           </div>
         </div>
 
@@ -1524,13 +1518,13 @@
   <!-- MODULOS JAVASCRIPT DE BulaPay -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/db.js?v=96"></script>
-  <script src="js/auth.js?v=96"></script>
-  <script src="js/supervisor.js?v=96"></script>
-  <script src="js/agent_v6.js?v=96"></script>
-  <script src="js/customer.js?v=96"></script>
+  <script src="js/db.js?v=97"></script>
+  <script src="js/auth.js?v=97"></script>
+  <script src="js/supervisor.js?v=97"></script>
+  <script src="js/agent_v6.js?v=97"></script>
+  <script src="js/customer.js?v=97"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=96"></script>
+  <script src="js/app.js?v=97"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
