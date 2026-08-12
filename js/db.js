@@ -2303,7 +2303,7 @@ const db = {
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
-      // 1. Suma de todas las inyecciones manuales de capital hechas por el usuario (y movimientos manuales)
+      // 1. Suma neta EXCLUSIVA de la tabla oficial 'capital_injections' (sin memorias viejas)
       const rawInjections = await this.getCapitalInjections(targetRouteId);
       const uniqueInjectionsMap = new Map();
       rawInjections.forEach(inj => {
@@ -2318,14 +2318,11 @@ const db = {
 
       let totalInjected = 0;
       for (const inj of injections) {
-        const belongsToUser = targetRouteId ? (String(inj.routeId) === String(targetRouteId)) : (String(inj.agent_id) === String(agentId));
-        if (belongsToUser) totalInjected += Math.round(parseFloat(inj.amount) || 0);
-      }
-
-      if (injections.length === 0 && totalInjected === 0 && targetRouteId) {
-        const route = await this.getRouteById(targetRouteId);
-        if (route && route.capital) {
-          totalInjected = Math.round(parseFloat(route.capital) || 0);
+        const belongsToUser = targetRouteId 
+          ? (String(inj.routeId || inj.route_id) === String(targetRouteId)) 
+          : (String(inj.agent_id) === String(agentId));
+        if (belongsToUser || !targetRouteId) {
+          totalInjected += Math.round(parseFloat(inj.amount) || 0);
         }
       }
 
@@ -2345,7 +2342,7 @@ const db = {
 
       const totalInyeccionesManuales = totalInjected + manualNetMovements;
 
-      // 2. Suma de abonos y liquidaciones reales recibidas en efectivo de los clientes de esta ruta
+      // 2. Suma de abonos reales ingresados (tabla 'payments')
       const payments = await this.getPayments();
       let totalAbonosReales = 0;
       for (const p of payments) {
@@ -2370,7 +2367,7 @@ const db = {
         }
       }
 
-      // 3. Suma de los préstamos activos actuales que salieron a la calle (únicamente estado = 'activo')
+      // 3. Menos los préstamos activos que salieron a la calle (tabla 'cartones' con estado = 'activo')
       let totalPrestamosActivosActuales = 0;
       try {
         let qCartonesActivos = supabase.from('cartones').select('*').eq('estado', 'activo');
@@ -2388,29 +2385,17 @@ const db = {
             const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
             totalPrestamosActivosActuales += efectivoEntregado;
           });
-        } else {
-          // Fallback a loadActiveCredits si no hay registros directos en cartones
-          const activeCredits = await this.loadActiveCredits();
-          activeCredits.forEach(c => {
-            const belongsToUser = targetRouteId ? (String(c.routeId) === String(targetRouteId)) : (String(c.agent_id) === String(agentId));
-            if (belongsToUser || !targetRouteId) {
-              const amountPuro = Math.round(Number(c.amount || c.monto_prestado || 0));
-              const discountAmt = Math.round(Number(c.discount_amount || 0));
-              const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-              totalPrestamosActivosActuales += efectivoEntregado;
-            }
-          });
         }
       } catch (eAct) {
         console.warn("Aviso al consultar cartones activos para Capital en Caja:", eAct);
       }
 
-      // FÓRMULA ESTRICTA LIMPIA (v94):
-      // Capital en Caja = (Inyecciones Manuales) + (Abonos Reales Recibidos) - (Préstamos Activos Actuales)
-      const capitalEnCajaFinal = Math.round(totalInyeccionesManuales + totalAbonosReales - totalPrestamosActivosActuales);
+      // FÓRMULA VINCULADA A capital_injections (v96):
+      // Capital en Caja = Suma neta capital_injections - Préstamos activos en calle + Pagos reales ingresados
+      const capitalEnCajaFinal = Math.round(totalInyeccionesManuales - totalPrestamosActivosActuales + totalAbonosReales);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
-      console.error('Error fetching liquid cash (Liquidez v94):', err);
+      console.error('Error fetching liquid cash (Liquidez v96):', err);
       return 0;
     }
   },
