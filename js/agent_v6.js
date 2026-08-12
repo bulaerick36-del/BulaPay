@@ -368,7 +368,7 @@ const agentModule = {
 
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
-            status: 'Liquidado_Mora',
+            status: 'liquidado_perdida',
             outstanding: 0,
             totalDebt: totalConIntereses
           });
@@ -421,10 +421,10 @@ const agentModule = {
             nuevoEstado = 'Liquidado_Pagado';
             alert('🎉 ¡Cartón Liquidado Exitosamente!');
           } 
-          // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v102)
+          // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v103: liquidado_perdida)
           else {
-            nuevoEstado = 'Liquidado_Mora';
-            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total con intereses de $${totalEsperado.toLocaleString('es-CO')}.\nEl crédito se da de baja: la Cartera en Calle se reduce a $0, los intereses activos se eliminan y el saldo de Capital en Caja se mantiene estable y tranquilo sin recálculos ni saltos.`);
+            nuevoEstado = 'liquidado_perdida';
+            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total con intereses de $${totalEsperado.toLocaleString('es-CO')}.\nEl crédito se marca como 'liquidado_perdida': la Cartera en Calle se reduce a $0 y el saldo de Capital en Caja se sincroniza sin desajustes.`);
           }
 
           // Actualizar estado del cliente y crédito en DB (outstanding pasa a 0 para saldar la cartera en calle, totalDebt almacena la deuda total con intereses)

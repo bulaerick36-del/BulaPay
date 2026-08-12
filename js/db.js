@@ -2146,13 +2146,15 @@ const db = {
       }
     }
 
-    const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
+    const isMora = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
 
     // 3. Actualizar la tabla 'cartones' (DONDE RESIDE EL ESTADO DEL CRÉDITO Y LA CARTERA)
-    const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_mora' : 'liquidado');
+    const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado');
+    const cartonStatusTarget = isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado');
     try {
       const cartonUpdatePayload = { 
         estado: cartonEstadoTarget, 
+        status: cartonStatusTarget,
         outstanding: 0 
       };
       if (isPaid) {
@@ -2164,8 +2166,7 @@ const db = {
       const { error: cartonErr } = await supabase
         .from('cartones')
         .update(cartonUpdatePayload)
-        .eq('cliente_id', String(cedula))
-        .eq('estado', 'activo');
+        .eq('cliente_id', String(cedula));
 
       if (cartonErr) {
         console.warn("Aviso al actualizar tabla cartones:", cartonErr.message);
@@ -2282,8 +2283,8 @@ const db = {
 
       if (cartonesData) {
         cartonesData.forEach(carton => {
-          const rawEstado = String(carton.estado || '').toLowerCase();
-          if (rawEstado === 'liquidado_mora' || rawEstado.includes('mora')) {
+          const rawEstado = String(carton.estado || carton.status || '').toLowerCase();
+          if (rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora')) {
             const ced = String(carton.cliente_id || carton.client_id || '').trim();
             if (ced) {
               const joinedClient = carton.clients || {};
@@ -2308,7 +2309,7 @@ const db = {
                 city: joinedClient.city || (existing ? existing.city : ''),
                 zone: joinedClient.zone || (existing ? existing.zone : ''),
                 risk: 'Rojo',
-                status: 'Liquidado_Mora',
+                status: 'liquidado_perdida',
                 outstanding: totalDebtConInteres > 0 ? totalDebtConInteres : Number(existing ? existing.outstanding : 0)
               });
             }
