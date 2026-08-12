@@ -2369,7 +2369,8 @@ const db = {
       const payments = await this.getPayments();
       let totalCuotasCobradasEfectivo = 0;
       for (const p of payments) {
-        if (p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && String(p.status || '').toUpperCase() !== 'LIQUIDADO_MORA') {
+        const pStatus = String(p.status || '').toUpperCase();
+        if (p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && !pStatus.includes('MORA') && !pStatus.includes('NEGRA')) {
           totalCuotasCobradasEfectivo += Math.round(parseFloat(p.amount) || 0);
         }
       }
@@ -2385,7 +2386,7 @@ const db = {
         });
       }
 
-      // REGLA MATEMÁTICA DEFINITIVA (v91):
+      // REGLA MATEMÁTICA DEFINITIVA (v92):
       // Capital en Caja (Físico en Mano) = Inyecciones + Retenciones + Cuotas Cobradas en Efectivo - Capital Entregado a Clientes + Movimientos Manuales
       const efectivoDisponible = Math.round(totalInjected + totalRetainedFees + totalCuotasCobradasEfectivo - totalCapitalPrestadoHistorico + manualNetMovements);
       return Math.max(0, efectivoDisponible);

@@ -410,23 +410,23 @@ const agentModule = {
           let gananciaReal = 0;
           let nuevoEstado = 'Liquidado_Pagado';
 
-          // Escenario A: Liquidación Exitosa con Pago (Regla 3)
-          if (recaudoReal >= capitalPrestado) {
-            gananciaReal = recaudoReal - capitalPrestado;
+          // Escenario A: Liquidación Exitosa con Pago Completo
+          if (saldoRestante <= 0 || recaudoReal >= totalEsperado) {
+            gananciaReal = Math.max(0, recaudoReal - capitalPrestado);
             nuevoEstado = 'Liquidado_Pagado';
             alert('🎉 ¡Cartón Liquidado Exitosamente!');
           } 
-          // Escenario B: Default / Pérdida (Mala Paga -> Lista Negra - Regla 4)
+          // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v92)
           else {
             nuevoEstado = 'Liquidado_Mora';
-            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda no pagada de $${saldoRestante.toLocaleString('es-CO')}. El crédito desaparece de la vista diaria y de Cartera en Calle.`);
+            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda no pagada de $${saldoRestante.toLocaleString('es-CO')}.\nEl crédito se da de baja: la Cartera en Calle se reduce a $0, los intereses activos se eliminan y el Capital en Caja permanece inalterado.`);
           }
 
-          // Actualizar estado del cliente y crédito en DB, asegurando que sus cuotas queden pagadas
+          // Actualizar estado del cliente y crédito en DB (outstanding pasa a 0 para saldar la cartera en calle sin generar ingresos falsos)
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: nuevoEstado,
-            outstanding: nuevoEstado === 'Liquidado_Pagado' ? 0 : saldoRestante
+            outstanding: 0
           });
 
           // Actualizar inmediatamente las métricas financieras del Dashboard
