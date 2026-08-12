@@ -2330,8 +2330,9 @@ const db = {
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
-      // FÓRMULA MATEMÁTICA OBLIGATORIA v101:
-      // Capital en Caja = [Inyecciones] - [Préstamos ACTIVOS] + [Abonos Reales] - [Capitales Dados de Baja en Lista Negra]
+      // FÓRMULA MATEMÁTICA DE SALDO MAESTRO v102:
+      // Capital en Caja = [Suma de Inyecciones] - [Suma de TODOS los préstamos otorgados (capital prestado)] + [Suma de TODOS los abonos/pagos reales en efectivo]
+      // Nota v102: Al enviar un cartón a Lista Negra (Liquidado por Mora), NO SE MODIFICA LA CAJA porque el dinero del préstamo ya salió de la caja al momento de su creación.
 
       // 1. Suma total de inyecciones de la tabla 'capital_injections'
       const rawInjections = await this.getCapitalInjections(targetRouteId);
@@ -2355,32 +2356,49 @@ const db = {
         }
       }
 
-      // 2. Suma de los préstamos estrictamente ACTIVOS en la calle (estado === 'activo')
-      let totalPrestamosActivos = 0;
-      const activeCedulas = new Set();
+      // 2. Suma de TODOS los préstamos otorgados en la historia (salida directa de dinero de caja al crear el préstamo)
+      let totalCapitalPrestadoTotal = 0;
+      const processedLoanKeys = new Set();
       try {
-        let qCartonesActivos = supabase.from('cartones').select('*').eq('estado', 'activo');
+        let qCartones = supabase.from('cartones').select('*');
         if (targetRouteId) {
-          qCartonesActivos = qCartonesActivos.eq('route_id', targetRouteId);
+          qCartones = qCartones.eq('route_id', targetRouteId);
         } else if (agentId) {
-          qCartonesActivos = qCartonesActivos.eq('agent_id', agentId);
+          qCartones = qCartones.eq('agent_id', agentId);
         }
-        const { data: cartonesActivos } = await qCartonesActivos;
+        const { data: cartonesAll } = await qCartones;
 
-        if (cartonesActivos && cartonesActivos.length > 0) {
-          cartonesActivos.forEach(c => {
+        if (cartonesAll && cartonesAll.length > 0) {
+          cartonesAll.forEach(c => {
             const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
             const discountAmt = Math.round(Number(c.discount_amount || 0));
             const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-            totalPrestamosActivos += efectivoEntregado;
-            if (c.cliente_id) activeCedulas.add(String(c.cliente_id).trim());
+            totalCapitalPrestadoTotal += efectivoEntregado;
+
+            const key = String(c.id || c.cliente_id || c.client_id || '').trim();
+            if (key) processedLoanKeys.add(key);
           });
         }
-      } catch (eAct) {
-        console.warn("Aviso al consultar cartones activos para Capital en Caja:", eAct);
+      } catch (eCartones) {
+        console.warn("Aviso al consultar préstamos otorgados para Capital en Caja:", eCartones);
       }
 
-      // 3. Suma total de abonos y pagos reales en efectivo recibidos (tabla 'payments')
+      // Fallback para clientes en tabla 'clients' no presentes en la tabla 'cartones'
+      const rawClients = await this.getClients();
+      rawClients.forEach(c => {
+        const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : true;
+        const ced = String(c.cedula || c.id || '').trim();
+
+        if (belongsToUser && ced && !processedLoanKeys.has(ced)) {
+          const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+          const discountAmt = Math.round(Number(c.discount_amount || 0));
+          const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+          totalCapitalPrestadoTotal += efectivoEntregado;
+          processedLoanKeys.add(ced);
+        }
+      });
+
+      // 3. Suma de TODOS los abonos y pagos reales en efectivo recibidos (entrada directa de dinero a caja al recibir pago)
       const payments = await this.getPayments();
       let totalAbonosReales = 0;
       for (const p of payments) {
@@ -2405,54 +2423,12 @@ const db = {
         }
       }
 
-      // 4. La acumulación histórica de capitales dados de baja por pérdida en Lista Negra (estrictamente liquidados por mora)
-      let totalCapitalesDadosDeBaja = 0;
-      const moraCedulas = new Set();
-      try {
-        let qCartonesMora = supabase.from('cartones').select('*, clients(*)').eq('estado', 'liquidado_mora');
-        if (targetRouteId) {
-          qCartonesMora = qCartonesMora.eq('route_id', targetRouteId);
-        } else if (agentId) {
-          qCartonesMora = qCartonesMora.eq('agent_id', agentId);
-        }
-        const { data: cartonesMora } = await qCartonesMora;
-
-        if (cartonesMora && cartonesMora.length > 0) {
-          cartonesMora.forEach(c => {
-            const amountPuro = Math.round(Number(c.monto_prestado || c.amount || (c.clients ? c.clients.amount : 0) || 0));
-            const discountAmt = Math.round(Number(c.discount_amount || 0));
-            const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-            totalCapitalesDadosDeBaja += efectivoEntregado;
-            if (c.cliente_id) moraCedulas.add(String(c.cliente_id).trim());
-          });
-        }
-
-        // Buscar clientes con estado/status estrictamente de liquidación por mora ('LIQUIDADO_MORA' o 'LISTA NEGRA')
-        const rawClients = await this.getClients();
-        rawClients.forEach(c => {
-          const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : true;
-          const ced = String(c.cedula || '').trim();
-          const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-          const isExplicitlyLiquidatedMora = rawStatus === 'LIQUIDADO_MORA' || rawStatus === 'LISTA NEGRA';
-
-          if (belongsToUser && isExplicitlyLiquidatedMora && !moraCedulas.has(ced) && !activeCedulas.has(ced)) {
-            const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-            const discountAmt = Math.round(Number(c.discount_amount || 0));
-            const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-            totalCapitalesDadosDeBaja += efectivoEntregado;
-            moraCedulas.add(ced);
-          }
-        });
-      } catch (eMora) {
-        console.warn("Aviso al consultar capitales dados de baja en mora para Capital en Caja:", eMora);
-      }
-
-      // FÓRMULA DEFCON BLINDADA (v101):
-      // Capital en Caja = Inyecciones - Préstamos ACTIVOS + Abonos Reales - Capitales Dados de Baja (Lista Negra)
-      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivos + totalAbonosReales - totalCapitalesDadosDeBaja);
+      // FÓRMULA DE SALDO MAESTRO DIRECTO (v102):
+      // Capital en Caja = Total Inyectado - Total Capital Prestado + Total Abonos Reales
+      const capitalEnCajaFinal = Math.round(totalInjected - totalCapitalPrestadoTotal + totalAbonosReales);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
-      console.error('Error fetching liquid cash (Liquidez v101):', err);
+      console.error('Error fetching liquid cash (Saldo Maestro v102):', err);
       return 0;
     }
   },

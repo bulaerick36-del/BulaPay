@@ -355,11 +355,11 @@ const agentModule = {
           return;
         }
 
-        // Regla v100: Deuda total registrada en Lista Negra incluye Intereses proyectados, y el Capital Prestado se descuenta de Capital en Caja
+        // Regla v102 (Saldo Maestro): Deuda total en Lista Negra incluye Intereses proyectados. El saldo de Capital en Caja permanece intacto sin desajustes porque el dinero prestado ya había salido de caja.
         const capitalPrestado = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
         const totalConIntereses = Number(client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || (capitalPrestado ? Math.round(capitalPrestado * 1.2) : 0));
 
-        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${client.name} y enviarlo a Lista Negra (Liquidado por Mora)?\nDeuda Total (Capital + Intereses): $${totalConIntereses.toLocaleString('es-CO')}.\nEsta acción descontará el Capital Prestado ($${capitalPrestado.toLocaleString('es-CO')}) del Capital en Caja y removerá al cliente de la cartera activa.`;
+        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${client.name} y enviarlo a Lista Negra (Liquidado por Mora)?\nDeuda Total a Lista Negra (Capital + Intereses): $${totalConIntereses.toLocaleString('es-CO')}.\nEsta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
         if (!confirm(confirmMsg)) return;
 
         try {
@@ -381,7 +381,7 @@ const agentModule = {
           await this.updateRouteTracking();
           await this.renderFinancialDashboard();
 
-          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl Capital Prestado ($${capitalPrestado.toLocaleString('es-CO')}) ha sido descontado de la Caja reflejando la pérdida real de tu bolsillo.`);
+          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl saldo del Capital en Caja se mantiene estable y tranquilo ya que la salida del préstamo fue descontada originalmente al momento de su creación.`);
         } catch (e) {
           console.error("Error al enviar a Lista Negra:", e);
           alert('❌ Error al procesar liquidación: ' + (e.message || e));
@@ -421,10 +421,10 @@ const agentModule = {
             nuevoEstado = 'Liquidado_Pagado';
             alert('🎉 ¡Cartón Liquidado Exitosamente!');
           } 
-          // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v100)
+          // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v102)
           else {
             nuevoEstado = 'Liquidado_Mora';
-            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total de $${totalEsperado.toLocaleString('es-CO')} (Capital + Intereses proyectados).\nEl crédito se da de baja: la Cartera en Calle se reduce a $0, los intereses activos se eliminan y el Capital Prestado de $${capitalPrestado.toLocaleString('es-CO')} se descuenta permanentemente del Capital en Caja.`);
+            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total con intereses de $${totalEsperado.toLocaleString('es-CO')}.\nEl crédito se da de baja: la Cartera en Calle se reduce a $0, los intereses activos se eliminan y el saldo de Capital en Caja se mantiene estable y tranquilo sin recálculos ni saltos.`);
           }
 
           // Actualizar estado del cliente y crédito en DB (outstanding pasa a 0 para saldar la cartera en calle, totalDebt almacena la deuda total con intereses)
