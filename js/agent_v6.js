@@ -1084,7 +1084,13 @@ const agentModule = {
           }
 
           // Actualizar vistas y dashboard financiero global
-          await window.AgentV6.renderFinancialDashboard();
+          if (this && typeof this.renderFinancialDashboard === 'function') {
+            await this.renderFinancialDashboard();
+          } else if (window.agentModule && typeof window.agentModule.renderFinancialDashboard === 'function') {
+            await window.agentModule.renderFinancialDashboard();
+          } else if (window.AgentV6 && typeof window.AgentV6.renderFinancialDashboard === 'function') {
+            await window.AgentV6.renderFinancialDashboard();
+          }
         } catch (error) {
           console.error("Error al guardar inyección de capital:", error);
           alert('❌ Error al guardar la inyección en la base de datos: ' + (error.message || 'Error de conexión'));
@@ -3621,3 +3627,4 @@ const agentModule = {
 };
 
 window.agentModule = agentModule;
+window.AgentV6 = agentModule;
