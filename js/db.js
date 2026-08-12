@@ -2303,7 +2303,7 @@ const db = {
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
-      // 1. Capital Inicial Inyectado Neto en el sistema (Inyecciones de Capital)
+      // 1. Suma de todas las inyecciones manuales de capital hechas por el usuario (y movimientos manuales)
       const rawInjections = await this.getCapitalInjections(targetRouteId);
       const uniqueInjectionsMap = new Map();
       rawInjections.forEach(inj => {
@@ -2329,85 +2329,88 @@ const db = {
         }
       }
 
-      // 2. Suma de Retenciones (Seguros/Papelería) y Capital Puro Prestado Entregado en la Calle (Histórico Total)
-      let totalRetainedFees = 0;
-      let totalCapitalPrestadoHistorico = 0;
-
-      let allCartonesData = [];
-      try {
-        let qCartonesAll = supabase.from('cartones').select('*');
-        if (targetRouteId) {
-          qCartonesAll = qCartonesAll.or(`route_id.eq.${targetRouteId},route_id.eq.${String(targetRouteId)}`);
-        } else if (agentId) {
-          qCartonesAll = qCartonesAll.eq('agent_id', agentId);
-        }
-        const { data: resCartones } = await qCartonesAll;
-        if (resCartones && resCartones.length > 0) {
-          allCartonesData = resCartones;
-        }
-      } catch (eCart) {
-        console.warn("Aviso al consultar cartones históricos en getLiquidCash:", eCart);
-      }
-
-      if (allCartonesData.length > 0) {
-        allCartonesData.forEach(c => {
-          const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
-          const discountAmt = Math.round(Number(c.discount_amount || 0));
-          const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-          totalCapitalPrestadoHistorico += efectivoEntregado;
-
-          const retained = this.getRetainedFeesFromCredit(c);
-          totalRetainedFees += Math.round(retained);
-        });
-      } else {
-        // Fallback: Consultar TODOS los clientes de la tabla 'clients' (SIN usar getClients() que filtra solo activos)
-        try {
-          const { data: rawClientsAll } = await supabase.from('clients').select('*');
-          if (rawClientsAll && rawClientsAll.length > 0) {
-            rawClientsAll.forEach(c => {
-              const belongsToUser = targetRouteId ? (String(c.routeId || c.route_id) === String(targetRouteId)) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
-              if (belongsToUser || !targetRouteId) {
-                const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-                const retainedFee = this.getRetainedFeesFromCredit(c);
-                const efectivoEntregado = Math.max(0, amountPuro - retainedFee);
-                totalCapitalPrestadoHistorico += efectivoEntregado;
-                totalRetainedFees += Math.round(retainedFee);
-              }
-            });
-          }
-        } catch (eClAll) {
-          console.warn("Aviso al consultar clients globales en fallback de getLiquidCash:", eClAll);
-        }
-      }
-
-      // 3. Cuotas diarias cobradas en efectivo de la tabla payments (recaudos reales ingresados a caja)
-      const payments = await this.getPayments();
-      let totalCuotasCobradasEfectivo = 0;
-      for (const p of payments) {
-        const pStatus = String(p.status || '').toUpperCase();
-        if (p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && !pStatus.includes('MORA') && !pStatus.includes('NEGRA')) {
-          totalCuotasCobradasEfectivo += Math.round(parseFloat(p.amount) || 0);
-        }
-      }
-
-      // 4. Movimientos manuales de caja (Entradas y Salidas)
+      // Movimientos manuales directos de caja (Entradas y Salidas)
       const movements = await this.getCashMovements();
       let manualNetMovements = 0;
       if (movements && movements.length > 0) {
         movements.forEach(m => {
-          const amt = Math.round(Number(m.amount) || 0);
-          if (m.type === 'entrada') manualNetMovements += amt;
-          else if (m.type === 'salida') manualNetMovements -= amt;
+          const belongsToUser = targetRouteId ? (String(m.routeId || m.route_id) === String(targetRouteId)) : (String(m.agent_id) === String(agentId));
+          if (belongsToUser || !targetRouteId) {
+            const amt = Math.round(Number(m.amount) || 0);
+            if (m.type === 'entrada') manualNetMovements += amt;
+            else if (m.type === 'salida') manualNetMovements -= amt;
+          }
         });
       }
 
-      // REGLA MATEMÁTICA DEFINITIVA (v93):
-      // Capital en Caja (Físico en Mano) = Inyecciones + Retenciones + Cuotas Cobradas en Efectivo - Capital Entregado a Clientes + Movimientos Manuales
-      // Al liquidar por Lista Negra / Mora, el dinero prestado se da de baja como cartera incobrable en la calle, pero el efectivo prestado NUNCA regresa a la caja.
-      const efectivoDisponible = Math.round(totalInjected + totalRetainedFees + totalCuotasCobradasEfectivo - totalCapitalPrestadoHistorico + manualNetMovements);
-      return Math.max(0, efectivoDisponible);
+      const totalInyeccionesManuales = totalInjected + manualNetMovements;
+
+      // 2. Suma de abonos y liquidaciones reales recibidas en efectivo de los clientes de esta ruta
+      const payments = await this.getPayments();
+      let totalAbonosReales = 0;
+      for (const p of payments) {
+        const pStatus = String(p.status || '').toUpperCase();
+        const isMoraOrNegra = pStatus.includes('MORA') || pStatus.includes('NEGRA');
+        const isRealPayment = p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && !isMoraOrNegra;
+
+        if (isRealPayment) {
+          const pAgentNameLower = (p.agentName || '').trim().toLowerCase();
+          const isMine = (currentUser && (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor'))
+            ? (p.supervisor_id === currentUser.username)
+            : (
+                p.agent_id === agentId || 
+                p.agentUsername === currentUser?.username || 
+                (currentUser?.name && pAgentNameLower === currentUser.name.trim().toLowerCase()) ||
+                (targetRouteId && String(p.routeId || p.route_id) === String(targetRouteId))
+              );
+
+          if (isMine || !targetRouteId) {
+            totalAbonosReales += Math.round(parseFloat(p.amount) || 0);
+          }
+        }
+      }
+
+      // 3. Suma de los préstamos activos actuales que salieron a la calle (únicamente estado = 'activo')
+      let totalPrestamosActivosActuales = 0;
+      try {
+        let qCartonesActivos = supabase.from('cartones').select('*').eq('estado', 'activo');
+        if (targetRouteId) {
+          qCartonesActivos = qCartonesActivos.eq('route_id', targetRouteId);
+        } else if (agentId) {
+          qCartonesActivos = qCartonesActivos.eq('agent_id', agentId);
+        }
+        const { data: cartonesActivos } = await qCartonesActivos;
+
+        if (cartonesActivos && cartonesActivos.length > 0) {
+          cartonesActivos.forEach(c => {
+            const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
+            const discountAmt = Math.round(Number(c.discount_amount || 0));
+            const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+            totalPrestamosActivosActuales += efectivoEntregado;
+          });
+        } else {
+          // Fallback a loadActiveCredits si no hay registros directos en cartones
+          const activeCredits = await this.loadActiveCredits();
+          activeCredits.forEach(c => {
+            const belongsToUser = targetRouteId ? (String(c.routeId) === String(targetRouteId)) : (String(c.agent_id) === String(agentId));
+            if (belongsToUser || !targetRouteId) {
+              const amountPuro = Math.round(Number(c.amount || c.monto_prestado || 0));
+              const discountAmt = Math.round(Number(c.discount_amount || 0));
+              const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+              totalPrestamosActivosActuales += efectivoEntregado;
+            }
+          });
+        }
+      } catch (eAct) {
+        console.warn("Aviso al consultar cartones activos para Capital en Caja:", eAct);
+      }
+
+      // FÓRMULA ESTRICTA LIMPIA (v94):
+      // Capital en Caja = (Inyecciones Manuales) + (Abonos Reales Recibidos) - (Préstamos Activos Actuales)
+      const capitalEnCajaFinal = Math.round(totalInyeccionesManuales + totalAbonosReales - totalPrestamosActivosActuales);
+      return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
-      console.error('Error fetching liquid cash (Liquidez):', err);
+      console.error('Error fetching liquid cash (Liquidez v94):', err);
       return 0;
     }
   },
