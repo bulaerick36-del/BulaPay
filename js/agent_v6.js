@@ -3438,14 +3438,21 @@ const agentModule = {
         }
       });
 
-      // Excluir estrictamente clientes con cartón liquidado o cancelado (outstanding <= 0)
+      // Excluir estrictamente clientes con cartón liquidado, cancelado o en Lista Negra / Mora (v104)
       const clients = allClients.filter(c => {
         const outstanding = Number(c.outstanding || 0);
         const amount = Number(c.amount || 0);
         const totalDebt = Number(c.totalDebt || 0);
         const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-        const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
-        return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isLiquidadoStatus;
+        const rawRisk = String(c.risk || '').trim().toUpperCase();
+        const isExcluded = rawStatus.includes('LIQUIDADO') || 
+                           rawStatus.includes('CANCELAD') || 
+                           rawStatus.includes('PERDIDA') || 
+                           rawStatus.includes('MORA') || 
+                           rawStatus.includes('NEGRA') || 
+                           rawStatus.includes('CASTIGADO') || 
+                           rawRisk === 'ROJO';
+        return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isExcluded;
       });
 
       if (clients.length === 0) {

@@ -2004,17 +2004,36 @@ const db = {
 
       if (!error && cartonesActivos && cartonesActivos.length > 0) {
         cartonesActivos.forEach(c => {
-          const outstanding = Math.round(Number(c.outstanding || 0));
-          const totalDebt = Math.round(Number(c.total_debt || c.totalDebt || 0));
-          const amount = Math.round(Number(c.monto_prestado || c.amount || 0));
+          const rawEstado = String(c.estado || '').trim().toUpperCase();
+          const rawStatus = String(c.status || '').trim().toUpperCase();
+          const rawRisk = String(c.risk || '').trim().toUpperCase();
 
-          if (outstanding > 0) {
-            if (totalDebt > 0) {
-              const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
-              carteraEnCalle += Math.round(outstanding * capitalRatio);
-              interesesActivos += Math.round(outstanding * (1 - capitalRatio));
-            } else {
-              carteraEnCalle += outstanding;
+          // Filtro estricto v104: Excluir totalmente Lista Negra, mora, perdida o castigados
+          const isExcluded = rawEstado.includes('MORA') || 
+                             rawEstado.includes('PERDIDA') || 
+                             rawEstado.includes('CASTIGADO') || 
+                             rawEstado.includes('NEGRA') || 
+                             (rawEstado !== 'ACTIVO' && rawEstado.includes('LIQUIDADO')) ||
+                             rawStatus.includes('MORA') || 
+                             rawStatus.includes('PERDIDA') || 
+                             rawStatus.includes('CASTIGADO') || 
+                             rawStatus.includes('NEGRA') || 
+                             rawStatus.includes('LIQUIDADO') ||
+                             rawRisk === 'ROJO';
+
+          if (!isExcluded) {
+            const outstanding = Math.round(Number(c.outstanding || 0));
+            const totalDebt = Math.round(Number(c.total_debt || c.totalDebt || 0));
+            const amount = Math.round(Number(c.monto_prestado || c.amount || 0));
+
+            if (outstanding > 0) {
+              if (totalDebt > 0) {
+                const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
+                carteraEnCalle += Math.round(outstanding * capitalRatio);
+                interesesActivos += Math.round(outstanding * (1 - capitalRatio));
+              } else {
+                carteraEnCalle += outstanding;
+              }
             }
           }
         });
@@ -2024,22 +2043,28 @@ const db = {
         rawClients.forEach(c => {
           const belongsToUser = assignedRouteId ? (c.routeId === assignedRouteId) : true;
           if (belongsToUser) {
-            const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
-            const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
-            const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
             const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-            const isMoroso = c.risk === 'Rojo' || 
-                             String(c.risk || '').trim().toLowerCase() === 'rojo' || 
-                             rawStatus.includes('MORA') || 
-                             rawStatus.includes('NEGRA');
+            const rawRisk = String(c.risk || '').trim().toUpperCase();
+            const isExcluded = rawRisk === 'ROJO' || 
+                               rawStatus.includes('MORA') || 
+                               rawStatus.includes('PERDIDA') || 
+                               rawStatus.includes('CASTIGADO') || 
+                               rawStatus.includes('NEGRA') || 
+                               rawStatus.includes('LIQUIDADO');
 
-            if (!isMoroso && outstanding > 0) {
-              if (totalDebt > 0) {
-                const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
-                carteraEnCalle += Math.round(outstanding * capitalRatio);
-                interesesActivos += Math.round(outstanding * (1 - capitalRatio));
-              } else {
-                carteraEnCalle += outstanding;
+            if (!isExcluded) {
+              const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
+              const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
+              const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+
+              if (outstanding > 0) {
+                if (totalDebt > 0) {
+                  const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
+                  carteraEnCalle += Math.round(outstanding * capitalRatio);
+                  interesesActivos += Math.round(outstanding * (1 - capitalRatio));
+                } else {
+                  carteraEnCalle += outstanding;
+                }
               }
             }
           }
@@ -2052,7 +2077,7 @@ const db = {
         posibleGanancia: Math.round(interesesActivos)
       };
     } catch (err) {
-      console.error("Error al calcular métricas del Dashboard financiero:", err);
+      console.error("Error al calcular métricas del Dashboard financiero (v104):", err);
       return { carteraEnCalle: 0, interesesActivos: 0, posibleGanancia: 0 };
     }
   },
