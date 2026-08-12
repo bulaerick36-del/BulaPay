@@ -2333,16 +2333,24 @@ const db = {
       let totalRetainedFees = 0;
       let totalCapitalPrestadoHistorico = 0;
 
-      let qCartonesAll = supabase.from('cartones').select('*');
-      if (targetRouteId) {
-        qCartonesAll = qCartonesAll.eq('route_id', targetRouteId);
-      } else if (agentId) {
-        qCartonesAll = qCartonesAll.eq('agent_id', agentId);
+      let allCartonesData = [];
+      try {
+        let qCartonesAll = supabase.from('cartones').select('*');
+        if (targetRouteId) {
+          qCartonesAll = qCartonesAll.or(`route_id.eq.${targetRouteId},route_id.eq.${String(targetRouteId)}`);
+        } else if (agentId) {
+          qCartonesAll = qCartonesAll.eq('agent_id', agentId);
+        }
+        const { data: resCartones } = await qCartonesAll;
+        if (resCartones && resCartones.length > 0) {
+          allCartonesData = resCartones;
+        }
+      } catch (eCart) {
+        console.warn("Aviso al consultar cartones históricos en getLiquidCash:", eCart);
       }
-      const { data: allCartones } = await qCartonesAll;
 
-      if (allCartones && allCartones.length > 0) {
-        allCartones.forEach(c => {
+      if (allCartonesData.length > 0) {
+        allCartonesData.forEach(c => {
           const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
           const discountAmt = Math.round(Number(c.discount_amount || 0));
           const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
@@ -2352,17 +2360,24 @@ const db = {
           totalRetainedFees += Math.round(retained);
         });
       } else {
-        const clients = await this.getClients();
-        clients.forEach(c => {
-          const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
-          if (belongsToUser || !targetRouteId) {
-            const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-            const retainedFee = this.getRetainedFeesFromCredit(c);
-            const efectivoEntregado = Math.max(0, amountPuro - retainedFee);
-            totalCapitalPrestadoHistorico += efectivoEntregado;
-            totalRetainedFees += Math.round(retainedFee);
+        // Fallback: Consultar TODOS los clientes de la tabla 'clients' (SIN usar getClients() que filtra solo activos)
+        try {
+          const { data: rawClientsAll } = await supabase.from('clients').select('*');
+          if (rawClientsAll && rawClientsAll.length > 0) {
+            rawClientsAll.forEach(c => {
+              const belongsToUser = targetRouteId ? (String(c.routeId || c.route_id) === String(targetRouteId)) : (c.agent_id === agentId || c.agentUsername === currentUser?.username);
+              if (belongsToUser || !targetRouteId) {
+                const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+                const retainedFee = this.getRetainedFeesFromCredit(c);
+                const efectivoEntregado = Math.max(0, amountPuro - retainedFee);
+                totalCapitalPrestadoHistorico += efectivoEntregado;
+                totalRetainedFees += Math.round(retainedFee);
+              }
+            });
           }
-        });
+        } catch (eClAll) {
+          console.warn("Aviso al consultar clients globales en fallback de getLiquidCash:", eClAll);
+        }
       }
 
       // 3. Cuotas diarias cobradas en efectivo de la tabla payments (recaudos reales ingresados a caja)
@@ -2386,8 +2401,9 @@ const db = {
         });
       }
 
-      // REGLA MATEMÁTICA DEFINITIVA (v92):
+      // REGLA MATEMÁTICA DEFINITIVA (v93):
       // Capital en Caja (Físico en Mano) = Inyecciones + Retenciones + Cuotas Cobradas en Efectivo - Capital Entregado a Clientes + Movimientos Manuales
+      // Al liquidar por Lista Negra / Mora, el dinero prestado se da de baja como cartera incobrable en la calle, pero el efectivo prestado NUNCA regresa a la caja.
       const efectivoDisponible = Math.round(totalInjected + totalRetainedFees + totalCuotasCobradasEfectivo - totalCapitalPrestadoHistorico + manualNetMovements);
       return Math.max(0, efectivoDisponible);
     } catch (err) {
