@@ -3255,6 +3255,27 @@ const agentModule = {
     }
   },
 
+  // FILTRO CONTABLE UNIFICADO v106:
+  // Excluye estrictamente cualquier cliente o cartón dado de baja por mora, en Lista Negra, castigado o liquidado
+  isClientActiveAndValid(c) {
+    if (!c) return false;
+    const outstanding = Number(c.outstanding || c.saldo_restante || 0);
+    const amount = Number(c.amount || c.capital_prestado || c.monto_prestado || 0);
+    const totalDebt = Number(c.totalDebt || c.monto_total || c.total_a_recaudar || 0);
+    const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+    const rawRisk = String(c.risk || '').trim().toUpperCase();
+
+    const isExcluded = rawStatus.includes('LIQUIDADO') || 
+                       rawStatus.includes('CANCELAD') || 
+                       rawStatus.includes('PERDIDA') || 
+                       rawStatus.includes('MORA') || 
+                       rawStatus.includes('NEGRA') || 
+                       rawStatus.includes('CASTIGADO') || 
+                       rawRisk === 'ROJO';
+
+    return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isExcluded;
+  },
+
   async updateRouteTracking() {
     const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser || (currentUser.role !== 'Agente de Ruta' && currentUser.role !== 'agent' && currentUser.role !== 'Agente Independiente')) {
@@ -3304,14 +3325,7 @@ const agentModule = {
         }
       });
 
-      const activeClients = allClients.filter(c => {
-        const outstanding = Number(c.outstanding || 0);
-        const amount = Number(c.amount || 0);
-        const totalDebt = Number(c.totalDebt || 0);
-        const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-        const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD');
-        return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isLiquidadoStatus;
-      });
+      const activeClients = allClients.filter(c => this.isClientActiveAndValid(c));
 
       const totalClientsCount = activeClients.length;
       let paidClientsCount = 0;
@@ -3438,22 +3452,8 @@ const agentModule = {
         }
       });
 
-      // Excluir estrictamente clientes con cartón liquidado, cancelado o en Lista Negra / Mora (v104)
-      const clients = allClients.filter(c => {
-        const outstanding = Number(c.outstanding || 0);
-        const amount = Number(c.amount || 0);
-        const totalDebt = Number(c.totalDebt || 0);
-        const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-        const rawRisk = String(c.risk || '').trim().toUpperCase();
-        const isExcluded = rawStatus.includes('LIQUIDADO') || 
-                           rawStatus.includes('CANCELAD') || 
-                           rawStatus.includes('PERDIDA') || 
-                           rawStatus.includes('MORA') || 
-                           rawStatus.includes('NEGRA') || 
-                           rawStatus.includes('CASTIGADO') || 
-                           rawRisk === 'ROJO';
-        return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isExcluded;
-      });
+      // Excluir estrictamente clientes con cartón liquidado, cancelado o en Lista Negra / Mora (v106)
+      const clients = allClients.filter(c => this.isClientActiveAndValid(c));
 
       if (clients.length === 0) {
         content.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No tiene clientes activos pendientes de cobro.</p>';

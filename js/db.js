@@ -1985,10 +1985,31 @@ const db = {
         assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
       }
 
-      // Consulta directa a la tabla 'cartones' con estado = 'activo' y filtros estrictos .neq('status', 'liquidado_perdida') (v105)
+      // 1. Obtener cedulas en Lista Negra / Mora desde la tabla master 'clients'
+      const rawClients = await this.getClients();
+      const blacklistedCedulas = new Set();
+      rawClients.forEach(c => {
+        const belongsToUser = assignedRouteId ? (c.routeId === assignedRouteId) : true;
+        if (belongsToUser) {
+          const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+          const rawRisk = String(c.risk || '').trim().toUpperCase();
+          const isMoroso = rawRisk === 'ROJO' || 
+                           rawStatus.includes('MORA') || 
+                           rawStatus.includes('PERDIDA') || 
+                           rawStatus.includes('CASTIGADO') || 
+                           rawStatus.includes('NEGRA') || 
+                           rawStatus.includes('LIQUIDADO');
+          if (isMoroso) {
+            if (c.cedula) blacklistedCedulas.add(String(c.cedula).trim());
+            if (c.id) blacklistedCedulas.add(String(c.id).trim());
+          }
+        }
+      });
+
+      // 2. Consulta directa a la tabla 'cartones' con estado = 'activo' y filtros estrictos .neq (v106)
       let query = supabase
         .from('cartones')
-        .select('*')
+        .select('*, clients(*)')
         .eq('estado', 'activo')
         .neq('status', 'liquidado_perdida')
         .neq('status', 'Liquidado_Mora')
@@ -2010,12 +2031,17 @@ const db = {
 
       if (!error && cartonesActivos && cartonesActivos.length > 0) {
         cartonesActivos.forEach(c => {
+          const ced = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+          const joinedClient = c.clients || {};
+          const joinedStatus = String(joinedClient.status || joinedClient.estado || '').trim().toUpperCase();
+          const joinedRisk = String(joinedClient.risk || '').trim().toUpperCase();
           const rawEstado = String(c.estado || '').trim().toUpperCase();
           const rawStatus = String(c.status || '').trim().toUpperCase();
           const rawRisk = String(c.risk || '').trim().toUpperCase();
 
-          // Filtro estricto v104: Excluir totalmente Lista Negra, mora, perdida o castigados
-          const isExcluded = rawEstado.includes('MORA') || 
+          // Filtro estricto v106: Excluir totalmente Lista Negra, mora, perdida o castigados
+          const isExcluded = blacklistedCedulas.has(ced) ||
+                             rawEstado.includes('MORA') || 
                              rawEstado.includes('PERDIDA') || 
                              rawEstado.includes('CASTIGADO') || 
                              rawEstado.includes('NEGRA') || 
@@ -2025,6 +2051,12 @@ const db = {
                              rawStatus.includes('CASTIGADO') || 
                              rawStatus.includes('NEGRA') || 
                              rawStatus.includes('LIQUIDADO') ||
+                             joinedStatus.includes('MORA') || 
+                             joinedStatus.includes('PERDIDA') || 
+                             joinedStatus.includes('CASTIGADO') || 
+                             joinedStatus.includes('NEGRA') || 
+                             joinedStatus.includes('LIQUIDADO') ||
+                             joinedRisk === 'ROJO' ||
                              rawRisk === 'ROJO';
 
           if (!isExcluded) {
@@ -2045,13 +2077,14 @@ const db = {
         });
       } else {
         // Fallback en caso de que la tabla cartones no tenga registros aún
-        const rawClients = await this.getClients();
         rawClients.forEach(c => {
           const belongsToUser = assignedRouteId ? (c.routeId === assignedRouteId) : true;
           if (belongsToUser) {
+            const ced = String(c.cedula || c.id || '').trim();
             const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
             const rawRisk = String(c.risk || '').trim().toUpperCase();
-            const isExcluded = rawRisk === 'ROJO' || 
+            const isExcluded = blacklistedCedulas.has(ced) ||
+                               rawRisk === 'ROJO' || 
                                rawStatus.includes('MORA') || 
                                rawStatus.includes('PERDIDA') || 
                                rawStatus.includes('CASTIGADO') || 
@@ -2083,7 +2116,7 @@ const db = {
         posibleGanancia: Math.round(interesesActivos)
       };
     } catch (err) {
-      console.error("Error al calcular métricas del Dashboard financiero (v104):", err);
+      console.error("Error al calcular métricas del Dashboard financiero (v106):", err);
       return { carteraEnCalle: 0, interesesActivos: 0, posibleGanancia: 0 };
     }
   },
