@@ -1742,41 +1742,21 @@ const db = {
     const todayStr = new Date().toISOString().split('T')[0];
     const injectionId = 'inj_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
 
-    const injectionPayload = {
+    // ESQUEMA EXACTO SEGÚN SUPABASE TABLE EDITOR:
+    // Columnas: id (text), routeId (text), agent_id (text), amount (numeric), date (date)
+    const exactPayload = {
       id: injectionId,
-      amount: cleanAmount,
       routeId: routeId ? String(routeId) : null,
-      route_id: routeId ? String(routeId) : null,
       agent_id: agentId ? String(agentId) : null,
-      date: todayStr,
-      created_at: new Date().toISOString(),
-      status: 'aprobado'
+      amount: cleanAmount,
+      date: todayStr
     };
 
-    let { error } = await supabase.from('capital_injections').insert([injectionPayload]);
+    const { error } = await supabase.from('capital_injections').insert([exactPayload]);
 
     if (error) {
-      console.warn("Aviso en inserción primaria de capital_injections:", error.message);
-      const payloadFallback1 = {
-        amount: cleanAmount,
-        route_id: routeId ? String(routeId) : null,
-        agent_id: agentId ? String(agentId) : null,
-        date: todayStr
-      };
-      const resFallback1 = await supabase.from('capital_injections').insert([payloadFallback1]);
-      if (resFallback1.error) {
-        console.warn("Aviso en fallback 1 capital_injections:", resFallback1.error.message);
-        const payloadFallback2 = {
-          amount: cleanAmount,
-          agent_id: agentId ? String(agentId) : null,
-          created_at: new Date().toISOString()
-        };
-        const resFallback2 = await supabase.from('capital_injections').insert([payloadFallback2]);
-        if (resFallback2.error) {
-          console.error("Error final en injectCapital DB:", resFallback2.error);
-          throw resFallback2.error;
-        }
-      }
+      console.error("Error directo al insertar en capital_injections:", error);
+      throw error;
     }
     return true;
   },
@@ -2331,7 +2311,7 @@ const db = {
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
-      // 1. Suma neta EXCLUSIVA de la tabla oficial 'capital_injections' (sin memorias viejas)
+      // 1. Suma neta EXCLUSIVA de la tabla oficial 'capital_injections'
       const rawInjections = await this.getCapitalInjections(targetRouteId);
       const uniqueInjectionsMap = new Map();
       rawInjections.forEach(inj => {
@@ -2353,22 +2333,6 @@ const db = {
           totalInjected += Math.round(parseFloat(inj.amount) || 0);
         }
       }
-
-      // Movimientos manuales directos de caja (Entradas y Salidas)
-      const movements = await this.getCashMovements();
-      let manualNetMovements = 0;
-      if (movements && movements.length > 0) {
-        movements.forEach(m => {
-          const belongsToUser = targetRouteId ? (String(m.routeId || m.route_id) === String(targetRouteId)) : (String(m.agent_id) === String(agentId));
-          if (belongsToUser || !targetRouteId) {
-            const amt = Math.round(Number(m.amount) || 0);
-            if (m.type === 'entrada') manualNetMovements += amt;
-            else if (m.type === 'salida') manualNetMovements -= amt;
-          }
-        });
-      }
-
-      const totalInyeccionesManuales = totalInjected + manualNetMovements;
 
       // 2. Suma de abonos reales ingresados (tabla 'payments')
       const payments = await this.getPayments();
@@ -2418,12 +2382,12 @@ const db = {
         console.warn("Aviso al consultar cartones activos para Capital en Caja:", eAct);
       }
 
-      // FÓRMULA VINCULADA A capital_injections (v96):
+      // FÓRMULA ESTRICTA UNIFICADA (v98):
       // Capital en Caja = Suma neta capital_injections - Préstamos activos en calle + Pagos reales ingresados
-      const capitalEnCajaFinal = Math.round(totalInyeccionesManuales - totalPrestamosActivosActuales + totalAbonosReales);
+      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivosActuales + totalAbonosReales);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
-      console.error('Error fetching liquid cash (Liquidez v96):', err);
+      console.error('Error fetching liquid cash (Liquidez v98):', err);
       return 0;
     }
   },
