@@ -2401,12 +2401,53 @@ const db = {
         console.warn("Aviso al consultar cartones activos para Capital en Caja:", eAct);
       }
 
-      // FÓRMULA ESTRICTA UNIFICADA (v98):
-      // Capital en Caja = Suma neta capital_injections - Préstamos activos en calle + Pagos reales ingresados
-      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivosActuales + totalAbonosReales);
+      // 4. Menos el capital prestado entregado que se dio por PERDIDO en Lista Negra (tabla 'cartones' con estado = 'liquidado_mora' o clientes con risk = 'Rojo')
+      let totalCapitalPerdidoMora = 0;
+      try {
+        let qCartonesMora = supabase.from('cartones').select('*, clients(*)').eq('estado', 'liquidado_mora');
+        if (targetRouteId) {
+          qCartonesMora = qCartonesMora.eq('route_id', targetRouteId);
+        } else if (agentId) {
+          qCartonesMora = qCartonesMora.eq('agent_id', agentId);
+        }
+        const { data: cartonesMora } = await qCartonesMora;
+
+        const processedMoraCedulas = new Set();
+        if (cartonesMora && cartonesMora.length > 0) {
+          cartonesMora.forEach(c => {
+            const amountPuro = Math.round(Number(c.monto_prestado || c.amount || (c.clients ? c.clients.amount : 0) || 0));
+            const discountAmt = Math.round(Number(c.discount_amount || 0));
+            const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+            totalCapitalPerdidoMora += efectivoEntregado;
+            if (c.cliente_id) processedMoraCedulas.add(String(c.cliente_id).trim());
+          });
+        }
+
+        // Fallback: Clientes morosos en tabla 'clients' con risk = 'Rojo' que no estuvieran en cartonesMora
+        const rawClients = await this.getClients();
+        rawClients.forEach(c => {
+          const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : true;
+          const ced = String(c.cedula || '').trim();
+          const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+          const isMoroso = (c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA'));
+
+          if (belongsToUser && isMoroso && !processedMoraCedulas.has(ced)) {
+            const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+            const discountAmt = Math.round(Number(c.discount_amount || 0));
+            const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+            totalCapitalPerdidoMora += efectivoEntregado;
+          }
+        });
+      } catch (eMora) {
+        console.warn("Aviso al consultar capital perdido en mora para Capital en Caja:", eMora);
+      }
+
+      // FÓRMULA ESTRICTA UNIFICADA CON IMPACTO DE LISTA NEGRA EN CAJA (v100):
+      // Capital en Caja = Suma neta capital_injections - Préstamos activos en calle - Capital prestado perdido por mora (Lista Negra) + Pagos reales ingresados
+      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivosActuales - totalCapitalPerdidoMora + totalAbonosReales);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
-      console.error('Error fetching liquid cash (Liquidez v98):', err);
+      console.error('Error fetching liquid cash (Liquidez v100):', err);
       return 0;
     }
   },
