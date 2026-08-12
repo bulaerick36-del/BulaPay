@@ -3160,6 +3160,12 @@ const agentModule = {
     return `${year}-${month}-${day}`;
   },
 
+  // FÓRMULA MATEMÁTICA OBLIGATORIA v101:
+  // Capital en Caja = [Inyecciones] - [Préstamos ACTIVOS] + [Abonos Reales] - [Capitales Dados de Baja en Lista Negra]
+  async calculateCapitalEnCaja(routeId) {
+    return await window.BulaPayDB.getLiquidCash(routeId);
+  },
+
   async renderFinancialDashboard() {
     const capitalEl = document.getElementById('private-panel-capital');
     const carteraEl = document.getElementById('private-panel-cartera');
@@ -3174,7 +3180,7 @@ const agentModule = {
       const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser) return;
 
-      const liquidCash = await window.BulaPayDB.getLiquidCash(currentUser.routeId);
+      const liquidCash = await this.calculateCapitalEnCaja(currentUser.routeId);
       capitalEl.textContent = `$${Number(liquidCash).toLocaleString('es-CO')}`;
       
       const metrics = await window.BulaPayDB.getDashboardFinancialMetrics(currentUser.routeId);
