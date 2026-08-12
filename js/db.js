@@ -1985,11 +1985,17 @@ const db = {
         assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
       }
 
-      // Consulta directa a la tabla 'cartones' con estado = 'activo'
+      // Consulta directa a la tabla 'cartones' con estado = 'activo' y filtros estrictos .neq('status', 'liquidado_perdida') (v105)
       let query = supabase
         .from('cartones')
         .select('*')
-        .eq('estado', 'activo');
+        .eq('estado', 'activo')
+        .neq('status', 'liquidado_perdida')
+        .neq('status', 'Liquidado_Mora')
+        .neq('status', 'castigado')
+        .neq('status', 'Lista Negra')
+        .neq('estado', 'liquidado_perdida')
+        .neq('estado', 'liquidado_mora');
 
       if (assignedRouteId) {
         query = query.eq('route_id', assignedRouteId);
@@ -2173,7 +2179,7 @@ const db = {
 
     const isMora = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
 
-    // 3. Actualizar la tabla 'cartones' (DONDE RESIDE EL ESTADO DEL CRÉDITO Y LA CARTERA)
+    // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE - v105)
     const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado');
     const cartonStatusTarget = isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado');
     try {
@@ -2188,22 +2194,23 @@ const db = {
         cartonUpdatePayload.total_debt = Number(totalDebt);
       }
 
-      const { error: cartonErr } = await supabase
-        .from('cartones')
-        .update(cartonUpdatePayload)
-        .eq('cliente_id', String(cedula));
-
-      if (cartonErr) {
-        console.warn("Aviso al actualizar tabla cartones:", cartonErr.message);
+      // Garantizar actualización en Supabase probando cliente_id, client_id y cedula
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', String(cedula));
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', String(cedula));
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', String(cedula));
+      if (clientData && clientData.id) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', clientData.id);
       }
     } catch (eCarton) {
       console.warn("Excepción al actualizar tabla cartones:", eCarton.message);
     }
 
-    // 4. Actualizar únicamente columnas VÁLIDAS en la tabla 'clients' (risk, y fallback seguro)
+    // 4. Actualizar tabla 'clients'
     try {
       const clientUpdatePayload = {
-        risk: isMora ? 'Rojo' : 'Verde'
+        risk: isMora ? 'Rojo' : 'Verde',
+        status: isMora ? 'liquidado_perdida' : (isPaid ? 'Liquidado_Pagado' : 'Activo'),
+        estado: isMora ? 'liquidado_perdida' : (isPaid ? 'Liquidado_Pagado' : 'Activo')
       };
 
       if (isPaid || isMora) {
@@ -2222,15 +2229,10 @@ const db = {
         .eq('cedula', String(cedula));
 
       if (clientErr) {
-        if (clientErr.code === 'PGRST204' || (clientErr.message && (clientErr.message.includes('column') || clientErr.message.includes('does not exist')))) {
-          console.warn("Reintentando actualización de cliente solo con columna 'risk':", clientErr.message);
-          await supabase
-            .from('clients')
-            .update({ risk: isMora ? 'Rojo' : 'Verde' })
-            .eq('cedula', String(cedula));
-        } else {
-          console.warn("Aviso al actualizar tabla clients:", clientErr.message);
-        }
+        await supabase
+          .from('clients')
+          .update({ risk: isMora ? 'Rojo' : 'Verde', status: isMora ? 'liquidado_perdida' : 'Activo' })
+          .eq('cedula', String(cedula));
       }
     } catch (eClient) {
       console.warn("Excepción al actualizar tabla clients:", eClient.message);
@@ -2382,54 +2384,65 @@ const db = {
         }
       }
 
-      // 2. Suma de TODOS los préstamos otorgados en la historia (salida directa de dinero de caja al crear el préstamo)
-      let totalCapitalPrestadoTotal = 0;
-      const processedLoanKeys = new Set();
+      // 2. Suma de préstamos ACTIVOS con filtro estricto .neq('status', 'liquidado_perdida') (v105)
+      let totalPrestamosActivos = 0;
+      const activeCedulas = new Set();
       try {
-        let qCartones = supabase.from('cartones').select('*');
+        let qCartonesActivos = supabase
+          .from('cartones')
+          .select('*')
+          .eq('estado', 'activo')
+          .neq('status', 'liquidado_perdida')
+          .neq('status', 'Liquidado_Mora')
+          .neq('status', 'castigado')
+          .neq('status', 'Lista Negra')
+          .neq('estado', 'liquidado_perdida')
+          .neq('estado', 'liquidado_mora');
+
         if (targetRouteId) {
-          qCartones = qCartones.eq('route_id', targetRouteId);
+          qCartonesActivos = qCartonesActivos.eq('route_id', targetRouteId);
         } else if (agentId) {
-          qCartones = qCartones.eq('agent_id', agentId);
+          qCartonesActivos = qCartonesActivos.eq('agent_id', agentId);
         }
-        const { data: cartonesAll } = await qCartones;
+        const { data: cartonesActivos } = await qCartonesActivos;
 
-        if (cartonesAll && cartonesAll.length > 0) {
-          cartonesAll.forEach(c => {
-            const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
-            const discountAmt = Math.round(Number(c.discount_amount || 0));
-            const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-            totalCapitalPrestadoTotal += efectivoEntregado;
+        if (cartonesActivos && cartonesActivos.length > 0) {
+          cartonesActivos.forEach(c => {
+            const rawEstado = String(c.estado || '').trim().toUpperCase();
+            const rawStatus = String(c.status || '').trim().toUpperCase();
+            const rawRisk = String(c.risk || '').trim().toUpperCase();
 
-            const key = String(c.id || c.cliente_id || c.client_id || '').trim();
-            if (key) processedLoanKeys.add(key);
+            const isExcluded = rawEstado.includes('MORA') || 
+                               rawEstado.includes('PERDIDA') || 
+                               rawEstado.includes('CASTIGADO') || 
+                               rawEstado.includes('NEGRA') || 
+                               (rawEstado !== 'ACTIVO' && rawEstado.includes('LIQUIDADO')) ||
+                               rawStatus.includes('MORA') || 
+                               rawStatus.includes('PERDIDA') || 
+                               rawStatus.includes('CASTIGADO') || 
+                               rawStatus.includes('NEGRA') || 
+                               rawStatus.includes('LIQUIDADO') ||
+                               rawRisk === 'ROJO';
+
+            if (!isExcluded) {
+              const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
+              const discountAmt = Math.round(Number(c.discount_amount || 0));
+              const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+              totalPrestamosActivos += efectivoEntregado;
+              if (c.cliente_id) activeCedulas.add(String(c.cliente_id).trim());
+            }
           });
         }
-      } catch (eCartones) {
-        console.warn("Aviso al consultar préstamos otorgados para Capital en Caja:", eCartones);
+      } catch (eAct) {
+        console.warn("Aviso al consultar cartones activos para Capital en Caja:", eAct);
       }
 
-      // Fallback para clientes en tabla 'clients' no presentes en la tabla 'cartones'
-      const rawClients = await this.getClients();
-      rawClients.forEach(c => {
-        const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : true;
-        const ced = String(c.cedula || c.id || '').trim();
-
-        if (belongsToUser && ced && !processedLoanKeys.has(ced)) {
-          const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-          const discountAmt = Math.round(Number(c.discount_amount || 0));
-          const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-          totalCapitalPrestadoTotal += efectivoEntregado;
-          processedLoanKeys.add(ced);
-        }
-      });
-
-      // 3. Suma de TODOS los abonos y pagos reales en efectivo recibidos (entrada directa de dinero a caja al recibir pago)
+      // 3. Suma de TODOS los abonos y pagos reales en efectivo recibidos (tabla 'payments')
       const payments = await this.getPayments();
       let totalAbonosReales = 0;
       for (const p of payments) {
         const pStatus = String(p.status || '').toUpperCase();
-        const isMoraOrNegra = pStatus.includes('MORA') || pStatus.includes('NEGRA');
+        const isMoraOrNegra = pStatus.includes('MORA') || pStatus.includes('NEGRA') || pStatus.includes('PERDIDA');
         const isRealPayment = p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && !isMoraOrNegra;
 
         if (isRealPayment) {
@@ -2449,9 +2462,57 @@ const db = {
         }
       }
 
-      // FÓRMULA DE SALDO MAESTRO DIRECTO (v102):
-      // Capital en Caja = Total Inyectado - Total Capital Prestado + Total Abonos Reales
-      const capitalEnCajaFinal = Math.round(totalInjected - totalCapitalPrestadoTotal + totalAbonosReales);
+      // 4. Suma de capitales prestados dados de baja / liquidados por pérdida (estado === 'liquidado_perdida' || status === 'liquidado_perdida')
+      let totalCapitalesPerdidos = 0;
+      const moraCedulas = new Set();
+      try {
+        let qCartonesAll = supabase.from('cartones').select('*, clients(*)');
+        if (targetRouteId) {
+          qCartonesAll = qCartonesAll.eq('route_id', targetRouteId);
+        } else if (agentId) {
+          qCartonesAll = qCartonesAll.eq('agent_id', agentId);
+        }
+        const { data: cartonesAll } = await qCartonesAll;
+
+        if (cartonesAll && cartonesAll.length > 0) {
+          cartonesAll.forEach(c => {
+            const rawEstado = String(c.estado || c.status || '').toLowerCase();
+            const isPerdida = rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora');
+            
+            if (isPerdida) {
+              const amountPuro = Math.round(Number(c.monto_prestado || c.amount || (c.clients ? c.clients.amount : 0) || 0));
+              const discountAmt = Math.round(Number(c.discount_amount || 0));
+              const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+              totalCapitalesPerdidos += efectivoEntregado;
+              const ced = String(c.cliente_id || c.client_id || '').trim();
+              if (ced) moraCedulas.add(ced);
+            }
+          });
+        }
+      } catch (ePerdida) {
+        console.warn("Aviso al consultar cartones liquidados por pérdida para Capital en Caja:", ePerdida);
+      }
+
+      // Fallback para clientes en tabla 'clients' marcados como liquidado_perdida / Mora
+      const rawClients = await this.getClients();
+      rawClients.forEach(c => {
+        const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : true;
+        const ced = String(c.cedula || c.id || '').trim();
+        const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+        const isExplicitlyLiquidatedMora = rawStatus === 'LIQUIDADO_PERDIDA' || rawStatus === 'LIQUIDADO_MORA' || rawStatus === 'LISTA NEGRA' || rawStatus === 'CASTIGADO';
+
+        if (belongsToUser && ced && isExplicitlyLiquidatedMora && !moraCedulas.has(ced) && !activeCedulas.has(ced)) {
+          const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+          const discountAmt = Math.round(Number(c.discount_amount || 0));
+          const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+          totalCapitalesPerdidos += efectivoEntregado;
+          moraCedulas.add(ced);
+        }
+      });
+
+      // FÓRMULA SINCRONIZADA v105:
+      // Capital en Caja = Total Inyectado - Préstamos ACTIVOS + Abonos Reales - Capitales Dados de Baja
+      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivos + totalAbonosReales - totalCapitalesPerdidos);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
       console.error('Error fetching liquid cash (Saldo Maestro v102):', err);
