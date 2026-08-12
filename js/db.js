@@ -1923,7 +1923,9 @@ const db = {
           const capitalPrincipal = amountPuro > 0 ? amountPuro : (totalDebt > 0 ? Math.round(totalDebt / 1.2) : 0);
 
           if (isMoroso) {
-            const capitalPerdidoNeto = Math.max(0, capitalPrincipal - totalPagado);
+            // REGLA CONTABLE v99: La pérdida por Lista Negra incluye el valor total del cartón con intereses (Capital + Intereses)
+            const totalConIntereses = totalDebt > 0 ? totalDebt : (capitalPrincipal > 0 ? Math.round(capitalPrincipal * 1.2) : 0);
+            const capitalPerdidoNeto = Math.max(0, totalConIntereses - totalPagado);
             totalPerdidasMora += capitalPerdidoNeto;
           } else {
             const isLiquidadoPagado = rawStatus === 'LIQUIDADO_PAGADO' || 
@@ -2055,7 +2057,7 @@ const db = {
     }
   },
 
-  async liquidateCredit({ cedula, status, outstanding }) {
+  async liquidateCredit({ cedula, status, outstanding, totalDebt }) {
     const supabase = await initSupabase();
     
     const isPaid = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
@@ -2149,13 +2151,19 @@ const db = {
     // 3. Actualizar la tabla 'cartones' (DONDE RESIDE EL ESTADO DEL CRÉDITO Y LA CARTERA)
     const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_mora' : 'liquidado');
     try {
+      const cartonUpdatePayload = { 
+        estado: cartonEstadoTarget, 
+        outstanding: 0 
+      };
+      if (isPaid) {
+        cartonUpdatePayload.total_debt = 0;
+      } else if (isMora && totalDebt) {
+        cartonUpdatePayload.total_debt = Number(totalDebt);
+      }
+
       const { error: cartonErr } = await supabase
         .from('cartones')
-        .update({ 
-          estado: cartonEstadoTarget, 
-          outstanding: 0,
-          total_debt: 0
-        })
+        .update(cartonUpdatePayload)
         .eq('cliente_id', String(cedula))
         .eq('estado', 'activo');
 
@@ -2260,12 +2268,13 @@ const db = {
           const rawStatus = String(c.status || c.estado || '').toUpperCase();
           if (c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA')) {
             const ced = String(c.cedula).trim();
+            const totalDebtConInteres = Number(c.totalToPay || c.totalDebt || c.monto_total || c.total_debt || c.total_a_recaudar || (c.amount ? Math.round(c.amount * 1.2) : 0));
             blacklistedMap.set(ced, {
               ...c,
               cedula: ced,
               name: c.name || `Cliente ${ced}`,
               status: 'Liquidado_Mora',
-              outstanding: Number(c.amount || c.totalDebt || c.outstanding || 0)
+              outstanding: totalDebtConInteres > 0 ? totalDebtConInteres : Number(c.amount || 0)
             });
           }
         });
@@ -2278,8 +2287,18 @@ const db = {
             const ced = String(carton.cliente_id || carton.client_id || '').trim();
             if (ced) {
               const joinedClient = carton.clients || {};
-              const moraDebt = Number(carton.monto_prestado || carton.amount || joinedClient.amount || 0);
               const existing = blacklistedMap.get(ced);
+              const totalDebtConInteres = Number(
+                carton.total_debt || 
+                carton.totalDebt || 
+                carton.monto_total || 
+                joinedClient.totalToPay || 
+                joinedClient.totalDebt || 
+                joinedClient.monto_total || 
+                joinedClient.total_debt || 
+                (carton.monto_prestado ? Math.round(carton.monto_prestado * 1.2) : 0) ||
+                (joinedClient.amount ? Math.round(joinedClient.amount * 1.2) : 0)
+              );
               blacklistedMap.set(ced, {
                 ...joinedClient,
                 ...carton,
@@ -2290,7 +2309,7 @@ const db = {
                 zone: joinedClient.zone || (existing ? existing.zone : ''),
                 risk: 'Rojo',
                 status: 'Liquidado_Mora',
-                outstanding: moraDebt > 0 ? moraDebt : Number(existing ? existing.outstanding : 0)
+                outstanding: totalDebtConInteres > 0 ? totalDebtConInteres : Number(existing ? existing.outstanding : 0)
               });
             }
           }

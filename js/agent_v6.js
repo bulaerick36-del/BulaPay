@@ -355,7 +355,10 @@ const agentModule = {
           return;
         }
 
-        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${client.name} y enviarlo a Lista Negra (Liquidado por Mora)?\nEsta acción es irreversible y removerá al cliente de la cartera activa.`;
+        // Regla v99: Deuda total registrada en Lista Negra incluye Intereses proyectados (Capital + Intereses)
+        const totalConIntereses = Number(client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || (client.amount ? Math.round(client.amount * 1.2) : 0));
+
+        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${client.name} y enviarlo a Lista Negra (Liquidado por Mora)?\nDeuda Total a Lista Negra (Capital + Intereses): $${totalConIntereses.toLocaleString('es-CO')}.\nEsta acción es irreversible y removerá al cliente de la cartera activa.`;
         if (!confirm(confirmMsg)) return;
 
         try {
@@ -365,7 +368,8 @@ const agentModule = {
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: 'Liquidado_Mora',
-            outstanding: 0
+            outstanding: 0,
+            totalDebt: totalConIntereses
           });
 
           this.currentClient = null;
@@ -376,7 +380,7 @@ const agentModule = {
           await this.updateRouteTracking();
           await this.renderFinancialDashboard();
 
-          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora) y removido de la ruta de cobro.`);
+          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora) con deuda total de $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses) y removido de la ruta de cobro.`);
         } catch (e) {
           console.error("Error al enviar a Lista Negra:", e);
           alert('❌ Error al procesar liquidación: ' + (e.message || e));
@@ -400,7 +404,7 @@ const agentModule = {
 
         try {
           const client = this.currentClient;
-          const totalEsperado = Number(client.totalToPay || client.monto_total || client.totalDebt || 0);
+          const totalEsperado = Number(client.totalToPay || client.monto_total || client.totalDebt || client.total_debt || (client.amount ? Math.round(client.amount * 1.2) : 0));
           const saldoRestante = Number(client.outstanding || client.saldo_restante || 0);
           const capitalPrestado = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
           
@@ -416,17 +420,18 @@ const agentModule = {
             nuevoEstado = 'Liquidado_Pagado';
             alert('🎉 ¡Cartón Liquidado Exitosamente!');
           } 
-          // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v92)
+          // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v99)
           else {
             nuevoEstado = 'Liquidado_Mora';
-            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda no pagada de $${saldoRestante.toLocaleString('es-CO')}.\nEl crédito se da de baja: la Cartera en Calle se reduce a $0, los intereses activos se eliminan y el Capital en Caja permanece inalterado.`);
+            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total con intereses de $${totalEsperado.toLocaleString('es-CO')}.\nEl crédito se da de baja: la Cartera en Calle se reduce a $0, los intereses activos se eliminan y el reporte de moroso refleja la pérdida total con intereses.`);
           }
 
-          // Actualizar estado del cliente y crédito en DB (outstanding pasa a 0 para saldar la cartera en calle sin generar ingresos falsos)
+          // Actualizar estado del cliente y crédito en DB (outstanding pasa a 0 para saldar la cartera en calle, totalDebt almacena la deuda total con intereses)
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: nuevoEstado,
-            outstanding: 0
+            outstanding: 0,
+            totalDebt: totalEsperado
           });
 
           // Actualizar inmediatamente las métricas financieras del Dashboard
@@ -1134,9 +1139,9 @@ const agentModule = {
             return;
           }
           
-          // Renderizar lista negra
+          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados)
           container.innerHTML = badClients.map(c => {
-            const moraDebt = Number(c.outstanding || c.totalDebt || c.amount || 0);
+            const moraDebt = Number(c.totalToPay || c.totalDebt || c.total_debt || c.monto_total || c.outstanding || (c.amount ? Math.round(c.amount * 1.2) : 0));
             return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
               <div>
@@ -1145,7 +1150,7 @@ const agentModule = {
                 <span style="font-size: 0.72rem; color: #ef4444; font-weight: 600;">Estado: Liquidado por Mora (Lista Negra)</span>
               </div>
               <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">
-                Deuda en Calle: $${moraDebt.toLocaleString('es-CO')}
+                Deuda Total (Capital + Intereses): $${moraDebt.toLocaleString('es-CO')}
               </span>
             </div>
             `;
