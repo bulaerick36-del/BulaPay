@@ -35,7 +35,7 @@ async function initSupabase() {
 const db = {
   async init() {
     await initSupabase();
-    await this.mapExistingClientsToCartones();
+    // v121: Se desactiva el mapeo automático en cada carga para prevenir el error 'permission denied for sequence cartones_numero_carton_seq'
   },
 
   async mapExistingClientsToCartones() {
@@ -64,6 +64,7 @@ const db = {
           const totalDebt = Number(client.totalDebt || 0);
           newCartones.push({
             cliente_id: cedula,
+            numero_carton: Math.floor(Date.now() % 100000000) + Math.floor(Math.random() * 1000),
             fecha_apertura: client.created_at || new Date().toISOString(),
             monto_prestado: amount > 0 ? amount : (totalDebt > 0 ? totalDebt : 0),
             estado: outstanding > 0 ? 'activo' : 'liquidado',
