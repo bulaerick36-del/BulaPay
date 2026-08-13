@@ -2026,7 +2026,7 @@ const db = {
           const rawStatus = String(c.status || '').trim().toUpperCase();
           const rawRisk = String(c.risk || '').trim().toUpperCase();
 
-          // Filtro estricto v106: Excluir totalmente Lista Negra, mora, perdida o castigados
+          // Filtro estricto v115: Excluir totalmente Lista Negra, mora, perdida o castigados
           const isExcluded = blacklistedCedulas.has(ced) ||
                              rawEstado.includes('MORA') || 
                              rawEstado.includes('PERDIDA') || 
@@ -2042,9 +2042,7 @@ const db = {
                              joinedStatus.includes('PERDIDA') || 
                              joinedStatus.includes('CASTIGADO') || 
                              joinedStatus.includes('NEGRA') || 
-                             joinedStatus.includes('LIQUIDADO') ||
-                             joinedRisk === 'ROJO' ||
-                             rawRisk === 'ROJO';
+                             joinedStatus.includes('LIQUIDADO');
 
           if (!isExcluded) {
             const outstanding = Math.round(Number(c.outstanding || 0));
@@ -2381,9 +2379,13 @@ const db = {
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
-      // FÓRMULA MATEMÁTICA DE SALDO MAESTRO v102:
-      // Capital en Caja = [Suma de Inyecciones] - [Suma de TODOS los préstamos otorgados (capital prestado)] + [Suma de TODOS los abonos/pagos reales en efectivo]
-      // Nota v102: Al enviar un cartón a Lista Negra (Liquidado por Mora), NO SE MODIFICA LA CAJA porque el dinero del préstamo ya salió de la caja al momento de su creación.
+      // ============================================================
+      // FÓRMULA MAESTRA CAJA v115 (RELOJ SUIZO):
+      // Capital en Caja = Total Inyectado - Total Prestado (Salida de Caja) + Total Abonos Reales
+      // 1. Salida al prestar: al crear cualquier cartón/préstamo, el dinero sale de caja de inmediato.
+      // 2. Entrada al abonar: cada abono/pago suma de inmediato a la caja.
+      // 3. Baja por Lista Negra: la caja se mantiene ESTABLE (el dinero salió físicamente al prestarse y no se suma de vuelta).
+      // ============================================================
 
       // 1. Suma total de inyecciones de la tabla 'capital_injections'
       const rawInjections = await this.getCapitalInjections(targetRouteId);
@@ -2407,57 +2409,27 @@ const db = {
         }
       }
 
-      // 2. Suma de préstamos ACTIVOS con filtro estricto .neq('status', 'liquidado_perdida') (v105)
-      let totalPrestamosActivos = 0;
-      const activeCedulas = new Set();
+      // 2. Suma del capital entregado en TODOS los préstamos otorgados (salida física de caja al prestar)
+      let totalPrestadoSalioDeCaja = 0;
       try {
-        let qCartonesActivos = supabase
-          .from('cartones')
-          .select('*')
-          .eq('estado', 'activo')
-          .neq('status', 'liquidado_perdida')
-          .neq('status', 'Liquidado_Mora')
-          .neq('status', 'castigado')
-          .neq('status', 'Lista Negra')
-          .neq('estado', 'liquidado_perdida')
-          .neq('estado', 'liquidado_mora');
-
-        if (targetRouteId) {
-          qCartonesActivos = qCartonesActivos.eq('route_id', targetRouteId);
-        } else if (agentId) {
-          qCartonesActivos = qCartonesActivos.eq('agent_id', agentId);
-        }
-        const { data: cartonesActivos } = await qCartonesActivos;
-
-        if (cartonesActivos && cartonesActivos.length > 0) {
-          cartonesActivos.forEach(c => {
-            const rawEstado = String(c.estado || '').trim().toUpperCase();
+        const { data: cartonesData } = await supabase.from('cartones').select('*');
+        if (cartonesData && cartonesData.length > 0) {
+          cartonesData.forEach(c => {
+            const rawEstado = String(c.estado || '').trim().toLowerCase();
             const rawStatus = String(c.status || '').trim().toUpperCase();
-            const rawRisk = String(c.risk || '').trim().toUpperCase();
+            // Ignorar únicamente cartones cancelados/rechazados sin desembolso
+            const isCanceled = rawEstado.includes('cancelad') || rawStatus.includes('CANCELAD') || rawStatus.includes('RECHAZAD');
 
-            const isExcluded = rawEstado.includes('MORA') || 
-                               rawEstado.includes('PERDIDA') || 
-                               rawEstado.includes('CASTIGADO') || 
-                               rawEstado.includes('NEGRA') || 
-                               (rawEstado !== 'ACTIVO' && rawEstado.includes('LIQUIDADO')) ||
-                               rawStatus.includes('MORA') || 
-                               rawStatus.includes('PERDIDA') || 
-                               rawStatus.includes('CASTIGADO') || 
-                               rawStatus.includes('NEGRA') || 
-                               rawStatus.includes('LIQUIDADO') ||
-                               rawRisk === 'ROJO';
-
-            if (!isExcluded) {
+            if (!isCanceled) {
               const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
               const discountAmt = Math.round(Number(c.discount_amount || 0));
               const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-              totalPrestamosActivos += efectivoEntregado;
-              if (c.cliente_id) activeCedulas.add(String(c.cliente_id).trim());
+              totalPrestadoSalioDeCaja += efectivoEntregado;
             }
           });
         }
-      } catch (eAct) {
-        console.warn("Aviso al consultar cartones activos para Capital en Caja:", eAct);
+      } catch (eCart) {
+        console.warn("Aviso al consultar cartones para Capital en Caja v115:", eCart);
       }
 
       // 3. Suma de TODOS los abonos y pagos reales en efectivo recibidos (tabla 'payments')
@@ -2469,37 +2441,14 @@ const db = {
         const isRealPayment = p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && !isMoraOrNegra;
 
         if (isRealPayment) {
-          const pAgentNameLower = (p.agentName || '').trim().toLowerCase();
-          const isMine = (currentUser && (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor'))
-            ? (p.supervisor_id === currentUser.username)
-            : (
-                p.agent_id === agentId || 
-                p.agentUsername === currentUser?.username || 
-                (currentUser?.name && pAgentNameLower === currentUser.name.trim().toLowerCase()) ||
-                (targetRouteId && String(p.routeId || p.route_id) === String(targetRouteId))
-              );
-
-          if (isMine || !targetRouteId) {
-            totalAbonosReales += Math.round(parseFloat(p.amount) || 0);
-          }
+          totalAbonosReales += Math.round(parseFloat(p.amount) || 0);
         }
       }
 
-      // ============================================================
-      // FÓRMULA MAESTRO v107 (SIN DOBLE PENALIZACIÓN):
-      // Al crear préstamo activo   → sale de caja (ya se resta en totalPrestamosActivos)
-      // Al ir a Lista Negra/mora   → ya NO está en totalPrestamosActivos (filtrado arriba)
-      //                           → NO se resta de nuevo: evitamos doble penalización
-      // Al recibir abono real      → vuelve a caja (suma en totalAbonosReales)
-      //
-      // Capital en Caja = Inyectado - PréstamosActivos + AbonosReales
-      // (Los capitales en mora ya fueron descontados al momento de su creación
-      //  y no regresan a caja porque el dinero está perdido físicamente)
-      // ============================================================
-      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivos + totalAbonosReales);
+      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestadoSalioDeCaja + totalAbonosReales);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
-      console.error('Error fetching liquid cash (Saldo Maestro v102):', err);
+      console.error('Error fetching liquid cash (v115):', err);
       return 0;
     }
   },
