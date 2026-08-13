@@ -258,7 +258,8 @@ const db = {
   getSupervisorId() {
     const user = this.getCurrentUser();
     if (!user) return null;
-    if (user.role === 'Agente de Ruta' || user.role === 'agent') {
+    // v108: Los agentes (incluido Agente Independiente) devuelven su supervisor real, no su username
+    if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
       return user.supervisor || null;
     }
     return user.username;
@@ -573,7 +574,7 @@ const db = {
       const currentUser = this.getCurrentUser();
       if (!currentUser) return [];
 
-      // FILTRO ESTRICTO v107: excluir cualquier cartón con estado de mora/pérdida/lista negra aunque figure como 'activo'
+      // FILTRO ESTRICTO v108: excluir cualquier cartón con estado de mora/pérdida/lista negra
       let query = supabase.from('cartones').select('*, clients(*)')
         .eq('estado', 'activo')
         .neq('status', 'liquidado_perdida')
@@ -582,12 +583,13 @@ const db = {
         .neq('status', 'Lista Negra')
         .neq('status', 'MOROSO');
 
-      const supId = await this.getSupervisorIdForUser(currentUser);
-      if (supId) {
-        query = query.eq('supervisor_id', supId);
-      }
+      // v108 FIX CRÍTICO: La lógica de filtrado por propiedad del cartón depende del ROL.
+      // - Supervisores: filtran por supervisor_id (ven todos los cartones de sus agentes)
+      // - Agentes: filtran por route_id / agent_id (NO por supervisor_id, evita falsos vacíos)
+      const isAgent = currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente';
 
-      if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
+      if (isAgent) {
+        // Para agentes: buscar por route_id O agent_id, sin depender de supervisor_id
         let assignedRouteId = currentUser.routeId;
         if (!assignedRouteId) {
           assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
@@ -597,6 +599,12 @@ const db = {
           query = query.or(`route_id.eq.${assignedRouteId},agent_id.eq.${agentId}`);
         } else {
           query = query.eq('agent_id', agentId);
+        }
+      } else {
+        // Para supervisores y otros roles: filtrar por supervisor_id
+        const supId = await this.getSupervisorIdForUser(currentUser);
+        if (supId) {
+          query = query.eq('supervisor_id', supId);
         }
       }
 
@@ -609,7 +617,9 @@ const db = {
       const clientsMap = new Map();
       try {
         let clientsQuery = supabase.from('clients').select('*');
-        if (supId) clientsQuery = clientsQuery.eq('supervisor_id', supId);
+        // v108: Filtrar clients por supervisor_id del usuario (resuelto dinámicamente)
+        const resolvedSupId = await this.getSupervisorIdForUser(currentUser);
+        if (resolvedSupId) clientsQuery = clientsQuery.eq('supervisor_id', resolvedSupId);
         const { data: rawClients } = await clientsQuery;
         if (rawClients) {
           rawClients.forEach(c => {
@@ -881,47 +891,63 @@ const db = {
 
       console.log('[DEBUG DB] saveClient - Registro exitoso. Datos devueltos:', data);
       
-      // Registrar cartón inicial obligatorio en la nueva tabla 'cartones' (aislamiento de préstamos)
+      // v108: VALIDACIÓN ANTI-DUPLICACIÓN antes de insertar cartón
+      // Verificar que no exista ya un cartón activo para esta cédula (evita duplicados por doble-clic)
       try {
-        const cartonPayload = {
-          cliente_id: String(client.cedula),
-          numero_carton: Math.floor(Date.now() % 100000000),
-          fecha_apertura: new Date().toISOString(),
-          monto_prestado: Number(client.amount || 0),
-          estado: 'activo',
-          saldo_anterior: Number(client.rollover_amount || client.saldo_anterior || 0),
-          rollover_amount: Number(client.rollover_amount || client.saldo_anterior || 0),
-          total_debt: Number(client.totalDebt || 0),
-          outstanding: Number(client.outstanding || client.totalDebt || 0),
-          installments_count: Number(client.installmentsCount || 1),
-          installment_amount: Number(client.installmentAmount || 0),
-          discount_amount: Number(client.discount_amount || 0),
-          discount_reason: client.discount_reason || null,
-          net_cash: Number(client.amount || 0) - Number(client.discount_amount || 0),
-          route_id: client.routeId || client.route_id || null,
-          agent_id: client.agent_id || client.agentId || null,
-          supervisor_id: client.supervisor_id || null,
-          created_at: new Date().toISOString()
-        };
+        const { data: existingCarton } = await supabase
+          .from('cartones')
+          .select('id')
+          .eq('cliente_id', String(client.cedula))
+          .eq('estado', 'activo')
+          .maybeSingle();
 
-        let { data: cData, error: cErr } = await supabase.from('cartones').insert([cartonPayload]).select();
-        
-        if (cErr) {
-          console.warn("⚠️ Advertencia al insertar cartón en 'cartones'. Reintentando con payload esencial...", cErr);
-          const essentialCartonPayload = {
+        if (existingCarton) {
+          console.warn(`⚠️ [ANTI-DUP v108] Ya existe un cartón activo (id: ${existingCarton.id}) para cédula ${client.cedula}. Omitiendo creación duplicada.`);
+        } else {
+          // Registrar cartón inicial obligatorio en la tabla 'cartones' (aislamiento de préstamos)
+          const cartonPayload = {
             cliente_id: String(client.cedula),
             numero_carton: Math.floor(Date.now() % 100000000),
+            fecha_apertura: new Date().toISOString(),
             monto_prestado: Number(client.amount || 0),
-            estado: 'activo'
+            estado: 'activo',
+            saldo_anterior: Number(client.rollover_amount || client.saldo_anterior || 0),
+            rollover_amount: Number(client.rollover_amount || client.saldo_anterior || 0),
+            total_debt: Number(client.totalDebt || 0),
+            outstanding: Number(client.outstanding || client.totalDebt || 0),
+            installments_count: Number(client.installmentsCount || 1),
+            installment_amount: Number(client.installmentAmount || 0),
+            discount_amount: Number(client.discount_amount || 0),
+            discount_reason: client.discount_reason || null,
+            net_cash: Number(client.amount || 0) - Number(client.discount_amount || 0),
+            route_id: client.routeId || client.route_id || null,
+            agent_id: client.agent_id || client.agentId || null,
+            supervisor_id: client.supervisor_id || null,
+            created_at: new Date().toISOString()
           };
-          const retryRes = await supabase.from('cartones').insert([essentialCartonPayload]).select();
-          if (retryRes.error) {
-            console.error("❌ Error definitivo al insertar cartón en 'cartones':", retryRes.error);
+
+          let { data: cData, error: cErr } = await supabase.from('cartones').insert([cartonPayload]).select();
+          
+          if (cErr) {
+            console.warn("⚠️ Advertencia al insertar cartón en 'cartones'. Reintentando con payload esencial...", cErr);
+            const essentialCartonPayload = {
+              cliente_id: String(client.cedula),
+              numero_carton: Math.floor(Date.now() % 100000000),
+              monto_prestado: Number(client.amount || 0),
+              estado: 'activo',
+              route_id: client.routeId || client.route_id || null,
+              agent_id: client.agent_id || client.agentId || null,
+              supervisor_id: client.supervisor_id || null
+            };
+            const retryRes = await supabase.from('cartones').insert([essentialCartonPayload]).select();
+            if (retryRes.error) {
+              console.error("❌ Error definitivo al insertar cartón en 'cartones':", retryRes.error);
+            } else {
+              console.log("✅ Cartón esencial creado exitosamente en 'cartones' para el cliente:", client.cedula);
+            }
           } else {
-            console.log("✅ Cartón esencial creado exitosamente en 'cartones' para el cliente:", client.cedula);
+            console.log("✅ Cartón completo creado exitosamente en 'cartones' para el cliente:", client.cedula, cData);
           }
-        } else {
-          console.log("✅ Cartón completo creado exitosamente en 'cartones' para el cliente:", client.cedula, cData);
         }
       } catch (eCarton) {
         console.error("Excepción al registrar cartón en 'cartones':", eCarton);
