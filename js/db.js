@@ -2002,35 +2002,28 @@ const db = {
         console.warn("Aviso al obtener lista negra para métricas v118:", eB);
       }
 
-      // 2. Consulta de cartones activos planos (select * simple sin error de llaves foráneas v118)
-      let { data: cartonesActivos } = await supabase
+      // 2. AUDITORÍA V119: Consulta estricta a la tabla 'cartones' con estado = 'activo'
+      const { data: cartonesActivos, error } = await supabase
         .from('cartones')
         .select('*')
         .eq('estado', 'activo');
 
+      console.log("🔍 [v119 AUDIT] Cartones Activos CRUDOS devueltos por Supabase:", cartonesActivos, "Error:", error);
+      console.log("🔍 [v119 AUDIT] Cédulas en Lista Negra detectadas:", Array.from(blacklistedCedulas));
+
       let carteraEnCalle = 0; // Suma del capital principal activo en poder de los clientes
       let interesesActivos = 0; // Suma de ganancias proyectadas de cartones activos
 
-      if (cartonesActivos && cartonesActivos.length > 0) {
+      if (!error && cartonesActivos && cartonesActivos.length > 0) {
         cartonesActivos.forEach(c => {
           const ced = String(c.cliente_id || c.client_id || c.cedula || '').trim();
-          const rawEstado = String(c.estado || '').trim().toUpperCase();
-          const rawStatus = String(c.status || '').trim().toUpperCase();
+          const rawEstado = String(c.estado || '').trim().toLowerCase();
+          const rawStatus = String(c.status || '').trim().toLowerCase();
 
-          // Filtro estricto v117: Excluir totalmente Lista Negra, mora, perdida o castigados
-          const isExcluded = blacklistedCedulas.has(ced) ||
-                             rawEstado.includes('MORA') || 
-                             rawEstado.includes('PERDIDA') || 
-                             rawEstado.includes('CASTIGADO') || 
-                             rawEstado.includes('NEGRA') || 
-                             (rawEstado !== 'ACTIVO' && rawEstado.includes('LIQUIDADO')) ||
-                             rawStatus.includes('MORA') || 
-                             rawStatus.includes('PERDIDA') || 
-                             rawStatus.includes('CASTIGADO') || 
-                             rawStatus.includes('NEGRA') || 
-                             rawStatus.includes('LIQUIDADO');
+          // SELECCIÓN ESTRICTA v119: Únicamente sumar si el estado es exactamente igual a 'activo' y no está en Lista Negra
+          const isStrictlyActive = (rawEstado === 'activo' || rawStatus === 'activo') && !blacklistedCedulas.has(ced);
 
-          if (!isExcluded) {
+          if (isStrictlyActive) {
             const outstanding = Math.round(Number(c.outstanding || 0));
             const totalDebt = Math.round(Number(c.total_debt || c.totalDebt || 0));
             const amount = Math.round(Number(c.monto_prestado || c.amount || 0));
@@ -2044,9 +2037,15 @@ const db = {
                 carteraEnCalle += outstanding;
               }
             }
+          } else {
+            console.log(`⏭️ [v119 AUDIT] Omitiendo cartón id: ${c.id}, cliente: ${ced}, estado: "${c.estado}", status: "${c.status}"`);
           }
         });
-      } else {
+      }
+
+      console.log(`✅ [v119 AUDIT] Totales recalculados -> Cartera en Calle: $${carteraEnCalle}, Intereses Activos: $${interesesActivos}`);
+      
+      if (!cartonesActivos || cartonesActivos.length === 0) {
         // Fallback en caso de que la tabla cartones no tenga registros aún
         rawClients.forEach(c => {
           const belongsToUser = assignedRouteId ? (c.routeId === assignedRouteId) : true;
