@@ -567,63 +567,27 @@ const db = {
     return data || [];
   },
 
-  // CLIENTS & CARTONES JOIN
+  // CLIENTS & CARTONES JOIN (v113 SIMPLIFICADO)
   async loadActiveCredits(options = {}) {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
       if (!currentUser) return [];
 
-      // FILTRO ESTRICTO v108: excluir cualquier cartón con estado de mora/pérdida/lista negra
-      let query = supabase.from('cartones').select('*, clients(*)')
-        .eq('estado', 'activo')
-        .neq('status', 'liquidado_perdida')
-        .neq('status', 'Liquidado_Mora')
-        .neq('status', 'castigado')
-        .neq('status', 'Lista Negra')
-        .neq('status', 'MOROSO');
+      // CONSULTA DIRECTA Y SIMPLE v113: Select * sin relaciones de llaves foráneas complejas (evita error PostgREST)
+      const { data: cartonesData, error: cartonesErr } = await supabase
+        .from('cartones')
+        .select('*')
+        .eq('estado', 'activo');
 
-      // v108 FIX CRÍTICO: La lógica de filtrado por propiedad del cartón depende del ROL.
-      // - Supervisores: filtran por supervisor_id (ven todos los cartones de sus agentes)
-      // - Agentes: filtran por route_id / agent_id (NO por supervisor_id, evita falsos vacíos)
-      const isAgent = currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente';
-
-      if (isAgent) {
-        // v109 TEMPORAL: Se desactiva el filtro estricto de agent_id y route_id 
-        // para asegurar que TODOS los cartones con estado 'activo' sean leídos.
-        // let assignedRouteId = currentUser.routeId;
-        // if (!assignedRouteId) {
-        //   assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
-        // }
-        // const agentId = currentUser.id || currentUser.username;
-        // if (assignedRouteId) {
-        //   query = query.or(`route_id.eq.${assignedRouteId},agent_id.eq.${agentId}`);
-        // } else {
-        //   query = query.eq('agent_id', agentId);
-        // }
-        console.log("v109 DEBUG: Filtros de agente y ruta omitidos temporalmente. Cargando todos los cartones activos.");
-      } else {
-        // Para supervisores y otros roles: filtrar por supervisor_id
-        const supId = await this.getSupervisorIdForUser(currentUser);
-        if (supId) {
-          query = query.eq('supervisor_id', supId);
-        }
-      }
-
-
-      const { data: cartonesData, error: cartonesErr } = await query;
       if (cartonesErr) {
         console.error("Error al obtener cartones activos en Supabase:", cartonesErr);
       }
 
-      // Pre-cargar mapa de la tabla clients para asegurar información completa
+      // Pre-cargar mapa de la tabla clients para asociar nombres e información de contacto
       const clientsMap = new Map();
       try {
-        let clientsQuery = supabase.from('clients').select('*');
-        // v108: Filtrar clients por supervisor_id del usuario (resuelto dinámicamente)
-        const resolvedSupId = await this.getSupervisorIdForUser(currentUser);
-        if (resolvedSupId) clientsQuery = clientsQuery.eq('supervisor_id', resolvedSupId);
-        const { data: rawClients } = await clientsQuery;
+        const { data: rawClients } = await supabase.from('clients').select('*');
         if (rawClients) {
           rawClients.forEach(c => {
             if (c && c.cedula) clientsMap.set(String(c.cedula).trim(), c);
