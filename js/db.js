@@ -598,12 +598,42 @@ const db = {
         console.warn("Aviso cargando tabla clients para fallback:", eCl);
       }
 
+      // Pre-cargar cédulas en Lista Negra para excluir automáticamente del listado de cobro activo (v124)
+      const blacklistedCedulas = new Set();
+      try {
+        const { data: allCls } = await supabase.from('clients').select('cedula, id, status, estado');
+        if (allCls) {
+          allCls.forEach(c => {
+            const st = String(c.status || c.estado || '').trim().toUpperCase();
+            const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('MORA') || st.includes('CASTIGADO'));
+            if (isLoss) {
+              if (c.cedula) blacklistedCedulas.add(String(c.cedula).trim());
+              if (c.id) blacklistedCedulas.add(String(c.id).trim());
+            }
+          });
+        }
+        const { data: allCarts } = await supabase.from('cartones').select('cliente_id, client_id, status, estado');
+        if (allCarts) {
+          allCarts.forEach(c => {
+            const st = String(c.status || c.estado || '').trim().toUpperCase();
+            const rawEst = String(c.estado || '').trim().toLowerCase();
+            const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
+            if (isLoss) {
+              if (c.cliente_id) blacklistedCedulas.add(String(c.cliente_id).trim());
+              if (c.client_id) blacklistedCedulas.add(String(c.client_id).trim());
+            }
+          });
+        }
+      } catch (eB) {
+        console.warn("Aviso al obtener lista negra en loadActiveCredits:", eB);
+      }
+
       const activeCreditsList = [];
       const cartones = cartonesData || [];
 
       cartones.forEach(carton => {
-        const cedula = String(carton.cliente_id || '').trim();
-        if (!cedula) return;
+        const cedula = String(carton.cliente_id || carton.client_id || carton.cedula || '').trim();
+        if (!cedula || blacklistedCedulas.has(cedula)) return;
 
         const joinedClient = (carton.clients && typeof carton.clients === 'object' && carton.clients.name)
           ? carton.clients
@@ -2199,18 +2229,27 @@ const db = {
       }
 
       const cedStr = String(cedula).trim();
+      const cedNum = Number(cedStr);
 
-      // v123: UPDATE explícito garantizado probando por ID, numero_carton, cliente_id, client_id y cedula
+      // v124: UPDATE explícito garantizado probando por ID, numero_carton, cliente_id, client_id y cedula (tanto String como Number)
       if (cartonId) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
       }
       if (numeroCarton) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', String(numeroCarton));
       }
 
       await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
       await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr);
       await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedStr);
+
+      if (!isNaN(cedNum) && cedNum > 0) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedNum);
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedNum);
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedNum);
+      }
+      console.log(`✅ [v124 LIQUIDATE] Cartón actualizado exitosamente a '${cartonEstadoTarget}' en Supabase para cliente ${cedStr}`);
       if (clientData && clientData.id) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('id', clientData.id);
       }
