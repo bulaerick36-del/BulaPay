@@ -1972,32 +1972,7 @@ const db = {
         assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
       }
 
-      // 1. Obtener cedulas en Lista Negra / Mora desde la tabla master 'clients'
-      const rawClients = await this.getClients();
-      const blacklistedCedulas = new Set();
-      rawClients.forEach(c => {
-        const belongsToUser = assignedRouteId ? (c.routeId === assignedRouteId) : true;
-        if (belongsToUser) {
-          const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-          const rawRisk = String(c.risk || '').trim().toUpperCase();
-          const isMoroso = rawRisk === 'ROJO' || 
-                           rawStatus.includes('MORA') || 
-                           rawStatus.includes('PERDIDA') || 
-                           rawStatus.includes('CASTIGADO') || 
-                           rawStatus.includes('NEGRA') || 
-                           rawStatus.includes('LIQUIDADO');
-          if (isMoroso) {
-            if (c.cedula) blacklistedCedulas.add(String(c.cedula).trim());
-            if (c.id) blacklistedCedulas.add(String(c.id).trim());
-          }
-        }
-      });
-
-      // 2. Consulta directa a la tabla 'cartones' con estado = 'activo' y filtros estrictos .neq (v106)
-      let query = supabase
-        .from('cartones')
-        .select('*, clients(*)')
-      // 1. Obtener cedulas en Lista Negra / Mora desde las tablas 'clients' y 'cartones' (v117)
+      // 1. Obtener cedulas en Lista Negra / Mora desde las tablas 'clients' y 'cartones' (v118)
       const blacklistedCedulas = new Set();
       try {
         const { data: allCls } = await supabase.from('clients').select('cedula, id, status, estado');
@@ -2021,10 +1996,10 @@ const db = {
           });
         }
       } catch (eB) {
-        console.warn("Aviso al obtener lista negra para métricas v117:", eB);
+        console.warn("Aviso al obtener lista negra para métricas v118:", eB);
       }
 
-      // 2. Consulta de cartones activos planos (select * simple sin error de llaves foráneas v117)
+      // 2. Consulta de cartones activos planos (select * simple sin error de llaves foráneas v118)
       let { data: cartonesActivos } = await supabase
         .from('cartones')
         .select('*')
