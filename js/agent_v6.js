@@ -368,12 +368,14 @@ const agentModule = {
 
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
+            cartonId: client.carton_id || client.id,
+            numeroCarton: client.numero_carton,
             status: 'liquidado_perdida',
             outstanding: 0,
             totalDebt: totalConIntereses
           });
 
-          // Actualización inmediata y sincronizada de TODOS los contadores (v107)
+          // Actualización inmediata y sincronizada de TODOS los contadores y vistas (v123)
           this.currentClient = null;
           if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
           if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
@@ -382,7 +384,8 @@ const agentModule = {
           // Disparar refresh completo de métricas sin esperar confirmación del usuario
           await Promise.all([
             this.updateRouteTracking(),
-            this.renderFinancialDashboard()
+            this.renderFinancialDashboard(),
+            typeof this.renderPaymentCardGrid === 'function' ? this.renderPaymentCardGrid() : Promise.resolve()
           ]);
 
           alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl saldo del Capital en Caja se mantiene estable: la salida del préstamo fue descontada originalmente al momento de su creación.`);
@@ -429,18 +432,21 @@ const agentModule = {
             nuevoEstado = 'liquidado_perdida';
           }
 
-          // Actualizar estado del cliente y crédito en DB (outstanding pasa a 0 para saldar la cartera en calle, totalDebt almacena la deuda total con intereses)
+          // Actualizar estado del cliente y crédito en DB con UPDATE explícito (v123)
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
+            cartonId: client.carton_id || client.id,
+            numeroCarton: client.numero_carton,
             status: nuevoEstado,
             outstanding: 0,
             totalDebt: totalEsperado
           });
 
-          // Actualizar inmediatamente las métricas financieras del Dashboard de forma síncrona (v118)
+          // Actualizar inmediatamente las métricas financieras del Dashboard de forma síncrona en vivo (v123)
           await Promise.all([
             this.renderFinancialDashboard(),
-            this.updateRouteTracking()
+            this.updateRouteTracking(),
+            typeof this.renderPaymentCardGrid === 'function' ? this.renderPaymentCardGrid() : Promise.resolve()
           ]);
 
           if (nuevoEstado === 'Liquidado_Pagado') {

@@ -2183,7 +2183,7 @@ const db = {
 
     const isMora = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
 
-    // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE - v105)
+    // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE v123)
     const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado');
     const cartonStatusTarget = isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado');
     try {
@@ -2198,13 +2198,23 @@ const db = {
         cartonUpdatePayload.total_debt = Number(totalDebt);
       }
 
-      // Garantizar actualización en Supabase probando cliente_id, client_id y cedula
-      await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', String(cedula));
-      await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', String(cedula));
-      await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', String(cedula));
+      const cedStr = String(cedula).trim();
+
+      // v123: UPDATE explícito garantizado probando por ID, numero_carton, cliente_id, client_id y cedula
+      if (cartonId) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+      }
+      if (numeroCarton) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+      }
+
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr);
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedStr);
       if (clientData && clientData.id) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('id', clientData.id);
       }
+      console.log(`✅ [v123 LIQUIDATE] Cartón actualizado exitosamente a '${cartonEstadoTarget}' en Supabase para cliente ${cedStr}`);
     } catch (eCarton) {
       console.warn("Excepción al actualizar tabla cartones:", eCarton.message);
     }
