@@ -174,7 +174,7 @@ const db = {
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .or(`supervisor_id.eq.${supId},username.eq.${supId}`);
+      .or(`supervisor_id.eq."${supId}",username.eq."${supId}"`);
     if (error) {
       console.error("Error al obtener usuarios en Supabase:", error);
       return [];
@@ -1260,11 +1260,10 @@ const db = {
     
     if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
       const agentId = currentUser.id || currentUser.username;
-      const agentName = currentUser.name;
       if (supId) {
         query = query.eq('supervisor_id', supId);
-      } else {
-        query = query.or(`agent_id.eq.${agentId},agentName.eq.${agentName}`);
+      } else if (agentId) {
+        query = query.eq('agent_id', agentId);
       }
     } else if (supId) {
       query = query.eq('supervisor_id', supId);
@@ -2286,14 +2285,17 @@ const db = {
       }
       const { data: clientsData } = await qClients;
 
-      // 2. Obtener cartones con estado = 'liquidado_mora' de la tabla cartones
-      let qCartones = supabase.from('cartones').select('*, clients(*)');
+      // 2. Obtener cartones con estado = 'liquidado_mora' o 'liquidado_perdida' de la tabla cartones (select * simple v120)
+      let qCartones = supabase.from('cartones').select('*');
       if (targetRouteId) {
         qCartones = qCartones.eq('route_id', targetRouteId);
       } else if (agentId) {
         qCartones = qCartones.eq('agent_id', agentId);
       }
-      const { data: cartonesData } = await qCartones;
+      const { data: cartonesData, error: cartonesErr } = await qCartones;
+      if (cartonesErr) {
+        console.error("Error al obtener cartones para lista negra:", cartonesErr);
+      }
 
       const blacklistedMap = new Map();
 
