@@ -573,7 +573,14 @@ const db = {
       const currentUser = this.getCurrentUser();
       if (!currentUser) return [];
 
-      let query = supabase.from('cartones').select('*, clients(*)').eq('estado', 'activo');
+      // FILTRO ESTRICTO v107: excluir cualquier cartón con estado de mora/pérdida/lista negra aunque figure como 'activo'
+      let query = supabase.from('cartones').select('*, clients(*)')
+        .eq('estado', 'activo')
+        .neq('status', 'liquidado_perdida')
+        .neq('status', 'Liquidado_Mora')
+        .neq('status', 'castigado')
+        .neq('status', 'Lista Negra')
+        .neq('status', 'MOROSO');
 
       const supId = await this.getSupervisorIdForUser(currentUser);
       if (supId) {
@@ -2083,13 +2090,16 @@ const db = {
             const ced = String(c.cedula || c.id || '').trim();
             const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
             const rawRisk = String(c.risk || '').trim().toUpperCase();
+            // FILTRO GLOBAL ACTIVOS v107: excluir mora, perdida, castigado, lista negra
+            // Nota: 'Liquidado_Pagado' también se excluye de cartera activa (el crédito fue saldado)
             const isExcluded = blacklistedCedulas.has(ced) ||
                                rawRisk === 'ROJO' || 
                                rawStatus.includes('MORA') || 
                                rawStatus.includes('PERDIDA') || 
                                rawStatus.includes('CASTIGADO') || 
                                rawStatus.includes('NEGRA') || 
-                               rawStatus.includes('LIQUIDADO');
+                               rawStatus.includes('LIQUIDADO') ||
+                               rawStatus === 'SIN DEUDA ACTIVA';
 
             if (!isExcluded) {
               const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
@@ -2495,57 +2505,18 @@ const db = {
         }
       }
 
-      // 4. Suma de capitales prestados dados de baja / liquidados por pérdida (estado === 'liquidado_perdida' || status === 'liquidado_perdida')
-      let totalCapitalesPerdidos = 0;
-      const moraCedulas = new Set();
-      try {
-        let qCartonesAll = supabase.from('cartones').select('*, clients(*)');
-        if (targetRouteId) {
-          qCartonesAll = qCartonesAll.eq('route_id', targetRouteId);
-        } else if (agentId) {
-          qCartonesAll = qCartonesAll.eq('agent_id', agentId);
-        }
-        const { data: cartonesAll } = await qCartonesAll;
-
-        if (cartonesAll && cartonesAll.length > 0) {
-          cartonesAll.forEach(c => {
-            const rawEstado = String(c.estado || c.status || '').toLowerCase();
-            const isPerdida = rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora');
-            
-            if (isPerdida) {
-              const amountPuro = Math.round(Number(c.monto_prestado || c.amount || (c.clients ? c.clients.amount : 0) || 0));
-              const discountAmt = Math.round(Number(c.discount_amount || 0));
-              const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-              totalCapitalesPerdidos += efectivoEntregado;
-              const ced = String(c.cliente_id || c.client_id || '').trim();
-              if (ced) moraCedulas.add(ced);
-            }
-          });
-        }
-      } catch (ePerdida) {
-        console.warn("Aviso al consultar cartones liquidados por pérdida para Capital en Caja:", ePerdida);
-      }
-
-      // Fallback para clientes en tabla 'clients' marcados como liquidado_perdida / Mora
-      const rawClients = await this.getClients();
-      rawClients.forEach(c => {
-        const belongsToUser = targetRouteId ? (c.routeId === targetRouteId) : true;
-        const ced = String(c.cedula || c.id || '').trim();
-        const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-        const isExplicitlyLiquidatedMora = rawStatus === 'LIQUIDADO_PERDIDA' || rawStatus === 'LIQUIDADO_MORA' || rawStatus === 'LISTA NEGRA' || rawStatus === 'CASTIGADO';
-
-        if (belongsToUser && ced && isExplicitlyLiquidatedMora && !moraCedulas.has(ced) && !activeCedulas.has(ced)) {
-          const amountPuro = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
-          const discountAmt = Math.round(Number(c.discount_amount || 0));
-          const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
-          totalCapitalesPerdidos += efectivoEntregado;
-          moraCedulas.add(ced);
-        }
-      });
-
-      // FÓRMULA SINCRONIZADA v105:
-      // Capital en Caja = Total Inyectado - Préstamos ACTIVOS + Abonos Reales - Capitales Dados de Baja
-      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivos + totalAbonosReales - totalCapitalesPerdidos);
+      // ============================================================
+      // FÓRMULA MAESTRO v107 (SIN DOBLE PENALIZACIÓN):
+      // Al crear préstamo activo   → sale de caja (ya se resta en totalPrestamosActivos)
+      // Al ir a Lista Negra/mora   → ya NO está en totalPrestamosActivos (filtrado arriba)
+      //                           → NO se resta de nuevo: evitamos doble penalización
+      // Al recibir abono real      → vuelve a caja (suma en totalAbonosReales)
+      //
+      // Capital en Caja = Inyectado - PréstamosActivos + AbonosReales
+      // (Los capitales en mora ya fueron descontados al momento de su creación
+      //  y no regresan a caja porque el dinero está perdido físicamente)
+      // ============================================================
+      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestamosActivos + totalAbonosReales);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
       console.error('Error fetching liquid cash (Saldo Maestro v102):', err);

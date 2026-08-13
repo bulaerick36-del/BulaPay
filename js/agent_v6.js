@@ -373,15 +373,19 @@ const agentModule = {
             totalDebt: totalConIntereses
           });
 
+          // Actualización inmediata y sincronizada de TODOS los contadores (v107)
           this.currentClient = null;
           if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
           if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
           if (this.inputSearchCedula) this.inputSearchCedula.value = '';
 
-          await this.updateRouteTracking();
-          await this.renderFinancialDashboard();
+          // Disparar refresh completo de métricas sin esperar confirmación del usuario
+          await Promise.all([
+            this.updateRouteTracking(),
+            this.renderFinancialDashboard()
+          ]);
 
-          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl saldo del Capital en Caja se mantiene estable y tranquilo ya que la salida del préstamo fue descontada originalmente al momento de su creación.`);
+          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl saldo del Capital en Caja se mantiene estable: la salida del préstamo fue descontada originalmente al momento de su creación.`);
         } catch (e) {
           console.error("Error al enviar a Lista Negra:", e);
           alert('❌ Error al procesar liquidación: ' + (e.message || e));
@@ -435,8 +439,11 @@ const agentModule = {
             totalDebt: totalEsperado
           });
 
-          // Actualizar inmediatamente las métricas financieras del Dashboard
-          await this.renderFinancialDashboard();
+          // Actualizar inmediatamente las métricas financieras del Dashboard (v107: Promise.all para máxima velocidad)
+          await Promise.all([
+            this.renderFinancialDashboard(),
+            this.updateRouteTracking()
+          ]);
 
           // Limpiar UI
           if (this.cobroCartonState && this.cobroInputState) {
@@ -3255,23 +3262,24 @@ const agentModule = {
     }
   },
 
-  // FILTRO CONTABLE UNIFICADO v106:
-  // Excluye estrictamente cualquier cliente o cartón dado de baja por mora, en Lista Negra, castigado o liquidado
+  // FILTRO CONTABLE UNIFICADO v107:
+  // Excluye estrictamente cualquier carton con estado de liquidación por mora (liquidado_perdida, Lista Negra)
+  // NO excluye por risk='Rojo' solo (un cliente puede tener riesgo rojo pero un cartón activo nuevo)
   isClientActiveAndValid(c) {
     if (!c) return false;
     const outstanding = Number(c.outstanding || c.saldo_restante || 0);
     const amount = Number(c.amount || c.capital_prestado || c.monto_prestado || 0);
     const totalDebt = Number(c.totalDebt || c.monto_total || c.total_a_recaudar || 0);
     const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-    const rawRisk = String(c.risk || '').trim().toUpperCase();
 
+    // Exclusión categórica: cualquier estado de liquidación por mora o pérdida
     const isExcluded = rawStatus.includes('LIQUIDADO') || 
                        rawStatus.includes('CANCELAD') || 
                        rawStatus.includes('PERDIDA') || 
                        rawStatus.includes('MORA') || 
                        rawStatus.includes('NEGRA') || 
-                       rawStatus.includes('CASTIGADO') || 
-                       rawRisk === 'ROJO';
+                       rawStatus.includes('CASTIGADO') ||
+                       rawStatus === 'SIN DEUDA ACTIVA';
 
     return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isExcluded;
   },
