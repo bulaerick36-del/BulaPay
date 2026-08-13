@@ -1979,7 +1979,8 @@ const db = {
         if (allCls) {
           allCls.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
-            if (st.includes('MORA') || st.includes('PERDIDA') || st.includes('CASTIGADO') || st.includes('NEGRA') || st.includes('LIQUIDADO')) {
+            const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('MORA') || st.includes('CASTIGADO'));
+            if (isLoss) {
               if (c.cedula) blacklistedCedulas.add(String(c.cedula).trim());
               if (c.id) blacklistedCedulas.add(String(c.id).trim());
             }
@@ -1989,7 +1990,9 @@ const db = {
         if (allCarts) {
           allCarts.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
-            if (st.includes('MORA') || st.includes('PERDIDA') || st.includes('CASTIGADO') || st.includes('NEGRA') || (st !== 'ACTIVO' && st.includes('LIQUIDADO'))) {
+            const rawEst = String(c.estado || '').trim().toLowerCase();
+            const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
+            if (isLoss) {
               if (c.cliente_id) blacklistedCedulas.add(String(c.cliente_id).trim());
               if (c.client_id) blacklistedCedulas.add(String(c.client_id).trim());
             }

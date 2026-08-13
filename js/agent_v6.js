@@ -423,12 +423,10 @@ const agentModule = {
           if (saldoRestante <= 0 || recaudoReal >= totalEsperado) {
             gananciaReal = Math.max(0, recaudoReal - capitalPrestado);
             nuevoEstado = 'Liquidado_Pagado';
-            alert('🎉 ¡Cartón Liquidado Exitosamente!');
           } 
           // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v103: liquidado_perdida)
           else {
             nuevoEstado = 'liquidado_perdida';
-            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total con intereses de $${totalEsperado.toLocaleString('es-CO')}.\nEl crédito se marca como 'liquidado_perdida': la Cartera en Calle se reduce a $0 y el saldo de Capital en Caja se sincroniza sin desajustes.`);
           }
 
           // Actualizar estado del cliente y crédito en DB (outstanding pasa a 0 para saldar la cartera en calle, totalDebt almacena la deuda total con intereses)
@@ -439,11 +437,17 @@ const agentModule = {
             totalDebt: totalEsperado
           });
 
-          // Actualizar inmediatamente las métricas financieras del Dashboard (v107: Promise.all para máxima velocidad)
+          // Actualizar inmediatamente las métricas financieras del Dashboard de forma síncrona (v118)
           await Promise.all([
             this.renderFinancialDashboard(),
             this.updateRouteTracking()
           ]);
+
+          if (nuevoEstado === 'Liquidado_Pagado') {
+            alert('🎉 ¡Cartón Liquidado Exitosamente!');
+          } else {
+            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total con intereses de $${totalEsperado.toLocaleString('es-CO')}.\nEl crédito se marca como 'liquidado_perdida': la Cartera en Calle se reduce a $0 y el saldo de Capital en Caja permanece estable.`);
+          }
 
           // Limpiar UI
           if (this.cobroCartonState && this.cobroInputState) {
