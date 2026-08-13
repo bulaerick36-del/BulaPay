@@ -2144,15 +2144,13 @@ const db = {
           }
         });
 
-        // Generar registros de pagos para las cuotas faltantes
+        // Generar registros de pagos para las cuotas faltantes ÚNICAMENTE si es liquidación exitosa por pago real (v122)
         const currentUser = this.getCurrentUser();
         const supId = this.getSupervisorId();
         const todayStr = new Date().toISOString().split('T')[0];
         const newPayments = [];
 
         let remainingDebt = Math.max(0, totalDebt - currentPaidTotal);
-
-        const isMora = (status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra');
 
         for (let i = 1; i <= installmentsCount; i++) {
           if (!existingMap.has(i)) {
@@ -2167,7 +2165,7 @@ const db = {
               date: todayStr,
               agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
               agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
-              status: isMora ? 'Liquidado_Mora' : 'Pagado',
+              status: 'Pagado',
               signature: `BulaPay-SIG-${cedula}-LIQ-${i}`,
               supervisor_id: supId
             });
@@ -2244,26 +2242,24 @@ const db = {
       console.warn("Excepción al actualizar tabla clients:", eClient.message);
     }
 
-    // 5. Si es mora, insertar registro explícito en la tabla payments
+    // 5. PROHIBIDO INSERTAR EN PAYMENTS AL LIQUIDAR POR MORA (v122)
+    // Cuando un cliente va a Lista Negra/pérdida, NO se inserta ningún registro en 'payments'.
+    // En su lugar, se sanean registros basura pendientes o nulos de la tabla payments.
     if (isMora) {
       try {
-        const currentUser = this.getCurrentUser();
-        const supId = this.getSupervisorId();
-        const todayStr = new Date().toISOString().split('T')[0];
-        await supabase.from('payments').insert([{
-          id: 'pay_mora_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          clientCedula: String(cedula),
-          installmentNumber: 0,
-          amount: 0,
-          date: todayStr,
-          agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
-          agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
-          status: 'Liquidado_Mora',
-          signature: `BulaPay-SIG-${cedula}-MORA`,
-          supervisor_id: supId
-        }]);
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('clientCedula', String(cedula))
+          .eq('status', 'Pendiente');
+        
+        await supabase
+          .from('payments')
+          .delete()
+          .eq('clientCedula', String(cedula))
+          .eq('amount', 0);
       } catch (eMoraPay) {
-        console.warn("No se pudo insertar registro de pago por mora:", eMoraPay);
+        console.warn("Aviso al sanealizar tabla payments en liquidación por mora:", eMoraPay);
       }
     }
     
