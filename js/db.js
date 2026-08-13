@@ -589,17 +589,19 @@ const db = {
       const isAgent = currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente';
 
       if (isAgent) {
-        // Para agentes: buscar por route_id O agent_id, sin depender de supervisor_id
-        let assignedRouteId = currentUser.routeId;
-        if (!assignedRouteId) {
-          assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
-        }
-        const agentId = currentUser.id || currentUser.username;
-        if (assignedRouteId) {
-          query = query.or(`route_id.eq.${assignedRouteId},agent_id.eq.${agentId}`);
-        } else {
-          query = query.eq('agent_id', agentId);
-        }
+        // v109 TEMPORAL: Se desactiva el filtro estricto de agent_id y route_id 
+        // para asegurar que TODOS los cartones con estado 'activo' sean leídos.
+        // let assignedRouteId = currentUser.routeId;
+        // if (!assignedRouteId) {
+        //   assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
+        // }
+        // const agentId = currentUser.id || currentUser.username;
+        // if (assignedRouteId) {
+        //   query = query.or(`route_id.eq.${assignedRouteId},agent_id.eq.${agentId}`);
+        // } else {
+        //   query = query.eq('agent_id', agentId);
+        // }
+        console.log("v109 DEBUG: Filtros de agente y ruta omitidos temporalmente. Cargando todos los cartones activos.");
       } else {
         // Para supervisores y otros roles: filtrar por supervisor_id
         const supId = await this.getSupervisorIdForUser(currentUser);
@@ -607,6 +609,7 @@ const db = {
           query = query.eq('supervisor_id', supId);
         }
       }
+
 
       const { data: cartonesData, error: cartonesErr } = await query;
       if (cartonesErr) {
