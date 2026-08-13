@@ -3262,15 +3262,13 @@ const agentModule = {
     }
   },
 
-  // FILTRO CONTABLE UNIFICADO v107:
-  // Excluye estrictamente cualquier carton con estado de liquidación por mora (liquidado_perdida, Lista Negra)
-  // NO excluye por risk='Rojo' solo (un cliente puede tener riesgo rojo pero un cartón activo nuevo)
+  // FILTRO CONTABLE UNIFICADO v111:
+  // Valida que un cliente / cartón esté activo y no liquidado o en mora.
+  // Si su estado es 'activo' o status es 'ACTIVO', se considera cliente activo.
   isClientActiveAndValid(c) {
     if (!c) return false;
-    const outstanding = Number(c.outstanding || c.saldo_restante || 0);
-    const amount = Number(c.amount || c.capital_prestado || c.monto_prestado || 0);
-    const totalDebt = Number(c.totalDebt || c.monto_total || c.total_a_recaudar || 0);
     const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+    const rawEstado = String(c.estado || '').trim().toLowerCase();
 
     // Exclusión categórica: cualquier estado de liquidación por mora o pérdida
     const isExcluded = rawStatus.includes('LIQUIDADO') || 
@@ -3279,9 +3277,22 @@ const agentModule = {
                        rawStatus.includes('MORA') || 
                        rawStatus.includes('NEGRA') || 
                        rawStatus.includes('CASTIGADO') ||
-                       rawStatus === 'SIN DEUDA ACTIVA';
+                       rawStatus === 'SIN DEUDA ACTIVA' ||
+                       rawEstado === 'liquidado_perdida' ||
+                       rawEstado === 'liquidado_mora';
 
-    return outstanding > 0 && (amount > 0 || totalDebt > 0) && !isExcluded;
+    if (isExcluded) return false;
+
+    // Si el registro tiene estado 'activo' o status 'ACTIVO', es un cartón activo
+    if (rawEstado === 'activo' || rawStatus === 'ACTIVO') {
+      return true;
+    }
+
+    const outstanding = Number(c.outstanding || c.saldo_restante || 0);
+    const amount = Number(c.amount || c.capital_prestado || c.monto_prestado || 0);
+    const totalDebt = Number(c.totalDebt || c.total_debt || c.monto_total || 0);
+
+    return (outstanding > 0 || amount > 0 || totalDebt > 0);
   },
 
   async updateRouteTracking() {
@@ -3339,7 +3350,8 @@ const agentModule = {
       let paidClientsCount = 0;
 
       activeClients.forEach(c => {
-        if (todayPaymentsMap.has(c.cedula)) {
+        const ced = String(c.cedula || c.cliente_id || c.client_id || '').trim();
+        if (todayPaymentsMap.has(ced)) {
           paidClientsCount++;
         }
       });

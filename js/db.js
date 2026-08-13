@@ -644,11 +644,11 @@ const db = {
           ? carton.clients
           : (clientsMap.get(cedula) || {});
 
-        const montoPrestado = Number(carton.monto_prestado || 0);
-        const totalDebt = Number(carton.total_debt || 0);
-        const outstanding = Number(carton.outstanding || 0);
+        const montoPrestado = Number(carton.monto_prestado || (joinedClient ? joinedClient.amount : 0) || 0);
+        const totalDebt = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
+        const outstanding = Number((carton.outstanding !== undefined && carton.outstanding !== null && carton.outstanding !== 0) ? carton.outstanding : (totalDebt || montoPrestado));
         const installmentsCount = Number(carton.installments_count || 1);
-        const installmentAmount = Number(carton.installment_amount || 0);
+        const installmentAmount = Number(carton.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
         const discountAmount = Number(carton.discount_amount || 0);
         const netCash = Number(carton.net_cash || (montoPrestado - discountAmount));
 
