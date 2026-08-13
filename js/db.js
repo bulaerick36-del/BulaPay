@@ -1997,36 +1997,49 @@ const db = {
       let query = supabase
         .from('cartones')
         .select('*, clients(*)')
-        .eq('estado', 'activo')
-        .neq('status', 'liquidado_perdida')
-        .neq('status', 'Liquidado_Mora')
-        .neq('status', 'castigado')
-        .neq('status', 'Lista Negra')
-        .neq('estado', 'liquidado_perdida')
-        .neq('estado', 'liquidado_mora');
-
-      if (assignedRouteId) {
-        query = query.eq('route_id', assignedRouteId);
-      } else if (agentId) {
-        query = query.eq('agent_id', agentId);
+      // 1. Obtener cedulas en Lista Negra / Mora desde las tablas 'clients' y 'cartones' (v117)
+      const blacklistedCedulas = new Set();
+      try {
+        const { data: allCls } = await supabase.from('clients').select('cedula, id, status, estado');
+        if (allCls) {
+          allCls.forEach(c => {
+            const st = String(c.status || c.estado || '').trim().toUpperCase();
+            if (st.includes('MORA') || st.includes('PERDIDA') || st.includes('CASTIGADO') || st.includes('NEGRA') || st.includes('LIQUIDADO')) {
+              if (c.cedula) blacklistedCedulas.add(String(c.cedula).trim());
+              if (c.id) blacklistedCedulas.add(String(c.id).trim());
+            }
+          });
+        }
+        const { data: allCarts } = await supabase.from('cartones').select('cliente_id, client_id, status, estado');
+        if (allCarts) {
+          allCarts.forEach(c => {
+            const st = String(c.status || c.estado || '').trim().toUpperCase();
+            if (st.includes('MORA') || st.includes('PERDIDA') || st.includes('CASTIGADO') || st.includes('NEGRA') || (st !== 'ACTIVO' && st.includes('LIQUIDADO'))) {
+              if (c.cliente_id) blacklistedCedulas.add(String(c.cliente_id).trim());
+              if (c.client_id) blacklistedCedulas.add(String(c.client_id).trim());
+            }
+          });
+        }
+      } catch (eB) {
+        console.warn("Aviso al obtener lista negra para métricas v117:", eB);
       }
 
-      const { data: cartonesActivos, error } = await query;
+      // 2. Consulta de cartones activos planos (select * simple sin error de llaves foráneas v117)
+      let { data: cartonesActivos } = await supabase
+        .from('cartones')
+        .select('*')
+        .eq('estado', 'activo');
 
       let carteraEnCalle = 0; // Suma del capital principal activo en poder de los clientes
       let interesesActivos = 0; // Suma de ganancias proyectadas de cartones activos
 
-      if (!error && cartonesActivos && cartonesActivos.length > 0) {
+      if (cartonesActivos && cartonesActivos.length > 0) {
         cartonesActivos.forEach(c => {
           const ced = String(c.cliente_id || c.client_id || c.cedula || '').trim();
-          const joinedClient = c.clients || {};
-          const joinedStatus = String(joinedClient.status || joinedClient.estado || '').trim().toUpperCase();
-          const joinedRisk = String(joinedClient.risk || '').trim().toUpperCase();
           const rawEstado = String(c.estado || '').trim().toUpperCase();
           const rawStatus = String(c.status || '').trim().toUpperCase();
-          const rawRisk = String(c.risk || '').trim().toUpperCase();
 
-          // Filtro estricto v115: Excluir totalmente Lista Negra, mora, perdida o castigados
+          // Filtro estricto v117: Excluir totalmente Lista Negra, mora, perdida o castigados
           const isExcluded = blacklistedCedulas.has(ced) ||
                              rawEstado.includes('MORA') || 
                              rawEstado.includes('PERDIDA') || 
@@ -2037,12 +2050,7 @@ const db = {
                              rawStatus.includes('PERDIDA') || 
                              rawStatus.includes('CASTIGADO') || 
                              rawStatus.includes('NEGRA') || 
-                             rawStatus.includes('LIQUIDADO') ||
-                             joinedStatus.includes('MORA') || 
-                             joinedStatus.includes('PERDIDA') || 
-                             joinedStatus.includes('CASTIGADO') || 
-                             joinedStatus.includes('NEGRA') || 
-                             joinedStatus.includes('LIQUIDADO');
+                             rawStatus.includes('LIQUIDADO');
 
           if (!isExcluded) {
             const outstanding = Math.round(Number(c.outstanding || 0));
