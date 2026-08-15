@@ -2054,8 +2054,8 @@ const db = {
           const rawEstado = String(c.estado || '').trim().toLowerCase();
           const rawStatus = String(c.status || '').trim().toLowerCase();
 
-          // SELECCIÓN ESTRICTA v119: Únicamente sumar si el estado es exactamente igual a 'activo' y no está en Lista Negra
-          const isStrictlyActive = (rawEstado === 'activo' || rawStatus === 'activo') && !blacklistedCedulas.has(ced);
+          const isLoss = rawEstado.includes('perdida') || rawEstado.includes('mora') || rawStatus.includes('perdida') || rawStatus.includes('mora') || blacklistedCedulas.has(ced);
+          const isStrictlyActive = (rawEstado === 'activo' || rawStatus === 'activo') && !isLoss;
 
           if (isStrictlyActive) {
             const outstanding = Math.round(Number(c.outstanding || 0));
