@@ -50,7 +50,7 @@ const db = {
       if (clientsErr || !clients || clients.length === 0) return;
 
       // 2. Obtener cartones existentes para no duplicar
-      const { data: cartones, error: cartonesErr } = await supabase.from('cartones').select('cliente_id, estado');
+      const { data: cartones, error: cartonesErr } = await supabase.from('cartones').select('*');
       const existingCartonsSet = new Set();
       if (!cartonesErr && cartones) {
         cartones.forEach(c => {
@@ -277,7 +277,7 @@ const db = {
     try {
       const supabase = await initSupabase();
       const supId = this.getSupervisorId();
-      let query = supabase.from('routes').select('id, agentUsername, supervisor_id');
+      let query = supabase.from('routes').select('*');
       if (supId) {
         query = query.eq('supervisor_id', supId);
       }
@@ -311,7 +311,7 @@ const db = {
       const supabase = await initSupabase();
       const { data } = await supabase
         .from('users')
-        .select('supervisor, supervisor_id')
+        .select('*')
         .eq('username', user.username || user.id)
         .maybeSingle();
         
@@ -605,7 +605,7 @@ const db = {
       // Pre-cargar cédulas en Lista Negra para excluir automáticamente del listado de cobro activo (v124)
       const blacklistedCedulas = new Set();
       try {
-        const { data: allCls } = await supabase.from('clients').select('cedula, id, status, estado');
+        const { data: allCls } = await supabase.from('clients').select('*');
         if (allCls) {
           allCls.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
@@ -616,7 +616,7 @@ const db = {
             }
           });
         }
-        const { data: allCarts } = await supabase.from('cartones').select('cliente_id, client_id, status, estado');
+        const { data: allCarts } = await supabase.from('cartones').select('*');
         if (allCarts) {
           allCarts.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
@@ -955,7 +955,7 @@ const db = {
       // 1. Recuperar únicamente por cédula
       const { data: existing } = await supabase
         .from('clients')
-        .select('cedula')
+        .select('*')
         .eq('cedula', String(payload.cedula))
         .limit(1);
 
@@ -1037,7 +1037,7 @@ const db = {
     // 1. Recuperar únicamente por Cédula (los datos de contacto se pueden repetir libremente)
     const { data: existing, error: searchErr } = await supabase
       .from('clients')
-      .select('cedula, name')
+      .select('*')
       .eq('cedula', String(payload.cedula))
       .limit(1);
 
@@ -2009,7 +2009,7 @@ const db = {
       // 1. Obtener cedulas en Lista Negra / Mora desde las tablas 'clients' y 'cartones' (v118)
       const blacklistedCedulas = new Set();
       try {
-        const { data: allCls } = await supabase.from('clients').select('cedula, id, status, estado');
+        const { data: allCls } = await supabase.from('clients').select('*');
         if (allCls) {
           allCls.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
@@ -2020,7 +2020,7 @@ const db = {
             }
           });
         }
-        const { data: allCarts } = await supabase.from('cartones').select('cliente_id, client_id, status, estado');
+        const { data: allCarts } = await supabase.from('cartones').select('*');
         if (allCarts) {
           allCarts.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
