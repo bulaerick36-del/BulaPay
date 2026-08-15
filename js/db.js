@@ -1613,7 +1613,7 @@ const db = {
     }
 
     const dailyStatus = [];
-    const totalInstallments = client.installmentsCount || 30; // Mostrar todo el cartón
+    const totalInstallments = Number(client?.installmentsCount || client?.installments_count || 30); // Mostrar todo el cartón
     
     let validDaysCounter = 0;
     let calendarDaysOffset = 0;
@@ -2152,8 +2152,8 @@ const db = {
     // 2. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments (sin tocar capital_injections)
     if (isPaid && clientData) {
       try {
-        const totalDebt = Math.round(Number(clientData.totalDebt || clientData.monto_total || 0));
-        originalAmount = Math.round(Number(clientData.amount || clientData.capital_prestado || 0));
+        const totalDebt = Math.round(Number(clientData?.totalDebt || clientData?.monto_total || 0));
+        originalAmount = Math.round(Number(clientData?.amount || clientData?.capital_prestado || 0));
         gananciaReal = Math.max(0, totalDebt - originalAmount);
 
         // Eliminar registros de cuotas pendientes previos para este cliente
@@ -2163,8 +2163,8 @@ const db = {
           .eq('clientCedula', String(cedula))
           .eq('status', 'Pendiente');
 
-        const installmentsCount = Number(clientData.installmentsCount || 30);
-        const installmentAmount = Math.round(Number(clientData.installmentAmount || (installmentsCount > 0 ? totalDebt / installmentsCount : 0)));
+        const installmentsCount = Number(clientData?.installmentsCount || clientData?.installments_count || 30);
+        const installmentAmount = Math.round(Number(clientData?.installmentAmount || (installmentsCount > 0 ? totalDebt / installmentsCount : 0)));
 
         // Consultar pagos ya registrados para este cliente
         const existingPayments = await this.getGlobalPaymentsByClient(cedula);

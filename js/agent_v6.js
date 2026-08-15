@@ -345,30 +345,34 @@ const agentModule = {
         if (!this.currentClient) return;
         const client = this.currentClient;
 
+        const cedula = client?.cedula;
+        const name = client?.name || `Cliente ${cedula || ''}`;
+        const cartonId = client?.carton_id || client?.id;
+        const numeroCarton = client?.numero_carton;
+        const installmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
+
         // Validación de Regla de Liquidar por Mora (v85)
-        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        const payments = cedula ? await window.BulaPayDB.getPaymentsByClient(cedula) : [];
         const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
         const isOverdue = this.isCartonOverdue(client, dailyStatusList);
 
         if (!isOverdue) {
-          alert(`⚠️ No es posible enviar a Lista Negra / Liquidar por Mora.\nEl cartón de ${client.name} no se encuentra vencido. Esta acción únicamente está habilitada para cartones oficialmente vencidos.`);
+          alert(`⚠️ No es posible enviar a Lista Negra / Liquidar por Mora.\nEl cartón de ${name} no se encuentra vencido. Esta acción únicamente está habilitada para cartones oficialmente vencidos.`);
           return;
         }
 
         // Regla v102 (Saldo Maestro): Deuda total en Lista Negra incluye Intereses proyectados. El saldo de Capital en Caja permanece intacto sin desajustes porque el dinero prestado ya había salido de caja.
-        const capitalPrestado = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
-        const totalConIntereses = Number(client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || (capitalPrestado ? Math.round(capitalPrestado * 1.2) : 0));
+        const capitalPrestado = Number(client?.amount || client?.monto_prestado || client?.capital_prestado || 0);
+        const totalConIntereses = Number(client?.totalToPay || client?.totalDebt || client?.monto_total || client?.total_debt || (capitalPrestado ? Math.round(capitalPrestado * 1.2) : 0));
 
-        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${client.name} y enviarlo a Lista Negra (Liquidado por Mora)?\nDeuda Total a Lista Negra (Capital + Intereses): $${totalConIntereses.toLocaleString('es-CO')}.\nEsta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
+        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${name} y enviarlo a Lista Negra (Liquidado por Mora)?\nDeuda Total a Lista Negra (Capital + Intereses): $${totalConIntereses.toLocaleString('es-CO')}.\nEsta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
         if (!confirm(confirmMsg)) return;
 
         try {
           this.btnCobroLiquidarMora.disabled = true;
           this.btnCobroLiquidarMora.textContent = 'Procesando...';
 
-          const cartonId = client.carton_id || client.id;
-          const numeroCarton = client.numero_carton;
-          const cedulaStr = String(client.cedula || '').trim();
+          const cedulaStr = String(cedula || '').trim();
 
           const supabase = await window.BulaPayDB.initSupabase();
 
@@ -1850,23 +1854,23 @@ const agentModule = {
   },
 
   isCartonOverdue(client, dailyStatusList = null) {
-    if (!client || Number(client.outstanding) <= 0) return false;
+    if (!client || Number(client?.outstanding || 0) <= 0) return false;
 
-    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    const totalInstallmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayStr = `${todayZero.getFullYear()}-${String(todayZero.getMonth() + 1).padStart(2, '0')}-${String(todayZero.getDate()).padStart(2, '0')}`;
 
     // 1. Chequeo por dailyStatusList si existe
     if (dailyStatusList && dailyStatusList.length > 0) {
-      const lastInstallment = dailyStatusList.find(s => s.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
-      if (lastInstallment && lastInstallment.dateStr && lastInstallment.dateStr < todayStr) {
+      const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
+      if (lastInstallment && lastInstallment?.dateStr && lastInstallment?.dateStr < todayStr) {
         return true;
       }
     }
 
     // 2. Chequeo directo por fecha_apertura
-    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    const cartonDateStr = client?.fecha_apertura || client?.fecha_inicio || client?.created_at;
     if (!cartonDateStr) return false;
 
     const startDate = this.parseLocalDate(cartonDateStr);
@@ -1879,9 +1883,9 @@ const agentModule = {
 
   canRenovarCarton(client, dailyStatusList = null) {
     if (!client) return false;
-    if (Number(client.outstanding) <= 0) return true; // Cliente sin deuda activa puede renovar
+    if (Number(client?.outstanding || 0) <= 0) return true; // Cliente sin deuda activa puede renovar
 
-    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    const totalInstallmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
     const halfTerm = Math.ceil(totalInstallmentsCount / 2);
 
     let paidCount = 0;
