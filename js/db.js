@@ -2235,29 +2235,15 @@ const db = {
       const cedStr = String(cedula).trim();
       const cedNum = Number(cedStr);
 
-      // v124: UPDATE explícito garantizado probando por ID, numero_carton, cliente_id, client_id y cedula (tanto String como Number)
+      // v132: UPDATE explícito único y directo sobre 'cartones'
       if (cartonId) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-      }
-      if (numeroCarton) {
+      } else if (numeroCarton) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', String(numeroCarton));
+      } else if (cedStr) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
       }
-
-      await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
-      await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr);
-      await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedStr);
-
-      if (!isNaN(cedNum) && cedNum > 0) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedNum);
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedNum);
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedNum);
-      }
-      console.log(`✅ [v124 LIQUIDATE] Cartón actualizado exitosamente a '${cartonEstadoTarget}' en Supabase para cliente ${cedStr}`);
-      if (clientData && clientData.id) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', clientData.id);
-      }
-      console.log(`✅ [v123 LIQUIDATE] Cartón actualizado exitosamente a '${cartonEstadoTarget}' en Supabase para cliente ${cedStr}`);
+      console.log(`✅ [v132 LIQUIDATE] Cartón actualizado a '${cartonEstadoTarget}' en Supabase.`);
     } catch (eCarton) {
       console.warn("Excepción al actualizar tabla cartones:", eCarton.message);
     }

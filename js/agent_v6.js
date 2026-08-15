@@ -368,7 +368,7 @@ const agentModule = {
           const cedulaStr = String(cedula || '').trim();
           const supabase = await window.BulaPayDB.initSupabase();
 
-          // UPDATE limpio y explícito sobre la tabla 'cartones' con tipos primitivos (v128)
+          // Sentencia de actualización única y directa sobre 'cartones' (v132)
           const cartonUpdatePayload = {
             estado: 'liquidado_perdida',
             status: 'liquidado_perdida',
@@ -376,59 +376,28 @@ const agentModule = {
             total_debt: totalConIntereses
           };
 
-          console.log(`📡 [SUPABASE UPDATE CARTONES] Ejecutando update real en tabla 'cartones' para cartonId: ${cartonId}, numeroCarton: ${numeroCarton}, cedula: ${cedulaStr}...`);
-
-          let updateSuccess = false;
-
+          let resCarton = null;
           if (cartonId) {
-            const { data, error } = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId).select();
-            if (error) {
-              console.error("❌ [SUPABASE UPDATE CARTONES BY ID FAILED]:", error);
-            } else {
-              console.log("✅ [SUPABASE UPDATE CARTONES BY ID SUCCESS]:", data);
-              updateSuccess = true;
-            }
+            resCarton = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+          } else if (numeroCarton) {
+            resCarton = await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+          } else if (cedulaStr) {
+            resCarton = await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
           }
 
-          if (numeroCarton) {
-            const { data, error } = await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton)).select();
-            if (error) {
-              console.error("❌ [SUPABASE UPDATE CARTONES BY NUMERO_CARTON FAILED]:", error);
-            } else {
-              console.log("✅ [SUPABASE UPDATE CARTONES BY NUMERO_CARTON SUCCESS]:", data);
-              updateSuccess = true;
-            }
+          if (resCarton && resCarton.error) {
+            console.warn("Aviso al actualizar cartón en Supabase:", resCarton.error.message);
+          } else {
+            console.log("✅ Cartón actualizado a 'liquidado_perdida' exitosamente en Supabase.");
           }
 
           if (cedulaStr) {
-            const { data, error } = await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr).select();
-            if (error) {
-              console.error("❌ [SUPABASE UPDATE CARTONES BY CLIENTE_ID FAILED]:", error);
-            } else {
-              console.log("✅ [SUPABASE UPDATE CARTONES BY CLIENTE_ID SUCCESS]:", data);
-              updateSuccess = true;
-            }
-
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedulaStr);
-
-            const { data: clientData, error: clientErr } = await supabase.from('clients').update({
+            await supabase.from('clients').update({
               status: 'liquidado_perdida',
               estado: 'liquidado_perdida',
               risk: 'Rojo',
               outstanding: 0
-            }).eq('cedula', cedulaStr).select();
-
-            if (clientErr) {
-              console.error("❌ [SUPABASE CLIENTS UPDATE FAILED]:", clientErr);
-            } else {
-              console.log("✅ [SUPABASE CLIENTS UPDATE SUCCESS]:", clientData);
-            }
-          }
-
-          if (updateSuccess) {
-            console.log(`🎉 [SUPABASE REAL UPDATE SUCCESS] El cartón ha sido marcado exitosamente como 'liquidado_perdida' en Supabase.`);
-          } else {
-            console.warn(`⚠️ [SUPABASE UPDATE NOTICE] Intento de actualización completado para cliente ${cedulaStr}.`);
+            }).eq('cedula', cedulaStr);
           }
 
           await window.BulaPayDB.liquidateCredit({
@@ -512,13 +481,10 @@ const agentModule = {
 
           if (cartonId) {
             await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-          }
-          if (numeroCarton) {
+          } else if (numeroCarton) {
             await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-          }
-          if (cedulaStr) {
+          } else if (cedulaStr) {
             await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedulaStr);
           }
 
           // Actualizar estado del cliente y crédito en DB con UPDATE explícito (v124)
