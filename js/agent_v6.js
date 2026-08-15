@@ -366,16 +366,50 @@ const agentModule = {
           this.btnCobroLiquidarMora.disabled = true;
           this.btnCobroLiquidarMora.textContent = 'Procesando...';
 
+          const cartonId = client.carton_id || client.id;
+          const numeroCarton = client.numero_carton;
+          const cedulaStr = String(client.cedula || '').trim();
+
+          const supabase = await window.BulaPayDB.initSupabase();
+
+          // UPDATE limpio y explícito sobre la tabla 'cartones' (v124)
+          const cartonUpdatePayload = {
+            estado: 'liquidado_perdida',
+            status: 'liquidado_perdida',
+            outstanding: 0,
+            total_debt: totalConIntereses
+          };
+
+          let updateError = null;
+          if (cartonId) {
+            const { error: idErr } = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+            if (idErr) updateError = idErr;
+          }
+          if (numeroCarton) {
+            const { error: numErr } = await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+            if (numErr && !cartonId) updateError = numErr;
+          }
+          if (cedulaStr) {
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedulaStr);
+          }
+
+          if (updateError) {
+            console.error("Aviso al actualizar estado en cartones:", updateError);
+          }
+
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
-            cartonId: client.carton_id || client.id,
-            numeroCarton: client.numero_carton,
+            cartonId: cartonId,
+            numeroCarton: numeroCarton,
             status: 'liquidado_perdida',
             outstanding: 0,
             totalDebt: totalConIntereses
           });
 
-          // Actualización inmediata y sincronizada de TODOS los contadores y vistas (v123)
+          // Fuerza una recarga inmediata de la interfaz (loadActiveCredits() y resumen de caja v124)
+          await window.BulaPayDB.loadActiveCredits();
+
           this.currentClient = null;
           if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
           if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
@@ -432,17 +466,43 @@ const agentModule = {
             nuevoEstado = 'liquidado_perdida';
           }
 
-          // Actualizar estado del cliente y crédito en DB con UPDATE explícito (v123)
+          const cartonId = client.carton_id || client.id;
+          const numeroCarton = client.numero_carton;
+          const cedulaStr = String(client.cedula || '').trim();
+
+          const supabase = await window.BulaPayDB.initSupabase();
+          const cartonUpdatePayload = {
+            estado: nuevoEstado === 'Liquidado_Pagado' ? 'liquidado' : 'liquidado_perdida',
+            status: nuevoEstado,
+            outstanding: 0,
+            total_debt: nuevoEstado === 'Liquidado_Pagado' ? 0 : totalEsperado
+          };
+
+          if (cartonId) {
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+          }
+          if (numeroCarton) {
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+          }
+          if (cedulaStr) {
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedulaStr);
+          }
+
+          // Actualizar estado del cliente y crédito en DB con UPDATE explícito (v124)
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
-            cartonId: client.carton_id || client.id,
-            numeroCarton: client.numero_carton,
+            cartonId: cartonId,
+            numeroCarton: numeroCarton,
             status: nuevoEstado,
             outstanding: 0,
             totalDebt: totalEsperado
           });
 
-          // Actualizar inmediatamente las métricas financieras del Dashboard de forma síncrona en vivo (v123)
+          // Fuerza una recarga inmediata de la interfaz (loadActiveCredits() y resumen de caja v124)
+          await window.BulaPayDB.loadActiveCredits();
+
+          // Actualizar inmediatamente las métricas financieras del Dashboard de forma síncrona en vivo (v124)
           await Promise.all([
             this.renderFinancialDashboard(),
             this.updateRouteTracking(),

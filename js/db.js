@@ -33,6 +33,10 @@ async function initSupabase() {
 }
 
 const db = {
+  async initSupabase() {
+    return await initSupabase();
+  },
+
   async init() {
     await initSupabase();
     // v121: Se desactiva el mapeo automático en cada carga para prevenir el error 'permission denied for sequence cartones_numero_carton_seq'
@@ -2124,7 +2128,7 @@ const db = {
     }
   },
 
-  async liquidateCredit({ cedula, status, outstanding, totalDebt }) {
+  async liquidateCredit({ cedula, status, outstanding, totalDebt, cartonId, numeroCarton }) {
     const supabase = await initSupabase();
     
     const isPaid = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
