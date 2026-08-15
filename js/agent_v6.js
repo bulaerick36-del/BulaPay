@@ -368,7 +368,7 @@ const agentModule = {
           const cedulaStr = String(cedula || '').trim();
           const supabase = await window.BulaPayDB.initSupabase();
 
-          // UPDATE limpio y explícito sobre la tabla 'cartones' con tipos primitivos (v126)
+          // UPDATE limpio y explícito sobre la tabla 'cartones' con tipos primitivos (v128)
           const cartonUpdatePayload = {
             estado: 'liquidado_perdida',
             status: 'liquidado_perdida',
@@ -376,16 +376,59 @@ const agentModule = {
             total_debt: totalConIntereses
           };
 
+          console.log(`📡 [SUPABASE UPDATE CARTONES] Ejecutando update real en tabla 'cartones' para cartonId: ${cartonId}, numeroCarton: ${numeroCarton}, cedula: ${cedulaStr}...`);
+
+          let updateSuccess = false;
+
           if (cartonId) {
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+            const { data, error } = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId).select();
+            if (error) {
+              console.error("❌ [SUPABASE UPDATE CARTONES BY ID FAILED]:", error);
+            } else {
+              console.log("✅ [SUPABASE UPDATE CARTONES BY ID SUCCESS]:", data);
+              updateSuccess = true;
+            }
           }
+
           if (numeroCarton) {
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+            const { data, error } = await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton)).select();
+            if (error) {
+              console.error("❌ [SUPABASE UPDATE CARTONES BY NUMERO_CARTON FAILED]:", error);
+            } else {
+              console.log("✅ [SUPABASE UPDATE CARTONES BY NUMERO_CARTON SUCCESS]:", data);
+              updateSuccess = true;
+            }
           }
+
           if (cedulaStr) {
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
+            const { data, error } = await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr).select();
+            if (error) {
+              console.error("❌ [SUPABASE UPDATE CARTONES BY CLIENTE_ID FAILED]:", error);
+            } else {
+              console.log("✅ [SUPABASE UPDATE CARTONES BY CLIENTE_ID SUCCESS]:", data);
+              updateSuccess = true;
+            }
+
             await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedulaStr);
-            await supabase.from('clients').update({ status: 'liquidado_perdida', estado: 'liquidado_perdida', risk: 'Rojo', outstanding: 0 }).eq('cedula', cedulaStr);
+
+            const { data: clientData, error: clientErr } = await supabase.from('clients').update({
+              status: 'liquidado_perdida',
+              estado: 'liquidado_perdida',
+              risk: 'Rojo',
+              outstanding: 0
+            }).eq('cedula', cedulaStr).select();
+
+            if (clientErr) {
+              console.error("❌ [SUPABASE CLIENTS UPDATE FAILED]:", clientErr);
+            } else {
+              console.log("✅ [SUPABASE CLIENTS UPDATE SUCCESS]:", clientData);
+            }
+          }
+
+          if (updateSuccess) {
+            console.log(`🎉 [SUPABASE REAL UPDATE SUCCESS] El cartón ha sido marcado exitosamente como 'liquidado_perdida' en Supabase.`);
+          } else {
+            console.warn(`⚠️ [SUPABASE UPDATE NOTICE] Intento de actualización completado para cliente ${cedulaStr}.`);
           }
 
           await window.BulaPayDB.liquidateCredit({
@@ -404,6 +447,7 @@ const agentModule = {
           if (this.inputSearchCedula) this.inputSearchCedula.value = '';
 
           // Forzar recarga limpia del mapa de clientes en DB y de la UI
+          console.log("🔄 [RECARGA INTERFAZ] Recargando cartones activos y métricas financieras...");
           await window.BulaPayDB.loadActiveCredits();
           await Promise.all([
             this.updateRouteTracking(),
@@ -1932,17 +1976,10 @@ const agentModule = {
     }
 
     if (btnLiquidarMora) {
-      if (isOverdueCarton) {
-        btnLiquidarMora.disabled = false;
-        btnLiquidarMora.style.opacity = '1';
-        btnLiquidarMora.style.cursor = 'pointer';
-        btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
-      } else {
-        btnLiquidarMora.disabled = true;
-        btnLiquidarMora.style.opacity = '0.4';
-        btnLiquidarMora.style.cursor = 'not-allowed';
-        btnLiquidarMora.title = 'Solo disponible si la fecha actual ha superado el plazo total del cartón (vencido).';
-      }
+      btnLiquidarMora.disabled = false;
+      btnLiquidarMora.style.opacity = '1';
+      btnLiquidarMora.style.cursor = 'pointer';
+      btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
     }
   },
 
