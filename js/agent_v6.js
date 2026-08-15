@@ -342,41 +342,33 @@ const agentModule = {
 
     if (this.btnCobroLiquidarMora) {
       this.btnCobroLiquidarMora.addEventListener('click', async () => {
-        if (!this.currentClient) return;
-        const client = this.currentClient;
+        const btn = this.btnCobroLiquidarMora;
+        const cartonId = btn?.dataset?.cartonId || this.currentClient?.carton_id || this.currentClient?.id || null;
+        const numeroCarton = btn?.dataset?.numeroCarton || this.currentClient?.numero_carton || null;
+        const cedula = btn?.dataset?.cedula || this.currentClient?.cedula || (this.inputSearchCedula ? this.inputSearchCedula.value : '') || null;
+        const name = btn?.dataset?.name || this.currentClient?.name || `Cliente ${cedula || ''}`;
+        
+        const capPrestado = Number(this.currentClient?.amount || this.currentClient?.monto_prestado || 0);
+        const totalConIntereses = Number(btn?.dataset?.totalConIntereses || this.currentClient?.totalToPay || this.currentClient?.totalDebt || this.currentClient?.monto_total || (capPrestado ? Math.round(capPrestado * 1.2) : 0));
 
-        const cedula = client?.cedula;
-        const name = client?.name || `Cliente ${cedula || ''}`;
-        const cartonId = client?.carton_id || client?.id;
-        const numeroCarton = client?.numero_carton;
-        const installmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
-
-        // Validación de Regla de Liquidar por Mora (v85)
-        const payments = cedula ? await window.BulaPayDB.getPaymentsByClient(cedula) : [];
-        const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const isOverdue = this.isCartonOverdue(client, dailyStatusList);
-
-        if (!isOverdue) {
-          alert(`⚠️ No es posible enviar a Lista Negra / Liquidar por Mora.\nEl cartón de ${name} no se encuentra vencido. Esta acción únicamente está habilitada para cartones oficialmente vencidos.`);
+        if (!cedula && !cartonId && !numeroCarton) {
+          alert('❌ No se encontró la información del cartón a liquidar.');
           return;
         }
-
-        // Regla v102 (Saldo Maestro): Deuda total en Lista Negra incluye Intereses proyectados. El saldo de Capital en Caja permanece intacto sin desajustes porque el dinero prestado ya había salido de caja.
-        const capitalPrestado = Number(client?.amount || client?.monto_prestado || client?.capital_prestado || 0);
-        const totalConIntereses = Number(client?.totalToPay || client?.totalDebt || client?.monto_total || client?.total_debt || (capitalPrestado ? Math.round(capitalPrestado * 1.2) : 0));
 
         const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${name} y enviarlo a Lista Negra (Liquidado por Mora)?\nDeuda Total a Lista Negra (Capital + Intereses): $${totalConIntereses.toLocaleString('es-CO')}.\nEsta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
         if (!confirm(confirmMsg)) return;
 
         try {
-          this.btnCobroLiquidarMora.disabled = true;
-          this.btnCobroLiquidarMora.textContent = 'Procesando...';
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Procesando...';
+          }
 
           const cedulaStr = String(cedula || '').trim();
-
           const supabase = await window.BulaPayDB.initSupabase();
 
-          // UPDATE limpio y explícito sobre la tabla 'cartones' (v124)
+          // UPDATE limpio y explícito sobre la tabla 'cartones' con tipos primitivos (v126)
           const cartonUpdatePayload = {
             estado: 'liquidado_perdida',
             status: 'liquidado_perdida',
@@ -384,26 +376,20 @@ const agentModule = {
             total_debt: totalConIntereses
           };
 
-          let updateError = null;
           if (cartonId) {
-            const { error: idErr } = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-            if (idErr) updateError = idErr;
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
           }
           if (numeroCarton) {
-            const { error: numErr } = await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-            if (numErr && !cartonId) updateError = numErr;
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
           }
           if (cedulaStr) {
             await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
             await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedulaStr);
-          }
-
-          if (updateError) {
-            console.error("Aviso al actualizar estado en cartones:", updateError);
+            await supabase.from('clients').update({ status: 'liquidado_perdida', estado: 'liquidado_perdida', risk: 'Rojo', outstanding: 0 }).eq('cedula', cedulaStr);
           }
 
           await window.BulaPayDB.liquidateCredit({
-            cedula: client.cedula,
+            cedula: cedulaStr,
             cartonId: cartonId,
             numeroCarton: numeroCarton,
             status: 'liquidado_perdida',
@@ -411,29 +397,27 @@ const agentModule = {
             totalDebt: totalConIntereses
           });
 
-          // Fuerza una recarga inmediata de la interfaz (loadActiveCredits() y resumen de caja v124)
-          await window.BulaPayDB.loadActiveCredits();
-
+          // Reset de cliente activo y formulario
           this.currentClient = null;
           if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
           if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
           if (this.inputSearchCedula) this.inputSearchCedula.value = '';
 
-          // Disparar refresh completo de métricas sin esperar confirmación del usuario
+          // Forzar recarga limpia del mapa de clientes en DB y de la UI
+          await window.BulaPayDB.loadActiveCredits();
           await Promise.all([
             this.updateRouteTracking(),
-            this.renderFinancialDashboard(),
-            typeof this.renderPaymentCardGrid === 'function' ? this.renderPaymentCardGrid() : Promise.resolve()
+            this.renderFinancialDashboard()
           ]);
 
-          alert(`⚠️ El cliente ${client.name} (C.C. ${client.cedula}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl saldo del Capital en Caja se mantiene estable: la salida del préstamo fue descontada originalmente al momento de su creación.`);
+          alert(`⚠️ El cliente ${name} (C.C. ${cedulaStr}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl saldo del Capital en Caja se mantiene estable.`);
         } catch (e) {
           console.error("Error al enviar a Lista Negra:", e);
           alert('❌ Error al procesar liquidación: ' + (e.message || e));
         } finally {
-          if (this.btnCobroLiquidarMora) {
-            this.btnCobroLiquidarMora.disabled = false;
-            this.btnCobroLiquidarMora.textContent = '⛔ Liquidar / Lista Negra';
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '⛔ Liquidar / Lista Negra';
           }
         }
       });
@@ -1434,14 +1418,19 @@ const agentModule = {
   },
 
   async renderPaymentCardGrid() {
+    if (!this.paymentCardGrid) return;
     this.paymentCardGrid.innerHTML = '';
     
     const client = this.currentClient;
-    const totalInstallments = client.installmentsCount || 20; // Default to typical 20 or 24 quotas
-    const installmentAmount = client.installmentAmount || 8000;
+    if (!client) return;
+
+    const totalInstallments = Number(client?.installmentsCount || client?.installments_count || 20);
+    const installmentAmount = Number(client?.installmentAmount || client?.installment_amount || 8000);
+    const cedula = client?.cedula;
+    if (!cedula) return;
     
     // Obtener los pagos reales desde Supabase
-    const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+    const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
     
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
     const startDate = cartonDateStr ? new Date(cartonDateStr) : new Date();
@@ -1977,6 +1966,24 @@ const agentModule = {
       if (this.searchError) this.searchError.style.display = 'none';
       
       this.currentClient = client;
+      
+      if (this.btnCobroLiquidarMora) {
+        this.btnCobroLiquidarMora.dataset.cartonId = client.carton_id || client.id || '';
+        this.btnCobroLiquidarMora.dataset.numeroCarton = client.numero_carton || '';
+        this.btnCobroLiquidarMora.dataset.cedula = client.cedula || '';
+        this.btnCobroLiquidarMora.dataset.name = client.name || '';
+        const cap = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
+        this.btnCobroLiquidarMora.dataset.totalConIntereses = client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || (cap ? Math.round(cap * 1.2) : 0);
+      }
+      if (this.btnLiquidarCarton) {
+        this.btnLiquidarCarton.dataset.cartonId = client.carton_id || client.id || '';
+        this.btnLiquidarCarton.dataset.numeroCarton = client.numero_carton || '';
+        this.btnLiquidarCarton.dataset.cedula = client.cedula || '';
+        this.btnLiquidarCarton.dataset.name = client.name || '';
+        this.btnLiquidarCarton.dataset.totalDebt = client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || 0;
+        this.btnLiquidarCarton.dataset.outstanding = client.outstanding || client.saldo_restante || 0;
+        this.btnLiquidarCarton.dataset.amount = client.amount || client.monto_prestado || 0;
+      }
       
       // Mostrar la tarjeta minimalista aislada y asegurar estado inicial
       if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
