@@ -744,7 +744,7 @@ const db = {
           ...client,
           ...carton,
           cedula: client.cedula,
-          name: client.name,
+          name: client.name || client.nombre || `Cliente ${client.cedula}`,
           amount: Number(carton.monto_prestado || 0),
           monto_prestado: Number(carton.monto_prestado || 0),
           totalDebt: Number(carton.total_debt || 0),
@@ -756,16 +756,20 @@ const db = {
           estado: 'activo'
         };
       } else {
+        const rawSt = String(client.status || client.estado || '').toUpperCase();
+        const isLoss = rawSt.includes('PERDIDA') || rawSt.includes('MORA') || rawSt.includes('NEGRA') || client.risk === 'Rojo';
         return {
           ...client,
+          cedula: client.cedula,
+          name: client.name || client.nombre || `Cliente ${client.cedula}`,
           outstanding: 0,
           totalDebt: 0,
           amount: 0,
           monto_prestado: 0,
           installmentsCount: 1,
           installmentAmount: 0,
-          status: 'Sin deuda activa',
-          estado: 'Sin deuda activa'
+          status: isLoss ? 'liquidado_perdida' : (client.status || client.estado || 'Sin deuda activa'),
+          estado: isLoss ? 'liquidado_perdida' : (client.estado || client.status || 'Sin deuda activa')
         };
       }
     } catch (eCarton) {

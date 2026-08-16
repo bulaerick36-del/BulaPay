@@ -1273,7 +1273,17 @@ const agentModule = {
     this.historyRiskStatus.textContent = '⏳ Buscando historial...';
 
     try {
-      const client = await window.BulaPayDB.getGlobalClientByCedula(cedula);
+      const cedulaStr = String(cedula || '').trim();
+      const supabase = await window.BulaPayDB.initSupabase();
+
+      // 1. Consultar de la tabla 'clients' mapeando la columna 'name'
+      const { data: dbClient } = await supabase
+        .from('clients')
+        .select('cedula, name, risk, status, estado, outstanding, totalDebt, agent_id, city')
+        .eq('cedula', cedulaStr)
+        .maybeSingle();
+
+      const client = dbClient || (await window.BulaPayDB.getGlobalClientByCedula(cedulaStr));
       
       if (!client) {
         // Cliente NO existe: Ocultar resultados y mostrar error visual rojo
@@ -1282,15 +1292,13 @@ const agentModule = {
         return;
       }
 
-      // Cliente SÍ existe: Mostrar Nombre Real
+      // Cliente SÍ existe: Mostrar Nombre Real desde columna 'name' (o fallback 'nombre')
+      const clientDisplayName = client.name || client.nombre || `Cliente ${cedulaStr}`;
       this.historyResults.style.display = 'block';
       this.historyError.style.display = 'none';
-      this.historyClientName.textContent = client.name;
+      this.historyClientName.textContent = clientDisplayName;
 
-      const cedulaStr = String(cedula || client.cedula || '').trim();
-      const supabase = await window.BulaPayDB.initSupabase();
-
-      // CONSULTA OBLIGATORIA (v136): Verificar si el cliente tiene registros con 'liquidado_perdida' o 'liquidado_mora' en la tabla 'cartones'
+      // 2. CONSULTA ESTRICTA A 'cartones' (v137): Verificar registros con 'liquidado_perdida' o 'liquidado_mora'
       let isLossRecordInCartones = false;
       try {
         const { data: lossCartones } = await supabase
@@ -1306,7 +1314,7 @@ const agentModule = {
         console.warn("Aviso al consultar cartones perdidos/morosos en historial:", eCartonLoss);
       }
 
-      // Evaluación de riesgo incondicional si el cliente está en Lista Negra o tiene cartones liquidados por pérdida (v136)
+      // 3. Evaluación de riesgo incondicional si el cliente tiene registros liquidados por pérdida / Lista Negra (v137)
       const rawStatusHist = String(client.status || client.estado || '').trim().toUpperCase();
       const isDbBlacklisted = isLossRecordInCartones || 
                               client.risk === 'Rojo' || 
