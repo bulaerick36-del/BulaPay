@@ -2217,35 +2217,36 @@ const db = {
 
     const isMora = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
 
-    // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE v133 - STRICT UPDATE NO INSERT)
+    // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE VIA RPC v134)
     const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado');
     const cartonStatusTarget = isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado');
     try {
-      const cartonUpdatePayload = { 
-        estado: cartonEstadoTarget, 
-        status: cartonStatusTarget,
-        outstanding: 0,
-        total_debt: 0
-      };
-
       const cedStr = String(cedula || '').trim();
-      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      if (isMora && cedStr) {
+        const { error: rpcErr } = await supabase.rpc('liquidar_carton_por_morosidad', {
+          p_cliente_id: cedStr
+        });
+        if (rpcErr) console.error("Error al liquidar mediante RPC en liquidateCredit:", rpcErr);
+        else console.log(`✅ [v134 LIQUIDATE RPC] Cartón(es) de ${cedStr} liquidados por morosidad vía RPC en Supabase.`);
+      } else {
+        const cartonUpdatePayload = { 
+          estado: cartonEstadoTarget, 
+          status: cartonStatusTarget,
+          outstanding: 0,
+          total_debt: 0
+        };
+        const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-      // 3.1 Actualizar cartón específico si cartonId es un UUID válido
-      if (cartonId && isValidUuid(cartonId)) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+        if (cartonId && isValidUuid(cartonId)) {
+          await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+        }
+        if (numeroCarton && !isNaN(Number(numeroCarton))) {
+          await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+        }
+        if (cedStr) {
+          await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
+        }
       }
-
-      // 3.2 Actualizar por número de cartón si fue suministrado
-      if (numeroCarton && !isNaN(Number(numeroCarton))) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-      }
-
-      // 3.3 LIMPIEZA OBLIGATORIA (v133): Marcar TODOS los registros activos/duplicados del cliente como liquidados
-      if (cedStr) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
-      }
-      console.log(`✅ [v133 LIQUIDATE] Cartón(es) de ${cedStr} actualizado(s) estrictamente con UPDATE a '${cartonEstadoTarget}' en Supabase.`);
     } catch (eCarton) {
       console.warn("Excepción al actualizar tabla cartones:", eCarton.message);
     }

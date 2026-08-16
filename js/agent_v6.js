@@ -365,48 +365,14 @@ const agentModule = {
             btn.textContent = 'Procesando...';
           }
 
-          const cedulaStr = String(cedula || '').trim();
+          const clienteId = String(cedula || '').trim();
           const supabase = await window.BulaPayDB.initSupabase();
 
-          // Sentencia de actualización única y directa sobre 'cartones' (v133 - UPDATE STRICT NO INSERT)
-          const cartonUpdatePayload = {
-            estado: 'liquidado_perdida',
-            status: 'liquidado_perdida',
-            outstanding: 0,
-            total_debt: 0
-          };
-
-          const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-
-          if (cartonId && isValidUuid(cartonId)) {
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-          }
-          if (numeroCarton && !isNaN(Number(numeroCarton))) {
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-          }
-          if (cedulaStr) {
-            // Limpieza v133: marcar todos los cartones activos/duplicados del cliente como liquidados
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
-          }
-          console.log("✅ Cartón(es) actualizado(s) a 'liquidado_perdida' exitosamente en Supabase.");
-
-          if (cedulaStr) {
-            await supabase.from('clients').update({
-              status: 'liquidado_perdida',
-              estado: 'liquidado_perdida',
-              risk: 'Rojo',
-              outstanding: 0
-            }).eq('cedula', cedulaStr);
-          }
-
-          await window.BulaPayDB.liquidateCredit({
-            cedula: cedulaStr,
-            cartonId: cartonId,
-            numeroCarton: numeroCarton,
-            status: 'liquidado_perdida',
-            outstanding: 0,
-            totalDebt: totalConIntereses
+          // v134: Llamada limpia a la función RPC de Supabase 'liquidar_carton_por_morosidad'
+          const { error } = await supabase.rpc('liquidar_carton_por_morosidad', { 
+            p_cliente_id: clienteId 
           });
+          if (error) console.error("Error al liquidar:", error);
 
           // Reset de cliente activo y formulario
           this.currentClient = null;
@@ -471,35 +437,21 @@ const agentModule = {
           const cedulaStr = String(client.cedula || '').trim();
 
           const supabase = await window.BulaPayDB.initSupabase();
-          const cartonUpdatePayload = {
-            estado: nuevoEstado === 'Liquidado_Pagado' ? 'liquidado' : 'liquidado_perdida',
-            status: nuevoEstado,
-            outstanding: 0,
-            total_debt: 0
-          };
-
-          const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-
-          if (cartonId && isValidUuid(cartonId)) {
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+          if (nuevoEstado === 'liquidado_perdida') {
+            const { error } = await supabase.rpc('liquidar_carton_por_morosidad', { 
+              p_cliente_id: cedulaStr 
+            });
+            if (error) console.error("Error al liquidar:", error);
+          } else {
+            await window.BulaPayDB.liquidateCredit({
+              cedula: client.cedula,
+              cartonId: cartonId,
+              numeroCarton: numeroCarton,
+              status: nuevoEstado,
+              outstanding: 0,
+              totalDebt: totalEsperado
+            });
           }
-          if (numeroCarton && !isNaN(Number(numeroCarton))) {
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-          }
-          if (cedulaStr) {
-            // Limpieza v133: marcar todos los cartones activos/duplicados del cliente como liquidados
-            await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
-          }
-
-          // Actualizar estado del cliente y crédito en DB con UPDATE explícito (v124)
-          await window.BulaPayDB.liquidateCredit({
-            cedula: client.cedula,
-            cartonId: cartonId,
-            numeroCarton: numeroCarton,
-            status: nuevoEstado,
-            outstanding: 0,
-            totalDebt: totalEsperado
-          });
 
           // Fuerza una recarga inmediata de la interfaz (loadActiveCredits() y resumen de caja v124)
           await window.BulaPayDB.loadActiveCredits();
