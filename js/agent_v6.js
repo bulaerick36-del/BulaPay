@@ -1273,91 +1273,70 @@ const agentModule = {
     this.historyRiskStatus.textContent = '⏳ Buscando historial...';
 
     try {
-      const cedulaStr = String(cedula || '').trim();
+      const cedulaBuscada = String(cedula || '').trim();
       const supabase = await window.BulaPayDB.initSupabase();
 
-      // 1. Consultar de la tabla 'clients' mapeando la columna 'name'
+      // 1. CONSULTA ASÍNCRONA DIRECTA A SUPABASE (v138)
+      let isLossCarton = false;
+      try {
+        const { data: cartonesMorosos } = await supabase
+          .from('cartones')
+          .select('*')
+          .eq('cliente_id', cedulaBuscada)
+          .eq('estado', 'liquidado_perdida');
+
+        if (cartonesMorosos && cartonesMorosos.length > 0) {
+          isLossCarton = true;
+        } else {
+          // Verificación secundaria por si acaso estado es 'liquidado_mora'
+          const { data: cartonesMora } = await supabase
+            .from('cartones')
+            .select('*')
+            .eq('cliente_id', cedulaBuscada)
+            .eq('estado', 'liquidado_mora');
+          if (cartonesMora && cartonesMora.length > 0) {
+            isLossCarton = true;
+          }
+        }
+      } catch (eCartonErr) {
+        console.warn("Aviso al consultar cartonesMorosos:", eCartonErr);
+      }
+
+      // 2. Consultar perfil del cliente en 'clients'
       const { data: dbClient } = await supabase
         .from('clients')
-        .select('cedula, name, risk, status, estado, outstanding, totalDebt, agent_id, city')
-        .eq('cedula', cedulaStr)
+        .select('*')
+        .eq('cedula', cedulaBuscada)
         .maybeSingle();
 
-      const client = dbClient || (await window.BulaPayDB.getGlobalClientByCedula(cedulaStr));
+      const client = dbClient || (await window.BulaPayDB.getGlobalClientByCedula(cedulaBuscada));
       
-      if (!client) {
+      if (!client && !isLossCarton) {
         // Cliente NO existe: Ocultar resultados y mostrar error visual rojo
         this.historyResults.style.display = 'none';
         this.historyError.style.display = 'block';
         return;
       }
 
-      // Cliente SÍ existe: Mostrar Nombre Real desde columna 'name' (o fallback 'nombre')
-      const clientDisplayName = client.name || client.nombre || `Cliente ${cedulaStr}`;
+      const clientDisplayName = (client && (client.name || client.nombre)) ? (client.name || client.nombre) : `Cliente ${cedulaBuscada}`;
       this.historyResults.style.display = 'block';
       this.historyError.style.display = 'none';
       this.historyClientName.textContent = clientDisplayName;
 
-      // 2. CONSULTA ESTRICTA A 'cartones' (v137): Verificar registros con 'liquidado_perdida' o 'liquidado_mora'
-      let isLossRecordInCartones = false;
-      try {
-        const { data: lossCartones } = await supabase
-          .from('cartones')
-          .select('id, estado, status')
-          .eq('cliente_id', cedulaStr)
-          .or('estado.eq.liquidado_perdida,status.eq.liquidado_perdida,estado.eq.liquidado_mora,status.eq.liquidado_mora');
-          
-        if (lossCartones && lossCartones.length > 0) {
-          isLossRecordInCartones = true;
-        }
-      } catch (eCartonLoss) {
-        console.warn("Aviso al consultar cartones perdidos/morosos en historial:", eCartonLoss);
-      }
+      // 3. SI TIENE CARTONES EN liquidado_perdida O RIESGO ROJO EN CLIENTS, FUERZA DE INMEDIATO RESULTADO VISUAL A ROJO (v138)
+      const rawStatusHist = String(client?.status || client?.estado || '').trim().toUpperCase();
+      const isBlacklisted = isLossCarton || 
+                            client?.risk === 'Rojo' || 
+                            String(client?.risk || '').trim().toLowerCase() === 'rojo' || 
+                            rawStatusHist.includes('NEGRA') || 
+                            rawStatusHist.includes('MORA') ||
+                            rawStatusHist.includes('PERDIDA');
 
-      // 3. Evaluación de riesgo incondicional si el cliente tiene registros liquidados por pérdida / Lista Negra (v137)
-      const rawStatusHist = String(client.status || client.estado || '').trim().toUpperCase();
-      const isDbBlacklisted = isLossRecordInCartones || 
-                              client.risk === 'Rojo' || 
-                              String(client.risk || '').trim().toLowerCase() === 'rojo' || 
-                              rawStatusHist.includes('NEGRA') || 
-                              rawStatusHist.includes('MORA') ||
-                              rawStatusHist.includes('PERDIDA');
-
-      if (isDbBlacklisted) {
-        client.risk = 'Rojo';
-      } else {
-        // Calcular riesgo dinámico basado en pagos solo si NO está en Lista Negra ni tiene pérdida
-        try {
-          const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
-          const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-          const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
-          
-          if (overdueCount >= 3) {
-            client.risk = 'Rojo';
-          } else if (overdueCount > 0) {
-            client.risk = 'Amarillo';
-          } else {
-            client.risk = 'Verde';
-          }
-        } catch (e) {
-          console.error("Error al calcular riesgo dinámico en historial:", e);
-        }
-      }
-
-      const hasOutstanding = Number(client.outstanding) > 0;
-      
-      if (client.risk === 'Rojo') {
+      if (isBlacklisted) {
+        if (client) client.risk = 'Rojo';
         this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo / Moroso / No apto)';
-      } else if (client.risk === 'Amarillo') {
-        this.historyTrafficLight.className = 'traffic-light-header amarillo';
-        this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
-      } else {
-        this.historyTrafficLight.className = 'traffic-light-header verde';
-        this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
-      }
-      
-      if (isDbBlacklisted) {
+        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo / Moroso)';
+        
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
           this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
@@ -1366,15 +1345,48 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.color = '#ef4444';
           this.historyActiveCreditsAlert.innerHTML = `🚫 ALERTA CRÍTICA: Este cliente cuenta con registros de liquidación por pérdida / Lista Negra (MOROSO). No es apto para nuevos créditos.`;
         }
-      } else if (hasOutstanding) {
-        let agentName = client.agent_id || 'Desconocido';
+        return;
+      }
+
+      // Si no tiene registros en liquidado_perdida, procede con el flujo normal de evaluación
+      try {
+        const payments = await window.BulaPayDB.getPaymentsByClient(cedulaBuscada);
+        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
+        const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
+        
+        if (overdueCount >= 3) {
+          client.risk = 'Rojo';
+        } else if (overdueCount > 0) {
+          client.risk = 'Amarillo';
+        } else {
+          client.risk = 'Verde';
+        }
+      } catch (e) {
+        console.error("Error al calcular riesgo dinámico en historial:", e);
+      }
+
+      const hasOutstanding = Number(client?.outstanding || 0) > 0;
+      
+      if (client.risk === 'Rojo') {
+        this.historyTrafficLight.className = 'traffic-light-header rojo';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo / Moroso)';
+      } else if (client.risk === 'Amarillo') {
+        this.historyTrafficLight.className = 'traffic-light-header amarillo';
+        this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
+      } else {
+        this.historyTrafficLight.className = 'traffic-light-header verde';
+        this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
+      }
+
+      if (hasOutstanding) {
+        let agentName = client?.agent_id || 'Desconocido';
         try {
-          if (client.agent_id) {
+          if (client?.agent_id) {
             const agentUser = await window.BulaPayDB.getUserByUsername(client.agent_id);
             if (agentUser) agentName = agentUser.name || agentUser.username;
           }
         } catch (e) {}
-        const municipality = client.city || 'Desconocido';
+        const municipality = client?.city || 'Desconocido';
         
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
@@ -2309,12 +2321,12 @@ const agentModule = {
     let isLossRecordInDetail = false;
     try {
       const supabaseDetail = await window.BulaPayDB.initSupabase();
-      const { data: lossCartones } = await supabaseDetail
+      const { data: cartonesMorosos } = await supabaseDetail
         .from('cartones')
-        .select('id, estado, status')
+        .select('*')
         .eq('cliente_id', cedulaDetailStr)
-        .or('estado.eq.liquidado_perdida,status.eq.liquidado_perdida,estado.eq.liquidado_mora,status.eq.liquidado_mora');
-      if (lossCartones && lossCartones.length > 0) {
+        .eq('estado', 'liquidado_perdida');
+      if (cartonesMorosos && cartonesMorosos.length > 0) {
         isLossRecordInDetail = true;
       }
     } catch (e) {}
