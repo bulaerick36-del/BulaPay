@@ -1287,16 +1287,38 @@ const agentModule = {
       this.historyError.style.display = 'none';
       this.historyClientName.textContent = client.name;
 
-      // Evaluación de riesgo incondicional si el cliente está en Lista Negra (risk === 'Rojo')
-      const isDbBlacklisted = client.risk === 'Rojo' || 
+      const cedulaStr = String(cedula || client.cedula || '').trim();
+      const supabase = await window.BulaPayDB.initSupabase();
+
+      // CONSULTA OBLIGATORIA (v136): Verificar si el cliente tiene registros con 'liquidado_perdida' o 'liquidado_mora' en la tabla 'cartones'
+      let isLossRecordInCartones = false;
+      try {
+        const { data: lossCartones } = await supabase
+          .from('cartones')
+          .select('id, estado, status')
+          .eq('cliente_id', cedulaStr)
+          .or('estado.eq.liquidado_perdida,status.eq.liquidado_perdida,estado.eq.liquidado_mora,status.eq.liquidado_mora');
+          
+        if (lossCartones && lossCartones.length > 0) {
+          isLossRecordInCartones = true;
+        }
+      } catch (eCartonLoss) {
+        console.warn("Aviso al consultar cartones perdidos/morosos en historial:", eCartonLoss);
+      }
+
+      // Evaluación de riesgo incondicional si el cliente está en Lista Negra o tiene cartones liquidados por pérdida (v136)
+      const rawStatusHist = String(client.status || client.estado || '').trim().toUpperCase();
+      const isDbBlacklisted = isLossRecordInCartones || 
+                              client.risk === 'Rojo' || 
                               String(client.risk || '').trim().toLowerCase() === 'rojo' || 
-                              String(client.status || client.estado || '').toUpperCase().includes('NEGRA') || 
-                              String(client.status || client.estado || '').toUpperCase().includes('MORA');
+                              rawStatusHist.includes('NEGRA') || 
+                              rawStatusHist.includes('MORA') ||
+                              rawStatusHist.includes('PERDIDA');
 
       if (isDbBlacklisted) {
         client.risk = 'Rojo';
       } else {
-        // Calcular riesgo dinámico basado en pagos solo si NO está en Lista Negra
+        // Calcular riesgo dinámico basado en pagos solo si NO está en Lista Negra ni tiene pérdida
         try {
           const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
           const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
@@ -1318,7 +1340,7 @@ const agentModule = {
       
       if (client.risk === 'Rojo') {
         this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Mal Cliente / Lista Negra)';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo / Moroso / No apto)';
       } else if (client.risk === 'Amarillo') {
         this.historyTrafficLight.className = 'traffic-light-header amarillo';
         this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
@@ -1327,7 +1349,16 @@ const agentModule = {
         this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
       }
       
-      if (hasOutstanding) {
+      if (isDbBlacklisted) {
+        if (this.historyActiveCreditsAlert) {
+          this.historyActiveCreditsAlert.style.display = 'flex';
+          this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+          this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
+          this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
+          this.historyActiveCreditsAlert.style.color = '#ef4444';
+          this.historyActiveCreditsAlert.innerHTML = `🚫 ALERTA CRÍTICA: Este cliente cuenta con registros de liquidación por pérdida / Lista Negra (MOROSO). No es apto para nuevos créditos.`;
+        }
+      } else if (hasOutstanding) {
         let agentName = client.agent_id || 'Desconocido';
         try {
           if (client.agent_id) {
@@ -1340,6 +1371,9 @@ const agentModule = {
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
           this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+          this.historyActiveCreditsAlert.style.borderColor = '';
+          this.historyActiveCreditsAlert.style.backgroundColor = '';
+          this.historyActiveCreditsAlert.style.color = '';
           this.historyActiveCreditsAlert.innerHTML = `⚠️ Atención: Este cliente tiene un crédito activo con el agente ${agentName} en el municipio ${municipality}.`;
         }
       } else {
@@ -2261,12 +2295,29 @@ const agentModule = {
     if (this.detailOutstanding) this.detailOutstanding.textContent = `$${Number(client.outstanding).toLocaleString('es-CO')}`;
     if (this.detailInstallment) this.detailInstallment.textContent = `$${Number(client.installmentAmount).toLocaleString('es-CO')}`;
     
-    // Preservar riesgo si el cliente está en Lista Negra (risk === 'Rojo')
+    // Preservar riesgo si el cliente está en Lista Negra o tiene cartones morosos/perdidos (risk === 'Rojo')
     let dailyStatusList = [];
-    const isDbBlacklistedDetail = client.risk === 'Rojo' || 
+    const cedulaDetailStr = String(client.cedula || '').trim();
+    let isLossRecordInDetail = false;
+    try {
+      const supabaseDetail = await window.BulaPayDB.initSupabase();
+      const { data: lossCartones } = await supabaseDetail
+        .from('cartones')
+        .select('id, estado, status')
+        .eq('cliente_id', cedulaDetailStr)
+        .or('estado.eq.liquidado_perdida,status.eq.liquidado_perdida,estado.eq.liquidado_mora,status.eq.liquidado_mora');
+      if (lossCartones && lossCartones.length > 0) {
+        isLossRecordInDetail = true;
+      }
+    } catch (e) {}
+
+    const rawStatusDetail = String(client.status || client.estado || '').trim().toUpperCase();
+    const isDbBlacklistedDetail = isLossRecordInDetail ||
+                                  client.risk === 'Rojo' || 
                                   String(client.risk || '').trim().toLowerCase() === 'rojo' || 
-                                  String(client.status || client.estado || '').toUpperCase().includes('NEGRA') || 
-                                  String(client.status || client.estado || '').toUpperCase().includes('MORA');
+                                  rawStatusDetail.includes('NEGRA') || 
+                                  rawStatusDetail.includes('MORA') ||
+                                  rawStatusDetail.includes('PERDIDA');
 
     if (isDbBlacklistedDetail) {
       client.risk = 'Rojo';
