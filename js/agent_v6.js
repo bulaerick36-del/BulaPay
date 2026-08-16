@@ -365,12 +365,12 @@ const agentModule = {
             btn.textContent = 'Procesando...';
           }
 
-          const clienteId = String(cedula || '').trim();
+          const cedulaStr = String(this.currentClient?.cedula || cedula || '').trim();
           const supabase = await window.BulaPayDB.initSupabase();
 
-          // v134: Llamada limpia a la función RPC de Supabase 'liquidar_carton_por_morosidad'
+          // v135: Llamada limpia a la función RPC de Supabase 'liquidar_carton_por_morosidad'
           const { error } = await supabase.rpc('liquidar_carton_por_morosidad', { 
-            p_cliente_id: clienteId 
+            p_cliente_id: cedulaStr 
           });
           if (error) console.error("Error al liquidar:", error);
 
