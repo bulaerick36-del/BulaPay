@@ -368,28 +368,27 @@ const agentModule = {
           const cedulaStr = String(cedula || '').trim();
           const supabase = await window.BulaPayDB.initSupabase();
 
-          // Sentencia de actualización única y directa sobre 'cartones' (v132)
+          // Sentencia de actualización única y directa sobre 'cartones' (v133 - UPDATE STRICT NO INSERT)
           const cartonUpdatePayload = {
             estado: 'liquidado_perdida',
             status: 'liquidado_perdida',
             outstanding: 0,
-            total_debt: totalConIntereses
+            total_debt: 0
           };
 
-          let resCarton = null;
-          if (cartonId) {
-            resCarton = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-          } else if (numeroCarton) {
-            resCarton = await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-          } else if (cedulaStr) {
-            resCarton = await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
-          }
+          const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-          if (resCarton && resCarton.error) {
-            console.warn("Aviso al actualizar cartón en Supabase:", resCarton.error.message);
-          } else {
-            console.log("✅ Cartón actualizado a 'liquidado_perdida' exitosamente en Supabase.");
+          if (cartonId && isValidUuid(cartonId)) {
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
           }
+          if (numeroCarton && !isNaN(Number(numeroCarton))) {
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+          }
+          if (cedulaStr) {
+            // Limpieza v133: marcar todos los cartones activos/duplicados del cliente como liquidados
+            await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
+          }
+          console.log("✅ Cartón(es) actualizado(s) a 'liquidado_perdida' exitosamente en Supabase.");
 
           if (cedulaStr) {
             await supabase.from('clients').update({
@@ -476,14 +475,19 @@ const agentModule = {
             estado: nuevoEstado === 'Liquidado_Pagado' ? 'liquidado' : 'liquidado_perdida',
             status: nuevoEstado,
             outstanding: 0,
-            total_debt: nuevoEstado === 'Liquidado_Pagado' ? 0 : totalEsperado
+            total_debt: 0
           };
 
-          if (cartonId) {
+          const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+          if (cartonId && isValidUuid(cartonId)) {
             await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-          } else if (numeroCarton) {
+          }
+          if (numeroCarton && !isNaN(Number(numeroCarton))) {
             await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-          } else if (cedulaStr) {
+          }
+          if (cedulaStr) {
+            // Limpieza v133: marcar todos los cartones activos/duplicados del cliente como liquidados
             await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
           }
 
