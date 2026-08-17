@@ -2473,6 +2473,76 @@ const db = {
         return false;
       }
 
+      // PASO 1 (CRÍTICO v149): Actualizar estado en Supabase PRIMERO con validación estricta de error
+      const cartonUpdatePayload = {
+        estado: 'liquidado_pagado',
+        status: 'Liquidado_Pagado',
+        outstanding: 0,
+        total_debt: 0
+      };
+
+      let updateErrors = [];
+      let updateExecuted = false;
+
+      // A) Si se recibe cartonId, actualizar directamente por ID
+      if (cartonId) {
+        const { error: errId } = await supabase
+          .from('cartones')
+          .update(cartonUpdatePayload)
+          .eq('id', cartonId);
+        if (errId) {
+          console.error("Error al actualizar cartón por id:", errId);
+          updateErrors.push(errId.message);
+        } else {
+          updateExecuted = true;
+        }
+      }
+
+      // B) Actualizar cartones por cliente_id / client_id / cedula
+      const { error: err1 } = await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
+      if (err1) updateErrors.push(err1.message); else updateExecuted = true;
+
+      const { error: err2 } = await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr);
+      if (err2) updateErrors.push(err2.message); else updateExecuted = true;
+
+      const { error: err3 } = await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedStr);
+      if (!err3) updateExecuted = true;
+
+      if (!isNaN(Number(cedStr))) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', Number(cedStr));
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', Number(cedStr));
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', Number(cedStr));
+      }
+
+      // C) Intentar actualización opcional en 'historial_creditos' y 'creditos'
+      try { await supabase.from('historial_creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
+      try { await supabase.from('creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
+
+      // D) Actualizar cliente en tabla 'clients'
+      const clientUpdatePayload = {
+        risk: 'Verde',
+        status: 'Liquidado_Pagado',
+        estado: 'liquidado_pagado',
+        outstanding: 0
+      };
+
+      const { error: errClient } = await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedStr);
+      if (errClient) {
+        await supabase.from('clients').update(clientUpdatePayload).eq('id', cedStr);
+        if (!isNaN(Number(cedStr))) {
+          await supabase.from('clients').update(clientUpdatePayload).eq('cedula', Number(cedStr));
+          await supabase.from('clients').update(clientUpdatePayload).eq('id', Number(cedStr));
+        }
+      }
+
+      // SI SUPABASE DEVOLVIÓ ERROR Y NINGÚN UPDATE SE EJECUTÓ SIN ERROR: MOSTRAR ALERTA Y ABORTAR (v149)
+      if (!updateExecuted && updateErrors.length > 0) {
+        const firstErr = updateErrors[0];
+        alert("❌ Error de Supabase al actualizar el cartón: " + firstErr + "\nNo se ha registrado el pago ni la rehabilitación.");
+        return false;
+      }
+
+      // PASO 2: Solo si Supabase respondió sin error, registrar movimiento en caja e insertar pago
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const routeId = currentUser ? currentUser.routeId : null;
       const supId = await this.getSupervisorIdForUser(currentUser);
@@ -2480,7 +2550,6 @@ const db = {
       const todayIso = now.toISOString();
       const todayClean = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      // 1. Insertar pago en 'payments' (con status 'Pagado' para que sume a caja y recaudo)
       const paymentRecord = {
         id: `pay_rehab_${Date.now()}_${Math.floor(Math.random()*1000)}`,
         clientCedula: cedStr,
@@ -2501,7 +2570,6 @@ const db = {
       const { error: payErr } = await supabase.from('payments').insert([paymentRecord]);
       if (payErr) console.error("Error al registrar pago en payments:", payErr);
 
-      // 2. Registrar movimiento de caja en 'caja_movimientos'
       const cashMov = {
         id: `mov_rehab_${Date.now()}`,
         date: todayClean,
@@ -2515,54 +2583,14 @@ const db = {
       };
       await this.saveCashMovement(cashMov);
 
-      // 3. Actualizar la tabla 'cartones' en Supabase (liquidado_perdida -> liquidado_pagado v148)
-      const cartonUpdatePayload = {
-        estado: 'liquidado_pagado',
-        status: 'Liquidado_Pagado',
-        outstanding: 0,
-        total_debt: 0
-      };
-
-      if (cartonId) {
-        try { await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId); } catch(e){}
-      }
-      try { await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr); } catch(e){}
-      try { await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr); } catch(e){}
-      try { await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
-      if (!isNaN(Number(cedStr))) {
-        try { await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', Number(cedStr)); } catch(e){}
-        try { await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', Number(cedStr)); } catch(e){}
-        try { await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', Number(cedStr)); } catch(e){}
-      }
-
-      // Intentar actualización opcional en 'historial_creditos' y 'creditos'
-      try { await supabase.from('historial_creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
-      try { await supabase.from('creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
-
-      // 4. Actualizar la tabla 'clients' en Supabase (v148)
-      const clientUpdatePayload = {
-        risk: 'Verde',
-        status: 'Liquidado_Pagado',
-        estado: 'liquidado_pagado',
-        outstanding: 0
-      };
-      try { await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedStr); } catch(e){}
-      try { await supabase.from('clients').update(clientUpdatePayload).eq('id', cedStr); } catch(e){}
-      if (!isNaN(Number(cedStr))) {
-        try { await supabase.from('clients').update(clientUpdatePayload).eq('cedula', Number(cedStr)); } catch(e){}
-        try { await supabase.from('clients').update(clientUpdatePayload).eq('id', Number(cedStr)); } catch(e){}
-      }
-
-      // 5. Cargar créditos activos y sincronizar
       await this.loadActiveCredits();
 
-      // 6. Notificación obligatoria de éxito
+      // PASO 3: Muestra mensaje de éxito de rehabilitación
       alert("¡Pago exitoso! Caja actualizada y cliente rehabilitado.");
-
       return true;
     } catch (e) {
       console.error("Error al rehabilitar cliente de Lista Negra:", e);
-      alert("❌ Ocurrió un error al procesar el pago de rehabilitación: " + e.message);
+      alert("❌ Error al procesar la actualización en Supabase: " + (e.message || e));
       return false;
     }
   },
