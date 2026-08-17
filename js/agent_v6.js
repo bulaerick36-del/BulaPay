@@ -1783,12 +1783,12 @@ const agentModule = {
     const amount = Number(client.amount || client.monto_prestado || 0);
     const totalDebt = Number(client.totalDebt || client.total_debt || 0);
     const rawStatus = String(client.status || client.estado || '').trim().toUpperCase();
-    const isLiquidadoStatus = rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || rawStatus === 'SIN DEUDA ACTIVA';
+    const isLossStatus = rawStatus.includes('PERDIDA') || rawStatus.includes('MORA') || rawStatus.includes('NEGRA') || rawStatus.includes('CASTIGADO');
+    const isLiquidadoStatus = (rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || rawStatus === 'SIN DEUDA ACTIVA') && !isLossStatus;
 
     const isBlacklisted = client.risk === 'Rojo' || 
                           String(client.risk || '').trim().toLowerCase() === 'rojo' || 
-                          rawStatus.includes('MORA') || 
-                          rawStatus.includes('NEGRA');
+                          isLossStatus;
 
     const cobroFormFields = document.getElementById('cobro-form-fields');
     const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');

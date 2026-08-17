@@ -762,13 +762,31 @@ const db = {
 
         if (isLoss) {
           try {
+            const cedStr = String(client.cedula).trim();
             const { data: lostCartons } = await supabase
               .from('cartones')
               .select('*')
-              .or(`cliente_id.eq.${client.cedula},client_id.eq.${client.cedula}`)
-              .in('estado', ['liquidado_perdida', 'liquidado_mora']);
-            if (lostCartons && lostCartons.length > 0) {
-              const lc = lostCartons[0];
+              .eq('cliente_id', cedStr);
+            
+            let lc = lostCartons ? lostCartons.find(c => {
+              const st = String(c.estado || c.status || '').toLowerCase();
+              return st.includes('perdida') || st.includes('mora') || st.includes('castigado');
+            }) : null;
+
+            if (!lc) {
+              const { data: lostCartons2 } = await supabase
+                .from('cartones')
+                .select('*')
+                .eq('client_id', cedStr);
+              if (lostCartons2) {
+                lc = lostCartons2.find(c => {
+                  const st = String(c.estado || c.status || '').toLowerCase();
+                  return st.includes('perdida') || st.includes('mora') || st.includes('castigado');
+                }) || lostCartons2[0];
+              }
+            }
+
+            if (lc) {
               const cDebt = Number(lc.monto_prestado || lc.amount || lc.total_debt || lc.totalDebt || lc.monto_total || (lc.monto_prestado ? Math.round(lc.monto_prestado * 1.2) : 0));
               if (cDebt > 0) moraDebt = cDebt;
             }
