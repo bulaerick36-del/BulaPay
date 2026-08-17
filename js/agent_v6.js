@@ -1350,16 +1350,16 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.color = '#ef4444';
 
           const moraDebt = Math.round(Number(
-            client?.moraDebt || client?.outstanding || client?.totalToPay || client?.totalDebt || client?.total_debt || client?.monto_total || (client?.amount ? Math.round(client.amount * 1.2) : 0) || 0
+            client?.monto_prestado || client?.amount || client?.moraDebt || client?.outstanding || client?.totalToPay || client?.totalDebt || client?.total_debt || client?.monto_total || 0
           ));
           const moraDebtFmt = moraDebt > 0 ? `$${moraDebt.toLocaleString('es-CO')}` : 'registrada en sistema';
 
           this.historyActiveCreditsAlert.innerHTML = `
             <div style="width: 100%; text-align: center; padding: 0.5rem 0;">
               <p style="margin: 0 0 0.5rem 0; font-weight: 800; font-size: 0.95rem;">🚫 ALERTA CRÍTICA: Cliente en Lista Negra (Liquidado por Mora)</p>
-              <p style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Deuda Pendiente a Recuperar: <span style="color: #ef4444;">${moraDebtFmt}</span></p>
+              <p style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Saldo Pendiente de Recuperación: <span style="color: #ef4444;">${moraDebtFmt}</span></p>
               <button id="btn-rehabilitate-history" class="btn" style="padding: 0.75rem 1.2rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);">
-                💳 Pagar Deuda y Sacar de Lista Negra
+                💳 Pagar Deuda y Rehabilitar Cliente
               </button>
             </div>
           `;
@@ -1379,7 +1379,7 @@ const agentModule = {
                     await agentModule.updateRouteTracking();
                   } else {
                     btnRehabHist.disabled = false;
-                    btnRehabHist.textContent = "💳 Pagar Deuda y Sacar de Lista Negra";
+                    btnRehabHist.textContent = "💳 Pagar Deuda y Rehabilitar Cliente";
                   }
                 }
               };
@@ -1807,14 +1807,14 @@ const agentModule = {
       if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'block', 'important');
 
       const moraDebt = Math.round(Number(
+        client.monto_prestado || 
+        client.amount || 
         client.moraDebt || 
         client.outstanding || 
         client.totalToPay || 
         client.totalDebt || 
         client.total_debt || 
         client.monto_total || 
-        (client.amount ? Math.round(client.amount * 1.2) : 0) ||
-        (client.monto_prestado ? Math.round(client.monto_prestado * 1.2) : 0) ||
         0
       ));
 
@@ -1824,7 +1824,7 @@ const agentModule = {
 
       const debtInfoEl = document.getElementById('cobro-blacklist-debt-info');
       if (debtInfoEl) {
-        debtInfoEl.textContent = `Deuda Total a Recuperar: $${moraDebt.toLocaleString('es-CO')}`;
+        debtInfoEl.textContent = `Saldo Pendiente de Recuperación: $${moraDebt.toLocaleString('es-CO')}`;
       }
 
       const inputPayAmount = document.getElementById('input-blacklist-pay-amount');
@@ -1834,6 +1834,7 @@ const agentModule = {
 
       const btnPayRehab = document.getElementById('btn-pay-and-rehabilitate');
       if (btnPayRehab) {
+        btnPayRehab.textContent = "💳 Pagar Deuda y Rehabilitar Cliente";
         btnPayRehab.onclick = async () => {
           const targetAmount = Number(inputPayAmount ? inputPayAmount.value : moraDebt);
           if (!targetAmount || targetAmount <= 0) {
@@ -1849,7 +1850,7 @@ const agentModule = {
             await agentModule.updateRouteTracking();
           } else {
             btnPayRehab.disabled = false;
-            btnPayRehab.textContent = "💳 Pagar Deuda y Sacar de Lista Negra";
+            btnPayRehab.textContent = "💳 Pagar Deuda y Rehabilitar Cliente";
           }
         };
       }

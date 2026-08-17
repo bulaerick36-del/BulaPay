@@ -765,19 +765,19 @@ const db = {
             const { data: lostCartons } = await supabase
               .from('cartones')
               .select('*')
-              .eq('cliente_id', String(client.cedula))
+              .or(`cliente_id.eq.${client.cedula},client_id.eq.${client.cedula}`)
               .in('estado', ['liquidado_perdida', 'liquidado_mora']);
             if (lostCartons && lostCartons.length > 0) {
               const lc = lostCartons[0];
-              const cDebt = Number(lc.total_debt || lc.totalDebt || lc.monto_total || (lc.monto_prestado ? Math.round(lc.monto_prestado * 1.2) : 0));
+              const cDebt = Number(lc.monto_prestado || lc.amount || lc.total_debt || lc.totalDebt || lc.monto_total || (lc.monto_prestado ? Math.round(lc.monto_prestado * 1.2) : 0));
               if (cDebt > 0) moraDebt = cDebt;
             }
           } catch (eLC) {
             console.warn("Aviso al consultar cartones perdidos en getClientByCedula:", eLC);
           }
 
-          if (moraDebt <= 0 && client.amount) {
-            moraDebt = Math.round(Number(client.amount) * 1.2);
+          if (moraDebt <= 0 && (client.monto_prestado || client.amount)) {
+            moraDebt = Math.round(Number(client.monto_prestado || client.amount || 0));
           }
         }
 
@@ -2513,7 +2513,7 @@ const db = {
       await this.loadActiveCredits();
 
       // 6. Notificación obligatoria de éxito
-      alert("¡Pago exitoso! El cliente ha sido retirado de la Lista Negra y la caja ha sido actualizada.");
+      alert("¡Pago exitoso! El cliente ha sido rehabilitado y la caja actualizada.");
 
       return true;
     } catch (e) {
