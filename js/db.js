@@ -787,7 +787,14 @@ const db = {
             }
 
             if (lc) {
-              const cDebt = Number(lc.monto_prestado || lc.amount || lc.total_debt || lc.totalDebt || lc.monto_total || (lc.monto_prestado ? Math.round(lc.monto_prestado * 1.2) : 0));
+              const cDebt = Number(
+                lc.total_debt || 
+                lc.totalDebt || 
+                lc.monto_total || 
+                (lc.monto_prestado ? Math.round(Number(lc.monto_prestado) * 1.2) : 0) || 
+                (lc.amount ? Math.round(Number(lc.amount) * 1.2) : 0) || 
+                0
+              );
               if (cDebt > 0) moraDebt = cDebt;
             }
           } catch (eLC) {
@@ -795,7 +802,7 @@ const db = {
           }
 
           if (moraDebt <= 0 && (client.monto_prestado || client.amount)) {
-            moraDebt = Math.round(Number(client.monto_prestado || client.amount || 0));
+            moraDebt = Math.round(Number(client.monto_prestado || client.amount || 0) * 1.2);
           }
         }
 

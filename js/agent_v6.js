@@ -1171,9 +1171,19 @@ const agentModule = {
             return;
           }
           
-          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v142: Botón de rehabilitación directa)
+          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v143: Monto por defecto Deuda Total completa)
           container.innerHTML = badClients.map(c => {
-            const moraDebt = Number(c.monto_prestado || c.totalToPay || c.totalDebt || c.total_debt || c.monto_total || c.outstanding || (c.amount ? Math.round(c.amount * 1.2) : 0));
+            const moraDebt = Number(
+              c.totalToPay || 
+              c.totalDebt || 
+              c.total_debt || 
+              c.monto_total || 
+              c.moraDebt || 
+              (c.monto_prestado ? Math.round(Number(c.monto_prestado) * 1.2) : 0) || 
+              (c.amount ? Math.round(Number(c.amount) * 1.2) : 0) || 
+              c.outstanding || 
+              0
+            );
             const cedulaStr = String(c.cedula || c.cliente_id || c.client_id || '').trim();
             const rawName = String(c.name || c.nombre || '').trim();
             const isGeneric = !rawName || /^cliente\s+\d+$/i.test(rawName) || rawName.toLowerCase() === `cliente ${cedulaStr}`.toLowerCase() || rawName === cedulaStr;
@@ -1388,7 +1398,15 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.color = '#ef4444';
 
           const moraDebt = Math.round(Number(
-            client?.monto_prestado || client?.amount || client?.moraDebt || client?.outstanding || client?.totalToPay || client?.totalDebt || client?.total_debt || client?.monto_total || 0
+            client?.totalToPay || 
+            client?.totalDebt || 
+            client?.total_debt || 
+            client?.monto_total || 
+            client?.moraDebt || 
+            (client?.monto_prestado ? Math.round(Number(client.monto_prestado) * 1.2) : 0) || 
+            (client?.amount ? Math.round(Number(client.amount) * 1.2) : 0) || 
+            client?.outstanding || 
+            0
           ));
           const moraDebtFmt = moraDebt > 0 ? `$${moraDebt.toLocaleString('es-CO')}` : 'registrada en sistema';
 
@@ -1845,14 +1863,14 @@ const agentModule = {
       if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'block', 'important');
 
       const moraDebt = Math.round(Number(
-        client.monto_prestado || 
-        client.amount || 
-        client.moraDebt || 
-        client.outstanding || 
         client.totalToPay || 
         client.totalDebt || 
         client.total_debt || 
         client.monto_total || 
+        client.moraDebt || 
+        (client.monto_prestado ? Math.round(Number(client.monto_prestado) * 1.2) : 0) || 
+        (client.amount ? Math.round(Number(client.amount) * 1.2) : 0) || 
+        client.outstanding || 
         0
       ));
 
