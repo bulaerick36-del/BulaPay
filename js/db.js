@@ -2658,8 +2658,8 @@ const db = {
       let totalAbonosReales = 0;
       for (const p of payments) {
         const pStatus = String(p.status || '').toUpperCase();
-        const isMoraOrNegra = pStatus.includes('MORA') || pStatus.includes('NEGRA') || pStatus.includes('PERDIDA');
-        const isRealPayment = p.amount > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago' && !isMoraOrNegra;
+        const isCanceled = pStatus.includes('CANCEL') || pStatus.includes('RECHAZ') || pStatus === 'NO PAGO' || pStatus === 'PENDIENTE';
+        const isRealPayment = p.amount > 0 && !isCanceled;
 
         if (isRealPayment) {
           totalAbonosReales += Math.round(parseFloat(p.amount) || 0);

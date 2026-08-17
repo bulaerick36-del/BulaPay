@@ -1337,26 +1337,32 @@ const agentModule = {
       let isLossCarton = false;
       try {
         const { data: cartonesMorosos } = await supabase
+      let hasHistoricalLoss = false;
+      let hasCleanNewCredit = false;
+      let hasActiveCredit = false;
+
+      try {
+        const { data: userCartons } = await supabase
           .from('cartones')
           .select('*')
-          .eq('cliente_id', cedulaBuscada)
-          .eq('estado', 'liquidado_perdida');
+          .or(`cliente_id.eq.${cedulaBuscada},client_id.eq.${cedulaBuscada},cedula.eq.${cedulaBuscada}`);
+        
+        if (userCartons && userCartons.length > 0) {
+          userCartons.forEach(c => {
+            const st = String(c.estado || c.status || '').trim().toLowerCase();
+            const out = Number(c.outstanding || c.total_debt || 0);
 
-        if (cartonesMorosos && cartonesMorosos.length > 0) {
-          isLossCarton = true;
-        } else {
-          // Verificación secundaria por si acaso estado es 'liquidado_mora'
-          const { data: cartonesMora } = await supabase
-            .from('cartones')
-            .select('*')
-            .eq('cliente_id', cedulaBuscada)
-            .eq('estado', 'liquidado_mora');
-          if (cartonesMora && cartonesMora.length > 0) {
-            isLossCarton = true;
-          }
+            if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st === 'liquidado_pagado' || st.includes('perdida') || st.includes('mora') || st.includes('castigado')) {
+              hasHistoricalLoss = true;
+            } else if (st === 'activo' && out > 0) {
+              hasActiveCredit = true;
+            } else if ((st === 'pagado' || st === 'liquidado') && !st.includes('perdida') && !st.includes('mora') && st !== 'liquidado_pagado') {
+              hasCleanNewCredit = true;
+            }
+          });
         }
       } catch (eCartonErr) {
-        console.warn("Aviso al consultar cartonesMorosos:", eCartonErr);
+        console.warn("Aviso al consultar cartones del cliente en historial:", eCartonErr);
       }
 
       // 2. Consultar perfil del cliente en 'clients'
@@ -1368,7 +1374,7 @@ const agentModule = {
 
       const client = dbClient || (await window.BulaPayDB.getGlobalClientByCedula(cedulaBuscada));
       
-      if (!client && !isLossCarton) {
+      if (!client && !hasHistoricalLoss) {
         // Cliente NO existe: Ocultar resultados y mostrar error visual rojo
         this.historyResults.style.display = 'none';
         this.historyError.style.display = 'block';
@@ -1380,19 +1386,11 @@ const agentModule = {
       this.historyError.style.display = 'none';
       this.historyClientName.textContent = clientDisplayName;
 
-      // 3. SI TIENE CARTONES EN liquidado_perdida O RIESGO ROJO EN CLIENTS, FUERZA DE INMEDIATO RESULTADO VISUAL A ROJO (v138)
-      const rawStatusHist = String(client?.status || client?.estado || '').trim().toUpperCase();
-      const isBlacklisted = isLossCarton || 
-                            client?.risk === 'Rojo' || 
-                            String(client?.risk || '').trim().toLowerCase() === 'rojo' || 
-                            rawStatusHist.includes('NEGRA') || 
-                            rawStatusHist.includes('MORA') ||
-                            rawStatusHist.includes('PERDIDA');
-
-      if (isBlacklisted) {
+      // 3. REGLA DE RIESGO HISTÓRICO (v150): Si tiene antecedentes de mora/liquidación y no ha finalizado un crédito nuevo desde cero
+      if (hasHistoricalLoss && !hasCleanNewCredit) {
         if (client) client.risk = 'Rojo';
         this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo / Moroso)';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Cliente de Riesgo / Antecedentes de Mora Pasada)';
         
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
@@ -1400,13 +1398,12 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#ef4444';
-
-          this.historyActiveCreditsAlert.innerHTML = `🚫 ALERTA CRÍTICA: Este cliente cuenta con registros de liquidación por pérdida / Lista Negra (MOROSO). No es apto para nuevos créditos.`;
+          this.historyActiveCreditsAlert.innerHTML = `⚠️ ADVERTENCIA DE HISTORIAL: Este cliente cuenta con antecedentes de mora pasada (deuda liquidada/recuperada). Requiere evaluación estricta para el otorgamiento de nuevos préstamos.`;
         }
         return;
       }
 
-      // Si no tiene registros en liquidado_perdida, procede con el flujo normal de evaluación
+      // Flujo normal de evaluación para clientes sin antecedentes o con crédito nuevo limpio
       try {
         const payments = await window.BulaPayDB.getPaymentsByClient(cedulaBuscada);
         const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
@@ -1422,12 +1419,10 @@ const agentModule = {
       } catch (e) {
         console.error("Error al calcular riesgo dinámico en historial:", e);
       }
-
-      const hasOutstanding = Number(client?.outstanding || 0) > 0;
       
       if (client.risk === 'Rojo') {
         this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo / Moroso)';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo)';
       } else if (client.risk === 'Amarillo') {
         this.historyTrafficLight.className = 'traffic-light-header amarillo';
         this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
@@ -1436,7 +1431,8 @@ const agentModule = {
         this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
       }
 
-      if (hasOutstanding) {
+      // Solo mostrar alerta de crédito activo si REALMENTE tiene un cartón activo con saldo pendiente
+      if (hasActiveCredit) {
         let agentName = client?.agent_id || 'Desconocido';
         try {
           if (client?.agent_id) {
