@@ -1171,27 +1171,65 @@ const agentModule = {
             return;
           }
           
-          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v138: Formato visual de título)
+          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v142: Botón de rehabilitación directa)
           container.innerHTML = badClients.map(c => {
-            const moraDebt = Number(c.totalToPay || c.totalDebt || c.total_debt || c.monto_total || c.outstanding || (c.amount ? Math.round(c.amount * 1.2) : 0));
+            const moraDebt = Number(c.monto_prestado || c.totalToPay || c.totalDebt || c.total_debt || c.monto_total || c.outstanding || (c.amount ? Math.round(c.amount * 1.2) : 0));
             const cedulaStr = String(c.cedula || c.cliente_id || c.client_id || '').trim();
             const rawName = String(c.name || c.nombre || '').trim();
             const isGeneric = !rawName || /^cliente\s+\d+$/i.test(rawName) || rawName.toLowerCase() === `cliente ${cedulaStr}`.toLowerCase() || rawName === cedulaStr;
             const titleText = (!isGeneric && rawName) ? `${rawName} (${cedulaStr})` : (cedulaStr || rawName || 'Sin Cédula');
 
             return `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color); gap: 0.75rem;">
               <div>
                 <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${titleText}</h4>
                 <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">CC: ${cedulaStr} | ${c.city || ''} ${c.zone ? '(' + c.zone + ')' : ''}</p>
                 <span style="font-size: 0.72rem; color: #ef4444; font-weight: 600;">Estado: Liquidado por Mora (Lista Negra)</span>
               </div>
-              <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">
-                Deuda Total (Capital + Intereses): $${moraDebt.toLocaleString('es-CO')}
-              </span>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem;">
+                <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 700;">
+                  Deuda Total (Capital + Intereses): $${moraDebt.toLocaleString('es-CO')}
+                </span>
+                <button type="button" class="btn-rehabilitate-card" data-cedula="${cedulaStr}" data-debt="${moraDebt}" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3); cursor: pointer; transition: transform 0.1s;">
+                  💳 Recibir Pago y Rehabilitar
+                </button>
+              </div>
             </div>
             `;
           }).join('');
+
+          // Evento click para recibir pago y rehabilitar cliente desde la modal (v142)
+          const rehabButtons = container.querySelectorAll('.btn-rehabilitate-card');
+          rehabButtons.forEach(btn => {
+            btn.onclick = async (evt) => {
+              evt.stopPropagation();
+              const cedula = btn.dataset.cedula;
+              const debtVal = Number(btn.dataset.debt || 0);
+
+              const inputVal = prompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000");
+              if (!inputVal) return;
+
+              const amountToPay = Number(inputVal);
+              if (isNaN(amountToPay) || amountToPay <= 0) {
+                alert("⚠️ Por favor ingresa un monto válido mayor a 0.");
+                return;
+              }
+
+              btn.disabled = true;
+              btn.textContent = "⏳ Procesando...";
+
+              const success = await window.BulaPayDB.rehabilitateBlacklistedClient(cedula, amountToPay);
+              if (success) {
+                // Recargar automáticamente la modal de Lista Negra (v142)
+                if (btnBlacklist) btnBlacklist.click();
+                await agentModule.renderFinancialDashboard();
+                await agentModule.updateRouteTracking();
+              } else {
+                btn.disabled = false;
+                btn.textContent = "💳 Recibir Pago y Rehabilitar";
+              }
+            };
+          });
           
         } catch (e) {
           console.error("Error al cargar Lista Negra:", e);

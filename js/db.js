@@ -2531,7 +2531,7 @@ const db = {
       await this.loadActiveCredits();
 
       // 6. Notificación obligatoria de éxito
-      alert("¡Pago exitoso! El cliente ha sido rehabilitado y la caja actualizada.");
+      alert("¡Pago exitoso! Caja actualizada y cliente rehabilitado.");
 
       return true;
     } catch (e) {
