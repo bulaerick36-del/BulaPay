@@ -2569,31 +2569,10 @@ const db = {
       const { error: payErr } = await supabase.from('payments').insert([paymentRecord]);
       if (payErr) console.error("Error al registrar pago en payments:", payErr);
 
-      // PASO 2 (CRÍTICO v152): Inserción explícita e incondicional en caja_movimientos en Supabase
-      const cashMov = {
-        id: `mov_rehab_${Date.now()}_${Math.floor(Math.random()*1000)}`,
-        date: todayClean,
-        type: 'ingreso',
-        tipo: 'recuperacion_cartera',
-        amount: payAmt,
-        concept: `Pago recuperación Lista Negra - C.C. ${cedStr}`,
-        description: `Ingreso a caja por pago y rehabilitación de cliente moroso C.C. ${cedStr}`,
-        agent_id: agentId,
-        routeId: routeId,
-        route_id: routeId,
-        created_at: todayIso
-      };
-
-      const { error: movErr } = await supabase.from('caja_movimientos').insert([cashMov]);
-      if (movErr) {
-        console.warn("Aviso al insertar directo en caja_movimientos, reintentando via saveCashMovement:", movErr);
-        await this.saveCashMovement(cashMov);
-      }
-
       await this.loadActiveCredits();
 
-      // PASO 3: Muestra mensaje de éxito de rehabilitación
-      alert("¡Pago exitoso! Caja actualizada y cliente rehabilitado.");
+      // PASO 3 (v153): Mensaje de éxito de rehabilitación indicando inyección voluntaria a caja
+      alert("¡Pago exitoso! Cliente rehabilitado. Lo invitamos a inyectar ese valor a la caja si lo desea.");
       return true;
     } catch (e) {
       console.error("Error al rehabilitar cliente de Lista Negra:", e);
