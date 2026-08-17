@@ -2133,7 +2133,8 @@ const db = {
       console.log(`✅ [v119 AUDIT] Totales recalculados -> Cartera en Calle: $${carteraEnCalle}, Intereses Activos: $${interesesActivos}`);
       
       if (!cartonesActivos || cartonesActivos.length === 0) {
-        // Fallback en caso de que la tabla cartones no tenga registros aún
+        // Fallback en caso de que la tabla cartones no tenga registros aún (v151: definir rawClients)
+        const rawClients = (await this.getClients()) || [];
         rawClients.forEach(c => {
           const belongsToUser = assignedRouteId ? (c.routeId === assignedRouteId) : true;
           if (belongsToUser) {
@@ -2772,9 +2773,9 @@ const db = {
                 (agentNameLower && pAgentNameLower === agentNameLower) ||
                 (supId && p.supervisor_id === supId)
               );
-         const isRealPayment = p.status !== 'Pendiente' && p.status !== 'No Pago';
-
+         const isRealPayment = Number(p.amount) > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago';
          const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
+         const isRehabPayment = p.payment_type === 'Rehabilitacion_Lista_Negra' || (p.id && String(p.id).startsWith('pay_rehab_'));
          const isBlacklistedClient = blacklistedCedulas.has(pCedula);
 
          const pStatusUpper = String(p.status || '').toUpperCase();
@@ -2783,7 +2784,9 @@ const db = {
                                pStatusUpper.includes('NEGRA') ||
                                (p.id && String(p.id).startsWith('pay_liq_') && isBlacklistedClient);
 
-         return isToday && isMine && isRealPayment && !isBlacklistedClient && !isMoraPayment;
+         if (isRehabPayment && isToday && isMine && isRealPayment) return true;
+
+         return isToday && isMine && isRealPayment && (!isBlacklistedClient || isRehabPayment) && !isMoraPayment;
       });
       
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
