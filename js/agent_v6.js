@@ -1333,10 +1333,7 @@ const agentModule = {
       const cedulaBuscada = String(cedula || '').trim();
       const supabase = await window.BulaPayDB.initSupabase();
 
-      // 1. CONSULTA ASÍNCRONA DIRECTA A SUPABASE (v138)
-      let isLossCarton = false;
-      try {
-        const { data: cartonesMorosos } = await supabase
+      // 1. CONSULTA ASÍNCRONA DIRECTA A SUPABASE (v151)
       let hasHistoricalLoss = false;
       let hasCleanNewCredit = false;
       let hasActiveCredit = false;
