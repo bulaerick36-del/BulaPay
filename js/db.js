@@ -2473,10 +2473,9 @@ const db = {
         return false;
       }
 
-      // PASO 1 (CRÍTICO v149): Actualizar estado en Supabase PRIMERO con validación estricta de error
+      // PASO 1 (CRÍTICO v150): Actualizar estado en Supabase PRIMERO con esquema válido (solo campo estado)
       const cartonUpdatePayload = {
         estado: 'liquidado_pagado',
-        status: 'Liquidado_Pagado',
         outstanding: 0,
         total_debt: 0
       };
@@ -2521,7 +2520,6 @@ const db = {
       // D) Actualizar cliente en tabla 'clients'
       const clientUpdatePayload = {
         risk: 'Verde',
-        status: 'Liquidado_Pagado',
         estado: 'liquidado_pagado',
         outstanding: 0
       };
