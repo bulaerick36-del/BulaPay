@@ -1333,22 +1333,27 @@ const agentModule = {
       const cedulaBuscada = String(cedula || '').trim();
       const supabase = await window.BulaPayDB.initSupabase();
 
-      // 1. CONSULTA ASÍNCRONA DIRECTA A SUPABASE (v151)
+      // 1. CONSULTA DIRECTA A SUPABASE DE CARTONES DEL CLIENTE (v152)
       let hasHistoricalLoss = false;
       let hasCleanNewCredit = false;
       let hasActiveCredit = false;
 
       try {
-        const { data: userCartons } = await supabase
-          .from('cartones')
-          .select('*')
-          .or(`cliente_id.eq.${cedulaBuscada},client_id.eq.${cedulaBuscada},cedula.eq.${cedulaBuscada}`);
+        let userCartons = [];
+        const { data: c1 } = await supabase.from('cartones').select('*').eq('cliente_id', cedulaBuscada);
+        if (c1 && c1.length > 0) {
+          userCartons = c1;
+        } else {
+          const { data: c2 } = await supabase.from('cartones').select('*').eq('cedula', cedulaBuscada);
+          if (c2 && c2.length > 0) userCartons = c2;
+        }
         
         if (userCartons && userCartons.length > 0) {
           userCartons.forEach(c => {
             const st = String(c.estado || c.status || '').trim().toLowerCase();
             const out = Number(c.outstanding || c.total_debt || 0);
 
+            // Si el cliente tiene algún cartón previo en liquidado_perdida, liquidado_mora, o liquidado_pagado
             if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st === 'liquidado_pagado' || st.includes('perdida') || st.includes('mora') || st.includes('castigado')) {
               hasHistoricalLoss = true;
             } else if (st === 'activo' && out > 0) {
@@ -1383,11 +1388,13 @@ const agentModule = {
       this.historyError.style.display = 'none';
       this.historyClientName.textContent = clientDisplayName;
 
-      // 3. REGLA DE RIESGO HISTÓRICO (v150): Si tiene antecedentes de mora/liquidación y no ha finalizado un crédito nuevo desde cero
+      // 3. REGLA PARCHE DEFINITIVO RIESGO EN ROJO (v152):
+      // Si tiene antecedentes de haber estado en liquidado_perdida o liquidado_pagado (recuperado), NO confiar ciegamente en risk='Verde'.
+      // Forzar a ROJO salvo que tenga un crédito NUEVO abierto desde cero y pagado limpio.
       if (hasHistoricalLoss && !hasCleanNewCredit) {
         if (client) client.risk = 'Rojo';
         this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Cliente de Riesgo / Antecedentes de Mora Pasada)';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Cliente de Riesgo / Antecedentes de Mora)';
         
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
@@ -1395,7 +1402,7 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#ef4444';
-          this.historyActiveCreditsAlert.innerHTML = `⚠️ ADVERTENCIA DE HISTORIAL: Este cliente cuenta con antecedentes de mora pasada (deuda liquidada/recuperada). Requiere evaluación estricta para el otorgamiento de nuevos préstamos.`;
+          this.historyActiveCreditsAlert.innerHTML = `⚠️ ADVERTENCIA DE HISTORIAL: Este cliente cuenta con antecedentes de crédito en pérdida/mora pasada. Requiere evaluación estricta antes de autorizar un nuevo crédito.`;
         }
         return;
       }
