@@ -1251,7 +1251,6 @@ const agentModule = {
 
       btnBlacklist.onclick = loadAndRenderBlacklist;
     }
-    }
   },
 
   switchTab(tab) {
