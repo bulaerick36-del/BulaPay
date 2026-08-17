@@ -758,14 +758,38 @@ const db = {
       } else {
         const rawSt = String(client.status || client.estado || '').toUpperCase();
         const isLoss = rawSt.includes('PERDIDA') || rawSt.includes('MORA') || rawSt.includes('NEGRA') || client.risk === 'Rojo';
+        let moraDebt = Number(client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || 0);
+
+        if (isLoss) {
+          try {
+            const { data: lostCartons } = await supabase
+              .from('cartones')
+              .select('*')
+              .eq('cliente_id', String(client.cedula))
+              .in('estado', ['liquidado_perdida', 'liquidado_mora']);
+            if (lostCartons && lostCartons.length > 0) {
+              const lc = lostCartons[0];
+              const cDebt = Number(lc.total_debt || lc.totalDebt || lc.monto_total || (lc.monto_prestado ? Math.round(lc.monto_prestado * 1.2) : 0));
+              if (cDebt > 0) moraDebt = cDebt;
+            }
+          } catch (eLC) {
+            console.warn("Aviso al consultar cartones perdidos en getClientByCedula:", eLC);
+          }
+
+          if (moraDebt <= 0 && client.amount) {
+            moraDebt = Math.round(Number(client.amount) * 1.2);
+          }
+        }
+
         return {
           ...client,
           cedula: client.cedula,
           name: client.name || client.nombre || `Cliente ${client.cedula}`,
-          outstanding: 0,
-          totalDebt: 0,
-          amount: 0,
-          monto_prestado: 0,
+          outstanding: isLoss ? moraDebt : 0,
+          moraDebt: moraDebt,
+          totalDebt: isLoss ? moraDebt : 0,
+          totalToPay: isLoss ? moraDebt : 0,
+          amount: Number(client.amount || 0),
           installmentsCount: 1,
           installmentAmount: 0,
           status: isLoss ? 'liquidado_perdida' : (client.status || client.estado || 'Sin deuda activa'),
@@ -2409,6 +2433,93 @@ const db = {
     } catch (e) {
       console.error("Error al obtener lista negra:", e);
       return [];
+    }
+  },
+
+  async rehabilitateBlacklistedClient(cedula, amount) {
+    try {
+      const supabase = await initSupabase();
+      const currentUser = this.getCurrentUser();
+      const cedStr = String(cedula).trim();
+      const payAmt = Math.round(Number(amount) || 0);
+
+      if (!cedStr || payAmt <= 0) {
+        alert("⚠️ Por favor ingresa un monto válido a recibir.");
+        return false;
+      }
+
+      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+      const routeId = currentUser ? currentUser.routeId : null;
+      const supId = await this.getSupervisorIdForUser(currentUser);
+      const now = new Date();
+      const todayIso = now.toISOString();
+      const todayClean = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      // 1. Insertar pago en 'payments' (con status 'Pagado' para que sume a caja y recaudo)
+      const paymentRecord = {
+        id: `pay_rehab_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+        clientCedula: cedStr,
+        client_cedula: cedStr,
+        amount: payAmt,
+        date: todayClean,
+        created_at: todayIso,
+        status: 'Pagado',
+        payment_type: 'Rehabilitacion_Lista_Negra',
+        concept: 'Pago de Deuda Lista Negra',
+        agent_id: agentId,
+        agentUsername: currentUser ? currentUser.username : null,
+        agentName: currentUser ? currentUser.name : null,
+        routeId: routeId,
+        supervisor_id: supId
+      };
+
+      const { error: payErr } = await supabase.from('payments').insert([paymentRecord]);
+      if (payErr) console.error("Error al registrar pago en payments:", payErr);
+
+      // 2. Registrar movimiento de caja en 'caja_movimientos'
+      const cashMov = {
+        id: `mov_rehab_${Date.now()}`,
+        date: todayClean,
+        type: 'ingreso',
+        amount: payAmt,
+        concept: `Pago recuperación Lista Negra - C.C. ${cedStr}`,
+        description: `Ingreso a caja por pago y rehabilitación de cliente moroso C.C. ${cedStr}`,
+        agent_id: agentId,
+        routeId: routeId,
+        created_at: todayIso
+      };
+      await this.saveCashMovement(cashMov);
+
+      // 3. Actualizar la tabla 'cartones' para sacar del estado de mora/perdida
+      const cartonUpdatePayload = {
+        estado: 'liquidado',
+        status: 'Liquidado_Pagado',
+        outstanding: 0,
+        total_debt: 0
+      };
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
+      await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr);
+
+      // 4. Actualizar la tabla 'clients'
+      const clientUpdatePayload = {
+        risk: 'Verde',
+        status: 'Liquidado_Pagado',
+        estado: 'Liquidado_Pagado',
+        outstanding: 0
+      };
+      await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedStr);
+
+      // 5. Cargar créditos activos y sincronizar
+      await this.loadActiveCredits();
+
+      // 6. Notificación obligatoria de éxito
+      alert("¡Pago exitoso! El cliente ha sido retirado de la Lista Negra y la caja ha sido actualizada.");
+
+      return true;
+    } catch (e) {
+      console.error("Error al rehabilitar cliente de Lista Negra:", e);
+      alert("❌ Ocurrió un error al procesar el pago de rehabilitación: " + e.message);
+      return false;
     }
   },
 

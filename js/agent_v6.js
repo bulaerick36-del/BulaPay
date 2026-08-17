@@ -1348,7 +1348,43 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#ef4444';
-          this.historyActiveCreditsAlert.innerHTML = `🚫 ALERTA CRÍTICA: Este cliente cuenta con registros de liquidación por pérdida / Lista Negra (MOROSO). No es apto para nuevos créditos.`;
+
+          const moraDebt = Math.round(Number(
+            client?.moraDebt || client?.outstanding || client?.totalToPay || client?.totalDebt || client?.total_debt || client?.monto_total || (client?.amount ? Math.round(client.amount * 1.2) : 0) || 0
+          ));
+          const moraDebtFmt = moraDebt > 0 ? `$${moraDebt.toLocaleString('es-CO')}` : 'registrada en sistema';
+
+          this.historyActiveCreditsAlert.innerHTML = `
+            <div style="width: 100%; text-align: center; padding: 0.5rem 0;">
+              <p style="margin: 0 0 0.5rem 0; font-weight: 800; font-size: 0.95rem;">🚫 ALERTA CRÍTICA: Cliente en Lista Negra (Liquidado por Mora)</p>
+              <p style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Deuda Pendiente a Recuperar: <span style="color: #ef4444;">${moraDebtFmt}</span></p>
+              <button id="btn-rehabilitate-history" class="btn" style="padding: 0.75rem 1.2rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);">
+                💳 Pagar Deuda y Sacar de Lista Negra
+              </button>
+            </div>
+          `;
+
+          setTimeout(() => {
+            const btnRehabHist = document.getElementById('btn-rehabilitate-history');
+            if (btnRehabHist) {
+              btnRehabHist.onclick = async () => {
+                const targetDebt = moraDebt > 0 ? moraDebt : Number(prompt("Ingresa el monto a recibir para rehabilitar el cliente:", "120000"));
+                if (targetDebt && targetDebt > 0) {
+                  btnRehabHist.disabled = true;
+                  btnRehabHist.textContent = "⏳ Procesando pago...";
+                  const ok = await window.BulaPayDB.rehabilitateBlacklistedClient(cedulaBuscada, targetDebt);
+                  if (ok) {
+                    await agentModule.searchClientHistory(cedulaBuscada);
+                    await agentModule.renderFinancialDashboard();
+                    await agentModule.updateRouteTracking();
+                  } else {
+                    btnRehabHist.disabled = false;
+                    btnRehabHist.textContent = "💳 Pagar Deuda y Sacar de Lista Negra";
+                  }
+                }
+              };
+            }
+          }, 50);
         }
         return;
       }
@@ -1769,6 +1805,54 @@ const agentModule = {
       if (cobroFormFields) cobroFormFields.style.setProperty('display', 'none', 'important');
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
       if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'block', 'important');
+
+      const moraDebt = Math.round(Number(
+        client.moraDebt || 
+        client.outstanding || 
+        client.totalToPay || 
+        client.totalDebt || 
+        client.total_debt || 
+        client.monto_total || 
+        (client.amount ? Math.round(client.amount * 1.2) : 0) ||
+        (client.monto_prestado ? Math.round(client.monto_prestado * 1.2) : 0) ||
+        0
+      ));
+
+      if (this.cobroClientOutstanding) {
+        this.cobroClientOutstanding.textContent = `$${moraDebt.toLocaleString('es-CO')}`;
+      }
+
+      const debtInfoEl = document.getElementById('cobro-blacklist-debt-info');
+      if (debtInfoEl) {
+        debtInfoEl.textContent = `Deuda Total a Recuperar: $${moraDebt.toLocaleString('es-CO')}`;
+      }
+
+      const inputPayAmount = document.getElementById('input-blacklist-pay-amount');
+      if (inputPayAmount && (!inputPayAmount.value || Number(inputPayAmount.value) === 0)) {
+        inputPayAmount.value = moraDebt;
+      }
+
+      const btnPayRehab = document.getElementById('btn-pay-and-rehabilitate');
+      if (btnPayRehab) {
+        btnPayRehab.onclick = async () => {
+          const targetAmount = Number(inputPayAmount ? inputPayAmount.value : moraDebt);
+          if (!targetAmount || targetAmount <= 0) {
+            alert("⚠️ Por favor ingresa un monto válido a recibir.");
+            return;
+          }
+          btnPayRehab.disabled = true;
+          btnPayRehab.textContent = "⏳ Procesando pago...";
+          const success = await window.BulaPayDB.rehabilitateBlacklistedClient(client.cedula, targetAmount);
+          if (success) {
+            await agentModule.searchClient();
+            await agentModule.renderFinancialDashboard();
+            await agentModule.updateRouteTracking();
+          } else {
+            btnPayRehab.disabled = false;
+            btnPayRehab.textContent = "💳 Pagar Deuda y Sacar de Lista Negra";
+          }
+        };
+      }
 
       if (this.btnLiquidarCarton) {
         this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
