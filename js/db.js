@@ -2515,10 +2515,10 @@ const db = {
       };
       await this.saveCashMovement(cashMov);
 
-      // 3. Actualizar la tabla 'cartones' en Supabase (liquidado_perdida -> pagado_rehabilitado v146)
+      // 3. Actualizar la tabla 'cartones' en Supabase (liquidado_perdida -> liquidado_pagado v148)
       const cartonUpdatePayload = {
-        estado: 'pagado_rehabilitado',
-        status: 'pagado_rehabilitado',
+        estado: 'liquidado_pagado',
+        status: 'Liquidado_Pagado',
         outstanding: 0,
         total_debt: 0
       };
@@ -2539,11 +2539,11 @@ const db = {
       try { await supabase.from('historial_creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
       try { await supabase.from('creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
 
-      // 4. Actualizar la tabla 'clients' en Supabase
+      // 4. Actualizar la tabla 'clients' en Supabase (v148)
       const clientUpdatePayload = {
         risk: 'Verde',
-        status: 'pagado_rehabilitado',
-        estado: 'pagado_rehabilitado',
+        status: 'Liquidado_Pagado',
+        estado: 'liquidado_pagado',
         outstanding: 0
       };
       try { await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedStr); } catch(e){}
