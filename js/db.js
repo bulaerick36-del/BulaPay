@@ -2461,7 +2461,7 @@ const db = {
     }
   },
 
-  async rehabilitateBlacklistedClient(cedula, amount) {
+  async rehabilitateBlacklistedClient(cedula, amount, cartonId = null) {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
@@ -2515,13 +2515,16 @@ const db = {
       };
       await this.saveCashMovement(cashMov);
 
-      // 3. Actualizar la tabla 'cartones' para sacar del estado de mora/perdida
+      // 3. Actualizar la tabla 'cartones' (liquidado_perdida -> liquidado_pagado v145)
       const cartonUpdatePayload = {
-        estado: 'liquidado',
+        estado: 'liquidado_pagado',
         status: 'Liquidado_Pagado',
         outstanding: 0,
         total_debt: 0
       };
+      if (cartonId) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+      }
       await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
       await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr);
 

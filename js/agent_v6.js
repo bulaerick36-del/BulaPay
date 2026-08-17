@@ -1156,7 +1156,7 @@ const agentModule = {
     
     // Modal de Lista Negra (Regla 4)
     if (btnBlacklist && blacklistModal) {
-      btnBlacklist.onclick = async () => {
+      const loadAndRenderBlacklist = async () => {
         blacklistModal.style.display = 'flex';
         const container = document.getElementById('private-blacklist-container');
         container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Cargando morosos...</p>';
@@ -1171,7 +1171,7 @@ const agentModule = {
             return;
           }
           
-          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v143: Monto por defecto Deuda Total completa)
+          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v145: Cierre de ciclo y actualización en vivo)
           container.innerHTML = badClients.map(c => {
             const moraDebt = Number(
               c.totalToPay || 
@@ -1188,6 +1188,7 @@ const agentModule = {
             const rawName = String(c.name || c.nombre || '').trim();
             const isGeneric = !rawName || /^cliente\s+\d+$/i.test(rawName) || rawName.toLowerCase() === `cliente ${cedulaStr}`.toLowerCase() || rawName === cedulaStr;
             const titleText = (!isGeneric && rawName) ? `${rawName} (${cedulaStr})` : (cedulaStr || rawName || 'Sin Cédula');
+            const cartonId = c.id || c.carton_id || '';
 
             return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color); gap: 0.75rem;">
@@ -1200,7 +1201,7 @@ const agentModule = {
                 <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 700;">
                   Deuda Total (Capital + Intereses): $${moraDebt.toLocaleString('es-CO')}
                 </span>
-                <button type="button" class="btn-rehabilitate-card" data-cedula="${cedulaStr}" data-debt="${moraDebt}" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3); cursor: pointer; transition: transform 0.1s;">
+                <button type="button" class="btn-rehabilitate-card" data-cedula="${cedulaStr}" data-debt="${moraDebt}" data-carton-id="${cartonId}" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3); cursor: pointer; transition: transform 0.1s;">
                   💳 Recibir Pago y Rehabilitar
                 </button>
               </div>
@@ -1208,13 +1209,14 @@ const agentModule = {
             `;
           }).join('');
 
-          // Evento click para recibir pago y rehabilitar cliente desde la modal (v142)
+          // Evento click para recibir pago y rehabilitar cliente desde la modal (v145)
           const rehabButtons = container.querySelectorAll('.btn-rehabilitate-card');
           rehabButtons.forEach(btn => {
             btn.onclick = async (evt) => {
               evt.stopPropagation();
               const cedula = btn.dataset.cedula;
               const debtVal = Number(btn.dataset.debt || 0);
+              const cartonId = btn.dataset.cartonId;
 
               const inputVal = prompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000");
               if (!inputVal) return;
@@ -1228,10 +1230,10 @@ const agentModule = {
               btn.disabled = true;
               btn.textContent = "⏳ Procesando...";
 
-              const success = await window.BulaPayDB.rehabilitateBlacklistedClient(cedula, amountToPay);
+              const success = await window.BulaPayDB.rehabilitateBlacklistedClient(cedula, amountToPay, cartonId);
               if (success) {
-                // Recargar automáticamente la modal de Lista Negra (v142)
-                if (btnBlacklist) btnBlacklist.click();
+                // Recargar automáticamente la modal de Lista Negra (v145)
+                await loadAndRenderBlacklist();
                 await agentModule.renderFinancialDashboard();
                 await agentModule.updateRouteTracking();
               } else {
@@ -1246,6 +1248,9 @@ const agentModule = {
           container.innerHTML = '<p style="text-align: center; color: var(--color-rojo);">Error al cargar Lista Negra.</p>';
         }
       };
+
+      btnBlacklist.onclick = loadAndRenderBlacklist;
+    }
     }
   },
 
@@ -1397,50 +1402,7 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#ef4444';
 
-          const moraDebt = Math.round(Number(
-            client?.totalToPay || 
-            client?.totalDebt || 
-            client?.total_debt || 
-            client?.monto_total || 
-            client?.moraDebt || 
-            (client?.monto_prestado ? Math.round(Number(client.monto_prestado) * 1.2) : 0) || 
-            (client?.amount ? Math.round(Number(client.amount) * 1.2) : 0) || 
-            client?.outstanding || 
-            0
-          ));
-          const moraDebtFmt = moraDebt > 0 ? `$${moraDebt.toLocaleString('es-CO')}` : 'registrada en sistema';
-
-          this.historyActiveCreditsAlert.innerHTML = `
-            <div style="width: 100%; text-align: center; padding: 0.5rem 0;">
-              <p style="margin: 0 0 0.5rem 0; font-weight: 800; font-size: 0.95rem;">🚫 ALERTA CRÍTICA: Cliente en Lista Negra (Liquidado por Mora)</p>
-              <p style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Saldo Pendiente de Recuperación: <span style="color: #ef4444;">${moraDebtFmt}</span></p>
-              <button id="btn-rehabilitate-history" class="btn" style="padding: 0.75rem 1.2rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);">
-                💳 Pagar Deuda y Rehabilitar Cliente
-              </button>
-            </div>
-          `;
-
-          setTimeout(() => {
-            const btnRehabHist = document.getElementById('btn-rehabilitate-history');
-            if (btnRehabHist) {
-              btnRehabHist.onclick = async () => {
-                const targetDebt = moraDebt > 0 ? moraDebt : Number(prompt("Ingresa el monto a recibir para rehabilitar el cliente:", "120000"));
-                if (targetDebt && targetDebt > 0) {
-                  btnRehabHist.disabled = true;
-                  btnRehabHist.textContent = "⏳ Procesando pago...";
-                  const ok = await window.BulaPayDB.rehabilitateBlacklistedClient(cedulaBuscada, targetDebt);
-                  if (ok) {
-                    await agentModule.searchClientHistory(cedulaBuscada);
-                    await agentModule.renderFinancialDashboard();
-                    await agentModule.updateRouteTracking();
-                  } else {
-                    btnRehabHist.disabled = false;
-                    btnRehabHist.textContent = "💳 Pagar Deuda y Rehabilitar Cliente";
-                  }
-                }
-              };
-            }
-          }, 50);
+          this.historyActiveCreditsAlert.innerHTML = `🚫 ALERTA CRÍTICA: Este cliente cuenta con registros de liquidación por pérdida / Lista Negra (MOROSO). No es apto para nuevos créditos.`;
         }
         return;
       }
