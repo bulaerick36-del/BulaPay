@@ -1171,14 +1171,19 @@ const agentModule = {
             return;
           }
           
-          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados)
+          // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v138: Formato visual de título)
           container.innerHTML = badClients.map(c => {
             const moraDebt = Number(c.totalToPay || c.totalDebt || c.total_debt || c.monto_total || c.outstanding || (c.amount ? Math.round(c.amount * 1.2) : 0));
+            const cedulaStr = String(c.cedula || c.cliente_id || c.client_id || '').trim();
+            const rawName = String(c.name || c.nombre || '').trim();
+            const isGeneric = !rawName || /^cliente\s+\d+$/i.test(rawName) || rawName.toLowerCase() === `cliente ${cedulaStr}`.toLowerCase() || rawName === cedulaStr;
+            const titleText = (!isGeneric && rawName) ? `${rawName} (${cedulaStr})` : (cedulaStr || rawName || 'Sin Cédula');
+
             return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border-color);">
               <div>
-                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${c.name}</h4>
-                <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">CC: ${c.cedula} | ${c.city || ''} ${c.zone ? '(' + c.zone + ')' : ''}</p>
+                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">${titleText}</h4>
+                <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">CC: ${cedulaStr} | ${c.city || ''} ${c.zone ? '(' + c.zone + ')' : ''}</p>
                 <span style="font-size: 0.72rem; color: #ef4444; font-weight: 600;">Estado: Liquidado por Mora (Lista Negra)</span>
               </div>
               <span style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-rojo); padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">

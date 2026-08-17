@@ -2340,6 +2340,13 @@ const db = {
         console.error("Error al obtener cartones para lista negra:", cartonesErr);
       }
 
+      const allClientsByCedula = new Map();
+      if (clientsData) {
+        clientsData.forEach(c => {
+          if (c.cedula) allClientsByCedula.set(String(c.cedula).trim(), c);
+        });
+      }
+
       const blacklistedMap = new Map();
 
       if (clientsData) {
@@ -2351,7 +2358,7 @@ const db = {
             blacklistedMap.set(ced, {
               ...c,
               cedula: ced,
-              name: c.name || `Cliente ${ced}`,
+              name: c.name || c.nombre || null,
               status: 'Liquidado_Mora',
               outstanding: totalDebtConInteres > 0 ? totalDebtConInteres : Number(c.amount || 0)
             });
@@ -2365,6 +2372,7 @@ const db = {
           if (rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora')) {
             const ced = String(carton.cliente_id || carton.client_id || '').trim();
             if (ced) {
+              const clientFromDb = allClientsByCedula.get(ced) || {};
               const joinedClient = carton.clients || {};
               const existing = blacklistedMap.get(ced);
               const totalDebtConInteres = Number(
@@ -2378,14 +2386,16 @@ const db = {
                 (carton.monto_prestado ? Math.round(carton.monto_prestado * 1.2) : 0) ||
                 (joinedClient.amount ? Math.round(joinedClient.amount * 1.2) : 0)
               );
+              const foundName = clientFromDb.name || clientFromDb.nombre || joinedClient.name || carton.nombre_cliente || (existing ? existing.name : null);
               blacklistedMap.set(ced, {
+                ...clientFromDb,
                 ...joinedClient,
                 ...carton,
                 cedula: ced,
-                name: joinedClient.name || carton.nombre_cliente || (existing ? existing.name : `Cliente ${ced}`),
-                phone: joinedClient.phone || (existing ? existing.phone : ''),
-                city: joinedClient.city || (existing ? existing.city : ''),
-                zone: joinedClient.zone || (existing ? existing.zone : ''),
+                name: foundName,
+                phone: clientFromDb.phone || joinedClient.phone || (existing ? existing.phone : ''),
+                city: clientFromDb.city || joinedClient.city || (existing ? existing.city : ''),
+                zone: clientFromDb.zone || joinedClient.zone || (existing ? existing.zone : ''),
                 risk: 'Rojo',
                 status: 'liquidado_perdida',
                 outstanding: totalDebtConInteres > 0 ? totalDebtConInteres : Number(existing ? existing.outstanding : 0)
