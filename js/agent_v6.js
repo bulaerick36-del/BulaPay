@@ -1232,10 +1232,10 @@ const agentModule = {
 
               const success = await window.BulaPayDB.rehabilitateBlacklistedClient(cedula, amountToPay, cartonId);
               if (success) {
-                // Recargar automáticamente la modal de Lista Negra (v145)
-                await loadAndRenderBlacklist();
-                await agentModule.renderFinancialDashboard();
-                await agentModule.updateRouteTracking();
+                // Refrescar la interfaz completamente (v146)
+                setTimeout(() => {
+                  window.location.reload();
+                }, 300);
               } else {
                 btn.disabled = false;
                 btn.textContent = "💳 Recibir Pago y Rehabilitar";
