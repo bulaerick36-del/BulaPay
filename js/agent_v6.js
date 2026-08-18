@@ -1812,10 +1812,10 @@ const agentModule = {
     const cobroFormFields = document.getElementById('cobro-form-fields');
     const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');
     const cobroBlacklistBanner = document.getElementById('cobro-blacklist-banner');
-    const cobroRenewalWrapper = document.getElementById('cobro-renewal-wrapper');
+    const cobroActionButtonsWrapper = document.getElementById('cobro-action-buttons-wrapper');
 
-    if (cobroRenewalWrapper) {
-      cobroRenewalWrapper.style.setProperty('display', 'block', 'important');
+    if (cobroActionButtonsWrapper) {
+      cobroActionButtonsWrapper.style.setProperty('display', 'flex', 'important');
     }
 
     // RENDERIZADO CONDICIONAL DE MÁXIMA PRIORIDAD: Cliente en Lista Negra (risk === 'Rojo')
@@ -2060,8 +2060,22 @@ const agentModule = {
         btnRenovar.style.cursor = 'pointer';
         btnRenovar.title = 'Liquidar cartón actual para solicitar renovación';
       } else {
-        btnRenovar.style.display = 'none'; // Estrictamente oculto por defecto y en cartones nuevos (v163)
+        btnRenovar.style.display = 'none';
         btnRenovar.disabled = true;
+      }
+    }
+
+    if (btnLiquidarMora) {
+      if (canLiquidarMora) {
+        btnLiquidarMora.style.removeProperty('display');
+        btnLiquidarMora.style.display = 'block';
+        btnLiquidarMora.disabled = false;
+        btnLiquidarMora.style.opacity = '1';
+        btnLiquidarMora.style.cursor = 'pointer';
+        btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
+      } else {
+        btnLiquidarMora.style.display = 'none';
+        btnLiquidarMora.disabled = true;
       }
     }
   },
