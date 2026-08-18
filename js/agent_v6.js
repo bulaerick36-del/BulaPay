@@ -976,13 +976,20 @@ const agentModule = {
       if (movementAmount) movementAmount.value = '';
 
       try {
-        const { totalCollected, totalLent, totalDiscounts, onHand, massPaymentsTotal } = await window.BulaPayDB.getEfectivoEnCajaDia();
+        const data = await window.BulaPayDB.getEfectivoEnCajaDia() || {};
+        const totalCollected = Number(data.totalCollected) || 0;
+        const totalLent = Number(data.totalLent) || 0;
+        const totalDiscounts = Number(data.totalDiscounts) || 0;
+        const onHand = Number(data.onHand) || 0;
+        const massPaymentsTotal = Number(data.massPaymentsTotal) || 0;
+        const totalIn = Number(data.totalIn) || 0;
+        const totalOut = Number(data.totalOut) || 0;
         
         if (elCollected) elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
         
         const elMass = document.getElementById('private-cash-mass-payments');
         if (elMass) {
-          if (massPaymentsTotal && massPaymentsTotal > 0) {
+          if (massPaymentsTotal > 0) {
             elMass.textContent = `$${Math.abs(massPaymentsTotal).toLocaleString('es-CO')}`;
             elMass.style.color = 'var(--color-verde, #10b981)';
           } else {
@@ -1021,8 +1028,17 @@ const agentModule = {
           }
         }
       } catch (e) {
-        console.error(e);
-        if (elCollected) elCollected.textContent = 'Error';
+        console.error("Error al cargar métricas de caja en el modal:", e);
+        if (elCollected) elCollected.textContent = '$0';
+        if (elLent) elLent.textContent = '$0';
+        if (elDiscounts) elDiscounts.textContent = '$0';
+        if (elOnHand) elOnHand.textContent = '$0';
+        const elMass = document.getElementById('private-cash-mass-payments');
+        if (elMass) elMass.textContent = '$0';
+        const elInMovements = document.getElementById('private-cash-in-movements');
+        if (elInMovements) elInMovements.textContent = '$0';
+        const elOutMovements = document.getElementById('private-cash-out-movements');
+        if (elOutMovements) elOutMovements.textContent = '$0';
       }
 
       if (type) {

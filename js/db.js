@@ -2834,7 +2834,7 @@ const db = {
       });
       
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
-      const massPaymentsTotal = Math.round(todaysPayments.reduce((acc, p) => (p.is_mass_payment || (p.status && p.status.includes('Masivo'))) ? acc + Math.round(Number(p.amount) || 0) : acc, 0));
+      const massPaymentsTotal = Math.round(todaysPayments.reduce((acc, p) => (p.is_mass_payment || String(p.status || '').includes('Masivo')) ? acc + Math.round(Number(p.amount) || 0) : acc, 0));
       
       // Prestado hoy
       const todaysClients = clients.filter(c => {
