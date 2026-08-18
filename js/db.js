@@ -583,7 +583,7 @@ const db = {
       const { data: cartonesData, error: cartonesErr } = await supabase
         .from('cartones')
         .select('*')
-        .eq('estado', 'activo');
+        .in('estado', ['activo', 'activo_por_renovacion']);
 
       if (cartonesErr) {
         console.error("Error al obtener cartones activos en Supabase:", cartonesErr);
@@ -736,7 +736,7 @@ const db = {
         .from('cartones')
         .select('*')
         .eq('cliente_id', String(cedula))
-        .eq('estado', 'activo')
+        .in('estado', ['activo', 'activo_por_renovacion'])
         .maybeSingle();
 
       if (carton) {
@@ -1043,11 +1043,15 @@ const db = {
 
         // Registrar/Renovar cartón en la tabla 'cartones'
         try {
+          const isRenov = payload.isRenewal || payload.is_renewal || Number(payload.rollover_amount || payload.saldo_anterior || 0) > 0;
+          const oldState = isRenov ? 'liquidado_por_renovacion' : 'liquidado';
+          const newState = isRenov ? 'activo_por_renovacion' : 'activo';
+
           await supabase
             .from('cartones')
-            .update({ estado: 'liquidado', outstanding: 0 })
+            .update({ estado: oldState, status: oldState, outstanding: 0, total_debt: 0 })
             .eq('cliente_id', String(clienteExistenteId))
-            .eq('estado', 'activo');
+            .in('estado', ['activo', 'activo_por_renovacion']);
 
           const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
           await supabase.from('cartones').insert([{
@@ -1055,7 +1059,8 @@ const db = {
             numero_carton: Math.floor(Date.now() % 100000000),
             fecha_apertura: new Date().toISOString(),
             monto_prestado: Number(payload.amount || 0),
-            estado: 'activo',
+            estado: newState,
+            status: newState,
             saldo_anterior: rolloverVal,
             rollover_amount: rolloverVal,
             total_debt: Number(payload.totalDebt || 0),
@@ -1104,24 +1109,31 @@ const db = {
 
     // 2. Marcar cartones anteriores del cliente como Liquidados en la tabla 'cartones'
     try {
+      const isRenov = payload.isRenewal || payload.is_renewal || Number(payload.rollover_amount || payload.saldo_anterior || 0) > 0;
+      const oldState = isRenov ? 'liquidado_por_renovacion' : 'liquidado';
+
       await supabase
         .from('cartones')
-        .update({ estado: 'liquidado', outstanding: 0 })
+        .update({ estado: oldState, status: oldState, outstanding: 0, total_debt: 0 })
         .eq('cliente_id', String(clientId))
-        .eq('estado', 'activo');
+        .in('estado', ['activo', 'activo_por_renovacion']);
     } catch (e) {
       console.warn("Actualizando cartones anteriores en 'cartones':", e.message);
     }
     
     // 3. Registrar nuevo cartón independiente (Renovación Atómica) en la tabla 'cartones'
     const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
+    const isRenov = payload.isRenewal || payload.is_renewal || rolloverVal > 0;
+    const newState = isRenov ? 'activo_por_renovacion' : 'activo';
+
     try {
       const cartonPayload = {
         cliente_id: String(clientId),
         numero_carton: Math.floor(Date.now() % 100000000),
         fecha_apertura: nowIso,
         monto_prestado: Number(payload.amount || 0),
-        estado: 'activo',
+        estado: newState,
+        status: newState,
         saldo_anterior: rolloverVal,
         rollover_amount: rolloverVal,
         total_debt: Number(payload.totalDebt || 0),
@@ -1145,7 +1157,8 @@ const db = {
           numero_carton: Math.floor(Date.now() % 100000000),
           fecha_apertura: nowIso,
           monto_prestado: Number(payload.amount || 0),
-          estado: 'activo',
+          estado: newState,
+          status: newState,
           saldo_anterior: rolloverVal,
           rollover_amount: rolloverVal,
           total_debt: Number(payload.totalDebt || 0),
@@ -2269,11 +2282,12 @@ const db = {
       }
     }
 
+    const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
     const isMora = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
 
     // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE VIA RPC v134)
-    const cartonEstadoTarget = isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado');
-    const cartonStatusTarget = isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado');
+    const cartonEstadoTarget = isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado'));
+    const cartonStatusTarget = isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado'));
     try {
       const cedStr = String(cedula || '').trim();
       if (isMora && cedStr) {
@@ -2309,8 +2323,8 @@ const db = {
     try {
       const clientUpdatePayload = {
         risk: isMora ? 'Rojo' : 'Verde',
-        status: isMora ? 'liquidado_perdida' : (isPaid ? 'Liquidado_Pagado' : 'Activo'),
-        estado: isMora ? 'liquidado_perdida' : (isPaid ? 'Liquidado_Pagado' : 'Activo')
+        status: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'Activo')),
+        estado: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'Activo'))
       };
 
       if (isPaid || isMora) {
@@ -2654,7 +2668,40 @@ const db = {
         }
       }
 
-      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestadoSalioDeCaja + totalAbonosReales);
+      // 4. Suma de entradas y salidas registradas en 'caja_movimientos' (Ingresos por renovación, movimientos de caja)
+      let totalMovimientosEntrada = 0;
+      let totalMovimientosSalida = 0;
+      try {
+        const movements = await this.getCashMovements();
+        const currentUser = this.getCurrentUser();
+        const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+        movements.forEach(m => {
+          const belongsToUser = targetRouteId 
+            ? (String(m.routeId || m.route_id) === String(targetRouteId)) 
+            : (String(m.agent_id) === String(agentId));
+          if (belongsToUser || !targetRouteId) {
+            const type = String(m.type || m.tipo || '').toLowerCase();
+            const amount = Math.round(Number(m.amount || m.monto || 0));
+            const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
+
+            if (type === 'entrada') {
+              if (m.id && String(m.id).startsWith('mov_renov_in_')) {
+                totalMovimientosEntrada += amount;
+              } else if (!concept.includes('inyección') && !concept.includes('inyeccion')) {
+                totalMovimientosEntrada += amount;
+              }
+            } else if (type === 'salida') {
+              if (!concept.includes('desembolso') && !concept.includes('cartón') && !concept.includes('carton') && !concept.includes('renovación') && !concept.includes('renovacion')) {
+                totalMovimientosSalida += amount;
+              }
+            }
+          }
+        });
+      } catch (eMov) {
+        console.warn("Aviso al calcular movimientos de caja en getLiquidCash:", eMov);
+      }
+
+      const capitalEnCajaFinal = Math.round(totalInjected - totalPrestadoSalioDeCaja + totalAbonosReales + totalMovimientosEntrada - totalMovimientosSalida);
       return Math.max(0, capitalEnCajaFinal);
     } catch (err) {
       console.error('Error fetching liquid cash (v115):', err);

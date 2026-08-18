@@ -301,13 +301,41 @@ const agentModule = {
         if (!confirm(confirmMsg)) return;
 
         try {
-          const oldOutstanding = Number(client.outstanding || client.totalDebt || 0);
+          const oldOutstanding = Math.round(Number(client.outstanding || client.totalDebt || client.monto_total || 0));
+          
+          // Liquidar cartón anterior con estado 'liquidado_por_renovacion' (v157)
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
-            status: 'Liquidado_Renovacion',
-            outstanding: 0
+            status: 'liquidado_por_renovacion',
+            outstanding: 0,
+            cartonId: client.carton_id || client.id || null,
+            numeroCarton: client.numero_carton || null
           });
           
+          // Sumar automáticamente el saldo pendiente del cartón anterior al Capital en Caja via caja_movimientos (v157)
+          if (oldOutstanding > 0) {
+            const currentUser = window.BulaPayDB.getCurrentUser();
+            const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
+            const routeId = currentUser ? currentUser.routeId : null;
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            await window.BulaPayDB.saveCashMovement({
+              id: 'mov_renov_in_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+              agent_id: agentId,
+              routeId: routeId,
+              route_id: routeId,
+              type: 'entrada',
+              tipo: 'entrada',
+              amount: oldOutstanding,
+              monto: oldOutstanding,
+              concept: 'Ingreso por renovación (Liquidación cartón anterior)',
+              concepto: 'Ingreso por renovación (Liquidación cartón anterior)',
+              description: `Liquidación cartón anterior del cliente ${client.name || ''} (C.C. ${client.cedula}) por renovación`,
+              client_cedula: client.cedula,
+              date: todayStr
+            });
+          }
+
           this.switchTab('register');
           this.setRenewalMode(true, oldOutstanding);
 
@@ -332,7 +360,7 @@ const agentModule = {
             }
           }
 
-          alert(`🔄 Cartón anterior de ${client.name} liquidado por renovación. Se pre-llenaron los datos en el formulario de registro.`);
+          alert(`🔄 Cartón anterior de ${client.name} liquidado por renovación ($${oldOutstanding.toLocaleString('es-CO')} ingresados a caja). Se pre-llenaron los datos en el formulario de registro.`);
         } catch (e) {
           console.error("Error al procesar renovación:", e);
           alert('❌ Error al procesar renovación: ' + (e.message || e));
@@ -985,6 +1013,16 @@ const agentModule = {
           }
         }
         
+        const elInMovements = document.getElementById('private-cash-in-movements');
+        if (elInMovements) {
+          elInMovements.textContent = totalIn > 0 ? `+$${totalIn.toLocaleString('es-CO')}` : '$0';
+        }
+
+        const elOutMovements = document.getElementById('private-cash-out-movements');
+        if (elOutMovements) {
+          elOutMovements.textContent = totalOut > 0 ? `-$${totalOut.toLocaleString('es-CO')}` : '$0';
+        }
+
         if (elLent) {
           const prestadoFormateado = totalLent === 0 ? "$0" : "-$" + Math.abs(totalLent).toLocaleString('es-CO');
           elLent.textContent = prestadoFormateado;
@@ -2848,6 +2886,7 @@ const agentModule = {
         retained_amount: Math.round(segVal + papVal), // Campo legado
         retained_fees: Math.round(segVal + papVal), // AISLADO: Únicamente cobros por Seguro y Papelería
         rollover_amount: Math.round(otrVal), // AISLADO: Saldo refinanciado / cartón anterior
+        saldo_anterior: Math.round(otrVal),
         segVal: Math.round(segVal),
         papVal: Math.round(papVal),
         discount_reason: discountReason, // Motivo del descuento
@@ -2857,11 +2896,15 @@ const agentModule = {
         installmentAmount: Math.round(debt / installments),
         routeId,
         agent_id: currentUser.id || currentUser.username,
-        supervisor_id: supervisorId
+        supervisor_id: supervisorId,
+        isRenewal: !!this.isRenewalMode,
+        is_renewal: !!this.isRenewalMode,
+        estado: this.isRenewalMode ? 'activo_por_renovacion' : 'activo'
       };
 
       console.log('Intentando enviar a Supabase la tabla clients...', payload);
 
+      const isRenov = !!this.isRenewalMode;
       let savedResult;
       if (existing || this.isRenewalMode) {
         savedResult = await window.BulaPayDB.registerCreditToExistingClient(payload);
@@ -2870,6 +2913,30 @@ const agentModule = {
       }
       console.log('Guardado exitoso:', savedResult);
       this.currentClient = payload;
+
+      // Restar/descontar automáticamente el nuevo crédito otorgado del Capital en Caja (salida por desembolso) (v157)
+      if (isRenov) {
+        try {
+          const todayStr = new Date().toISOString().split('T')[0];
+          await window.BulaPayDB.saveCashMovement({
+            id: 'mov_renov_out_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            agent_id: currentUser.id || currentUser.username,
+            routeId: routeId,
+            route_id: routeId,
+            type: 'salida',
+            tipo: 'salida',
+            amount: montoPrestamo,
+            monto: montoPrestamo,
+            concept: 'Salida por desembolso de nuevo crédito (Renovación)',
+            concepto: 'Salida por desembolso de nuevo crédito (Renovación)',
+            description: `Desembolso nuevo crédito por renovación cliente ${name} (C.C. ${cedula})`,
+            client_cedula: cedula,
+            date: todayStr
+          });
+        } catch (eOut) {
+          console.warn("Aviso al guardar salida por desembolso de renovación en caja_movimientos:", eOut);
+        }
+      }
 
       // Garantizar que no quede ninguna alerta de duplicado previa visible en el DOM tras la inserción exitosa
       if (typeof Swal !== 'undefined' && Swal.isVisible()) {
@@ -2884,6 +2951,7 @@ const agentModule = {
       if (typeof this.updateRouteTracking === 'function') {
         this.updateRouteTracking();
       }
+      await this.updateCashViews();
       await this.renderFinancialDashboard();
 
       // Envío de email de bienvenida (Resend placeholder)
@@ -3493,8 +3561,8 @@ const agentModule = {
 
     if (isExcluded) return false;
 
-    // Si el registro tiene estado 'activo' o status 'ACTIVO', es un cartón activo
-    if (rawEstado === 'activo' || rawStatus === 'ACTIVO') {
+    // Si el registro tiene estado 'activo' o 'activo_por_renovacion', es un cartón activo
+    if (rawEstado === 'activo' || rawEstado === 'activo_por_renovacion' || rawStatus === 'ACTIVO' || rawStatus === 'ACTIVO_POR_RENOVACION') {
       return true;
     }
 
