@@ -2052,16 +2052,18 @@ const agentModule = {
     const canLiquidarMora = (isOverdueCarton || isMoraOrPerdida) && !isWithoutActiveDebt;
 
     if (btnRenovar) {
+      btnRenovar.style.removeProperty('display');
+      btnRenovar.style.display = 'block';
       if (canRenovar) {
-        btnRenovar.style.removeProperty('display');
-        btnRenovar.style.display = 'block';
         btnRenovar.disabled = false;
         btnRenovar.style.opacity = '1';
         btnRenovar.style.cursor = 'pointer';
         btnRenovar.title = 'Liquidar cartón actual para solicitar renovación';
       } else {
-        btnRenovar.style.display = 'none';
-        btnRenovar.disabled = true;
+        btnRenovar.disabled = false; // Permitir clic para desplegar la alerta informativa
+        btnRenovar.style.opacity = '0.85';
+        btnRenovar.style.cursor = 'pointer';
+        btnRenovar.title = 'Requiere al menos el 50% del plazo cumplido para renovar';
       }
     }
 
