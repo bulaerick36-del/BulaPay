@@ -2066,11 +2066,26 @@ const agentModule = {
       }
     }
 
+    // REGLA OBLIGATORIA v154: El botón rojo de "Liquidar por Mora" debe estar ESTRICTAMENTE OCULTO por defecto.
+    // Solo debe mostrarse y habilitarse si el estado del crédito está explícitamente en VENCIDO o en MORA.
+    const overdueCount = (dailyStatusList && dailyStatusList.length > 0)
+      ? dailyStatusList.filter(s => s.isOverdue || s.status === 'Overdue' || s.status === 'Atrasado').length
+      : 0;
+    const rawSt = String(client?.estado || client?.status || '').toLowerCase();
+    const isMoraState = isOverdueCarton || overdueCount >= 3 || rawSt.includes('mora') || rawSt.includes('perdida') || String(client?.risk || '').toLowerCase() === 'rojo';
+
     if (btnLiquidarMora) {
-      btnLiquidarMora.disabled = false;
-      btnLiquidarMora.style.opacity = '1';
-      btnLiquidarMora.style.cursor = 'pointer';
-      btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
+      if (isMoraState && !isWithoutActiveDebt) {
+        btnLiquidarMora.style.removeProperty('display');
+        btnLiquidarMora.style.display = 'inline-flex';
+        btnLiquidarMora.disabled = false;
+        btnLiquidarMora.style.opacity = '1';
+        btnLiquidarMora.style.cursor = 'pointer';
+        btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
+      } else {
+        btnLiquidarMora.style.setProperty('display', 'none', 'important');
+        btnLiquidarMora.disabled = true;
+      }
     }
   },
 
