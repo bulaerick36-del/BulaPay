@@ -1890,20 +1890,28 @@ const agentModule = {
       if (cobroFormFields) cobroFormFields.style.setProperty('display', 'none', 'important');
       // 2. Mostrar letrero verde claro "✅ Cartón Liquidado / Cliente sin deuda activa"
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'block', 'important');
-
-      if (this.btnLiquidarCarton) {
-        this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
-      }
     } else {
-      // Cliente con deuda activa (outstanding > 0)
+      // Cliente con cuotas/deuda activa (outstanding > 0)
       if (cobroFormFields) cobroFormFields.style.setProperty('display', 'block', 'important');
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
+    }
 
-      if (this.btnLiquidarCarton) {
+    // REGLA OBLIGATORIA v155: El botón verde de "Liquidar Cartón" debe estar ESTRICTAMENTE OCULTO por defecto.
+    // Solo debe mostrarse y habilitarse si TODAS las cuotas del cartón están pagadas (saldo pendiente = $0 y cuotas completadas).
+    // Si el cartón tiene cuotas pendientes (outstanding > 0 o días sin pagar), JAMÁS debe mostrarse.
+    const hasUnpaidDays = dailyStatusList && dailyStatusList.length > 0 && dailyStatusList.some(d => !d.paid && !d.isPaid && d.status !== 'Pagado');
+    const isAllInstallmentsPaid = (outstanding <= 0 || isWithoutActiveDebt) && !hasUnpaidDays && !isLossStatus;
+
+    if (this.btnLiquidarCarton) {
+      if (isAllInstallmentsPaid) {
         this.btnLiquidarCarton.style.removeProperty('display');
+        this.btnLiquidarCarton.style.display = 'inline-flex';
         this.btnLiquidarCarton.disabled = false;
         this.btnLiquidarCarton.style.cursor = 'pointer';
         this.btnLiquidarCarton.style.opacity = '1';
+      } else {
+        this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
+        this.btnLiquidarCarton.disabled = true;
       }
     }
 
