@@ -2846,7 +2846,25 @@ const agentModule = {
       let papVal = 0;
       let otrVal = 0;
 
-      if (applyDiscount) {
+      if (this.isRenewalMode) {
+        // Blindaje estricto v158: En modo renovación, el saldo anterior y el descuento inicial
+        // se sincronizan rígidamente con el valor real del saldo pendiente del cartón liquidado.
+        otrVal = Math.round(Number(this.currentRenewalOutstanding || 0));
+        discountAmount = otrVal;
+
+        let reasons = ['Saldo Cartón Anterior (Renovación)'];
+        if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
+          reasons.push('Seguro');
+        }
+        if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
+          reasons.push('Papelería / Software');
+        }
+        if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
+          const concText = document.getElementById('new-client-discount-reason-otro-concepto-text')?.value.trim() || 'Otro Motivo';
+          reasons.push(concText);
+        }
+        discountReason = reasons.join(', ');
+      } else if (applyDiscount) {
         discountAmount = Math.round(parseFloat(document.getElementById('new-client-discount-amount')?.value.replace(/\./g, '') || '0') || 0);
 
         let reasons = [];
@@ -2860,14 +2878,15 @@ const agentModule = {
           const concText = document.getElementById('new-client-discount-reason-otro-concepto-text')?.value.trim() || 'Otro Motivo';
           reasons.push(concText);
         }
-        if (this.isRenewalMode || document.getElementById('new-client-discount-reason-otros')?.checked) {
-          const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Saldo Cartón Anterior (Renovación)';
+        if (document.getElementById('new-client-discount-reason-otros')?.checked) {
+          const otrosText = document.getElementById('new-client-discount-reason-otros-text')?.value.trim() || 'Saldo Cartón Anterior';
           reasons.push(otrosText);
-          otrVal = discountAmount || this.currentRenewalOutstanding || 0;
+          otrVal = discountAmount || 0;
         }
         discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       } else if (this.isRenewalMode && (this.currentRenewalOutstanding > 0)) {
-        otrVal = this.currentRenewalOutstanding;
+        otrVal = Math.round(Number(this.currentRenewalOutstanding || 0));
+        discountAmount = otrVal;
       }
 
       const emailEl = document.getElementById('new-client-email');
@@ -3272,9 +3291,9 @@ const agentModule = {
   setRenewalMode(isRenewal, oldOutstanding = 0) {
     this.isRenewalMode = !!isRenewal;
     if (oldOutstanding > 0) {
-      this.currentRenewalOutstanding = oldOutstanding;
+      this.currentRenewalOutstanding = Math.round(Number(oldOutstanding));
     }
-    const effectiveOutstanding = oldOutstanding || this.currentRenewalOutstanding || 0;
+    const effectiveOutstanding = Math.round(Number(oldOutstanding || this.currentRenewalOutstanding || 0));
 
     const rolloverContainer = document.getElementById('new-client-discount-rollover-container');
     const discountCheckbox = document.getElementById('new-client-apply-discount');
@@ -3283,34 +3302,60 @@ const agentModule = {
     const cbOtros = document.getElementById('new-client-discount-reason-otros');
     const inputOtrosText = document.getElementById('new-client-discount-reason-otros-text');
 
-    const formatNum = (num) => num ? num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
+    const formatNum = (num) => num ? num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "0";
 
     if (rolloverContainer) {
       rolloverContainer.style.display = this.isRenewalMode ? 'flex' : 'none';
     }
 
-    if (this.isRenewalMode && effectiveOutstanding > 0) {
+    if (this.isRenewalMode) {
+      this.currentRenewalOutstanding = effectiveOutstanding;
+
       if (discountCheckbox) {
         discountCheckbox.checked = true;
+        discountCheckbox.disabled = true; // Bloqueado rígidamente en renovación (v158)
         if (discountPanel) discountPanel.style.display = 'flex';
       }
       if (cbOtros) {
         cbOtros.checked = true;
+        cbOtros.disabled = true; // Bloqueado rígidamente (v158)
         if (inputOtrosText) {
           inputOtrosText.style.display = 'block';
+          inputOtrosText.readOnly = true; // Solo lectura rígidamente (v158)
           inputOtrosText.value = `Saldo Cartón Anterior: $${formatNum(effectiveOutstanding)}`;
         }
       }
       if (discountAmountInput) {
         discountAmountInput.value = formatNum(effectiveOutstanding);
+        discountAmountInput.readOnly = true; // Campo automático e inalterable (v158)
+        discountAmountInput.style.backgroundColor = 'var(--bg-secondary)';
+        discountAmountInput.style.color = 'var(--color-verde)';
+        discountAmountInput.style.fontWeight = 'bold';
+        discountAmountInput.style.cursor = 'not-allowed';
+        discountAmountInput.title = 'Monto automático e inalterable por renovación (Saldo Cartón Anterior)';
         discountAmountInput.dispatchEvent(new Event('input'));
       }
       const capitalInput = document.getElementById('new-client-capital');
       if (capitalInput) {
         capitalInput.dispatchEvent(new Event('input'));
       }
-    } else if (!this.isRenewalMode) {
+    } else {
       this.currentRenewalOutstanding = 0;
+      if (discountCheckbox) {
+        discountCheckbox.disabled = false;
+      }
+      if (cbOtros) {
+        cbOtros.disabled = false;
+      }
+      if (inputOtrosText) {
+        inputOtrosText.readOnly = false;
+      }
+      if (discountAmountInput) {
+        discountAmountInput.readOnly = false;
+        discountAmountInput.style.backgroundColor = 'var(--bg-primary)';
+        discountAmountInput.style.cursor = 'text';
+        discountAmountInput.removeAttribute('title');
+      }
     }
   },
 
@@ -3353,7 +3398,14 @@ const agentModule = {
 
       // La matemática del descuento depende ÚNICAMENTE de la cifra global ingresada arriba
       let totalDiscount = 0;
-      if (discountCheckbox && discountCheckbox.checked && discountAmountInput) {
+      if (this.isRenewalMode) {
+        // Blindaje estricto v158: En renovación, el descuento está rígidamente fijado al saldo pendiente real del cartón anterior
+        totalDiscount = Math.round(Number(this.currentRenewalOutstanding || 0));
+        if (discountAmountInput) {
+          discountAmountInput.value = formatNumber(totalDiscount);
+          discountAmountInput.readOnly = true;
+        }
+      } else if (discountCheckbox && discountCheckbox.checked && discountAmountInput) {
         totalDiscount = parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0;
       }
 
@@ -3366,9 +3418,14 @@ const agentModule = {
 
     if (discountCheckbox && discountPanel) {
       discountCheckbox.addEventListener('change', (e) => {
+        if (this.isRenewalMode) {
+          discountCheckbox.checked = true;
+          discountPanel.style.display = 'flex';
+          this.setRenewalMode(true, this.currentRenewalOutstanding);
+          return;
+        }
         if (e.target.checked) {
           discountPanel.style.display = 'flex';
-          this.setRenewalMode(this.isRenewalMode);
         } else {
           discountPanel.style.display = 'none';
           if (discountAmountInput) discountAmountInput.value = '';
@@ -3385,6 +3442,11 @@ const agentModule = {
 
     if (discountAmountInput) {
       discountAmountInput.addEventListener('input', (e) => {
+        if (this.isRenewalMode) {
+          e.target.value = formatNumber(Math.round(Number(this.currentRenewalOutstanding || 0)));
+          calculate();
+          return;
+        }
         let val = e.target.value.replace(/\D/g, '');
         e.target.value = val ? formatNumber(val) : '';
         calculate();
@@ -3401,6 +3463,15 @@ const agentModule = {
 
     if (cbOtros) {
       cbOtros.addEventListener('change', (e) => {
+        if (this.isRenewalMode) {
+          cbOtros.checked = true;
+          if (inputOtrosText) {
+            inputOtrosText.style.display = 'block';
+            inputOtrosText.readOnly = true;
+            inputOtrosText.value = `Saldo Cartón Anterior: $${formatNumber(Math.round(Number(this.currentRenewalOutstanding || 0)))}`;
+          }
+          return;
+        }
         const isChecked = e.target.checked;
         if (inputOtrosText) inputOtrosText.style.display = isChecked ? 'block' : 'none';
         if (!isChecked && inputOtrosText) inputOtrosText.value = '';
