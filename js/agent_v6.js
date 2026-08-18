@@ -2044,6 +2044,11 @@ const agentModule = {
 
     const canRenovar = this.canRenovarCarton(client, dailyStatusList) || isWithoutActiveDebt;
     const isOverdueCarton = this.isCartonOverdue(client, dailyStatusList);
+    const rawSt = String(client?.estado || client?.status || '').toLowerCase();
+    const isMoraOrPerdida = rawSt.includes('mora') || rawSt.includes('perdida') || String(client?.risk || '').toLowerCase() === 'rojo';
+
+    // Habilitar botón de liquidar por mora ÚNICAMENTE si el cartón está vencido por fecha o en mora
+    const canLiquidarMora = (isOverdueCarton || isMoraOrPerdida) && !isWithoutActiveDebt;
 
     if (btnRenovar) {
       if (canRenovar) {
@@ -2062,10 +2067,18 @@ const agentModule = {
     if (btnLiquidarMora) {
       btnLiquidarMora.style.removeProperty('display');
       btnLiquidarMora.style.display = 'inline-flex';
-      btnLiquidarMora.disabled = false;
-      btnLiquidarMora.style.opacity = '1';
-      btnLiquidarMora.style.cursor = 'pointer';
-      btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
+      
+      if (canLiquidarMora) {
+        btnLiquidarMora.disabled = false;
+        btnLiquidarMora.style.opacity = '1';
+        btnLiquidarMora.style.cursor = 'pointer';
+        btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
+      } else {
+        btnLiquidarMora.disabled = true;
+        btnLiquidarMora.style.opacity = '0.4';
+        btnLiquidarMora.style.cursor = 'not-allowed';
+        btnLiquidarMora.title = 'Solo disponible si el cartón está vencido según la fecha de inicio del préstamo.';
+      }
     }
   },
 
