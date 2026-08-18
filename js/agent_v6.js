@@ -1812,11 +1812,10 @@ const agentModule = {
     const cobroFormFields = document.getElementById('cobro-form-fields');
     const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');
     const cobroBlacklistBanner = document.getElementById('cobro-blacklist-banner');
-    const cobroActionButtonsWrapper = document.getElementById('cobro-action-buttons-wrapper');
+    const cobroRenewalWrapper = document.getElementById('cobro-renewal-wrapper');
 
-    // RENDERIZADO OBLIGATORIO Y VISIBLE DE LOS BOTONES DE ACCIÓN (RENOVAR / LIQUIDAR)
-    if (cobroActionButtonsWrapper) {
-      cobroActionButtonsWrapper.style.setProperty('display', 'flex', 'important');
+    if (cobroRenewalWrapper) {
+      cobroRenewalWrapper.style.setProperty('display', 'block', 'important');
     }
 
     // RENDERIZADO CONDICIONAL DE MÁXIMA PRIORIDAD: Cliente en Lista Negra (risk === 'Rojo')
