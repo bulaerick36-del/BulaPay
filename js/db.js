@@ -2198,7 +2198,8 @@ const db = {
   async liquidateCredit({ cedula, status, outstanding, totalDebt, cartonId, numeroCarton }) {
     const supabase = await initSupabase();
     
-    const isPaid = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
+    const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
+    const isPaid = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO') || isRenovacion;
     
     // 1. Obtener datos del cliente ANTES de resetear sus saldos numéricos
     let clientData = null;

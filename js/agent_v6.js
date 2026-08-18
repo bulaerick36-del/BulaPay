@@ -287,7 +287,7 @@ const agentModule = {
         if (!this.currentClient) return;
         const client = this.currentClient;
 
-        // Validación de Regla de Renovación (v85)
+        // Validación de Regla de Renovación (v85/v160)
         const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
         const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
         const canRenovar = this.canRenovarCarton(client, dailyStatusList);
@@ -297,13 +297,13 @@ const agentModule = {
           return;
         }
 
-        const confirmMsg = `¿Estás seguro de renovar el préstamo para el cliente ${client.name} (C.C. ${client.cedula})?\nEsto liquidará el cartón actual y abrirá el formulario de registro pre-llenando sus datos.`;
+        const confirmMsg = `¿Estás seguro de liquidar para renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nEsto marcará todas las cuotas restantes y liquidará el cartón actual sin alterar la caja automáticamente.`;
         if (!confirm(confirmMsg)) return;
 
         try {
           const oldOutstanding = Math.round(Number(client.outstanding || client.totalDebt || client.monto_total || 0));
           
-          // Liquidar cartón anterior con estado 'liquidado_por_renovacion' (v157)
+          // Liquidar cartón anterior con estado 'liquidado_por_renovacion' y marcar cuotas restantes (v160)
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: 'liquidado_por_renovacion',
@@ -311,30 +311,10 @@ const agentModule = {
             cartonId: client.carton_id || client.id || null,
             numeroCarton: client.numero_carton || null
           });
-          
-          // Sumar automáticamente el saldo pendiente del cartón anterior al Capital en Caja via caja_movimientos (v157)
-          if (oldOutstanding > 0) {
-            const currentUser = window.BulaPayDB.getCurrentUser();
-            const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
-            const routeId = currentUser ? currentUser.routeId : null;
-            const todayStr = new Date().toISOString().split('T')[0];
 
-            await window.BulaPayDB.saveCashMovement({
-              id: 'mov_renov_in_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-              agent_id: agentId,
-              routeId: routeId,
-              route_id: routeId,
-              type: 'entrada',
-              tipo: 'entrada',
-              amount: oldOutstanding,
-              monto: oldOutstanding,
-              concept: 'Ingreso por renovación (Liquidación cartón anterior)',
-              concepto: 'Ingreso por renovación (Liquidación cartón anterior)',
-              description: `Liquidación cartón anterior del cliente ${client.name || ''} (C.C. ${client.cedula}) por renovación`,
-              client_cedula: client.cedula,
-              date: todayStr
-            });
-          }
+          // Alerta de guía inteligente (v160)
+          const formattedMonto = oldOutstanding.toLocaleString('es-CO');
+          alert(`¡Liquidación exitosa para renovación! Saldo restante: $${formattedMonto} pesos. No olvide descontarlos del nuevo crédito.`);
 
           this.switchTab('register');
           this.setRenewalMode(true, oldOutstanding);
@@ -359,8 +339,6 @@ const agentModule = {
               inputCity.value = client.city || client.ciudad || client.municipio;
             }
           }
-
-          alert(`🔄 Cartón anterior de ${client.name} liquidado por renovación ($${oldOutstanding.toLocaleString('es-CO')} ingresados a caja). Se pre-llenaron los datos en el formulario de registro.`);
         } catch (e) {
           console.error("Error al procesar renovación:", e);
           alert('❌ Error al procesar renovación: ' + (e.message || e));
@@ -2090,15 +2068,15 @@ const agentModule = {
 
     if (btnRenovar) {
       if (canRenovar) {
+        btnRenovar.style.removeProperty('display');
+        btnRenovar.style.display = 'inline-flex';
         btnRenovar.disabled = false;
         btnRenovar.style.opacity = '1';
         btnRenovar.style.cursor = 'pointer';
-        btnRenovar.title = 'Renovar cartón';
+        btnRenovar.title = 'Liquidar cartón actual para solicitar renovación';
       } else {
+        btnRenovar.style.display = 'none'; // Estrictamente oculto por defecto y en cartones nuevos (v160)
         btnRenovar.disabled = true;
-        btnRenovar.style.opacity = '0.4';
-        btnRenovar.style.cursor = 'not-allowed';
-        btnRenovar.title = 'Solo disponible si ha transcurrido/pagado al menos el 50% del plazo o si el cartón está vencido.';
       }
     }
 
@@ -2933,29 +2911,7 @@ const agentModule = {
       console.log('Guardado exitoso:', savedResult);
       this.currentClient = payload;
 
-      // Restar/descontar automáticamente el nuevo crédito otorgado del Capital en Caja (salida por desembolso) (v157)
-      if (isRenov) {
-        try {
-          const todayStr = new Date().toISOString().split('T')[0];
-          await window.BulaPayDB.saveCashMovement({
-            id: 'mov_renov_out_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-            agent_id: currentUser.id || currentUser.username,
-            routeId: routeId,
-            route_id: routeId,
-            type: 'salida',
-            tipo: 'salida',
-            amount: montoPrestamo,
-            monto: montoPrestamo,
-            concept: 'Salida por desembolso de nuevo crédito (Renovación)',
-            concepto: 'Salida por desembolso de nuevo crédito (Renovación)',
-            description: `Desembolso nuevo crédito por renovación cliente ${name} (C.C. ${cedula})`,
-            client_cedula: cedula,
-            date: todayStr
-          });
-        } catch (eOut) {
-          console.warn("Aviso al guardar salida por desembolso de renovación en caja_movimientos:", eOut);
-        }
-      }
+      // v160: Sin alteraciones automáticas en caja_movimientos durante renovación
 
       // Garantizar que no quede ninguna alerta de duplicado previa visible en el DOM tras la inserción exitosa
       if (typeof Swal !== 'undefined' && Swal.isVisible()) {
