@@ -1103,22 +1103,8 @@ const agentModule = {
         const agentId = currentUser.id || currentUser.username;
 
         try {
-          // 1. Guardar la inyección directamente en la tabla oficial capital_injections
+          // 1. Guardar la inyección ÚNICAMENTE en la tabla oficial capital_injections (fuente única v161)
           await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount);
-
-          // 2. Guardar registro paralelo en caja_movimientos como respaldo
-          try {
-            await window.BulaPayDB.saveCashMovement({
-              id: 'mov_' + Date.now(),
-              agent_id: agentId,
-              routeId: currentUser.routeId,
-              type: 'entrada',
-              amount: amount,
-              date: new Date().toISOString().split('T')[0]
-            });
-          } catch (eMov) {
-            console.warn("Aviso en guardado secundario de caja_movimientos:", eMov);
-          }
 
           alert(`✅ Inyección de $${amount.toLocaleString('es-CO')} ingresada exitosamente a caja.`);
           document.getElementById('cash-movement-amount').value = '';

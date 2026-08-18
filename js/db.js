@@ -1909,7 +1909,14 @@ const db = {
         const belongsToUser = routeId ? (m.routeId === routeId) : (m.agent_id === agentId);
         if (belongsToUser) {
           if (m.type === 'salida') totalExpenses += Math.round(parseFloat(m.amount) || 0);
-          if (m.type === 'entrada') totalAdditions += Math.round(parseFloat(m.amount) || 0);
+          if (m.type === 'entrada') {
+            const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
+            const idStr = String(m.id || '');
+            const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || idStr.startsWith('inj_') || (!concept && !m.description && !m.concepto);
+            if (!isInjection) {
+              totalAdditions += Math.round(parseFloat(m.amount) || 0);
+            }
+          }
         }
       }
 
@@ -2685,9 +2692,12 @@ const db = {
             const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
 
             if (type === 'entrada') {
-              if (m.id && String(m.id).startsWith('mov_renov_in_')) {
+              const isRenov = m.id && String(m.id).startsWith('mov_renov_in_');
+              const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || String(m.id || '').startsWith('inj_') || (!concept && !m.description && !m.concepto);
+              
+              if (isRenov) {
                 totalMovimientosEntrada += amount;
-              } else if (!concept.includes('inyección') && !concept.includes('inyeccion')) {
+              } else if (!isInjection) {
                 totalMovimientosEntrada += amount;
               }
             } else if (type === 'salida') {
@@ -2881,7 +2891,13 @@ const db = {
 
       // Movimientos de caja
       const todaysMovements = movements.filter(m => m.date && getCleanDateStr(m.date) === todayStr);
-      const totalIn = Math.round(todaysMovements.filter(m => m.type === 'entrada').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
+      const totalIn = Math.round(todaysMovements.filter(m => {
+        if (m.type !== 'entrada') return false;
+        const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
+        const idStr = String(m.id || '');
+        const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || idStr.startsWith('inj_') || (!concept && !m.description && !m.concepto);
+        return !isInjection;
+      }).reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       const totalOut = Math.round(todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       
       // Efectivo Disponible / Liquidez Diaria en Caja calculada dinámicamente según la nueva arquitectura
