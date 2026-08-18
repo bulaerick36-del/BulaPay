@@ -651,16 +651,17 @@
                       <button type="button" class="btn btn-primary" id="btn-cobro-carton" style="width: 100%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; border: none; border-radius: 10px; cursor: pointer; transition: background 0.2s;">
                         Registrar Pago
                       </button>
+                      <!-- NUEVO BOTÓN: Liquidar para Renovar (Justo debajo de Registrar Pago) -->
+                      <button type="button" id="btn-cobro-renovar" class="btn btn-secondary" style="display: none; width: 100%; padding: 0.85rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 6px rgba(13,148,136,0.3); text-align: center; margin-top: 0.25rem;">
+                        🔄 Liquidar para Renovar
+                      </button>
                     </div>
                   </div>
 
-                  <!-- ACCIONES OBLIGATORIAS DEL CARTÓN (RENOVAR / LIQUIDAR) -->
+                  <!-- ACCIONES OBLIGATORIAS DEL CARTÓN (LIQUIDAR POR MORA) -->
                   <div id="cobro-action-buttons-wrapper" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px dashed var(--border-color);">
                     <div style="display: flex; gap: 0.5rem; width: 100%;">
-                      <button type="button" id="btn-cobro-renovar" class="btn btn-secondary" style="display: none; flex: 1; padding: 0.8rem; font-size: 0.85rem; font-weight: 800; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 6px rgba(13,148,136,0.3);">
-                        🔄 Liquidar para Renovar
-                      </button>
-                      <button type="button" id="btn-cobro-liquidar-mora" class="btn btn-danger" style="flex: 1; padding: 0.8rem; font-size: 0.85rem; font-weight: 800; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 6px rgba(239,68,68,0.25);">
+                      <button type="button" id="btn-cobro-liquidar-mora" class="btn btn-danger" style="width: 100%; padding: 0.8rem; font-size: 0.85rem; font-weight: 800; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 6px rgba(239,68,68,0.25);">
                         ⛔ Liquidar / Lista Negra
                       </button>
                     </div>
@@ -1535,13 +1536,13 @@
   <!-- MODULOS JAVASCRIPT DE BulaPay -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/db.js?v=161"></script>
-  <script src="js/auth.js?v=161"></script>
-  <script src="js/supervisor.js?v=161"></script>
-  <script src="js/agent_v6.js?v=161"></script>
-  <script src="js/customer.js?v=161"></script>
+  <script src="js/db.js?v=162"></script>
+  <script src="js/auth.js?v=162"></script>
+  <script src="js/supervisor.js?v=162"></script>
+  <script src="js/agent_v6.js?v=162"></script>
+  <script src="js/customer.js?v=162"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=161"></script>
+  <script src="js/app.js?v=162"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">

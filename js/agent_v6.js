@@ -312,9 +312,9 @@ const agentModule = {
             numeroCarton: client.numero_carton || null
           });
 
-          // Alerta de guía inteligente (v160)
+          // Alerta de guía inteligente (v162)
           const formattedMonto = oldOutstanding.toLocaleString('es-CO');
-          alert(`¡Liquidación exitosa para renovación! Saldo restante: $${formattedMonto} pesos. No olvide descontarlos del nuevo crédito.`);
+          alert(`¡Liquidación exitosa para renovación! Saldo restante: $${formattedMonto}. No olvide descontarlo del nuevo crédito.`);
 
           this.switchTab('register');
           this.setRenewalMode(true, oldOutstanding);
