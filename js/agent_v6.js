@@ -1896,14 +1896,8 @@ const agentModule = {
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
     }
 
-    // REGLA OBLIGATORIA v155: El botón verde de "Liquidar Cartón" debe estar ESTRICTAMENTE OCULTO por defecto.
-    // Solo debe mostrarse y habilitarse si TODAS las cuotas del cartón están pagadas (saldo pendiente = $0 y cuotas completadas).
-    // Si el cartón tiene cuotas pendientes (outstanding > 0 o días sin pagar), JAMÁS debe mostrarse.
-    const hasUnpaidDays = dailyStatusList && dailyStatusList.length > 0 && dailyStatusList.some(d => !d.paid && !d.isPaid && d.status !== 'Pagado');
-    const isAllInstallmentsPaid = (outstanding <= 0 || isWithoutActiveDebt) && !hasUnpaidDays && !isLossStatus;
-
     if (this.btnLiquidarCarton) {
-      if (isAllInstallmentsPaid) {
+      if (!isLossStatus) {
         this.btnLiquidarCarton.style.removeProperty('display');
         this.btnLiquidarCarton.style.display = 'inline-flex';
         this.btnLiquidarCarton.disabled = false;
@@ -1911,7 +1905,6 @@ const agentModule = {
         this.btnLiquidarCarton.style.opacity = '1';
       } else {
         this.btnLiquidarCarton.style.setProperty('display', 'none', 'important');
-        this.btnLiquidarCarton.disabled = true;
       }
     }
 
@@ -2066,26 +2059,13 @@ const agentModule = {
       }
     }
 
-    // REGLA OBLIGATORIA v154: El botón rojo de "Liquidar por Mora" debe estar ESTRICTAMENTE OCULTO por defecto.
-    // Solo debe mostrarse y habilitarse si el estado del crédito está explícitamente en VENCIDO o en MORA.
-    const overdueCount = (dailyStatusList && dailyStatusList.length > 0)
-      ? dailyStatusList.filter(s => s.isOverdue || s.status === 'Overdue' || s.status === 'Atrasado').length
-      : 0;
-    const rawSt = String(client?.estado || client?.status || '').toLowerCase();
-    const isMoraState = isOverdueCarton || overdueCount >= 3 || rawSt.includes('mora') || rawSt.includes('perdida') || String(client?.risk || '').toLowerCase() === 'rojo';
-
     if (btnLiquidarMora) {
-      if (isMoraState && !isWithoutActiveDebt) {
-        btnLiquidarMora.style.removeProperty('display');
-        btnLiquidarMora.style.display = 'inline-flex';
-        btnLiquidarMora.disabled = false;
-        btnLiquidarMora.style.opacity = '1';
-        btnLiquidarMora.style.cursor = 'pointer';
-        btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
-      } else {
-        btnLiquidarMora.style.setProperty('display', 'none', 'important');
-        btnLiquidarMora.disabled = true;
-      }
+      btnLiquidarMora.style.removeProperty('display');
+      btnLiquidarMora.style.display = 'inline-flex';
+      btnLiquidarMora.disabled = false;
+      btnLiquidarMora.style.opacity = '1';
+      btnLiquidarMora.style.cursor = 'pointer';
+      btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
     }
   },
 
