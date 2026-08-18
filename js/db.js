@@ -2283,7 +2283,6 @@ const db = {
       }
     }
 
-    const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
     const isMora = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
 
     // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE VIA RPC v134)
