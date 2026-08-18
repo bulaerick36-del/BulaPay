@@ -2053,7 +2053,9 @@ const agentModule = {
 
     if (btnRenovar) {
       btnRenovar.style.removeProperty('display');
-      btnRenovar.style.display = 'block';
+      btnRenovar.style.display = 'inline-flex';
+      btnRenovar.style.alignItems = 'center';
+      btnRenovar.style.justifyContent = 'center';
       if (canRenovar) {
         btnRenovar.disabled = false;
         btnRenovar.style.opacity = '1';
@@ -2068,16 +2070,20 @@ const agentModule = {
     }
 
     if (btnLiquidarMora) {
+      btnLiquidarMora.style.removeProperty('display');
+      btnLiquidarMora.style.display = 'inline-flex';
+      btnLiquidarMora.style.alignItems = 'center';
+      btnLiquidarMora.style.justifyContent = 'center';
       if (canLiquidarMora) {
-        btnLiquidarMora.style.removeProperty('display');
-        btnLiquidarMora.style.display = 'block';
         btnLiquidarMora.disabled = false;
         btnLiquidarMora.style.opacity = '1';
         btnLiquidarMora.style.cursor = 'pointer';
         btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
       } else {
-        btnLiquidarMora.style.display = 'none';
         btnLiquidarMora.disabled = true;
+        btnLiquidarMora.style.opacity = '0.4';
+        btnLiquidarMora.style.cursor = 'not-allowed';
+        btnLiquidarMora.title = 'Disponible solo para préstamos vencidos en mora';
       }
     }
   },
