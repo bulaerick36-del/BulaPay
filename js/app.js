@@ -595,10 +595,11 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Registro de Service Worker PWA (sin recargas automáticas)
+// Registro de Service Worker PWA con actualización forzada (v167)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').then((reg) => {
+      reg.update();
       console.log('[PWA] Service Worker registrado exitosamente');
     }).catch((err) => console.warn('[PWA] Error al registrar SW:', err));
   });

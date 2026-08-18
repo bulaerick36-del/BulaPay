@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bulapay-v166';
+const CACHE_NAME = 'bulapay-v167';
 const ASSETS = [
   './',
   './index.html',
@@ -13,8 +13,9 @@ const ASSETS = [
   './assets/logo.svg'
 ];
 
-// Instalar el Service Worker y almacenar en caché los activos estáticos
+// Instalar el Service Worker y almacenar en caché los activos estáticos (v167)
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[Service Worker] Caching app shell');
