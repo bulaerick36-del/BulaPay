@@ -2055,31 +2055,14 @@ const agentModule = {
     if (btnRenovar) {
       if (canRenovar) {
         btnRenovar.style.removeProperty('display');
-        btnRenovar.style.display = 'inline-flex';
+        btnRenovar.style.display = 'block';
         btnRenovar.disabled = false;
         btnRenovar.style.opacity = '1';
         btnRenovar.style.cursor = 'pointer';
         btnRenovar.title = 'Liquidar cartón actual para solicitar renovación';
       } else {
-        btnRenovar.style.display = 'none'; // Estrictamente oculto por defecto y en cartones nuevos (v160)
+        btnRenovar.style.display = 'none'; // Estrictamente oculto por defecto y en cartones nuevos (v163)
         btnRenovar.disabled = true;
-      }
-    }
-
-    if (btnLiquidarMora) {
-      btnLiquidarMora.style.removeProperty('display');
-      btnLiquidarMora.style.display = 'inline-flex';
-      
-      if (canLiquidarMora) {
-        btnLiquidarMora.disabled = false;
-        btnLiquidarMora.style.opacity = '1';
-        btnLiquidarMora.style.cursor = 'pointer';
-        btnLiquidarMora.title = 'Liquidar por mora / Lista Negra';
-      } else {
-        btnLiquidarMora.disabled = true;
-        btnLiquidarMora.style.opacity = '0.4';
-        btnLiquidarMora.style.cursor = 'not-allowed';
-        btnLiquidarMora.title = 'Solo disponible si el cartón está vencido según la fecha de inicio del préstamo.';
       }
     }
   },
