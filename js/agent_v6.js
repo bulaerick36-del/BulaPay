@@ -2062,10 +2062,10 @@ const agentModule = {
         btnRenovar.style.cursor = 'pointer';
         btnRenovar.title = 'Liquidar cartón actual para solicitar renovación';
       } else {
-        btnRenovar.disabled = false; // Permitir clic para desplegar la alerta informativa
-        btnRenovar.style.opacity = '0.85';
-        btnRenovar.style.cursor = 'pointer';
-        btnRenovar.title = 'Requiere al menos el 50% del plazo cumplido para renovar';
+        btnRenovar.disabled = true; // Deshabilitado hasta cumplir la mitad del cobro (cuota 15+)
+        btnRenovar.style.opacity = '0.4';
+        btnRenovar.style.cursor = 'not-allowed';
+        btnRenovar.title = 'Solo se habilita desde la cuota 15 en adelante (mitad del cobro cumplida)';
       }
     }
 
