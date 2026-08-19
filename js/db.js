@@ -2680,7 +2680,12 @@ const db = {
             if (!isCanceled) {
               const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
               const discountAmt = Math.round(Number(c.discount_amount || 0));
-              const efectivoEntregado = Math.max(0, amountPuro - discountAmt);
+              const rolloverAmt = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+              
+              // REGLA DE NEUTRALIZACIÓN ABSOLUTA EN CAJA v174:
+              // Ningún cartón creado con saldo_anterior o rollover_amount debe restar ese saldo anterior de la caja.
+              // El único dinero físico que sale de caja al entregar un crédito es net_cash (capital - discount - rollover):
+              const efectivoEntregado = Math.max(0, amountPuro - discountAmt - rolloverAmt);
               totalPrestadoSalioDeCaja += efectivoEntregado;
             }
           });
