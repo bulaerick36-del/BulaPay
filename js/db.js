@@ -948,14 +948,16 @@ const db = {
       
       // Registrar cartón inicial obligatorio en la nueva tabla 'cartones' (aislamiento de préstamos)
       try {
+        const rolloverVal = Number(client.rollover_amount || client.saldo_anterior || 0);
+        const cartonState = client.isRenewal || client.is_renewal || rolloverVal > 0 ? 'activo_por_renovacion' : 'activo';
         const cartonPayload = {
           cliente_id: String(client.cedula),
           numero_carton: Math.floor(Date.now() % 100000000),
           fecha_apertura: new Date().toISOString(),
           monto_prestado: Number(client.amount || 0),
-          estado: 'activo',
-          saldo_anterior: Number(client.rollover_amount || client.saldo_anterior || 0),
-          rollover_amount: Number(client.rollover_amount || client.saldo_anterior || 0),
+          estado: cartonState,
+          saldo_anterior: rolloverVal,
+          rollover_amount: rolloverVal,
           total_debt: Number(client.totalDebt || 0),
           outstanding: Number(client.outstanding || client.totalDebt || 0),
           installments_count: Number(client.installmentsCount || 1),
@@ -977,7 +979,13 @@ const db = {
             cliente_id: String(client.cedula),
             numero_carton: Math.floor(Date.now() % 100000000),
             monto_prestado: Number(client.amount || 0),
-            estado: 'activo',
+            estado: cartonState,
+            saldo_anterior: rolloverVal,
+            rollover_amount: rolloverVal,
+            total_debt: Number(client.totalDebt || 0),
+            outstanding: Number(client.outstanding || client.totalDebt || 0),
+            installments_count: Number(client.installmentsCount || 1),
+            installment_amount: Number(client.installmentAmount || 0),
             route_id: client.routeId || client.route_id || null,
             agent_id: client.agent_id || client.agentId || null,
             supervisor_id: client.supervisor_id || null
@@ -1049,7 +1057,7 @@ const db = {
 
           await supabase
             .from('cartones')
-            .update({ estado: oldState, status: oldState, outstanding: 0, total_debt: 0 })
+            .update({ estado: oldState, outstanding: 0, total_debt: 0 })
             .eq('cliente_id', String(clienteExistenteId))
             .in('estado', ['activo', 'activo_por_renovacion']);
 
@@ -1060,7 +1068,6 @@ const db = {
             fecha_apertura: new Date().toISOString(),
             monto_prestado: Number(payload.amount || 0),
             estado: newState,
-            status: newState,
             saldo_anterior: rolloverVal,
             rollover_amount: rolloverVal,
             total_debt: Number(payload.totalDebt || 0),
@@ -1114,7 +1121,7 @@ const db = {
 
       await supabase
         .from('cartones')
-        .update({ estado: oldState, status: oldState, outstanding: 0, total_debt: 0 })
+        .update({ estado: oldState, outstanding: 0, total_debt: 0 })
         .eq('cliente_id', String(clientId))
         .in('estado', ['activo', 'activo_por_renovacion']);
     } catch (e) {
@@ -1133,7 +1140,6 @@ const db = {
         fecha_apertura: nowIso,
         monto_prestado: Number(payload.amount || 0),
         estado: newState,
-        status: newState,
         saldo_anterior: rolloverVal,
         rollover_amount: rolloverVal,
         total_debt: Number(payload.totalDebt || 0),
@@ -1158,7 +1164,6 @@ const db = {
           fecha_apertura: nowIso,
           monto_prestado: Number(payload.amount || 0),
           estado: newState,
-          status: newState,
           saldo_anterior: rolloverVal,
           rollover_amount: rolloverVal,
           total_debt: Number(payload.totalDebt || 0),
@@ -2324,7 +2329,6 @@ const db = {
       } else {
         const cartonUpdatePayload = { 
           estado: cartonEstadoTarget, 
-          status: cartonStatusTarget,
           outstanding: 0,
           total_debt: 0
         };
