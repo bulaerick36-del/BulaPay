@@ -1117,15 +1117,27 @@ const db = {
     console.log('-> Generando nuevo crédito independiente ID:', newCreditId);
 
     // 2. Marcar cartones anteriores del cliente como Liquidados en la tabla 'cartones'
+    // 2. Marcar cartones anteriores del cliente como RENOVADO / CERRADO en la tabla 'cartones' (Cierre de Ciclo)
     try {
       const isRenov = payload.isRenewal || payload.is_renewal || Number(payload.rollover_amount || payload.saldo_anterior || 0) > 0;
-      const oldState = isRenov ? 'liquidado_por_renovacion' : 'liquidado';
+      const oldState = isRenov ? 'RENOVADO' : 'CERRADO';
 
-      await supabase
-        .from('cartones')
-        .update({ estado: oldState, outstanding: 0, total_debt: 0 })
-        .eq('cliente_id', String(clientId))
-        .in('estado', ['activo', 'activo_por_renovacion']);
+      const cartonUpdateOld = { 
+        estado: oldState, 
+        status: oldState,
+        outstanding: 0, 
+        total_debt: 0 
+      };
+
+      const cedStr = String(clientId).trim();
+      await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+      await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+      await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+      if (!isNaN(Number(cedStr))) {
+        await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+        await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+        await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+      }
     } catch (e) {
       console.warn("Actualizando cartones anteriores en 'cartones':", e.message);
     }
@@ -2141,53 +2153,61 @@ const db = {
         console.warn("Aviso al obtener lista negra para métricas v118:", eB);
       }
 
-      // 2. AUDITORÍA V119: Consulta estricta a la tabla 'cartones' con estado = 'activo'
+      // 2. AUDITORÍA V182: Consulta estricta a la tabla 'cartones' con estado = 'activo' / 'activo_por_renovacion'
       const { data: cartonesActivos, error } = await supabase
         .from('cartones')
         .select('*')
-        .eq('estado', 'activo');
+        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
 
-      console.log("🔍 [v119 AUDIT] Cartones Activos CRUDOS devueltos por Supabase:", cartonesActivos, "Error:", error);
-      console.log("🔍 [v119 AUDIT] Cédulas en Lista Negra detectadas:", Array.from(blacklistedCedulas));
+      console.log("🔍 [v182 AUDIT] Cartones Activos devueltos por Supabase:", cartonesActivos, "Error:", error);
+      console.log("🔍 [v182 AUDIT] Cédulas en Lista Negra detectadas:", Array.from(blacklistedCedulas));
 
       let carteraEnCalle = 0; // Suma del capital principal activo en poder de los clientes
       let interesesActivos = 0; // Suma de ganancias proyectadas de cartones activos
 
       if (!error && cartonesActivos && cartonesActivos.length > 0) {
+        // Filtrar y deduplicar cartones activos conservando únicamente el más reciente por cliente
+        const activeMap = new Map();
+
         cartonesActivos.forEach(c => {
           const ced = String(c.cliente_id || c.client_id || c.cedula || '').trim();
-          const rawEstado = String(c.estado || '').trim().toLowerCase();
-          const rawStatus = String(c.status || '').trim().toLowerCase();
+          const rawEstado = String(c.estado || '').trim().toUpperCase();
+          const rawStatus = String(c.status || '').trim().toUpperCase();
 
-          const isLoss = rawEstado.includes('perdida') || rawEstado.includes('mora') || rawStatus.includes('perdida') || rawStatus.includes('mora') || blacklistedCedulas.has(ced);
-          const isStrictlyActive = (rawEstado === 'activo' || rawStatus === 'activo') && !isLoss;
+          const isLoss = rawEstado.includes('PERDIDA') || rawEstado.includes('MORA') || rawStatus.includes('PERDIDA') || rawStatus.includes('MORA') || blacklistedCedulas.has(ced);
+          const isClosedOrRenewed = rawEstado === 'CERRADO' || rawEstado === 'RENOVADO' || rawEstado === 'LIQUIDADO_POR_RENOVACION' || rawEstado === 'LIQUIDADO' || rawStatus === 'CERRADO' || rawStatus === 'RENOVADO' || rawStatus === 'LIQUIDADO_POR_RENOVACION' || rawStatus === 'LIQUIDADO';
 
-          if (isStrictlyActive) {
-            const outstanding = Math.round(Number(c.outstanding || 0));
-            let totalDebt = Math.round(Number(c.total_debt || c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
-            let amount = Math.round(Number(c.monto_prestado || c.amount || c.capital_prestado || 0));
+          const isStrictlyActive = (rawEstado === 'ACTIVO' || rawEstado === 'ACTIVO_POR_RENOVACION' || rawStatus === 'ACTIVO') && !isLoss && !isClosedOrRenewed;
 
-            if (outstanding > 0) {
-              if (totalDebt <= 0 && amount > 0) {
-                totalDebt = Math.round(amount * 1.2);
-              }
-              if (amount <= 0 && totalDebt > 0) {
-                amount = Math.round(totalDebt / 1.2);
-              }
-
-              const originalInterest = (totalDebt > amount) ? Math.round(totalDebt - amount) : 0;
-
-              // REGLA 1 (v168): Intereses Activos permanecen estables mientras el cartón siga activo (no disminuyen por abonos o pagos masivos)
-              interesesActivos += originalInterest;
-
-              // REGLA 2 (v168): Cartera en Calle descuenta directamente los abonos/pagos masivos del capital prestado
-              // ej. $100.000 prestados, $120.000 total (interés $20.000). Si se recogen $72.000 en pago masivo (outstanding = $48.000):
-              // Cartera en Calle = Math.max(0, 48.000 - 20.000) = $28.000.
-              const capitalPendiente = Math.max(0, Math.min(amount, outstanding - originalInterest));
-              carteraEnCalle += capitalPendiente;
+          if (isStrictlyActive && ced) {
+            const existingCarton = activeMap.get(ced);
+            if (!existingCarton || (new Date(c.created_at || c.fecha_apertura || 0) > new Date(existingCarton.created_at || existingCarton.fecha_apertura || 0))) {
+              activeMap.set(ced, c);
             }
-          } else {
-            console.log(`⏭️ [v119 AUDIT] Omitiendo cartón id: ${c.id}, cliente: ${ced}, estado: "${c.estado}", status: "${c.status}"`);
+          }
+        });
+
+        activeMap.forEach(c => {
+          const outstanding = Math.round(Number(c.outstanding || 0));
+          let totalDebt = Math.round(Number(c.total_debt || c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
+          let amount = Math.round(Number(c.monto_prestado || c.amount || c.capital_prestado || 0));
+
+          if (outstanding > 0) {
+            if (totalDebt <= 0 && amount > 0) {
+              totalDebt = Math.round(amount * 1.2);
+            }
+            if (amount <= 0 && totalDebt > 0) {
+              amount = Math.round(totalDebt / 1.2);
+            }
+
+            const originalInterest = (totalDebt > amount) ? Math.round(totalDebt - amount) : 0;
+
+            // REGLA 1 (v168): Intereses Activos permanecen estables mientras el cartón siga activo (no disminuyen por abonos o pagos masivos)
+            interesesActivos += originalInterest;
+
+            // REGLA 2 (v168): Cartera en Calle descuenta directamente los abonos/pagos masivos del capital prestado
+            const capitalPendiente = Math.max(0, Math.min(amount, outstanding - originalInterest));
+            carteraEnCalle += capitalPendiente;
           }
         });
       }
@@ -2356,10 +2376,10 @@ const db = {
         if (rpcErr) console.error("Error al liquidar mediante RPC en liquidateCredit:", rpcErr);
         else console.log(`✅ [v134 LIQUIDATE RPC] Cartón(es) de ${cedStr} liquidados por morosidad vía RPC en Supabase.`);
       } else {
+        const moraOutstanding = isMora ? ((outstanding !== undefined && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0))) : 0;
         const cartonUpdatePayload = { 
           estado: cartonEstadoTarget, 
-          outstanding: 0,
-          total_debt: 0
+          outstanding: moraOutstanding
         };
         const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -2385,12 +2405,13 @@ const db = {
         estado: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'Activo'))
       };
 
-      if (isPaid || isMora) {
+      if (isPaid) {
         clientUpdatePayload.outstanding = 0;
-        if (isPaid) {
-          clientUpdatePayload.totalDebt = 0;
-          clientUpdatePayload.amount = 0;
-        }
+        clientUpdatePayload.totalDebt = 0;
+        clientUpdatePayload.amount = 0;
+      } else if (isMora) {
+        const moraOutstanding = (outstanding !== undefined && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0));
+        clientUpdatePayload.outstanding = moraOutstanding;
       } else if (outstanding !== undefined) {
         clientUpdatePayload.outstanding = Math.round(Number(outstanding || 0));
       }
@@ -2476,13 +2497,13 @@ const db = {
           const rawStatus = String(c.status || c.estado || '').toUpperCase();
           if (c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA')) {
             const ced = String(c.cedula).trim();
-            const totalDebtConInteres = Number(c.totalToPay || c.totalDebt || c.monto_total || c.total_debt || c.total_a_recaudar || (c.amount ? Math.round(c.amount * 1.2) : 0));
+            const realSaldoPendiente = Math.round(Number(c.outstanding ?? c.saldo_pendiente ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
             blacklistedMap.set(ced, {
               ...c,
               cedula: ced,
               name: c.name || c.nombre || null,
               status: 'Liquidado_Mora',
-              outstanding: totalDebtConInteres > 0 ? totalDebtConInteres : Number(c.amount || 0)
+              outstanding: realSaldoPendiente > 0 ? realSaldoPendiente : Number(c.amount || 0)
             });
           }
         });
@@ -2497,17 +2518,16 @@ const db = {
               const clientFromDb = allClientsByCedula.get(ced) || {};
               const joinedClient = carton.clients || {};
               const existing = blacklistedMap.get(ced);
-              const totalDebtConInteres = Number(
-                carton.total_debt || 
-                carton.totalDebt || 
-                carton.monto_total || 
-                joinedClient.totalToPay || 
-                joinedClient.totalDebt || 
-                joinedClient.monto_total || 
-                joinedClient.total_debt || 
-                (carton.monto_prestado ? Math.round(carton.monto_prestado * 1.2) : 0) ||
-                (joinedClient.amount ? Math.round(joinedClient.amount * 1.2) : 0)
-              );
+              const realSaldoPendiente = Math.round(Number(
+                carton.outstanding ?? 
+                clientFromDb.outstanding ?? 
+                joinedClient.outstanding ?? 
+                carton.saldo_pendiente ?? 
+                clientFromDb.saldo_pendiente ?? 
+                carton.total_debt ?? 
+                carton.totalDebt ?? 
+                0
+              ));
               const foundName = clientFromDb.name || clientFromDb.nombre || joinedClient.name || carton.nombre_cliente || (existing ? existing.name : null);
               blacklistedMap.set(ced, {
                 ...clientFromDb,
@@ -2520,7 +2540,7 @@ const db = {
                 zone: clientFromDb.zone || joinedClient.zone || (existing ? existing.zone : ''),
                 risk: 'Rojo',
                 status: 'liquidado_perdida',
-                outstanding: totalDebtConInteres > 0 ? totalDebtConInteres : Number(existing ? existing.outstanding : 0)
+                outstanding: realSaldoPendiente > 0 ? realSaldoPendiente : Number(existing ? existing.outstanding : 0)
               });
             }
           }

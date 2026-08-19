@@ -481,6 +481,14 @@ const agentModule = {
 
           const supabase = await window.BulaPayDB.initSupabase();
           if (nuevoEstado === 'liquidado_perdida') {
+            await window.BulaPayDB.liquidateCredit({
+              cedula: client.cedula,
+              cartonId: cartonId,
+              numeroCarton: numeroCarton,
+              status: nuevoEstado,
+              outstanding: saldoRestante,
+              totalDebt: totalEsperado
+            });
             const { error } = await supabase.rpc('liquidar_carton_por_morosidad', { 
               p_cliente_id: cedulaStr 
             });
@@ -509,7 +517,7 @@ const agentModule = {
           if (nuevoEstado === 'Liquidado_Pagado') {
             alert('🎉 ¡Cartón Liquidado Exitosamente!');
           } else {
-            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con deuda total con intereses de $${totalEsperado.toLocaleString('es-CO')}.\nEl crédito se marca como 'liquidado_perdida': la Cartera en Calle se reduce a $0 y el saldo de Capital en Caja permanece estable.`);
+            alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con saldo pendiente de $${saldoRestante.toLocaleString('es-CO')}.\nEl crédito se marca como 'liquidado_perdida': la Cartera en Calle se reduce y la deuda real se registra en Lista Negra.`);
           }
 
           // Limpiar UI
@@ -1244,14 +1252,12 @@ const agentModule = {
           // Renderizar lista negra (v99: Deuda completa incluyendo Intereses proyectados - v145: Cierre de ciclo y actualización en vivo)
           container.innerHTML = badClients.map(c => {
             const moraDebt = Number(
-              c.totalToPay || 
-              c.totalDebt || 
-              c.total_debt || 
-              c.monto_total || 
-              c.moraDebt || 
-              (c.monto_prestado ? Math.round(Number(c.monto_prestado) * 1.2) : 0) || 
-              (c.amount ? Math.round(Number(c.amount) * 1.2) : 0) || 
-              c.outstanding || 
+              c.outstanding ?? 
+              c.saldo_pendiente ?? 
+              c.saldo_restante ?? 
+              c.totalDebt ?? 
+              c.total_debt ?? 
+              c.monto_total ?? 
               0
             );
             const cedulaStr = String(c.cedula || c.cliente_id || c.client_id || '').trim();
@@ -1896,14 +1902,12 @@ const agentModule = {
       if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'block', 'important');
 
       const moraDebt = Math.round(Number(
-        client.totalToPay || 
-        client.totalDebt || 
-        client.total_debt || 
-        client.monto_total || 
-        client.moraDebt || 
-        (client.monto_prestado ? Math.round(Number(client.monto_prestado) * 1.2) : 0) || 
-        (client.amount ? Math.round(Number(client.amount) * 1.2) : 0) || 
-        client.outstanding || 
+        client.outstanding ?? 
+        client.saldo_pendiente ?? 
+        client.saldo_restante ?? 
+        client.totalDebt ?? 
+        client.total_debt ?? 
+        client.monto_total ?? 
         0
       ));
 
