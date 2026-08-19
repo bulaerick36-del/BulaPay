@@ -1159,36 +1159,18 @@ const agentModule = {
 
         try {
           if (movementType === 'salida') {
-            // REGLA DE RETIRO / SALIDA v178: Guardar movimiento de salida (egreso) en caja_movimientos
-            await window.BulaPayDB.saveCashMovement({
-              id: 'mov_salida_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-              route_id: currentUser.routeId,
-              routeId: currentUser.routeId,
-              agent_id: agentId,
-              type: 'salida',
-              tipo: 'salida',
-              amount: amount,
-              monto: amount,
-              concept: 'Retiro de caja (Salida)',
-              concepto: 'Retiro de caja (Salida)',
-              description: 'Retiro de caja (Salida)',
-              date: nowIso,
-              created_at: nowIso
-            });
-
-            alert(`🔴 Retiro de $${amount.toLocaleString('es-CO')} registrado exitosamente. El capital en caja ha disminuido.`);
+            // REGLA ABSOLUTA DE RETIRO v180: Registrar retiro con monto negativo en capital_injections
+            await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount, true);
           } else {
-            // REGLA DE INYECCIÓN / ENTRADA v178: Guardar inyección de capital en capital_injections
-            await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount);
-
-            alert(`🟢 Inyección de $${amount.toLocaleString('es-CO')} ingresada exitosamente a caja.`);
+            // REGLA DE INYECCIÓN v180: Registrar inyección de capital positivo en capital_injections
+            await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount, false);
           }
 
           document.getElementById('cash-movement-amount').value = '';
           const movementForm = document.getElementById('cash-movement-form');
           if (movementForm) movementForm.style.display = 'none';
 
-          // Actualizar datos del modal de Cierre de Caja
+          // REGLA CRÍTICA DE ORDEN DE EJECUCIÓN (v180): Actualizar la interfaz ANTES de mostrar el alert bloqueante
           const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
           const elOnHand = document.getElementById('private-cash-on-hand');
           if (elOnHand) {
@@ -1201,13 +1183,20 @@ const agentModule = {
             }
           }
 
-          // Actualizar vistas y dashboard financiero global
+          // Actualizar vistas y dashboard financiero global inmediatamente
           if (this && typeof this.renderFinancialDashboard === 'function') {
             await this.renderFinancialDashboard();
           } else if (window.agentModule && typeof window.agentModule.renderFinancialDashboard === 'function') {
             await window.agentModule.renderFinancialDashboard();
           } else if (window.AgentV6 && typeof window.AgentV6.renderFinancialDashboard === 'function') {
             await window.AgentV6.renderFinancialDashboard();
+          }
+
+          // MOSTRAR ALERT DESPUÉS DE QUE LA CAJA Y EL MODAL YA ESTÉN ACTUALIZADOS EN PANTALLA
+          if (movementType === 'salida') {
+            alert(`🔴 Retiro de $${amount.toLocaleString('es-CO')} registrado exitosamente.\nCapital actual en caja: $${Number(onHand).toLocaleString('es-CO')}`);
+          } else {
+            alert(`🟢 Inyección de $${amount.toLocaleString('es-CO')} ingresada exitosamente a caja.\nCapital actual en caja: $${Number(onHand).toLocaleString('es-CO')}`);
           }
         } catch (error) {
           console.error("Error al procesar movimiento de caja:", error);

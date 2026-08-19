@@ -1832,11 +1832,14 @@ const db = {
     }
   },
 
-  async injectCapital(routeId, agentId, amount) {
+  async injectCapital(routeId, agentId, amount, isWithdrawal = false) {
     const supabase = await initSupabase();
-    const cleanAmount = Math.round(parseFloat(amount) || 0);
+    let cleanAmount = Math.round(parseFloat(amount) || 0);
+    if (isWithdrawal && cleanAmount > 0) {
+      cleanAmount = -cleanAmount;
+    }
     const todayStr = new Date().toISOString().split('T')[0];
-    const injectionId = 'inj_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    const injectionId = (isWithdrawal ? 'inj_ret_' : 'inj_') + Date.now() + '_' + Math.floor(Math.random() * 1000);
 
     // ESQUEMA EXACTO SEGÚN SUPABASE TABLE EDITOR:
     // Columnas: id (text), routeId (text), agent_id (text), amount (numeric), date (date)
@@ -1854,6 +1857,26 @@ const db = {
       console.error("Error directo al insertar en capital_injections:", error);
       throw error;
     }
+
+    // Insert secundario en caja_movimientos para trazabilidad auditable
+    try {
+      await supabase.from('caja_movimientos').insert([{
+        id: 'mov_' + injectionId,
+        route_id: routeId ? String(routeId) : null,
+        routeId: routeId ? String(routeId) : null,
+        agent_id: agentId ? String(agentId) : null,
+        type: isWithdrawal ? 'salida' : 'entrada',
+        tipo: isWithdrawal ? 'salida' : 'entrada',
+        amount: Math.abs(cleanAmount),
+        monto: Math.abs(cleanAmount),
+        concept: isWithdrawal ? 'Retiro de caja (Salida)' : 'Inyección de capital (Entrada)',
+        concepto: isWithdrawal ? 'Retiro de caja (Salida)' : 'Inyección de capital (Entrada)',
+        date: new Date().toISOString()
+      }]);
+    } catch (eMov) {
+      console.warn("Omitiendo insert secundario en caja_movimientos:", eMov.message);
+    }
+
     return true;
   },
 
@@ -2738,7 +2761,8 @@ const db = {
                 totalMovimientosEntrada += amount;
               }
             } else if (isSalida) {
-              if (!concept.includes('desembolso') && !concept.includes('cartón') && !concept.includes('carton') && !concept.includes('renovación') && !concept.includes('renovacion')) {
+              const isInjectionSalida = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || String(m.id || '').startsWith('inj_') || String(m.id || '').startsWith('mov_inj_');
+              if (!concept.includes('desembolso') && !concept.includes('cartón') && !concept.includes('carton') && !concept.includes('renovación') && !concept.includes('renovacion') && !isInjectionSalida) {
                 totalMovimientosSalida += amount;
               }
             }
