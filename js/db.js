@@ -950,6 +950,7 @@ const db = {
       try {
         const rolloverVal = Number(client.rollover_amount || client.saldo_anterior || 0);
         const cartonState = client.isRenewal || client.is_renewal || rolloverVal > 0 ? 'activo_por_renovacion' : 'activo';
+        const netCashVal = Math.max(0, Number(client.amount || 0) - Number(client.discount_amount || 0) - rolloverVal);
         const cartonPayload = {
           cliente_id: String(client.cedula),
           numero_carton: Math.floor(Date.now() % 100000000),
@@ -964,7 +965,7 @@ const db = {
           installment_amount: Number(client.installmentAmount || 0),
           discount_amount: Number(client.discount_amount || 0),
           discount_reason: client.discount_reason || null,
-          net_cash: Number(client.amount || 0) - Number(client.discount_amount || 0),
+          net_cash: netCashVal,
           route_id: client.routeId || client.route_id || null,
           agent_id: client.agent_id || client.agentId || null,
           supervisor_id: client.supervisor_id || null,
@@ -1062,6 +1063,7 @@ const db = {
             .in('estado', ['activo', 'activo_por_renovacion']);
 
           const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
+          const netCashVal = Math.max(0, Number(payload.amount || 0) - Number(payload.discount_amount || 0) - rolloverVal);
           await supabase.from('cartones').insert([{
             cliente_id: String(clienteExistenteId),
             numero_carton: Math.floor(Date.now() % 100000000),
@@ -1076,7 +1078,7 @@ const db = {
             installment_amount: Number(payload.installmentAmount || 0),
             discount_amount: Number(payload.discount_amount || 0),
             discount_reason: payload.discount_reason || null,
-            net_cash: Number(payload.amount || 0) - Number(payload.discount_amount || 0),
+            net_cash: netCashVal,
             route_id: payload.routeId || payload.route_id || null,
             agent_id: payload.agent_id || payload.agentId || null,
             supervisor_id: payload.supervisor_id || null,
@@ -1132,6 +1134,7 @@ const db = {
     const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
     const isRenov = payload.isRenewal || payload.is_renewal || rolloverVal > 0;
     const newState = isRenov ? 'activo_por_renovacion' : 'activo';
+    const netCashVal = Math.max(0, Number(payload.amount || 0) - Number(payload.discount_amount || 0) - rolloverVal);
 
     try {
       const cartonPayload = {
@@ -1148,7 +1151,7 @@ const db = {
         installment_amount: Number(payload.installmentAmount || 0),
         discount_amount: Number(payload.discount_amount || 0),
         discount_reason: payload.discount_reason || null,
-        net_cash: Number(payload.amount || 0) - Number(payload.discount_amount || 0),
+        net_cash: netCashVal,
         route_id: payload.routeId || payload.route_id || null,
         agent_id: payload.agent_id || payload.agentId || null,
         supervisor_id: payload.supervisor_id || null,
@@ -1172,7 +1175,7 @@ const db = {
           installment_amount: Number(payload.installmentAmount || 0),
           discount_amount: Number(payload.discount_amount || 0),
           discount_reason: payload.discount_reason || null,
-          net_cash: Number(payload.amount || 0) - Number(payload.discount_amount || 0),
+          net_cash: netCashVal,
           route_id: payload.routeId || payload.route_id || null,
           agent_id: payload.agent_id || payload.agentId || null,
           supervisor_id: payload.supervisor_id || null,
@@ -2229,7 +2232,8 @@ const db = {
     const supabase = await initSupabase();
     
     const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
-    const isPaid = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO') || isRenovacion;
+    const isPaidRealCash = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
+    const isPaid = isPaidRealCash || isRenovacion;
     
     // 1. Obtener datos del cliente ANTES de resetear sus saldos numéricos
     let clientData = null;
@@ -2247,8 +2251,9 @@ const db = {
     let gananciaReal = 0;
     let originalAmount = 0;
 
-    // 2. Si el crédito fue liquidado/cancelado con pago, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments (sin tocar capital_injections)
-    if (isPaid && clientData) {
+    // 2. Si el crédito fue liquidado/cancelado con PAGO REAL EN EFECTIVO, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments.
+    // REGLA CONTABLE ABSOLUTA v173: En RENOVACIÓN no se insertan cuotas pagadas en payments porque el saldo anterior es puramente simbólico/referencial.
+    if (isPaidRealCash && !isRenovacion && clientData) {
       try {
         const totalDebt = Math.round(Number(clientData?.totalDebt || clientData?.monto_total || 0));
         originalAmount = Math.round(Number(clientData?.amount || clientData?.capital_prestado || 0));
