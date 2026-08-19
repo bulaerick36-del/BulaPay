@@ -1188,14 +1188,15 @@ const db = {
       console.warn("Omitiendo inserción en 'cartones':", e.message);
     }
 
-    // 4. Limpiar pagos del cartón anterior para aislar las cuotas del nuevo cartón
+    // 4. Limpiar únicamente las cuotas PENDIENTES del cartón anterior para aislar las cuotas del nuevo cartón
+    // REGLA CONTABLE ABSOLUTA v175: NUNCA borrar los pagos REALES del historial porque representan dinero real ingresado a caja.
     try {
-      await supabase.from('payments').delete().eq('clientCedula', String(clientId));
+      await supabase.from('payments').delete().eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
     } catch (e) {
       console.warn("Omitiendo borrado por clientCedula:", e.message);
     }
     try {
-      await supabase.from('payments').delete().eq('client_cedula', String(clientId));
+      await supabase.from('payments').delete().eq('client_cedula', String(clientId)).eq('status', 'Pendiente');
     } catch (e) {
       console.warn("Omitiendo borrado por client_cedula:", e.message);
     }
