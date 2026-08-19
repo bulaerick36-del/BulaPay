@@ -2716,15 +2716,19 @@ const db = {
         const currentUser = this.getCurrentUser();
         const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
         movements.forEach(m => {
+          const mRoute = m.route_id || m.routeId;
+          const mAgent = m.agent_id || m.agentId;
           const belongsToUser = targetRouteId 
-            ? (String(m.routeId || m.route_id) === String(targetRouteId)) 
-            : (String(m.agent_id) === String(agentId));
+            ? (!mRoute || String(mRoute) === String(targetRouteId) || (agentId && String(mAgent) === String(agentId))) 
+            : (!agentId || String(mAgent) === String(agentId));
           if (belongsToUser || !targetRouteId) {
-            const type = String(m.type || m.tipo || '').toLowerCase();
-            const amount = Math.round(Number(m.amount || m.monto || 0));
+            const typeStr = String(m.type || m.tipo || '').toLowerCase();
+            const isEntrada = typeStr === 'entrada' || typeStr === 'ingreso' || typeStr === 'inyeccion' || typeStr === 'inyección' || typeStr === 'in';
+            const isSalida = typeStr === 'salida' || typeStr === 'egreso' || typeStr === 'retiro' || typeStr === 'out';
+            const amount = Math.abs(Math.round(Number(m.amount || m.monto || 0)));
             const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
 
-            if (type === 'entrada') {
+            if (isEntrada) {
               const isRenov = m.id && String(m.id).startsWith('mov_renov_in_');
               const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || String(m.id || '').startsWith('inj_') || (!concept && !m.description && !m.concepto);
               
@@ -2733,7 +2737,7 @@ const db = {
               } else if (!isInjection) {
                 totalMovimientosEntrada += amount;
               }
-            } else if (type === 'salida') {
+            } else if (isSalida) {
               if (!concept.includes('desembolso') && !concept.includes('cartón') && !concept.includes('carton') && !concept.includes('renovación') && !concept.includes('renovacion')) {
                 totalMovimientosSalida += amount;
               }
@@ -2931,7 +2935,10 @@ const db = {
         const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || idStr.startsWith('inj_') || (!concept && !m.description && !m.concepto);
         return !isInjection;
       }).reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
-      const totalOut = Math.round(todaysMovements.filter(m => m.type === 'salida').reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
+      const totalOut = Math.round(todaysMovements.filter(m => {
+        const typeStr = String(m.type || m.tipo || '').toLowerCase();
+        return typeStr === 'salida' || typeStr === 'egreso' || typeStr === 'retiro' || typeStr === 'out';
+      }).reduce((acc, m) => acc + Math.abs(Math.round(Number(m.amount || m.monto) || 0)), 0));
       
       // Efectivo Disponible / Liquidez Diaria en Caja calculada dinámicamente según la nueva arquitectura
       const onHand = Math.round(await this.getLiquidCash(currentUser.routeId));
