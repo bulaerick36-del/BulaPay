@@ -2879,6 +2879,7 @@ const agentModule = {
       }
 
       const applyDiscount = document.getElementById('new-client-apply-discount')?.checked;
+      const discountAmountInput = document.getElementById('new-client-discount-amount');
       let discountAmount = 0;
       let discountReason = null;
       let segVal = 0;
@@ -2886,10 +2887,10 @@ const agentModule = {
       let otrVal = 0;
 
       if (this.isRenewalMode) {
-        // v171: En modo renovación, otrVal (saldo_anterior / rollover_amount) se inyecta exclusivamente en la casilla inferior.
+        // v181: En modo renovación, otrVal (saldo_anterior / rollover_amount) se inyecta exclusivamente en la casilla inferior.
         // discountAmount toma el monto del descuento general del campo superior (si existe).
         otrVal = Math.round(Number(this.currentRenewalOutstanding || 0));
-        discountAmount = (applyDiscount && discountAmountInput) ? Math.round(parseFloat(discountAmountInput.value.replace(/\./g, '') || '0') || 0) : 0;
+        discountAmount = (applyDiscount && typeof discountAmountInput !== 'undefined' && discountAmountInput) ? Math.round(parseFloat(discountAmountInput.value.replace(/\./g, '') || '0') || 0) : 0;
 
         let reasons = ['Saldo Cartón Anterior (Renovación)'];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
