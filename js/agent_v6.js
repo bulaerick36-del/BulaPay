@@ -1150,17 +1150,43 @@ const agentModule = {
         const currentUser = window.BulaPayDB.getCurrentUser();
         if (!currentUser) return;
 
+        const movementType = window._currentCashMovementType || 'entrada';
         btnConfirmMov.disabled = true;
         btnConfirmMov.textContent = 'Procesando...';
 
         const agentId = currentUser.id || currentUser.username;
+        const nowIso = new Date().toISOString();
 
         try {
-          // 1. Guardar la inyección ÚNICAMENTE en la tabla oficial capital_injections (fuente única v161)
-          await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount);
+          if (movementType === 'salida') {
+            // REGLA DE RETIRO / SALIDA v178: Guardar movimiento de salida (egreso) en caja_movimientos
+            await window.BulaPayDB.saveCashMovement({
+              id: 'mov_salida_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+              route_id: currentUser.routeId,
+              routeId: currentUser.routeId,
+              agent_id: agentId,
+              type: 'salida',
+              tipo: 'salida',
+              amount: amount,
+              monto: amount,
+              concept: 'Retiro de caja (Salida)',
+              concepto: 'Retiro de caja (Salida)',
+              description: 'Retiro de caja (Salida)',
+              date: nowIso,
+              created_at: nowIso
+            });
 
-          alert(`✅ Inyección de $${amount.toLocaleString('es-CO')} ingresada exitosamente a caja.`);
+            alert(`🔴 Retiro de $${amount.toLocaleString('es-CO')} registrado exitosamente. El capital en caja ha disminuido.`);
+          } else {
+            // REGLA DE INYECCIÓN / ENTRADA v178: Guardar inyección de capital en capital_injections
+            await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount);
+
+            alert(`🟢 Inyección de $${amount.toLocaleString('es-CO')} ingresada exitosamente a caja.`);
+          }
+
           document.getElementById('cash-movement-amount').value = '';
+          const movementForm = document.getElementById('cash-movement-form');
+          if (movementForm) movementForm.style.display = 'none';
 
           // Actualizar datos del modal de Cierre de Caja
           const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
@@ -1184,8 +1210,8 @@ const agentModule = {
             await window.AgentV6.renderFinancialDashboard();
           }
         } catch (error) {
-          console.error("Error al guardar inyección de capital:", error);
-          alert('❌ Error al guardar la inyección en la base de datos: ' + (error.message || 'Error de conexión'));
+          console.error("Error al procesar movimiento de caja:", error);
+          alert('❌ Error al registrar el movimiento en la base de datos: ' + (error.message || 'Error de conexión'));
         }
         
         btnConfirmMov.disabled = false;
