@@ -2834,10 +2834,10 @@ const agentModule = {
       let otrVal = 0;
 
       if (this.isRenewalMode) {
-        // Blindaje estricto v158: En modo renovación, el saldo anterior y el descuento inicial
-        // se sincronizan rígidamente con el valor real del saldo pendiente del cartón liquidado.
+        // v171: En modo renovación, otrVal (saldo_anterior / rollover_amount) se inyecta exclusivamente en la casilla inferior.
+        // discountAmount toma el monto del descuento general del campo superior (si existe).
         otrVal = Math.round(Number(this.currentRenewalOutstanding || 0));
-        discountAmount = otrVal;
+        discountAmount = (applyDiscount && discountAmountInput) ? Math.round(parseFloat(discountAmountInput.value.replace(/\./g, '') || '0') || 0) : 0;
 
         let reasons = ['Saldo Cartón Anterior (Renovación)'];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
@@ -2871,9 +2871,6 @@ const agentModule = {
           otrVal = discountAmount || 0;
         }
         discountReason = reasons.length > 0 ? reasons.join(', ') : null;
-      } else if (this.isRenewalMode && (this.currentRenewalOutstanding > 0)) {
-        otrVal = Math.round(Number(this.currentRenewalOutstanding || 0));
-        discountAmount = otrVal;
       }
 
       const emailEl = document.getElementById('new-client-email');
@@ -3288,17 +3285,21 @@ const agentModule = {
           inputOtrosText.style.display = 'block';
           inputOtrosText.readOnly = true; // Solo lectura rígidamente (v158)
           inputOtrosText.value = `Saldo Cartón Anterior: $${formatNum(effectiveOutstanding)}`;
+          inputOtrosText.style.fontWeight = 'bold';
+          inputOtrosText.style.color = '#3b82f6';
         }
       }
       if (discountAmountInput) {
-        discountAmountInput.value = formatNum(effectiveOutstanding);
-        discountAmountInput.readOnly = true; // Campo automático e inalterable (v158)
-        discountAmountInput.style.backgroundColor = 'var(--bg-secondary)';
+        discountAmountInput.readOnly = false;
+        discountAmountInput.style.backgroundColor = 'var(--bg-primary)';
         discountAmountInput.style.color = 'var(--color-verde)';
         discountAmountInput.style.fontWeight = 'bold';
-        discountAmountInput.style.cursor = 'not-allowed';
-        discountAmountInput.title = 'Monto automático e inalterable por renovación (Saldo Cartón Anterior)';
-        discountAmountInput.dispatchEvent(new Event('input'));
+        discountAmountInput.style.cursor = 'text';
+        discountAmountInput.removeAttribute('title');
+        // REGLA DE UBICACIÓN (v171): El campo superior de descuentos generales no debe rellenarse automáticamente con el saldo anterior.
+        if (discountAmountInput.value === formatNum(effectiveOutstanding)) {
+          discountAmountInput.value = '';
+        }
       }
       const capitalInput = document.getElementById('new-client-capital');
       if (capitalInput) {
@@ -3310,9 +3311,12 @@ const agentModule = {
         discountCheckbox.disabled = false;
       }
       if (cbOtros) {
+        cbOtros.checked = false;
         cbOtros.disabled = false;
       }
       if (inputOtrosText) {
+        inputOtrosText.value = '';
+        inputOtrosText.style.display = 'none';
         inputOtrosText.readOnly = false;
       }
       if (discountAmountInput) {
@@ -3361,23 +3365,23 @@ const agentModule = {
       debtInput.value = totalDebt ? formatNumber(totalDebt) : "";
       installmentValInput.value = installmentVal ? formatNumber(installmentVal) : "";
 
-      // La matemática del descuento depende ÚNICAMENTE de la cifra global ingresada arriba
-      let totalDiscount = 0;
-      if (this.isRenewalMode) {
-        // Blindaje estricto v158: En renovación, el descuento está rígidamente fijado al saldo pendiente real del cartón anterior
-        totalDiscount = Math.round(Number(this.currentRenewalOutstanding || 0));
-        if (discountAmountInput) {
-          discountAmountInput.value = formatNumber(totalDiscount);
-          discountAmountInput.readOnly = true;
-        }
-      } else if (discountCheckbox && discountCheckbox.checked && discountAmountInput) {
-        totalDiscount = parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0;
+      // v171: Descuento general del campo superior (Seguro, Papelería, etc.)
+      let generalDiscount = 0;
+      if (discountCheckbox && discountCheckbox.checked && discountAmountInput) {
+        generalDiscount = parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0;
       }
 
-      const netCash = Math.max(0, capital - totalDiscount);
+      // v171: Saldo del cartón anterior (Renovación) inyectado de forma estricta y exclusiva desde el rollover
+      let rolloverDiscount = 0;
+      if (this.isRenewalMode) {
+        rolloverDiscount = Math.round(Number(this.currentRenewalOutstanding || 0));
+      }
+
+      const totalDeductions = generalDiscount + rolloverDiscount;
+      const netCash = Math.max(0, capital - totalDeductions);
 
       if (netCashInput) {
-        netCashInput.value = (capital > 0 || totalDiscount > 0) ? `$${formatNumber(netCash)}` : "";
+        netCashInput.value = (capital > 0 || totalDeductions > 0) ? `$${formatNumber(netCash)}` : "";
       }
     };
 
@@ -3407,11 +3411,6 @@ const agentModule = {
 
     if (discountAmountInput) {
       discountAmountInput.addEventListener('input', (e) => {
-        if (this.isRenewalMode) {
-          e.target.value = formatNumber(Math.round(Number(this.currentRenewalOutstanding || 0)));
-          calculate();
-          return;
-        }
         let val = e.target.value.replace(/\D/g, '');
         e.target.value = val ? formatNumber(val) : '';
         calculate();
