@@ -2132,17 +2132,27 @@ const db = {
 
           if (isStrictlyActive) {
             const outstanding = Math.round(Number(c.outstanding || 0));
-            const totalDebt = Math.round(Number(c.total_debt || c.totalDebt || 0));
-            const amount = Math.round(Number(c.monto_prestado || c.amount || 0));
+            let totalDebt = Math.round(Number(c.total_debt || c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
+            let amount = Math.round(Number(c.monto_prestado || c.amount || c.capital_prestado || 0));
 
             if (outstanding > 0) {
-              if (totalDebt > 0) {
-                const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
-                carteraEnCalle += Math.round(outstanding * capitalRatio);
-                interesesActivos += Math.round(outstanding * (1 - capitalRatio));
-              } else {
-                carteraEnCalle += outstanding;
+              if (totalDebt <= 0 && amount > 0) {
+                totalDebt = Math.round(amount * 1.2);
               }
+              if (amount <= 0 && totalDebt > 0) {
+                amount = Math.round(totalDebt / 1.2);
+              }
+
+              const originalInterest = (totalDebt > amount) ? Math.round(totalDebt - amount) : 0;
+
+              // REGLA 1 (v168): Intereses Activos permanecen estables mientras el cartón siga activo (no disminuyen por abonos o pagos masivos)
+              interesesActivos += originalInterest;
+
+              // REGLA 2 (v168): Cartera en Calle descuenta directamente los abonos/pagos masivos del capital prestado
+              // ej. $100.000 prestados, $120.000 total (interés $20.000). Si se recogen $72.000 en pago masivo (outstanding = $48.000):
+              // Cartera en Calle = Math.max(0, 48.000 - 20.000) = $28.000.
+              const capitalPendiente = Math.max(0, Math.min(amount, outstanding - originalInterest));
+              carteraEnCalle += capitalPendiente;
             }
           } else {
             console.log(`⏭️ [v119 AUDIT] Omitiendo cartón id: ${c.id}, cliente: ${ced}, estado: "${c.estado}", status: "${c.status}"`);
@@ -2150,7 +2160,7 @@ const db = {
         });
       }
 
-      console.log(`✅ [v119 AUDIT] Totales recalculados -> Cartera en Calle: $${carteraEnCalle}, Intereses Activos: $${interesesActivos}`);
+      console.log(`✅ [v168 AUDIT] Totales recalculados -> Cartera en Calle: $${carteraEnCalle}, Intereses Activos: $${interesesActivos}`);
       
       if (!cartonesActivos || cartonesActivos.length === 0) {
         // Fallback en caso de que la tabla cartones no tenga registros aún (v151: definir rawClients)
@@ -2174,17 +2184,25 @@ const db = {
 
             if (!isExcluded) {
               const outstanding = Math.round(Number(c.outstanding || c.saldo_restante || 0));
-              const totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || 0));
-              const amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
+              let totalDebt = Math.round(Number(c.totalDebt || c.total_a_recaudar || c.monto_total || c.total_debt || 0));
+              let amount = Math.round(Number(c.amount || c.capital_prestado || c.monto_prestado || 0));
 
               if (outstanding > 0) {
-                if (totalDebt > 0) {
-                  const capitalRatio = Math.min(1, Math.max(0, amount / totalDebt));
-                  carteraEnCalle += Math.round(outstanding * capitalRatio);
-                  interesesActivos += Math.round(outstanding * (1 - capitalRatio));
-                } else {
-                  carteraEnCalle += outstanding;
+                if (totalDebt <= 0 && amount > 0) {
+                  totalDebt = Math.round(amount * 1.2);
                 }
+                if (amount <= 0 && totalDebt > 0) {
+                  amount = Math.round(totalDebt / 1.2);
+                }
+
+                const originalInterest = (totalDebt > amount) ? Math.round(totalDebt - amount) : 0;
+
+                // REGLA 1 (v168): Intereses Activos estables mientras el cartón siga activo
+                interesesActivos += originalInterest;
+
+                // REGLA 2 (v168): Cartera en Calle descuenta directamente del capital
+                const capitalPendiente = Math.max(0, Math.min(amount, outstanding - originalInterest));
+                carteraEnCalle += capitalPendiente;
               }
             }
           }
@@ -2197,7 +2215,7 @@ const db = {
         posibleGanancia: Math.round(interesesActivos)
       };
     } catch (err) {
-      console.error("Error al calcular métricas del Dashboard financiero (v106):", err);
+      console.error("Error al calcular métricas del Dashboard financiero (v168):", err);
       return { carteraEnCalle: 0, interesesActivos: 0, posibleGanancia: 0 };
     }
   },

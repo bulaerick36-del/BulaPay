@@ -1762,6 +1762,9 @@ const agentModule = {
         
         // Actualizar botón de seguimiento
         await this.updateRouteTracking();
+
+        // Actualizar métricas financieras en tiempo real (v168)
+        await this.renderFinancialDashboard();
         
         // Mostrar modal obligatorio SMS para notificar el pago masivo
         this.showMandatorySmsPrompt(updatedClient, 'payment');
