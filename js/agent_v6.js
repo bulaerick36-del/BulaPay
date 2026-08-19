@@ -297,12 +297,49 @@ const agentModule = {
           return;
         }
 
-        const confirmMsg = `¿Estás seguro de liquidar para renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nEsto marcará todas las cuotas restantes y liquidará el cartón actual sin alterar la caja automáticamente.`;
+        // REGLA OBLIGATORIA v177: Cálculo exacto del Saldo Real Remanente del cartón actual
+        // Saldo_Real_Remanente = Saldo_Total_Inicial - (Suma de todos los pagos reales/masivos de este cartón)
+        let totalPagadoReal = 0;
+        const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+        const cartonCreatedTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
+        const cartonId = client.carton_id || client.id;
+        const numeroCarton = client.numero_carton;
+
+        if (payments && Array.isArray(payments)) {
+          payments.forEach(p => {
+            const pStatus = String(p.status || '').toUpperCase();
+            const isCanceled = pStatus.includes('CANCEL') || pStatus.includes('RECHAZ') || pStatus === 'NO PAGO' || pStatus === 'PENDIENTE';
+            const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || pStatus === 'LIQUIDADO_PAGADO' || pStatus === 'LIQUIDADO_MORA';
+
+            if (!isCanceled && !isLiquidationRecord && Number(p.amount) > 0) {
+              let belongsToCarton = true;
+              if (p.carton_id && cartonId && String(p.carton_id) !== String(cartonId)) {
+                belongsToCarton = false;
+              } else if (p.numero_carton && numeroCarton && String(p.numero_carton) !== String(numeroCarton)) {
+                belongsToCarton = false;
+              } else if (cartonCreatedTime > 0) {
+                let pTime = 0;
+                if (p.created_at) pTime = new Date(p.created_at).getTime();
+                else if (p.date) pTime = new Date(String(p.date).trim().includes('T') ? String(p.date).trim() : String(p.date).trim() + 'T00:00:00').getTime();
+                if (pTime > 0 && (cartonCreatedTime - pTime > 2000)) {
+                  belongsToCarton = false;
+                }
+              }
+
+              if (belongsToCarton) {
+                totalPagadoReal += Math.round(Number(p.amount));
+              }
+            }
+          });
+        }
+
+        const saldoTotalInicial = Math.round(Number(client.totalDebt || client.total_debt || client.monto_total || (Number(client.amount || client.monto_prestado || 0) * 1.2)));
+        const saldoRealRemanente = Math.max(0, saldoTotalInicial - totalPagadoReal);
+
+        const confirmMsg = `¿Estás seguro de liquidar para renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nSaldo real a refinanciar: $${saldoRealRemanente.toLocaleString('es-CO')}.\nEsto marcará las cuotas y liquidará el cartón sin alterar la caja.`;
         if (!confirm(confirmMsg)) return;
 
         try {
-          const oldOutstanding = Math.round(Number(client.outstanding || client.totalDebt || client.monto_total || 0));
-          
           // Liquidar cartón anterior con estado 'liquidado_por_renovacion' y marcar cuotas restantes (v160)
           await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
@@ -312,12 +349,12 @@ const agentModule = {
             numeroCarton: client.numero_carton || null
           });
 
-          // Alerta de guía inteligente (v162)
-          const formattedMonto = oldOutstanding.toLocaleString('es-CO');
+          // Alerta con el Saldo Real Remanente (v177)
+          const formattedMonto = saldoRealRemanente.toLocaleString('es-CO');
           alert(`¡Liquidación exitosa para renovación! Saldo restante: $${formattedMonto}. No olvide descontarlo del nuevo crédito.`);
 
           this.switchTab('register');
-          this.setRenewalMode(true, oldOutstanding);
+          this.setRenewalMode(true, saldoRealRemanente);
 
           const inputName = document.getElementById('new-client-name');
           const inputCedula = document.getElementById('new-client-cedula');
