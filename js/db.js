@@ -1112,24 +1112,23 @@ const db = {
 
     const clientId = (existing && existing.length > 0) ? existing[0].cedula : String(payload.cedula);
     const nowIso = new Date().toISOString();
+    const newCartonUuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('carton_' + Date.now() + '_' + Math.floor(Math.random() * 10000));
     const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const newNumeroCarton = Math.floor(Date.now() % 100000000);
+
     console.log('-> ID/Cédula del cliente recuperado:', clientId);
-    console.log('-> Generando nuevo crédito independiente ID:', newCreditId);
+    console.log('-> Generando nuevo crédito independiente ID:', newCreditId, 'Cartón UUID:', newCartonUuid);
 
-    // 2. Marcar cartones anteriores del cliente como Liquidados en la tabla 'cartones'
-    // 2. Marcar cartones anteriores del cliente como RENOVADO / CERRADO en la tabla 'cartones' (Cierre de Ciclo)
+    // 2. CIERRE CONTABLE DEL ANTERIOR: Marcar explícitamente los cartones anteriores como 'liquidado_por_renovacion' con outstanding: 0
     try {
-      const isRenov = payload.isRenewal || payload.is_renewal || Number(payload.rollover_amount || payload.saldo_anterior || 0) > 0;
-      const oldState = isRenov ? 'RENOVADO' : 'CERRADO';
-
+      const cedStr = String(clientId).trim();
       const cartonUpdateOld = { 
-        estado: oldState, 
-        status: oldState,
-        outstanding: 0, 
-        total_debt: 0 
+        estado: 'liquidado_por_renovacion', 
+        status: 'liquidado_por_renovacion',
+        outstanding: 0,
+        fecha_cierre: nowIso
       };
 
-      const cedStr = String(clientId).trim();
       await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
       await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
       await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
@@ -1139,28 +1138,33 @@ const db = {
         await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
       }
     } catch (e) {
-      console.warn("Actualizando cartones anteriores en 'cartones':", e.message);
+      console.warn("Aviso al cerrar cartones anteriores:", e.message);
     }
     
-    // 3. Registrar nuevo cartón independiente (Renovación Atómica) en la tabla 'cartones'
+    // 3. REGISTRO 100% NUEVO: Registrar nuevo cartón independiente en la tabla 'cartones' con su propio ID y fecha actual
     const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
     const isRenov = payload.isRenewal || payload.is_renewal || rolloverVal > 0;
     const newState = isRenov ? 'activo_por_renovacion' : 'activo';
-    const netCashVal = Math.max(0, Number(payload.amount || 0) - Number(payload.discount_amount || 0) - rolloverVal);
+    const newTotalDebt = Math.round(Number(payload.totalDebt || 0));
+    const newMontoPrestado = Math.round(Number(payload.amount || 0));
+    const netCashVal = Math.max(0, newMontoPrestado - Number(payload.discount_amount || 0) - rolloverVal);
 
     try {
       const cartonPayload = {
+        id: newCartonUuid,
         cliente_id: String(clientId),
-        numero_carton: Math.floor(Date.now() % 100000000),
+        numero_carton: newNumeroCarton,
         fecha_apertura: nowIso,
-        monto_prestado: Number(payload.amount || 0),
+        fecha_inicio: nowIso,
+        monto_prestado: newMontoPrestado,
         estado: newState,
+        status: 'Activo',
         saldo_anterior: rolloverVal,
         rollover_amount: rolloverVal,
-        total_debt: Number(payload.totalDebt || 0),
-        outstanding: Number(payload.outstanding || payload.totalDebt || 0),
-        installments_count: Number(payload.installmentsCount || 1),
-        installment_amount: Number(payload.installmentAmount || 0),
+        total_debt: newTotalDebt,
+        outstanding: newTotalDebt, // Saldo inicial 100% igual a la nueva deuda total
+        installments_count: Number(payload.installmentsCount || 30),
+        installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
         discount_amount: Number(payload.discount_amount || 0),
         discount_reason: payload.discount_reason || null,
         net_cash: netCashVal,
@@ -1172,36 +1176,17 @@ const db = {
 
       const { error: cartonErr } = await supabase.from('cartones').insert([cartonPayload]);
       if (cartonErr) {
-        console.warn("⚠️ Error al insertar cartón en 'cartones'. Reintentando con payload esencial...", cartonErr);
-        await supabase.from('cartones').insert([{
-          cliente_id: String(clientId),
-          numero_carton: Math.floor(Date.now() % 100000000),
-          fecha_apertura: nowIso,
-          monto_prestado: Number(payload.amount || 0),
-          estado: newState,
-          saldo_anterior: rolloverVal,
-          rollover_amount: rolloverVal,
-          total_debt: Number(payload.totalDebt || 0),
-          outstanding: Number(payload.outstanding || payload.totalDebt || 0),
-          installments_count: Number(payload.installmentsCount || 1),
-          installment_amount: Number(payload.installmentAmount || 0),
-          discount_amount: Number(payload.discount_amount || 0),
-          discount_reason: payload.discount_reason || null,
-          net_cash: netCashVal,
-          route_id: payload.routeId || payload.route_id || null,
-          agent_id: payload.agent_id || payload.agentId || null,
-          supervisor_id: payload.supervisor_id || null,
-          created_at: nowIso
-        }]);
+        console.warn("⚠️ Error al insertar nuevo cartón en 'cartones'. Reintentando con payload esencial...", cartonErr);
+        delete cartonPayload.id;
+        await supabase.from('cartones').insert([cartonPayload]);
       } else {
-        console.log("✅ Nuevo cartón (Renovación Atómica) registrado exitosamente en 'cartones' para cliente:", clientId);
+        console.log("✅ Nuevo cartón (Renovación Atómica) registrado exitosamente con UUID:", newCartonUuid);
       }
     } catch (e) {
-      console.warn("Omitiendo inserción en 'cartones':", e.message);
+      console.warn("Excepción al insertar nuevo cartón:", e.message);
     }
 
-    // 4. Limpiar únicamente las cuotas PENDIENTES del cartón anterior para aislar las cuotas del nuevo cartón
-    // REGLA CONTABLE ABSOLUTA v175: NUNCA borrar los pagos REALES del historial porque representan dinero real ingresado a caja.
+    // 4. RESETEO DE CONTADORES: Limpiar únicamente las cuotas PENDIENTES del cartón anterior
     try {
       await supabase.from('payments').delete().eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
     } catch (e) {
@@ -1219,29 +1204,35 @@ const db = {
       phone: payload.phone,
       city: payload.city,
       zone: payload.zone,
-      amount: payload.amount,
+      amount: newMontoPrestado,
       discount_amount: payload.discount_amount || 0,
       retained_amount: payload.retained_amount || 0,
       retained_fees: payload.retained_fees || payload.retained_amount || 0,
-      rollover_amount: payload.rollover_amount || 0,
+      rollover_amount: rolloverVal,
+      saldo_anterior: rolloverVal,
       segVal: payload.segVal || 0,
       papVal: payload.papVal || 0,
       discount_reason: payload.discount_reason || null,
-      totalDebt: payload.totalDebt,
-      outstanding: payload.outstanding,
+      totalDebt: newTotalDebt,
+      outstanding: newTotalDebt, // Saldo deudor inicial refleja la nueva deuda total
       installmentsCount: payload.installmentsCount,
       installmentAmount: payload.installmentAmount,
       routeId: payload.routeId,
       agent_id: payload.agent_id,
       supervisor_id: payload.supervisor_id,
       risk: 'Verde',
+      status: 'Activo',
+      estado: 'Activo',
+      carton_id: newCartonUuid,
+      numero_carton: newNumeroCarton,
+      fecha_apertura: nowIso,
       created_at: nowIso
     }).eq('cedula', clientId);
 
-    // 6. Insertar los registros iniciales de las cuotas del nuevo cartón vinculados al nuevo crédito
+    // 6. Insertar los registros iniciales de las cuotas del nuevo cartón desvinculados del anterior (cuotas 1..N)
     try {
       const installmentsCount = Number(payload.installmentsCount || 30);
-      const installmentAmount = Math.round(Number(payload.installmentAmount || (payload.totalDebt / installmentsCount)));
+      const installmentAmount = Math.round(Number(payload.installmentAmount || (newTotalDebt / installmentsCount)));
       const todayStr = nowIso.split('T')[0];
       const supId = this.getSupervisorId();
       const initialPendingPayments = [];
@@ -1250,8 +1241,10 @@ const db = {
         initialPendingPayments.push({
           id: 'pay_init_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
           clientCedula: clientId,
+          carton_id: newCartonUuid,
           credit_id: newCreditId,
-          installmentNumber: i,
+          numero_carton: newNumeroCarton,
+          installmentNumber: i, // Reseteo estricto a cuota 1, 2, 3...
           amount: installmentAmount,
           date: todayStr,
           agentName: payload.agent_id || 'Sistema',
@@ -1267,7 +1260,15 @@ const db = {
       console.warn("Inserción inicial de cuotas pendientes:", e.message);
     }
     
-    return { ...payload, cedula: clientId, credit_id: newCreditId, created_at: nowIso };
+    return { 
+      ...payload, 
+      cedula: clientId, 
+      carton_id: newCartonUuid, 
+      credit_id: newCreditId, 
+      outstanding: newTotalDebt, 
+      totalDebt: newTotalDebt, 
+      created_at: nowIso 
+    };
   },
 
   async getCommerceBuyers() {
@@ -1350,11 +1351,7 @@ const db = {
         .from('clients')
         .update({ outstanding: newOutstanding, risk: newRisk })
         .eq('cedula', String(cedula));
-      if (error) {
-        console.error(`Error al actualizar saldo pendiente de cliente "${cedula}":`, error);
-      }
-
-      // Actualizar la tabla cartones en tiempo real para mantener sincronización total
+         // Actualizar la tabla cartones en tiempo real para mantener sincronización total
       try {
         const cartonStateUpdate = { outstanding: newOutstanding };
         if (newOutstanding === 0) {
@@ -1364,7 +1361,7 @@ const db = {
           .from('cartones')
           .update(cartonStateUpdate)
           .eq('cliente_id', String(cedula))
-          .eq('estado', 'activo');
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
       } catch (eCarton) {
         console.warn(`Aviso actualizando saldo en cartón para "${cedula}":`, eCarton);
       }
@@ -1461,9 +1458,31 @@ const db = {
     // Redondeo estricto a números enteros, sin decimales
     const amountPaid = Math.round(Number(payment.amount) || 0);
 
-    // Obtener total de pagos históricos del cliente para calcular el correlativo de cuota
+    // Obtener cartón activo para vincular el pago e independizar cuotas de créditos anteriores
+    const cartonId = payment.carton_id || client.carton_id || client.id || null;
+    const cartonStartDate = client.fecha_apertura || client.created_at;
+    const cartonStartTime = cartonStartDate ? new Date(cartonStartDate).getTime() : 0;
+
     const clientPayments = await this.getPaymentsByClient(payment.clientCedula);
-    const installmentNumber = payment.installmentNumber || (clientPayments.length + 1);
+    const activeCartonPayments = (clientPayments || []).filter(p => {
+      const pStatus = String(p.status || '').toUpperCase();
+      const isCanceled = pStatus.includes('CANCEL') || pStatus.includes('RECHAZ') || pStatus === 'NO PAGO' || pStatus === 'PENDIENTE';
+      const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || pStatus === 'LIQUIDADO_PAGADO' || pStatus === 'LIQUIDADO_MORA';
+      if (isCanceled || isLiquidationRecord || !Number(p.amount)) return false;
+
+      if (cartonId && p.carton_id) {
+        return String(p.carton_id) === String(cartonId);
+      }
+      if (cartonStartTime > 0) {
+        let pTime = 0;
+        if (p.created_at) pTime = new Date(p.created_at).getTime();
+        else if (p.date) pTime = new Date(String(p.date).trim().includes('T') ? String(p.date).trim() : String(p.date).trim() + 'T00:00:00').getTime();
+        return pTime >= cartonStartTime - 2000;
+      }
+      return true;
+    });
+
+    const installmentNumber = payment.installmentNumber || (activeCartonPayments.length + 1);
     
     const signature = `BulaPay-SIG-${payment.clientCedula}-${Date.now().toString().slice(-4)}`;
     const id = 'pay_' + installmentNumber + '_' + Date.now();
@@ -1477,14 +1496,17 @@ const db = {
     const newPayment = {
       id: id,
       clientCedula: String(payment.clientCedula),
+      carton_id: cartonId,
+      credit_id: payment.credit_id || client.credit_id || null,
       installmentNumber: installmentNumber,
       amount: amountPaid,
       date: payment.date || localDateStr,
       agentName: agentName,
       agent_id: agentId,
-      status: payment.status,
+      status: payment.status || 'Pagado',
       signature: signature,
-      supervisor_id: supId
+      supervisor_id: supId,
+      created_at: now.toISOString()
     };
 
     // 1. Registrar pago
@@ -1671,6 +1693,7 @@ const db = {
     const pendingRecordsMap = new Map();
 
     if (payments) {
+      const cartonId = client.carton_id || client.id;
       const clientCreatedTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
       payments.forEach(p => {
         let pTime = 0;
@@ -1681,11 +1704,17 @@ const db = {
           pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
         }
 
-        // Si el pago pertenece a un cartón anterior (creado antes del nuevo crédito) o es un registro de liquidación, se excluye obligatoriamente
-        const isFromOlderCarton = clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000);
+        // Si el pago pertenece a un cartón anterior (diferente carton_id o fecha previa), se excluye obligatoriamente
+        let belongsToCurrentCarton = true;
+        if (p.carton_id && cartonId && String(p.carton_id) !== String(cartonId)) {
+          belongsToCurrentCarton = false;
+        } else if (clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000)) {
+          belongsToCurrentCarton = false;
+        }
+
         const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || p.status === 'Liquidado_Pagado' || p.status === 'Liquidado_Mora';
 
-        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidationRecord && !isFromOlderCarton) {
+        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidationRecord && belongsToCurrentCarton) {
           paidInstallments.add(Number(p.installmentNumber));
           if (p.date) {
             if (!maxPaymentDateStr || p.date > maxPaymentDateStr) {
@@ -1693,7 +1722,7 @@ const db = {
             }
           }
         }
-        if (p.status === 'Pendiente' && !isFromOlderCarton) {
+        if (p.status === 'Pendiente' && belongsToCurrentCarton) {
           pendingRecordsMap.set(Number(p.installmentNumber), p.date);
         }
       });
