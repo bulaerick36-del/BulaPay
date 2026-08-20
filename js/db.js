@@ -2369,28 +2369,45 @@ const db = {
     const cartonStatusTarget = isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado'));
     try {
       const cedStr = String(cedula || '').trim();
+      const moraOutstanding = isMora ? ((outstanding !== undefined && outstanding !== null && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0))) : 0;
+      const cartonUpdatePayload = { 
+        estado: cartonEstadoTarget, 
+        outstanding: moraOutstanding
+      };
+      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+      if (cartonId && isValidUuid(cartonId)) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
+      }
+      if (numeroCarton && !isNaN(Number(numeroCarton))) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+      }
+      if (cedStr) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
+      }
+
       if (isMora && cedStr) {
         const { error: rpcErr } = await supabase.rpc('liquidar_carton_por_morosidad', {
           p_cliente_id: cedStr
         });
         if (rpcErr) console.error("Error al liquidar mediante RPC en liquidateCredit:", rpcErr);
         else console.log(`✅ [v134 LIQUIDATE RPC] Cartón(es) de ${cedStr} liquidados por morosidad vía RPC en Supabase.`);
-      } else {
-        const moraOutstanding = isMora ? ((outstanding !== undefined && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0))) : 0;
-        const cartonUpdatePayload = { 
-          estado: cartonEstadoTarget, 
-          outstanding: moraOutstanding
-        };
-        const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-        if (cartonId && isValidUuid(cartonId)) {
-          await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-        }
-        if (numeroCarton && !isNaN(Number(numeroCarton))) {
-          await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-        }
-        if (cedStr) {
-          await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
+        // Inserción en la tabla 'lista_negra' registrando el saldo pendiente real
+        try {
+          await supabase.from('lista_negra').insert([{
+            cliente_id: cedStr,
+            cedula: cedStr,
+            monto: moraOutstanding,
+            saldo_pendiente: moraOutstanding,
+            outstanding: moraOutstanding,
+            total_debt: totalDebt || 0,
+            carton_id: cartonId || null,
+            motivo: 'Liquidado por Mora',
+            created_at: new Date().toISOString()
+          }]);
+        } catch (eLn) {
+          console.warn("Aviso opcional en liquidateCredit al insertar en lista_negra:", eLn?.message);
         }
       }
     } catch (eCarton) {

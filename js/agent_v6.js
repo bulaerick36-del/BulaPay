@@ -390,34 +390,155 @@ const agentModule = {
         const numeroCarton = btn?.dataset?.numeroCarton || this.currentClient?.numero_carton || null;
         const cedula = btn?.dataset?.cedula || this.currentClient?.cedula || (this.inputSearchCedula ? this.inputSearchCedula.value : '') || null;
         const name = btn?.dataset?.name || this.currentClient?.name || `Cliente ${cedula || ''}`;
-        
-        const capPrestado = Number(this.currentClient?.amount || this.currentClient?.monto_prestado || 0);
-        const totalConIntereses = Number(btn?.dataset?.totalConIntereses || this.currentClient?.totalToPay || this.currentClient?.totalDebt || this.currentClient?.monto_total || (capPrestado ? Math.round(capPrestado * 1.2) : 0));
+        const cedulaStr = String(cedula || '').trim();
 
-        if (!cedula && !cartonId && !numeroCarton) {
+        if (!cedulaStr && !cartonId && !numeroCarton) {
           alert('❌ No se encontró la información del cartón a liquidar.');
           return;
         }
 
-        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${name} y enviarlo a Lista Negra (Liquidado por Mora)?\nDeuda Total a Lista Negra (Capital + Intereses): $${totalConIntereses.toLocaleString('es-CO')}.\nEsta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
-        if (!confirm(confirmMsg)) return;
-
         try {
           if (btn) {
             btn.disabled = true;
-            btn.textContent = 'Procesando...';
+            btn.textContent = 'Verificando...';
           }
 
-          const cedulaStr = String(this.currentClient?.cedula || cedula || '').trim();
           const supabase = await window.BulaPayDB.initSupabase();
 
-          // v135: Llamada limpia a la función RPC de Supabase 'liquidar_carton_por_morosidad'
-          const { error } = await supabase.rpc('liquidar_carton_por_morosidad', { 
-            p_cliente_id: cedulaStr 
-          });
-          if (error) console.error("Error al liquidar:", error);
+          // 1. LECTURA EN TIEMPO REAL: Consultar obligatoriamente el cartón activo y cliente en la base de datos
+          let cartonQuery = supabase.from('cartones').select('*');
+          if (cartonId) {
+            cartonQuery = cartonQuery.eq('id', cartonId);
+          } else if (numeroCarton) {
+            cartonQuery = cartonQuery.eq('numero_carton', Number(numeroCarton));
+          } else if (cedulaStr) {
+            cartonQuery = cartonQuery.eq('cliente_id', cedulaStr);
+          }
+          const { data: cartonesData } = await cartonQuery;
+          const activeCarton = (cartonesData || []).find(c => {
+            const st = String(c.estado || c.status || '').toLowerCase();
+            return st === 'activo' || st === 'activo_por_renovacion';
+          }) || (cartonesData || [])[0];
 
-          // Reset de cliente activo y formulario
+          let { data: clientData } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('cedula', cedulaStr)
+            .maybeSingle();
+
+          // Obtener abonos previos pagados para descontarlos de la deuda total inicial
+          const { data: paymentsData } = await supabase
+            .from('payments')
+            .select('amount, status')
+            .eq('clientCedula', cedulaStr);
+
+          const totalAbonosPrevios = (paymentsData || [])
+            .filter(p => {
+              const st = String(p.status || '').toUpperCase();
+              return st === 'PAGADO' || st === 'ABONADO';
+            })
+            .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+          const totalDebt = Math.round(Number(
+            activeCarton?.total_debt ||
+            activeCarton?.monto_total ||
+            activeCarton?.totalDebt ||
+            clientData?.totalDebt ||
+            (activeCarton?.monto_prestado ? activeCarton.monto_prestado * 1.2 : 0) ||
+            (clientData?.amount ? clientData.amount * 1.2 : 0)
+          ));
+
+          // Calcular el saldo pendiente real actual
+          let saldoPendienteReal = 0;
+          if (totalDebt > 0 && totalAbonosPrevios > 0) {
+            saldoPendienteReal = Math.max(0, totalDebt - totalAbonosPrevios);
+          } else if (activeCarton && activeCarton.outstanding !== undefined && activeCarton.outstanding !== null && Number(activeCarton.outstanding) > 0) {
+            saldoPendienteReal = Math.round(Number(activeCarton.outstanding));
+          } else if (clientData && clientData.outstanding !== undefined && clientData.outstanding !== null && Number(clientData.outstanding) > 0) {
+            saldoPendienteReal = Math.round(Number(clientData.outstanding));
+          } else {
+            saldoPendienteReal = Math.max(0, totalDebt - totalAbonosPrevios);
+          }
+
+          // 2. SINCRONIZACIÓN DE UI Y BACKEND: Prompt/confirmación mostrando exactamente el saldo pendiente real
+          const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${name} y enviarlo a Lista Negra (Liquidado por Mora)?\n` +
+            `Deuda Total a Lista Negra: $${saldoPendienteReal.toLocaleString('es-CO')}.\n` +
+            `Esta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
+
+          if (!confirm(confirmMsg)) {
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = '⛔ Liquidar / Lista Negra';
+            }
+            return;
+          }
+
+          if (btn) btn.textContent = 'Procesando...';
+
+          // 3. REGISTRO EN BASE DE DATOS Y LISTA NEGRA CON EL SALDO PENDIENTE REAL
+          const targetCartonId = activeCarton?.id || cartonId;
+
+          // Actualizar 'cartones' registrando el saldo pendiente real
+          if (targetCartonId) {
+            await supabase.from('cartones').update({
+              estado: 'liquidado_perdida',
+              outstanding: saldoPendienteReal
+            }).eq('id', targetCartonId);
+          }
+          if (cedulaStr) {
+            await supabase.from('cartones').update({
+              estado: 'liquidado_perdida',
+              outstanding: saldoPendienteReal
+            }).eq('cliente_id', cedulaStr).eq('estado', 'activo');
+          }
+
+          // Actualizar 'clients' con estado en mora y el saldo pendiente real
+          if (cedulaStr) {
+            await supabase.from('clients').update({
+              risk: 'Rojo',
+              status: 'liquidado_perdida',
+              estado: 'liquidado_perdida',
+              outstanding: saldoPendienteReal
+            }).eq('cedula', cedulaStr);
+          }
+
+          // Insertar en la tabla 'lista_negra' asegurando registrar los $80.000 restantes
+          try {
+            await supabase.from('lista_negra').insert([{
+              cliente_id: cedulaStr,
+              cedula: cedulaStr,
+              nombre: name,
+              monto: saldoPendienteReal,
+              saldo_pendiente: saldoPendienteReal,
+              outstanding: saldoPendienteReal,
+              total_debt: totalDebt,
+              carton_id: targetCartonId || null,
+              motivo: 'Liquidado por Mora',
+              created_at: new Date().toISOString()
+            }]);
+          } catch (eLn) {
+            console.warn("Aviso opcional al insertar en 'lista_negra':", eLn?.message);
+          }
+
+          // Invocación a la función RPC de Supabase 'liquidar_carton_por_morosidad'
+          try {
+            const { error: rpcErr } = await supabase.rpc('liquidar_carton_por_morosidad', { 
+              p_cliente_id: cedulaStr 
+            });
+            if (rpcErr) console.warn("Aviso RPC liquidar_carton_por_morosidad:", rpcErr.message);
+          } catch (eRpc) {
+            console.warn("Excepción RPC:", eRpc.message);
+          }
+
+          // INTEGRIDAD DE CAJA: Limpiar registros pendientes o vacíos en payments sin tocar abonos reales recibidos
+          try {
+            await supabase.from('payments').delete().eq('clientCedula', cedulaStr).eq('status', 'Pendiente');
+            await supabase.from('payments').delete().eq('clientCedula', cedulaStr).eq('amount', 0);
+          } catch (eDel) {
+            console.warn("Aviso al sanear tabla payments:", eDel?.message);
+          }
+
+          // Reset de cliente activo y formulario de UI
           this.currentClient = null;
           if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
           if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
@@ -431,10 +552,10 @@ const agentModule = {
             this.renderFinancialDashboard()
           ]);
 
-          alert(`⚠️ El cliente ${name} (C.C. ${cedulaStr}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Total registrada: $${totalConIntereses.toLocaleString('es-CO')} (Capital + Intereses).\nEl saldo del Capital en Caja se mantiene estable.`);
+          alert(`⚠️ El cliente ${name} (C.C. ${cedulaStr}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Pendiente Real registrada: $${saldoPendienteReal.toLocaleString('es-CO')}.\nEl saldo del Capital en Caja se mantiene estable.`);
         } catch (e) {
           console.error("Error al enviar a Lista Negra:", e);
-          alert('❌ Error al procesar liquidación: ' + (e.message || e));
+          alert('❌ Error al procesar liquidación por mora: ' + (e.message || e));
         } finally {
           if (btn) {
             btn.disabled = false;
@@ -2189,8 +2310,9 @@ const agentModule = {
         this.btnCobroLiquidarMora.dataset.numeroCarton = client.numero_carton || '';
         this.btnCobroLiquidarMora.dataset.cedula = client.cedula || '';
         this.btnCobroLiquidarMora.dataset.name = client.name || '';
-        const cap = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
-        this.btnCobroLiquidarMora.dataset.totalConIntereses = client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || (cap ? Math.round(cap * 1.2) : 0);
+        const saldoPendienteActual = Number(client.outstanding ?? client.saldo_pendiente ?? client.saldo_restante ?? 0);
+        this.btnCobroLiquidarMora.dataset.outstanding = saldoPendienteActual;
+        this.btnCobroLiquidarMora.dataset.totalConIntereses = saldoPendienteActual;
       }
       if (this.btnLiquidarCarton) {
         this.btnLiquidarCarton.dataset.cartonId = client.carton_id || client.id || '';
