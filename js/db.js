@@ -1226,16 +1226,14 @@ const db = {
       console.error("Excepción al insertar nuevo cartón en 'cartones':", e);
     }
 
-    // 5. RESETEO DE CONTADORES: Limpiar únicamente las cuotas PENDIENTES del cartón anterior
+    // 5. ARCHIVADO DE CUOTAS PENDIENTES DEL CARTÓN ANTERIOR:
+    // Marcar y archivar explícitamente las cuotas pendientes del cartón anterior como 'Liquidado_Por_Renovacion'
     try {
-      await supabase.from('payments').delete().eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
+      const archivePayload = { status: 'Liquidado_Por_Renovacion' };
+      await supabase.from('payments').update(archivePayload).eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
+      await supabase.from('payments').update(archivePayload).eq('client_cedula', String(clientId)).eq('status', 'Pendiente');
     } catch (e) {
-      console.warn("Omitiendo borrado por clientCedula:", e.message);
-    }
-    try {
-      await supabase.from('payments').delete().eq('client_cedula', String(clientId)).eq('status', 'Pendiente');
-    } catch (e) {
-      console.warn("Omitiendo borrado por client_cedula:", e.message);
+      console.warn("Aviso al archivar cuotas pendientes del cartón anterior:", e.message);
     }
 
     // 6. Preservar y actualizar la ficha del cliente y crédito activo en la tabla 'clients' con validación de error
@@ -1813,7 +1811,11 @@ const db = {
           belongsToCurrentCarton = false;
         }
 
-        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || p.status === 'Liquidado_Pagado' || p.status === 'Liquidado_Mora';
+        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || 
+          p.status === 'Liquidado_Pagado' || 
+          p.status === 'Liquidado_Mora' || 
+          p.status === 'Liquidado_Por_Renovacion' || 
+          p.status === 'liquidado_por_renovacion';
 
         if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidationRecord && belongsToCurrentCarton) {
           paidInstallments.add(Number(p.installmentNumber));
