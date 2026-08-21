@@ -743,6 +743,7 @@ const db = {
         return {
           ...client,
           ...carton,
+          carton_id: carton.id,
           cedula: client.cedula,
           name: client.name || client.nombre || `Cliente ${client.cedula}`,
           amount: Number(carton.monto_prestado || 0),
@@ -1845,7 +1846,7 @@ const db = {
     const pendingRecordsMap = new Map();
 
     if (payments) {
-      const cartonId = client.carton_id || client.id;
+      const cartonId = client.carton_id || client.id || client.numero_carton;
       const clientCreatedTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
       payments.forEach(p => {
         let pTime = 0;
@@ -1856,21 +1857,31 @@ const db = {
           pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
         }
 
-        // Si el pago pertenece a un cartón anterior (diferente carton_id o fecha previa), se excluye obligatoriamente
+        // Si el pago pertenece a un cartón anterior (diferente carton_id o marcado como liquidado: true), se excluye obligatoriamente
         let belongsToCurrentCarton = true;
-        if (p.carton_id && cartonId && String(p.carton_id) !== String(cartonId)) {
+        if (p.liquidado === true || p.liquidado === 'true') {
           belongsToCurrentCarton = false;
-        } else if (clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000)) {
+        } else if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
+          belongsToCurrentCarton = false;
+        } else if (!p.carton_id && clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000)) {
           belongsToCurrentCarton = false;
         }
 
-        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || 
-          p.status === 'Liquidado_Pagado' || 
-          p.status === 'Liquidado_Mora' || 
-          p.status === 'Liquidado_Por_Renovacion' || 
-          p.status === 'liquidado_por_renovacion';
+        const rawStatus = String(p.status || '').trim().toLowerCase();
 
-        if (p.amount > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidationRecord && belongsToCurrentCarton) {
+        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || 
+          rawStatus.includes('liquidado') || 
+          rawStatus.includes('cancelado') || 
+          rawStatus.includes('rechazado');
+
+        const isPaidStatus = !isLiquidationRecord && (
+          rawStatus.includes('pagado') || 
+          rawStatus.includes('abonado') || 
+          rawStatus.includes('completo') || 
+          (Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente')
+        );
+
+        if (isPaidStatus && belongsToCurrentCarton) {
           paidInstallments.add(Number(p.installmentNumber));
           if (p.date) {
             if (!maxPaymentDateStr || p.date > maxPaymentDateStr) {
@@ -1878,7 +1889,7 @@ const db = {
             }
           }
         }
-        if (p.status === 'Pendiente' && belongsToCurrentCarton) {
+        if (rawStatus === 'pendiente' && belongsToCurrentCarton) {
           pendingRecordsMap.set(Number(p.installmentNumber), p.date);
         }
       });

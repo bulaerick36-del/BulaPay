@@ -2353,10 +2353,10 @@ const agentModule = {
       // Preparar el Cartón Interactivo (Flujo B)
       if (this.cobroOverdueDaysList) {
         try {
-          const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+          const payments = await window.BulaPayDB.getPaymentsByClient(client, client.carton_id || client.id);
           const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
           const todayStr = this.getLocalDateString();
-          this.hasPaidRecordToday = payments ? payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago') : false;
+          this.hasPaidRecordToday = payments ? payments.some(p => p.date === todayStr && Number(p.amount) > 0 && String(p.status || '').trim().toLowerCase() !== 'no pago') : false;
           
           // Re-evaluar estado de los botones de pago, renovación y liquidación por mora
           this.updateCobroViewState(client, dailyStatusList);
