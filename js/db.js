@@ -1108,11 +1108,13 @@ const db = {
       .eq('cedula', String(payload.cedula))
       .limit(1);
 
-    if (searchErr) console.error("Error buscando por cédula:", searchErr);
+    if (searchErr) {
+      console.error("Error buscando por cédula en registerCreditToExistingClient:", searchErr);
+    }
 
-    const clientId = (existing && existing.length > 0) ? existing[0].cedula : String(payload.cedula);
+    const clientId = (existing && existing.length > 0) ? String(existing[0].cedula) : String(payload.cedula);
     const nowIso = new Date().toISOString();
-    const newCartonUuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('carton_' + Date.now() + '_' + Math.floor(Math.random() * 10000));
+    let newCartonUuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('carton_' + Date.now() + '_' + Math.floor(Math.random() * 10000));
     const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
     const newNumeroCarton = Math.floor(Date.now() % 100000000);
 
@@ -1141,14 +1143,18 @@ const db = {
       console.warn("Aviso al cerrar cartones anteriores:", e.message);
     }
     
-    // 3. REGISTRO 100% NUEVO: Registrar nuevo cartón independiente en la tabla 'cartones' con su propio ID y fecha actual
-    const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
+    // 3. CÁLCULO DE VALORES Y FLUJO NETO (Net Cash)
+    const rolloverVal = Math.round(Number(payload.rollover_amount || payload.saldo_anterior || 0));
+    const discountVal = Math.round(Number(payload.discount_amount || payload.descuento || 0));
     const isRenov = payload.isRenewal || payload.is_renewal || rolloverVal > 0;
     const newState = isRenov ? 'activo_por_renovacion' : 'activo';
     const newTotalDebt = Math.round(Number(payload.totalDebt || 0));
-    const newMontoPrestado = Math.round(Number(payload.amount || 0));
-    const netCashVal = Math.max(0, newMontoPrestado - Number(payload.discount_amount || 0) - rolloverVal);
+    const newMontoPrestado = Math.round(Number(payload.amount || payload.monto_prestado || 0));
+    
+    // Cálculo limpio del flujo neto (Net Cash: Capital Prestado menos Descuentos menos Rollover/Saldo Anterior)
+    const netCashVal = Math.max(0, newMontoPrestado - discountVal - rolloverVal);
 
+    // 4. REGISTRO 100% NUEVO: Registrar nuevo cartón independiente con validación estricta de respuesta de Supabase
     try {
       const cartonPayload = {
         id: newCartonUuid,
@@ -1165,7 +1171,7 @@ const db = {
         outstanding: newTotalDebt, // Saldo inicial 100% igual a la nueva deuda total
         installments_count: Number(payload.installmentsCount || 30),
         installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
-        discount_amount: Number(payload.discount_amount || 0),
+        discount_amount: discountVal,
         discount_reason: payload.discount_reason || null,
         net_cash: netCashVal,
         route_id: payload.routeId || payload.route_id || null,
@@ -1174,19 +1180,53 @@ const db = {
         created_at: nowIso
       };
 
-      const { error: cartonErr } = await supabase.from('cartones').insert([cartonPayload]);
+      const { data: insertedCarton, error: cartonErr } = await supabase
+        .from('cartones')
+        .insert([cartonPayload])
+        .select();
+
       if (cartonErr) {
-        console.warn("⚠️ Error al insertar nuevo cartón en 'cartones'. Reintentando con payload esencial...", cartonErr);
-        delete cartonPayload.id;
-        await supabase.from('cartones').insert([cartonPayload]);
-      } else {
+        console.warn("⚠️ Error al insertar cartón completo en 'cartones'. Reintentando con payload esencial...", cartonErr);
+        const essentialPayload = {
+          cliente_id: String(clientId),
+          numero_carton: newNumeroCarton,
+          fecha_apertura: nowIso,
+          monto_prestado: newMontoPrestado,
+          estado: newState,
+          saldo_anterior: rolloverVal,
+          rollover_amount: rolloverVal,
+          total_debt: newTotalDebt,
+          outstanding: newTotalDebt,
+          installments_count: Number(payload.installmentsCount || 30),
+          installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
+          discount_amount: discountVal,
+          net_cash: netCashVal,
+          route_id: payload.routeId || payload.route_id || null,
+          agent_id: payload.agent_id || payload.agentId || null,
+          supervisor_id: payload.supervisor_id || null,
+          created_at: nowIso
+        };
+
+        const { data: retryData, error: retryErr } = await supabase
+          .from('cartones')
+          .insert([essentialPayload])
+          .select();
+
+        if (retryErr) {
+          console.error("❌ Error definitivo al insertar nuevo cartón en 'cartones':", retryErr);
+        } else if (retryData && retryData.length > 0 && retryData[0].id) {
+          newCartonUuid = retryData[0].id;
+          console.log("✅ Nuevo cartón esencial creado exitosamente con ID:", newCartonUuid);
+        }
+      } else if (insertedCarton && insertedCarton.length > 0 && insertedCarton[0].id) {
+        newCartonUuid = insertedCarton[0].id;
         console.log("✅ Nuevo cartón (Renovación Atómica) registrado exitosamente con UUID:", newCartonUuid);
       }
     } catch (e) {
-      console.warn("Excepción al insertar nuevo cartón:", e.message);
+      console.error("Excepción al insertar nuevo cartón en 'cartones':", e);
     }
 
-    // 4. RESETEO DE CONTADORES: Limpiar únicamente las cuotas PENDIENTES del cartón anterior
+    // 5. RESETEO DE CONTADORES: Limpiar únicamente las cuotas PENDIENTES del cartón anterior
     try {
       await supabase.from('payments').delete().eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
     } catch (e) {
@@ -1198,14 +1238,14 @@ const db = {
       console.warn("Omitiendo borrado por client_cedula:", e.message);
     }
 
-    // 5. Preservar y actualizar la ficha del cliente y crédito activo en la tabla 'clients'
-    await supabase.from('clients').update({
+    // 6. Preservar y actualizar la ficha del cliente y crédito activo en la tabla 'clients' con validación de error
+    const clientUpdatePayload = {
       name: payload.name,
       phone: payload.phone,
       city: payload.city,
       zone: payload.zone,
       amount: newMontoPrestado,
-      discount_amount: payload.discount_amount || 0,
+      discount_amount: discountVal,
       retained_amount: payload.retained_amount || 0,
       retained_fees: payload.retained_fees || payload.retained_amount || 0,
       rollover_amount: rolloverVal,
@@ -1214,12 +1254,12 @@ const db = {
       papVal: payload.papVal || 0,
       discount_reason: payload.discount_reason || null,
       totalDebt: newTotalDebt,
-      outstanding: newTotalDebt, // Saldo deudor inicial refleja la nueva deuda total
-      installmentsCount: payload.installmentsCount,
-      installmentAmount: payload.installmentAmount,
-      routeId: payload.routeId,
-      agent_id: payload.agent_id,
-      supervisor_id: payload.supervisor_id,
+      outstanding: newTotalDebt,
+      installmentsCount: Number(payload.installmentsCount || 30),
+      installmentAmount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
+      routeId: payload.routeId || payload.route_id || null,
+      agent_id: payload.agent_id || payload.agentId || null,
+      supervisor_id: payload.supervisor_id || null,
       risk: 'Verde',
       status: 'Activo',
       estado: 'Activo',
@@ -1227,37 +1267,51 @@ const db = {
       numero_carton: newNumeroCarton,
       fecha_apertura: nowIso,
       created_at: nowIso
-    }).eq('cedula', clientId);
+    };
 
-    // 6. Insertar los registros iniciales de las cuotas del nuevo cartón desvinculados del anterior (cuotas 1..N)
+    const { error: clientUpdateErr } = await supabase
+      .from('clients')
+      .update(clientUpdatePayload)
+      .eq('cedula', clientId);
+
+    if (clientUpdateErr) {
+      console.error("❌ Error de Supabase al actualizar cliente en 'clients':", clientUpdateErr);
+    } else {
+      console.log("✅ Ficha del cliente actualizada exitosamente en 'clients' para cédula:", clientId);
+    }
+
+    // 7. Insertar los registros iniciales de las cuotas del nuevo cartón desvinculados del anterior (cuotas 1..N) con validación de error
     try {
       const installmentsCount = Number(payload.installmentsCount || 30);
       const installmentAmount = Math.round(Number(payload.installmentAmount || (newTotalDebt / installmentsCount)));
       const todayStr = nowIso.split('T')[0];
-      const supId = this.getSupervisorId();
+      const supId = (typeof this.getSupervisorId === 'function') ? this.getSupervisorId() : (payload.supervisor_id || null);
       const initialPendingPayments = [];
 
       for (let i = 1; i <= installmentsCount; i++) {
         initialPendingPayments.push({
           id: 'pay_init_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-          clientCedula: clientId,
+          clientCedula: String(clientId),
           carton_id: newCartonUuid,
           credit_id: newCreditId,
           numero_carton: newNumeroCarton,
-          installmentNumber: i, // Reseteo estricto a cuota 1, 2, 3...
+          installmentNumber: i,
           amount: installmentAmount,
           date: todayStr,
-          agentName: payload.agent_id || 'Sistema',
-          agent_id: payload.agent_id,
+          agentName: payload.agent_id || payload.agentId || 'Sistema',
+          agent_id: payload.agent_id || payload.agentId || null,
           status: 'Pendiente',
           supervisor_id: supId,
           created_at: nowIso
         });
       }
 
-      await supabase.from('payments').insert(initialPendingPayments);
+      const { error: payErr } = await supabase.from('payments').insert(initialPendingPayments);
+      if (payErr) {
+        console.warn("⚠️ Advertencia al insertar cuotas iniciales en 'payments':", payErr);
+      }
     } catch (e) {
-      console.warn("Inserción inicial de cuotas pendientes:", e.message);
+      console.warn("Excepción al registrar cuotas pendientes iniciales:", e.message);
     }
     
     return { 
@@ -1265,6 +1319,13 @@ const db = {
       cedula: clientId, 
       carton_id: newCartonUuid, 
       credit_id: newCreditId, 
+      numero_carton: newNumeroCarton,
+      monto_prestado: newMontoPrestado,
+      amount: newMontoPrestado,
+      discount_amount: discountVal,
+      rollover_amount: rolloverVal,
+      saldo_anterior: rolloverVal,
+      net_cash: netCashVal,
       outstanding: newTotalDebt, 
       totalDebt: newTotalDebt, 
       created_at: nowIso 
