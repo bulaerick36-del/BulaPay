@@ -1227,11 +1227,14 @@ const db = {
     }
 
     // 5. ARCHIVADO DE CUOTAS PENDIENTES DEL CARTÓN ANTERIOR:
-    // Marcar y archivar explícitamente las cuotas pendientes del cartón anterior como 'Liquidado_Por_Renovacion'
+    // Marcar y archivar explícitamente las cuotas pendientes del cartón anterior como 'Liquidado_Por_Renovacion' y liquidado: true
     try {
-      const archivePayload = { status: 'Liquidado_Por_Renovacion' };
-      await supabase.from('payments').update(archivePayload).eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
-      await supabase.from('payments').update(archivePayload).eq('client_cedula', String(clientId)).eq('status', 'Pendiente');
+      const archivePayload = { status: 'Liquidado_Por_Renovacion', liquidado: true };
+      const { error: archErr } = await supabase.from('payments').update(archivePayload).eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
+      if (archErr) {
+        delete archivePayload.liquidado;
+        await supabase.from('payments').update(archivePayload).eq('clientCedula', String(clientId)).eq('status', 'Pendiente');
+      }
     } catch (e) {
       console.warn("Aviso al archivar cuotas pendientes del cartón anterior:", e.message);
     }
@@ -1299,6 +1302,7 @@ const db = {
           agentName: payload.agent_id || payload.agentId || 'Sistema',
           agent_id: payload.agent_id || payload.agentId || null,
           status: 'Pendiente',
+          liquidado: false,
           supervisor_id: supId,
           created_at: nowIso
         });
@@ -1306,7 +1310,12 @@ const db = {
 
       const { error: payErr } = await supabase.from('payments').insert(initialPendingPayments);
       if (payErr) {
-        console.warn("⚠️ Advertencia al insertar cuotas iniciales en 'payments':", payErr);
+        if (payErr.code === 'PGRST204' || (payErr.message && payErr.message.includes('liquidado'))) {
+          initialPendingPayments.forEach(p => delete p.liquidado);
+          await supabase.from('payments').insert(initialPendingPayments);
+        } else {
+          console.warn("⚠️ Advertencia al insertar cuotas iniciales en 'payments':", payErr);
+        }
       }
     } catch (e) {
       console.warn("Excepción al registrar cuotas pendientes iniciales:", e.message);
@@ -1455,6 +1464,27 @@ const db = {
     return data || [];
   },
 
+  async syncCartonLiquidadoStates() {
+    try {
+      const supabase = await initSupabase();
+      // 1. Cartón '04dc7d1e-6668-47c7-a6d1-a27a7c92c753' -> liquidado: true
+      await supabase
+        .from('payments')
+        .update({ liquidado: true, status: 'Liquidado_Por_Renovacion' })
+        .eq('carton_id', '04dc7d1e-6668-47c7-a6d1-a27a7c92c753');
+
+      // 2. Cartón 'fe0e2ef4-cae7-4ab9-a924-d01a6f21a386' -> liquidado: false
+      await supabase
+        .from('payments')
+        .update({ liquidado: false })
+        .eq('carton_id', 'fe0e2ef4-cae7-4ab9-a924-d01a6f21a386');
+
+      console.log("✅ Estados de la columna 'liquidado' sincronizados exitosamente.");
+    } catch (e) {
+      console.warn("Aviso al sincronizar columna liquidado:", e.message);
+    }
+  },
+
   async getPaymentsByClient(cedula, cartonId = null) {
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();
@@ -1492,22 +1522,33 @@ const db = {
       }
     }
 
-    let query = supabase.from('payments').select('*').eq('clientCedula', cedStr);
+    let queryBase = supabase.from('payments').select('*').eq('clientCedula', cedStr);
 
     if (targetCartonId) {
-      query = query.eq('carton_id', String(targetCartonId));
+      queryBase = queryBase.eq('carton_id', String(targetCartonId));
     }
 
     if (supId) {
-      query = query.eq('supervisor_id', supId);
+      queryBase = queryBase.eq('supervisor_id', supId);
     }
 
-    const { data, error } = await query;
+    // Filtrar obligatoriamente por registros donde liquidado sea false o no verdaderos
+    let queryWithLiquidado = queryBase.or('liquidado.is.null,liquidado.eq.false');
+
+    let { data, error } = await queryWithLiquidado;
     if (error) {
-      console.error(`Error al obtener pagos del cliente "${cedStr}":`, error);
-      return [];
+      // Fallback transparente por si la columna 'liquidado' aún no está creada en Supabase
+      const { data: fallbackData, error: fbErr } = await queryBase;
+      if (fbErr) {
+        console.error(`Error al obtener pagos del cliente "${cedStr}":`, fbErr);
+        return [];
+      }
+      data = fallbackData;
     }
-    return data || [];
+
+    // Filtro adicional en memoria por seguridad
+    const filteredData = (data || []).filter(p => p.liquidado !== true && p.liquidado !== 'true');
+    return filteredData;
   },
 
   async getGlobalPaymentsByClient(cedula) {
@@ -1603,19 +1644,31 @@ const db = {
       agentName: agentName,
       agent_id: agentId,
       status: payment.status || 'Pagado',
+      liquidado: false,
       signature: signature,
       supervisor_id: supId,
       created_at: now.toISOString()
     };
 
     // 1. Registrar pago
-    const { data, error: payError } = await supabase
+    let { data, error: payError } = await supabase
       .from('payments')
       .insert([newPayment])
       .select();
+
     if (payError) {
-      console.error("Error al registrar pago en Supabase:", payError);
-      throw payError;
+      // Si falla porque la columna 'liquidado' aún no está creada, reintentar sin ella
+      if (payError.code === 'PGRST204' || (payError.message && payError.message.includes('liquidado'))) {
+        delete newPayment.liquidado;
+        const retryRes = await supabase.from('payments').insert([newPayment]).select();
+        if (retryRes.error) {
+          console.error("Error al registrar pago en Supabase (retry):", retryRes.error);
+          throw retryRes.error;
+        }
+      } else {
+        console.error("Error al registrar pago en Supabase:", payError);
+        throw payError;
+      }
     }
 
     // 2. Actualizar saldo pendiente del cliente (Redondeo estricto a números enteros)

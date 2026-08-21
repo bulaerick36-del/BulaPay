@@ -430,7 +430,7 @@ const agentModule = {
           const activeCartonId = activeCarton?.id || clientData?.carton_id;
           let paymentsQuery = supabase
             .from('payments')
-            .select('amount, status, carton_id')
+            .select('amount, status, carton_id, liquidado')
             .eq('clientCedula', cedulaStr);
 
           if (activeCartonId) {
@@ -441,6 +441,7 @@ const agentModule = {
 
           const totalAbonosPrevios = (paymentsData || [])
             .filter(p => {
+              if (p.liquidado === true || p.liquidado === 'true') return false;
               const st = String(p.status || '').toUpperCase();
               return st === 'PAGADO' || st === 'ABONADO';
             })
