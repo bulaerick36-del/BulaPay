@@ -1457,16 +1457,56 @@ const db = {
     return data || [];
   },
 
-  async getPaymentsByClient(cedula) {
+  async getPaymentsByClient(cedula, cartonId = null) {
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();
-    let query = supabase.from('payments').select('*').eq('clientCedula', String(cedula));
+
+    const cedStr = String(typeof cedula === 'object' && cedula !== null ? (cedula.cedula || cedula.clientCedula || '') : (cedula || ''));
+    let targetCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || cedula.id || null) : null);
+
+    // Si no se proporcionó cartonId explícito, obtener obligatoriamente el carton_id del cartón activo actual
+    if (!targetCartonId && cedStr) {
+      try {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('carton_id')
+          .eq('cedula', cedStr)
+          .maybeSingle();
+
+        if (clientData && clientData.carton_id) {
+          targetCartonId = clientData.carton_id;
+        } else {
+          // Intentar obtener el ID del cartón activo desde la tabla 'cartones'
+          const { data: cartonData } = await supabase
+            .from('cartones')
+            .select('id')
+            .eq('cliente_id', cedStr)
+            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO'])
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (cartonData && cartonData.length > 0 && cartonData[0].id) {
+            targetCartonId = cartonData[0].id;
+          }
+        }
+      } catch (e) {
+        console.warn("Aviso al consultar el cartón activo del cliente:", e.message);
+      }
+    }
+
+    let query = supabase.from('payments').select('*').eq('clientCedula', cedStr);
+
+    if (targetCartonId) {
+      query = query.eq('carton_id', String(targetCartonId));
+    }
+
     if (supId) {
       query = query.eq('supervisor_id', supId);
     }
+
     const { data, error } = await query;
     if (error) {
-      console.error(`Error al obtener pagos del cliente "${cedula}":`, error);
+      console.error(`Error al obtener pagos del cliente "${cedStr}":`, error);
       return [];
     }
     return data || [];

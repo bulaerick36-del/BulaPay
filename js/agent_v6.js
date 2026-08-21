@@ -426,11 +426,18 @@ const agentModule = {
             .eq('cedula', cedulaStr)
             .maybeSingle();
 
-          // Obtener abonos previos pagados para descontarlos de la deuda total inicial
-          const { data: paymentsData } = await supabase
+          // Obtener abonos previos pagados para descontarlos de la deuda total inicial del cartón activo
+          const activeCartonId = activeCarton?.id || clientData?.carton_id;
+          let paymentsQuery = supabase
             .from('payments')
-            .select('amount, status')
+            .select('amount, status, carton_id')
             .eq('clientCedula', cedulaStr);
+
+          if (activeCartonId) {
+            paymentsQuery = paymentsQuery.eq('carton_id', String(activeCartonId));
+          }
+
+          const { data: paymentsData } = await paymentsQuery;
 
           const totalAbonosPrevios = (paymentsData || [])
             .filter(p => {
