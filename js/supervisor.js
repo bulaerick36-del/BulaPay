@@ -3076,7 +3076,12 @@ const supervisorModule = {
         return clientLocalDate === todayStr;
       });
 
-      const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.totalDebt) / 1.2), 0);
+      const totalLent = todayClients.reduce((sum, c) => {
+        const amt = Math.round(Number(c.amount || c.monto_prestado || (Number(c.totalDebt || 0) / 1.2)));
+        const disc = Math.round(Number(c.discount_amount || 0));
+        const roll = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+        return sum + Math.max(0, amt - disc - roll);
+      }, 0);
       const netGlobal = totalCollected - totalLent;
 
       // Poblar elementos del Nivel 1
@@ -3249,7 +3254,12 @@ const supervisorModule = {
         return clientLocalDate === todayStr && c.agent_id === agentUsername;
       });
 
-      const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.totalDebt) / 1.2), 0);
+      const totalLent = todayClients.reduce((sum, c) => {
+        const amt = Math.round(Number(c.amount || c.monto_prestado || (Number(c.totalDebt || 0) / 1.2)));
+        const disc = Math.round(Number(c.discount_amount || 0));
+        const roll = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+        return sum + Math.max(0, amt - disc - roll);
+      }, 0);
       const netAgent = totalCollected - totalLent;
 
       // Rellenar factura del agente (solo lectura)

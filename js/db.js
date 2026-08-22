@@ -2957,14 +2957,15 @@ const db = {
       for (const p of payments) {
         const pStatus = String(p.status || '').toUpperCase();
         const isCanceled = pStatus.includes('CANCEL') || pStatus.includes('RECHAZ') || pStatus === 'NO PAGO' || pStatus === 'PENDIENTE';
-        const isRealPayment = p.amount > 0 && !isCanceled;
+        const isRenovationArchive = pStatus.includes('RENOVAC') || pStatus.includes('LIQUIDADO_POR_RENOVACION') || p.liquidado === true;
+        const isRealPayment = p.amount > 0 && !isCanceled && !isRenovationArchive;
 
         if (isRealPayment) {
           totalAbonosReales += Math.round(parseFloat(p.amount) || 0);
         }
       }
 
-      // 4. Suma de entradas y salidas registradas en 'caja_movimientos' (Ingresos por renovación, movimientos de caja)
+      // 4. Suma de entradas y salidas registradas en 'caja_movimientos' (Movimientos manuales de caja)
       let totalMovimientosEntrada = 0;
       let totalMovimientosSalida = 0;
       try {
@@ -2983,19 +2984,18 @@ const db = {
             const isSalida = typeStr === 'salida' || typeStr === 'egreso' || typeStr === 'retiro' || typeStr === 'out';
             const amount = Math.abs(Math.round(Number(m.amount || m.monto || 0)));
             const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
+            const isRenov = (m.id && String(m.id).startsWith('mov_renov_in_')) || concept.includes('renovac') || concept.includes('renovación');
 
             if (isEntrada) {
-              const isRenov = m.id && String(m.id).startsWith('mov_renov_in_');
               const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || String(m.id || '').startsWith('inj_') || (!concept && !m.description && !m.concepto);
               
-              if (isRenov) {
-                totalMovimientosEntrada += amount;
-              } else if (!isInjection) {
+              // Omitir cualquier entrada de renovación para evitar duplicar el ingreso ajustado en flujo neto
+              if (!isRenov && !isInjection) {
                 totalMovimientosEntrada += amount;
               }
             } else if (isSalida) {
               const isInjectionSalida = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || String(m.id || '').startsWith('inj_') || String(m.id || '').startsWith('mov_inj_');
-              if (!concept.includes('desembolso') && !concept.includes('cartón') && !concept.includes('carton') && !concept.includes('renovación') && !concept.includes('renovacion') && !isInjectionSalida) {
+              if (!concept.includes('desembolso') && !concept.includes('cartón') && !concept.includes('carton') && !isRenov && !isInjectionSalida) {
                 totalMovimientosSalida += amount;
               }
             }
@@ -3117,6 +3117,7 @@ const db = {
          const isBlacklistedClient = blacklistedCedulas.has(pCedula);
 
          const pStatusUpper = String(p.status || '').toUpperCase();
+         const isRenovationPayment = pStatusUpper.includes('RENOVAC') || pStatusUpper.includes('LIQUIDADO_POR_RENOVACION') || p.liquidado === true;
          const isMoraPayment = pStatusUpper.includes('MORA') || 
                                pStatusUpper.includes('LIQUIDADO_MORA') || 
                                pStatusUpper.includes('NEGRA') ||
@@ -3124,13 +3125,13 @@ const db = {
 
          if (isRehabPayment && isToday && isMine && isRealPayment) return true;
 
-         return isToday && isMine && isRealPayment && (!isBlacklistedClient || isRehabPayment) && !isMoraPayment;
+         return isToday && isMine && isRealPayment && (!isBlacklistedClient || isRehabPayment) && !isMoraPayment && !isRenovationPayment;
       });
       
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
       const massPaymentsTotal = Math.round(todaysPayments.reduce((acc, p) => (p.is_mass_payment || String(p.status || '').includes('Masivo')) ? acc + Math.round(Number(p.amount) || 0) : acc, 0));
       
-      // Prestado hoy
+      // Prestado hoy (Desembolso Neto Real entregado de caja)
       const todaysClients = clients.filter(c => {
          if (!c.created_at && !c.date) return false;
          const cDate = getCleanDateStr(c.created_at || c.date);
@@ -3170,14 +3171,22 @@ const db = {
         // cartones query fallback
       }
 
-      let totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount) || 0), 0));
+      let totalLent = Math.round(todaysClients.reduce((acc, c) => {
+        const amt = Math.round(Number(c.amount || c.monto_prestado || 0));
+        const disc = Math.round(Number(c.discount_amount || 0));
+        const roll = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+        return acc + Math.max(0, amt - disc - roll);
+      }, 0));
       let totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + this.getRetainedFeesFromCredit(c), 0));
 
       if (secondaryCartonesToday.length > 0) {
         secondaryCartonesToday.forEach(sc => {
           const alreadyInClients = todaysClients.some(tc => String(tc.cedula) === String(sc.cliente_id));
           if (!alreadyInClients) {
-            totalLent += Math.round(Number(sc.monto_prestado || sc.amount) || 0);
+            const amt = Math.round(Number(sc.monto_prestado || sc.amount || 0));
+            const disc = Math.round(Number(sc.discount_amount || 0));
+            const roll = Math.round(Number(sc.rollover_amount || sc.saldo_anterior || 0));
+            totalLent += Math.max(0, amt - disc - roll);
             totalDiscounts += Math.round(Number(sc.discount_amount) || 0);
           }
         });
@@ -3189,8 +3198,9 @@ const db = {
         if (m.type !== 'entrada') return false;
         const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
         const idStr = String(m.id || '');
+        const isRenov = idStr.startsWith('mov_renov_in_') || concept.includes('renovac') || concept.includes('renovación');
         const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || idStr.startsWith('inj_') || (!concept && !m.description && !m.concepto);
-        return !isInjection;
+        return !isInjection && !isRenov;
       }).reduce((acc, m) => acc + Math.round(Number(m.amount) || 0), 0));
       const totalOut = Math.round(todaysMovements.filter(m => {
         const typeStr = String(m.type || m.tipo || '').toLowerCase();
