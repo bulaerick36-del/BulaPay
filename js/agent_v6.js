@@ -1929,14 +1929,7 @@ const agentModule = {
       this.currentClient = updatedClient;
       
       if (Number(updatedClient.outstanding) <= 0) {
-        await window.BulaPayDB.liquidateCredit({
-          cedula: updatedClient.cedula,
-          status: 'Liquidado_Pagado',
-          outstanding: 0
-        });
-        alert('🎉 ¡Felicitaciones! Esta es tu última cuota, el cartón se liquidará automáticamente, te invitamos a adquirir otro crédito');
-        await this.renderFinancialDashboard();
-        await this.searchClient();
+        this.showSuccessLiquidationModal(updatedClient);
       } else {
         // Actualizar la interfaz principal del cobrador, Cartón y estado de liquidación
         await this.renderClientInfo(updatedClient);
@@ -2485,16 +2478,9 @@ const agentModule = {
       
       await this.searchClient(); // Recarga y repinta los datos completos
 
-      // Liquidación Automática de Última Cuota (v83)
+      // Liquidación Automática de Última Cuota con Alerta y Aceptar
       if (Number(updatedClient.outstanding) <= 0) {
-        await window.BulaPayDB.liquidateCredit({
-          cedula: updatedClient.cedula,
-          status: 'Liquidado_Pagado',
-          outstanding: 0
-        });
-        alert('🎉 ¡Felicitaciones! Esta es tu última cuota, el cartón se liquidará automáticamente, te invitamos a adquirir otro crédito');
-        await this.renderFinancialDashboard();
-        await this.searchClient();
+        this.showSuccessLiquidationModal(updatedClient);
       } else {
         // Mostrar modal obligatorio SMS para notificar el pago
         this.showMandatorySmsPrompt(updatedClient, 'payment');
@@ -2610,14 +2596,7 @@ const agentModule = {
       this.currentClient = updatedClient;
       
       if (Number(updatedClient.outstanding) <= 0) {
-        await window.BulaPayDB.liquidateCredit({
-          cedula: updatedClient.cedula,
-          status: 'Liquidado_Pagado',
-          outstanding: 0
-        });
-        alert('🎉 ¡Felicitaciones! Esta es tu última cuota, el cartón se liquidará automáticamente, te invitamos a adquirir otro crédito');
-        await this.renderFinancialDashboard();
-        await this.searchClient();
+        this.showSuccessLiquidationModal(updatedClient);
       } else {
         await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
         this.showMandatorySmsPrompt(updatedClient, 'payment');
@@ -2802,6 +2781,11 @@ const agentModule = {
 
       // Actualizar botón de seguimiento
       await this.updateRouteTracking();
+
+      // Verificar si completó el 100% de la deuda (última cuota)
+      if (updatedClient && Number(updatedClient.outstanding) <= 0) {
+        this.showSuccessLiquidationModal(updatedClient);
+      }
     } catch (err) {
       console.error(err);
       if (err.message && (err.message.includes('Precaución') || err.message.includes('Acceso Denegado'))) {
@@ -3889,39 +3873,63 @@ const agentModule = {
     }
   },
 
-  showSuccessLiquidationModal(client) {
-    const modal = document.getElementById('cobro-success-liquidation-modal');
-    if (!modal) return;
+  showSuccessLiquidationModal(client, onCompleteCallback) {
+    if (!client) return;
+    const clientName = client.name || client.nombre || 'Cliente';
+    const message = `¡Felicitaciones ${clientName}! Pagaste tu última cuota. BulaPay te invita a adquirir un nuevo crédito.`;
 
+    const doLiquidation = async () => {
+      try {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: client.cedula || client.id,
+          status: 'Liquidado_Pagado',
+          outstanding: 0,
+          cartonId: client.carton_id || client.id || null,
+          numeroCarton: client.numero_carton || null
+        });
+        if (typeof this.renderFinancialDashboard === 'function') await this.renderFinancialDashboard();
+        if (typeof this.searchClient === 'function') await this.searchClient();
+        if (typeof this.updateRouteTracking === 'function') await this.updateRouteTracking();
+        if (typeof onCompleteCallback === 'function') await onCompleteCallback();
+      } catch (e) {
+        console.error("Error al liquidar cartón desde modal de éxito:", e);
+      }
+    };
+
+    const modal = document.getElementById('cobro-success-liquidation-modal');
+    const msgEl = document.getElementById('cobro-success-liquidation-message');
     const btnConfirm = document.getElementById('btn-success-liquidate-confirm');
     const btnClose = document.getElementById('btn-success-liquidate-close');
 
-    if (btnConfirm) {
+    if (modal) {
+      if (msgEl) msgEl.innerText = message;
+      if (btnConfirm) btnConfirm.innerText = 'Aceptar';
+      if (btnClose) btnClose.style.display = 'none';
+
+      modal.style.display = 'flex';
+
       btnConfirm.onclick = async () => {
         modal.style.display = 'none';
-        try {
-          await window.BulaPayDB.liquidateCredit({
-            cedula: client.cedula,
-            status: 'Liquidado_Pagado',
-            outstanding: 0
-          });
-          alert('🎉 ¡Cartón Liquidado Exitosamente!');
-          await this.renderFinancialDashboard();
-          await this.searchClient();
-        } catch (e) {
-          console.error("Error al liquidar cartón desde modal de éxito:", e);
-          alert('Error al liquidar cartón: ' + (e.message || e));
+        await doLiquidation();
+      };
+    } else if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: '🎉 ¡Felicitaciones!',
+        text: message,
+        icon: 'success',
+        confirmButtonText: 'Aceptar',
+        confirmButtonColor: '#10b981',
+        allowOutsideClick: false,
+        allowEscapeKey: false
+      }).then(async (result) => {
+        if (result.isConfirmed) {
+          await doLiquidation();
         }
-      };
+      });
+    } else {
+      alert(message);
+      doLiquidation();
     }
-
-    if (btnClose) {
-      btnClose.onclick = () => {
-        modal.style.display = 'none';
-      };
-    }
-
-    modal.style.display = 'flex';
   },
 
   // Modal de cartón vencido deshabilitado y reemplazado por letrero integrado nativo (v87)

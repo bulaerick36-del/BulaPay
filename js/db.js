@@ -1488,6 +1488,7 @@ const db = {
         const cartonStateUpdate = { outstanding: newOutstanding };
         if (newOutstanding === 0) {
           cartonStateUpdate.estado = 'liquidado';
+          cartonStateUpdate.status = 'Liquidado_Pagado';
         }
         await supabase
           .from('cartones')
@@ -1498,6 +1499,55 @@ const db = {
         console.warn(`Aviso actualizando saldo en cartón para "${cedula}":`, eCarton);
       }
     }
+  },
+
+  async checkAndHandleLastInstallment(client, onCompleteCallback) {
+    if (!client) return false;
+    const outstanding = Math.round(Number(client.outstanding || 0));
+    if (outstanding <= 0) {
+      const clientName = client.name || client.nombre || 'Cliente';
+      const message = `¡Felicitaciones ${clientName}! Pagaste tu última cuota. BulaPay te invita a adquirir un nuevo crédito.`;
+
+      const executeLiquidation = async () => {
+        try {
+          await this.liquidateCredit({
+            cedula: client.cedula || client.id,
+            status: 'Liquidado_Pagado',
+            outstanding: 0,
+            cartonId: client.carton_id || client.id || null,
+            numeroCarton: client.numero_carton || null
+          });
+          if (typeof onCompleteCallback === 'function') {
+            await onCompleteCallback();
+          }
+        } catch (e) {
+          console.error("Error al liquidar automáticamente cartón finalizado:", e);
+        }
+      };
+
+      if (typeof window.BulaPayAgent !== 'undefined' && typeof window.BulaPayAgent.showSuccessLiquidationModal === 'function') {
+        window.BulaPayAgent.showSuccessLiquidationModal(client, onCompleteCallback);
+        return true;
+      }
+
+      if (typeof Swal !== 'undefined') {
+        await Swal.fire({
+          title: '🎉 ¡Felicitaciones!',
+          text: message,
+          icon: 'success',
+          confirmButtonText: 'Aceptar',
+          confirmButtonColor: '#10b981',
+          allowOutsideClick: false,
+          allowEscapeKey: false
+        });
+        await executeLiquidation();
+      } else {
+        alert(message);
+        await executeLiquidation();
+      }
+      return true;
+    }
+    return false;
   },
 
   // PAYMENTS

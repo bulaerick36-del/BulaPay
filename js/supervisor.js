@@ -2547,10 +2547,15 @@ const supervisorModule = {
         amount: amount
       });
       
-      alert(`✅ Pago de la cuota ${installmentNumber} registrado con éxito.`);
-      client.outstanding = Math.max(0, Number(client.outstanding) - Number(amount));
-      
-      await this.renderDashboard();
+      const updatedClient = await window.BulaPayDB.getClientByCedula(client.cedula);
+      if (updatedClient && Number(updatedClient.outstanding) <= 0) {
+        await window.BulaPayDB.checkAndHandleLastInstallment(updatedClient, async () => {
+          await this.renderDashboard();
+        });
+      } else {
+        alert(`✅ Pago de la cuota ${installmentNumber} registrado con éxito.`);
+        await this.renderDashboard();
+      }
     } catch (err) {
       console.error(err);
       alert('❌ Error al registrar el pago.');
