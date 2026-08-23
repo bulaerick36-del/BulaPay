@@ -287,6 +287,29 @@ const agentModule = {
         if (!this.currentClient) return;
         const client = this.currentClient;
 
+        // 1. VALIDACIÓN ESTRICTA DE ESTADO EN CLIENTE Y CARTÓN
+        const rawStatus = String(client.estado || client.status || '').toLowerCase().trim();
+        const isAlreadyClosed = rawStatus.includes('liquidado') || rawStatus.includes('renovad') || rawStatus.includes('cerrado') || rawStatus.includes('cancelad');
+
+        if (isAlreadyClosed) {
+          alert(`⚠️ Operación Denegada: El cartón o crédito actual del cliente ${client.name} (C.C. ${client.cedula}) ya se encuentra en estado '${client.estado || client.status}'.\nNo es posible procesar una segunda renovación sobre un ciclo ya cerrado.`);
+          return;
+        }
+
+        // 2. Consulta de estado fresco en base de datos directamente
+        try {
+          const freshCarton = await window.BulaPayDB.getActiveCartonByClient(client.cedula);
+          if (freshCarton) {
+            const freshStatus = String(freshCarton.estado || freshCarton.status || '').toLowerCase().trim();
+            if (freshStatus.includes('liquidado') || freshStatus.includes('renovad') || freshStatus.includes('cerrado') || freshStatus.includes('cancelad')) {
+              alert(`⚠️ Operación Denegada: El cartón N° ${freshCarton.numero_carton || ''} ya fue liquidado/renovado previamente (Estado: ${freshCarton.estado || freshCarton.status}). No se puede re-renovar un ciclo cerrado.`);
+              return;
+            }
+          }
+        } catch (eCheck) {
+          console.warn("Aviso al verificar estado fresco del cartón:", eCheck);
+        }
+
         // Validación de Regla de Renovación (v85/v160)
         const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
         const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
@@ -2205,7 +2228,14 @@ const agentModule = {
 
   canRenovarCarton(client, dailyStatusList = null) {
     if (!client) return false;
-    if (Number(client?.outstanding || 0) <= 0) return true; // Cliente sin deuda activa puede renovar
+
+    // BLOQUEO ESTRICTO: Cartón cerrado, renovado o liquidado no se puede renovar por segunda vez
+    const rawSt = String(client?.estado || client?.status || '').toLowerCase().trim();
+    if (rawSt.includes('liquidado') || rawSt.includes('renovad') || rawSt.includes('cerrado') || rawSt.includes('cancelad')) {
+      return false;
+    }
+
+    if (Number(client?.outstanding || 0) <= 0) return true; // Cliente activo sin deuda pendiente puede renovar
 
     const totalInstallmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
     const halfTerm = Math.ceil(totalInstallmentsCount / 2);
