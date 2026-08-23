@@ -971,22 +971,41 @@ const db = {
       
       // Registrar cartón inicial obligatorio en la nueva tabla 'cartones' (aislamiento de préstamos)
       try {
-        const rolloverVal = Number(client.rollover_amount || client.saldo_anterior || 0);
-        const cartonState = client.isRenewal || client.is_renewal || rolloverVal > 0 ? 'activo_por_renovacion' : 'activo';
-        const netCashVal = Math.max(0, Number(client.amount || 0) - Number(client.discount_amount || 0) - rolloverVal);
+        const rolloverVal = Math.round(Number(client.rollover_amount || client.saldo_anterior || 0));
+        const discountVal = Math.round(Number(client.discount_amount || client.descuento || 0));
+        const isRenov = client.isRenewal || client.is_renewal || rolloverVal > 0;
+        const cartonState = isRenov ? 'activo_por_renovacion' : 'activo';
+        const netCashVal = Math.max(0, Number(client.amount || 0) - discountVal - rolloverVal);
+
+        // Si es renovación, liquidar explícitamente cartones activos anteriores
+        if (isRenov) {
+          const cedStr = String(client.cedula).trim();
+          const cartonUpdateOld = { 
+            estado: 'liquidado_por_renovacion', 
+            status: 'liquidado_por_renovacion',
+            outstanding: 0,
+            total_debt: 0,
+            fecha_cierre: new Date().toISOString()
+          };
+          await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+          await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+          await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+        }
+
         const cartonPayload = {
           cliente_id: String(client.cedula),
           numero_carton: Math.floor(Date.now() % 100000000),
           fecha_apertura: new Date().toISOString(),
           monto_prestado: Number(client.amount || 0),
           estado: cartonState,
+          status: cartonState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
           saldo_anterior: rolloverVal,
           rollover_amount: rolloverVal,
           total_debt: Number(client.totalDebt || 0),
           outstanding: Number(client.outstanding || client.totalDebt || 0),
           installments_count: Number(client.installmentsCount || 1),
           installment_amount: Number(client.installmentAmount || 0),
-          discount_amount: Number(client.discount_amount || 0),
+          discount_amount: discountVal,
           discount_reason: client.discount_reason || null,
           net_cash: netCashVal,
           route_id: client.routeId || client.route_id || null,
@@ -1004,12 +1023,15 @@ const db = {
             numero_carton: Math.floor(Date.now() % 100000000),
             monto_prestado: Number(client.amount || 0),
             estado: cartonState,
+            status: cartonState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
             saldo_anterior: rolloverVal,
             rollover_amount: rolloverVal,
             total_debt: Number(client.totalDebt || 0),
             outstanding: Number(client.outstanding || client.totalDebt || 0),
             installments_count: Number(client.installmentsCount || 1),
             installment_amount: Number(client.installmentAmount || 0),
+            discount_amount: discountVal,
+            net_cash: netCashVal,
             route_id: client.routeId || client.route_id || null,
             agent_id: client.agent_id || client.agentId || null,
             supervisor_id: client.supervisor_id || null
@@ -1075,31 +1097,48 @@ const db = {
 
         // Registrar/Renovar cartón en la tabla 'cartones'
         try {
-          const isRenov = payload.isRenewal || payload.is_renewal || Number(payload.rollover_amount || payload.saldo_anterior || 0) > 0;
+          const rolloverVal = Math.round(Number(payload.rollover_amount || payload.saldo_anterior || 0));
+          const discountVal = Math.round(Number(payload.discount_amount || payload.descuento || 0));
+          const isRenov = payload.isRenewal || payload.is_renewal || rolloverVal > 0;
           const oldState = isRenov ? 'liquidado_por_renovacion' : 'liquidado';
           const newState = isRenov ? 'activo_por_renovacion' : 'activo';
 
+          const cedStr = String(clienteExistenteId).trim();
+          const cartonUpdateOld = { 
+            estado: oldState, 
+            status: oldState,
+            outstanding: 0,
+            total_debt: 0,
+            fecha_cierre: new Date().toISOString()
+          };
+
           await supabase
             .from('cartones')
-            .update({ estado: oldState, outstanding: 0, total_debt: 0 })
-            .eq('cliente_id', String(clienteExistenteId))
-            .in('estado', ['activo', 'activo_por_renovacion']);
+            .update(cartonUpdateOld)
+            .eq('cliente_id', cedStr)
+            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
 
-          const rolloverVal = Number(payload.rollover_amount || payload.saldo_anterior || 0);
-          const netCashVal = Math.max(0, Number(payload.amount || 0) - Number(payload.discount_amount || 0) - rolloverVal);
+          await supabase
+            .from('cartones')
+            .update(cartonUpdateOld)
+            .eq('client_id', cedStr)
+            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+
+          const netCashVal = Math.max(0, Number(payload.amount || 0) - discountVal - rolloverVal);
           await supabase.from('cartones').insert([{
             cliente_id: String(clienteExistenteId),
             numero_carton: Math.floor(Date.now() % 100000000),
             fecha_apertura: new Date().toISOString(),
             monto_prestado: Number(payload.amount || 0),
             estado: newState,
+            status: newState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
             saldo_anterior: rolloverVal,
             rollover_amount: rolloverVal,
             total_debt: Number(payload.totalDebt || 0),
             outstanding: Number(payload.outstanding || payload.totalDebt || 0),
             installments_count: Number(payload.installmentsCount || 1),
             installment_amount: Number(payload.installmentAmount || 0),
-            discount_amount: Number(payload.discount_amount || 0),
+            discount_amount: discountVal,
             discount_reason: payload.discount_reason || null,
             net_cash: netCashVal,
             route_id: payload.routeId || payload.route_id || null,
@@ -1151,16 +1190,17 @@ const db = {
         estado: 'liquidado_por_renovacion', 
         status: 'liquidado_por_renovacion',
         outstanding: 0,
+        total_debt: 0,
         fecha_cierre: nowIso
       };
 
-      await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
-      await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
-      await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+      await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
+      await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
+      await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
       if (!isNaN(Number(cedStr))) {
-        await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
-        await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
-        await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+        await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
+        await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
+        await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
       }
     } catch (e) {
       console.warn("Aviso al cerrar cartones anteriores:", e.message);
@@ -1187,7 +1227,7 @@ const db = {
         fecha_inicio: nowIso,
         monto_prestado: newMontoPrestado,
         estado: newState,
-        status: 'Activo',
+        status: newState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
         saldo_anterior: rolloverVal,
         rollover_amount: rolloverVal,
         total_debt: newTotalDebt,
@@ -1274,6 +1314,7 @@ const db = {
       retained_fees: payload.retained_fees || payload.retained_amount || 0,
       rollover_amount: rolloverVal,
       saldo_anterior: rolloverVal,
+      net_cash: netCashVal,
       segVal: payload.segVal || 0,
       papVal: payload.papVal || 0,
       discount_reason: payload.discount_reason || null,
@@ -2951,16 +2992,40 @@ const db = {
         const { data: cartonesData } = await supabase.from('cartones').select('*');
         if (cartonesData && cartonesData.length > 0) {
           cartonesData.forEach(c => {
-            const rawEstado = String(c.estado || '').trim().toLowerCase();
-            const rawStatus = String(c.status || '').trim().toUpperCase();
+            const rawEstado = String(c.estado || c.status || '').trim().toLowerCase();
+            const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
             // Ignorar únicamente cartones cancelados/rechazados sin desembolso
             const isCanceled = rawEstado.includes('cancelad') || rawStatus.includes('CANCELAD') || rawStatus.includes('RECHAZAD');
 
             if (!isCanceled) {
-              const desembolsoTotal = Math.round(Number(c.monto_prestado || c.amount || 0));
-              totalPrestadoSalioDeCaja += desembolsoTotal;
+              const montoPrestado = Math.round(Number(c.monto_prestado || c.amount || 0));
+              const discountAmt = Math.round(Number(c.discount_amount || c.descuento || 0));
+              const rolloverAmt = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+              
+              let realNetCashOut = (c.net_cash !== undefined && c.net_cash !== null && !isNaN(Number(c.net_cash)))
+                ? Math.round(Number(c.net_cash))
+                : Math.max(0, montoPrestado - discountAmt - rolloverAmt);
+
+              totalPrestadoSalioDeCaja += realNetCashOut;
             }
           });
+        } else {
+          const clientsData = await this.getClients();
+          if (clientsData && clientsData.length > 0) {
+            clientsData.forEach(c => {
+              const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
+              const isCanceled = rawStatus.includes('CANCEL') || rawStatus.includes('RECHAZ');
+              if (!isCanceled) {
+                const monto = Math.round(Number(c.amount || c.monto_prestado || 0));
+                const discount = Math.round(Number(c.discount_amount || c.descuento || 0));
+                const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+                const realNetCashOut = (c.net_cash !== undefined && c.net_cash !== null && !isNaN(Number(c.net_cash)))
+                  ? Math.round(Number(c.net_cash))
+                  : Math.max(0, monto - discount - rollover);
+                totalPrestadoSalioDeCaja += realNetCashOut;
+              }
+            });
+          }
         }
       } catch (eCart) {
         console.warn("Aviso al consultar cartones para Capital en Caja v115:", eCart);
@@ -3186,14 +3251,28 @@ const db = {
         // cartones query fallback
       }
 
-      let totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount || c.monto_prestado || 0)), 0));
+      let totalLent = Math.round(todaysClients.reduce((acc, c) => {
+        const monto = Math.round(Number(c.amount || c.monto_prestado || 0));
+        const discount = Math.round(Number(c.discount_amount || c.descuento || 0));
+        const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+        const net = (c.net_cash !== undefined && c.net_cash !== null && !isNaN(Number(c.net_cash)))
+          ? Math.round(Number(c.net_cash))
+          : Math.max(0, monto - discount - rollover);
+        return acc + net;
+      }, 0));
       let totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + this.getRetainedFeesFromCredit(c), 0));
 
       if (secondaryCartonesToday.length > 0) {
         secondaryCartonesToday.forEach(sc => {
           const alreadyInClients = todaysClients.some(tc => String(tc.cedula) === String(sc.cliente_id));
           if (!alreadyInClients) {
-            totalLent += Math.round(Number(sc.monto_prestado || sc.amount) || 0);
+            const monto = Math.round(Number(sc.monto_prestado || sc.amount || 0));
+            const discount = Math.round(Number(sc.discount_amount || sc.descuento || 0));
+            const rollover = Math.round(Number(sc.rollover_amount || sc.saldo_anterior || 0));
+            const net = (sc.net_cash !== undefined && sc.net_cash !== null && !isNaN(Number(sc.net_cash)))
+              ? Math.round(Number(sc.net_cash))
+              : Math.max(0, monto - discount - rollover);
+            totalLent += net;
             totalDiscounts += Math.round(Number(sc.discount_amount) || 0);
           }
         });
