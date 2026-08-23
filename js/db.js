@@ -2972,8 +2972,8 @@ const db = {
       for (const p of payments) {
         const pStatus = String(p.status || '').toUpperCase();
         const isCanceled = pStatus.includes('CANCEL') || pStatus.includes('RECHAZ') || pStatus === 'NO PAGO' || pStatus === 'PENDIENTE';
-        const isRenovationArchive = pStatus.includes('RENOVAC') || pStatus.includes('LIQUIDADO_POR_RENOVACION') || p.liquidado === true;
-        const isRealPayment = p.amount > 0 && !isCanceled && !isRenovationArchive;
+        const isMoraLoss = pStatus.includes('LIQUIDADO_MORA') || pStatus.includes('MORA');
+        const isRealPayment = p.amount > 0 && !isCanceled && !isMoraLoss;
 
         if (isRealPayment) {
           totalAbonosReales += Math.round(parseFloat(p.amount) || 0);
@@ -3004,7 +3004,7 @@ const db = {
             if (isEntrada) {
               const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || String(m.id || '').startsWith('inj_') || (!concept && !m.description && !m.concepto);
               
-              // Omitir cualquier entrada de renovación para evitar duplicar el ingreso ajustado en flujo neto
+              // Omitir cualquier entrada manual duplicada de renovación
               if (!isRenov && !isInjection) {
                 totalMovimientosEntrada += amount;
               }
