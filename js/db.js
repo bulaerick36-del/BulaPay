@@ -2935,15 +2935,8 @@ const db = {
             const isCanceled = rawEstado.includes('cancelad') || rawStatus.includes('CANCELAD') || rawStatus.includes('RECHAZAD');
 
             if (!isCanceled) {
-              const amountPuro = Math.round(Number(c.monto_prestado || c.amount || 0));
-              const discountAmt = Math.round(Number(c.discount_amount || 0));
-              const rolloverAmt = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
-              
-              // REGLA DE NEUTRALIZACIÓN ABSOLUTA EN CAJA v174:
-              // Ningún cartón creado con saldo_anterior o rollover_amount debe restar ese saldo anterior de la caja.
-              // El único dinero físico que sale de caja al entregar un crédito es net_cash (capital - discount - rollover):
-              const efectivoEntregado = Math.max(0, amountPuro - discountAmt - rolloverAmt);
-              totalPrestadoSalioDeCaja += efectivoEntregado;
+              const desembolsoTotal = Math.round(Number(c.monto_prestado || c.amount || 0));
+              totalPrestadoSalioDeCaja += desembolsoTotal;
             }
           });
         }
@@ -3171,22 +3164,14 @@ const db = {
         // cartones query fallback
       }
 
-      let totalLent = Math.round(todaysClients.reduce((acc, c) => {
-        const amt = Math.round(Number(c.amount || c.monto_prestado || 0));
-        const disc = Math.round(Number(c.discount_amount || 0));
-        const roll = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
-        return acc + Math.max(0, amt - disc - roll);
-      }, 0));
+      let totalLent = Math.round(todaysClients.reduce((acc, c) => acc + Math.round(Number(c.amount || c.monto_prestado || 0)), 0));
       let totalDiscounts = Math.round(todaysClients.reduce((acc, c) => acc + this.getRetainedFeesFromCredit(c), 0));
 
       if (secondaryCartonesToday.length > 0) {
         secondaryCartonesToday.forEach(sc => {
           const alreadyInClients = todaysClients.some(tc => String(tc.cedula) === String(sc.cliente_id));
           if (!alreadyInClients) {
-            const amt = Math.round(Number(sc.monto_prestado || sc.amount || 0));
-            const disc = Math.round(Number(sc.discount_amount || 0));
-            const roll = Math.round(Number(sc.rollover_amount || sc.saldo_anterior || 0));
-            totalLent += Math.max(0, amt - disc - roll);
+            totalLent += Math.round(Number(sc.monto_prestado || sc.amount) || 0);
             totalDiscounts += Math.round(Number(sc.discount_amount) || 0);
           }
         });

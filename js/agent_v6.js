@@ -4129,13 +4129,8 @@ const agentModule = {
         return clientLocalDate === todayStr;
       });
 
-      // Sumar capital desembolsado neto en efectivo (net_cash: capital prestado menos descuentos y refinanciaciones por renovación)
-      const totalLent = todayClients.reduce((sum, c) => {
-        const amt = Math.round(Number(c.amount || c.monto_prestado || (Number(c.totalDebt || 0) / 1.2)));
-        const disc = Math.round(Number(c.discount_amount || 0));
-        const roll = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
-        return sum + Math.max(0, amt - disc - roll);
-      }, 0);
+      // Sumar desembolso total del nuevo crédito prestado a la calle
+      const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.amount || c.monto_prestado || (Number(c.totalDebt || 0) / 1.2))), 0);
       const netCash = totalCollected - totalLent;
 
       // Poblar el modal tipo tirilla/factura
