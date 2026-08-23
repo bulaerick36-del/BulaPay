@@ -2496,23 +2496,6 @@ const db = {
     const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
     const isPaidRealCash = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
     const isPaid = isPaidRealCash || isRenovacion;
-
-    // 0. VALIDACIÓN ESTRICTA DE SEGURIDAD EN DB: Bloquear re-liquidación por renovación en cartones ya cerrados/renovados
-    if (isRenovacion) {
-      try {
-        const cedStr = String(cedula || '').trim();
-        const activeCarton = await this.getActiveCartonByClient(cedStr);
-        if (activeCarton) {
-          const st = String(activeCarton.estado || activeCarton.status || '').toLowerCase().trim();
-          if (st.includes('liquidado_por_renovacion') || st.includes('renovad') || st.includes('cerrado')) {
-            console.warn(`⚠️ [BLOQUEO SEGURIDAD DB] El cartón N° ${activeCarton.numero_carton || ''} de ${cedStr} ya fue liquidado por renovación previamente. Operación denegada.`);
-            return { success: false, message: 'El cartón ya se encuentra liquidado o renovado previamente.' };
-          }
-        }
-      } catch (eCheck) {
-        console.warn("Aviso al verificar estado de cartón previo en liquidateCredit:", eCheck);
-      }
-    }
     
     // 1. Obtener datos del cliente ANTES de resetear sus saldos numéricos
     let clientData = null;
