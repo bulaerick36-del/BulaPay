@@ -469,6 +469,15 @@ const agentModule = {
           }
 
           // 2. SINCRONIZACIÓN DE UI Y BACKEND: Prompt/confirmación mostrando exactamente el saldo pendiente real
+          if (saldoPendienteReal <= 0) {
+            alert('❌ Este cartón no tiene saldo pendiente. No se puede enviar a Lista Negra un cliente paz y salvo.');
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = '⛔ Liquidar / Lista Negra';
+            }
+            return;
+          }
+
           const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${name} y enviarlo a Lista Negra (Liquidado por Mora)?\n` +
             `Deuda Total a Lista Negra: $${saldoPendienteReal.toLocaleString('es-CO')}.\n` +
             `Esta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
@@ -1857,6 +1866,9 @@ const agentModule = {
       // Actualizar botón de seguimiento
       await this.updateRouteTracking();
       
+      if (Number(updatedClient.outstanding) <= 0) {
+        this.showSuccessLiquidationModal(updatedClient);
+      }
     } catch (err) {
       console.error("Error al pagar cuota desde cartón:", err);
       if (err.message && (err.message.includes('Precaución') || err.message.includes('Acceso Denegado'))) {
@@ -3876,7 +3888,7 @@ const agentModule = {
   showSuccessLiquidationModal(client, onCompleteCallback) {
     if (!client) return;
     const clientName = client.name || client.nombre || 'Cliente';
-    const message = `¡Felicitaciones ${clientName}! Pagaste tu última cuota. BulaPay te invita a adquirir un nuevo crédito.`;
+    const message = `¡Felicitaciones ${clientName}! Esta es tu última cuota. El cartón se liquidará automáticamente. BulaPay te invita a adquirir otro crédito.`;
 
     const doLiquidation = async () => {
       try {

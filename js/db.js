@@ -1475,13 +1475,17 @@ const db = {
       
       // Actualizar el semáforo/riesgo del cliente basado en su saldo deudor pendiente
       let newRisk = client.risk;
+      const clientUpdatePayload = { outstanding: newOutstanding, risk: newRisk };
       if (newOutstanding === 0) {
         newRisk = 'Verde'; // Se pone al día al cancelar crédito
+        clientUpdatePayload.risk = 'Verde';
+        clientUpdatePayload.status = 'Liquidado_Pagado';
+        clientUpdatePayload.estado = 'liquidado';
       }
 
       const { error } = await supabase
         .from('clients')
-        .update({ outstanding: newOutstanding, risk: newRisk })
+        .update(clientUpdatePayload)
         .eq('cedula', String(cedula));
          // Actualizar la tabla cartones en tiempo real para mantener sincronización total
       try {
@@ -1506,7 +1510,7 @@ const db = {
     const outstanding = Math.round(Number(client.outstanding || 0));
     if (outstanding <= 0) {
       const clientName = client.name || client.nombre || 'Cliente';
-      const message = `¡Felicitaciones ${clientName}! Pagaste tu última cuota. BulaPay te invita a adquirir un nuevo crédito.`;
+      const message = `¡Felicitaciones ${clientName}! Esta es tu última cuota. El cartón se liquidará automáticamente. BulaPay te invita a adquirir otro crédito.`;
 
       const executeLiquidation = async () => {
         try {
@@ -1539,8 +1543,11 @@ const db = {
           confirmButtonColor: '#10b981',
           allowOutsideClick: false,
           allowEscapeKey: false
+        }).then(async (result) => {
+          if (result.isConfirmed) {
+            await executeLiquidation();
+          }
         });
-        await executeLiquidation();
       } else {
         alert(message);
         await executeLiquidation();
@@ -2585,8 +2592,11 @@ const db = {
     const supabase = await initSupabase();
     
     const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
-    const isPaidRealCash = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO');
-    const isPaid = isPaidRealCash || isRenovacion;
+    const isPaidRealCash = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO' || status === 'liquidado' || status === 'LIQUIDADO');
+    const isPaid = isPaidRealCash || isRenovacion || (outstanding !== undefined && Number(outstanding) <= 0);
+    
+    // REGLA ABSOLUTA: Si el saldo pendiente es <= 0 o es pago/liquidación exitosa, NUNCA es mora ni lista negra.
+    const isMora = !isPaid && (outstanding !== undefined && Number(outstanding) > 0) && (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
     
     // 1. Obtener datos del cliente ANTES de resetear sus saldos numéricos
     let clientData = null;
@@ -2604,9 +2614,9 @@ const db = {
     let gananciaReal = 0;
     let originalAmount = 0;
 
-    // 2. Si el crédito fue liquidado/cancelado con PAGO REAL EN EFECTIVO, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments.
+    // 2. Si el crédito fue liquidado/cancelado con PAGO REAL EN EFECTIVO o saldo final 0, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments.
     // REGLA CONTABLE ABSOLUTA v173: En RENOVACIÓN no se insertan cuotas pagadas en payments porque el saldo anterior es puramente simbólico/referencial.
-    if (isPaidRealCash && !isRenovacion && clientData) {
+    if ((isPaidRealCash || isPaid) && !isRenovacion && clientData) {
       try {
         const totalDebt = Math.round(Number(clientData?.totalDebt || clientData?.monto_total || 0));
         originalAmount = Math.round(Number(clientData?.amount || clientData?.capital_prestado || 0));
@@ -2671,8 +2681,6 @@ const db = {
       }
     }
 
-    const isMora = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
-
     // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE VIA RPC v134)
     const cartonEstadoTarget = isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado'));
     const cartonStatusTarget = isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado'));
@@ -2727,8 +2735,8 @@ const db = {
     try {
       const clientUpdatePayload = {
         risk: isMora ? 'Rojo' : 'Verde',
-        status: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'Activo')),
-        estado: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'Activo'))
+        status: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'liquidado')),
+        estado: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'liquidado'))
       };
 
       if (isPaid) {
@@ -2750,7 +2758,7 @@ const db = {
       if (clientErr) {
         await supabase
           .from('clients')
-          .update({ risk: isMora ? 'Rojo' : 'Verde', status: isMora ? 'liquidado_perdida' : 'Activo' })
+          .update({ risk: isMora ? 'Rojo' : 'Verde', status: isMora ? 'liquidado_perdida' : 'Liquidado_Pagado' })
           .eq('cedula', String(cedula));
       }
     } catch (eClient) {
