@@ -911,14 +911,13 @@ const db = {
       client.totalDebt = Math.round(Number(client.totalDebt) || 0);
       client.outstanding = Math.round(Number(client.outstanding) || 0);
       client.installmentsCount = Math.round(Number(client.installmentsCount) || 1);
-      client.installmentAmount = Math.round(Number(client.installmentAmount) || 0);
-      client.carton_id = newCartonUuid;
       client.numero_carton = newNumeroCarton;
       client.credit_id = newCreditId;
       client.status = client.status || 'Activo';
       client.estado = client.estado || 'Activo';
       client.fecha_apertura = client.fecha_apertura || nowIso;
       client.created_at = client.created_at || nowIso;
+      delete client.carton_id;
       
       // Limpiar undefined
       Object.keys(client).forEach(key => {
@@ -952,7 +951,6 @@ const db = {
           routeId: client.routeId,
           agent_id: client.agent_id,
           supervisor_id: client.supervisor_id,
-          carton_id: newCartonUuid,
           numero_carton: newNumeroCarton,
           status: 'Activo',
           estado: 'Activo'
@@ -1055,16 +1053,15 @@ const db = {
         console.error("Excepción al registrar cartón en 'cartones':", eCarton);
       }
 
-      // Asegurar vínculo directo de carton_id y numero_carton en la ficha del cliente en 'clients'
+      // Asegurar estado activo en la ficha del cliente en 'clients'
       try {
         await supabase.from('clients').update({
-          carton_id: newCartonUuid,
           numero_carton: newNumeroCarton,
           status: 'Activo',
           estado: 'Activo'
         }).eq('cedula', String(client.cedula));
       } catch (eLink) {
-        console.warn("Aviso al vincular carton_id en clients:", eLink?.message);
+        console.warn("Aviso al actualizar estado en clients:", eLink?.message);
       }
 
       // Generar e insertar las cuotas iniciales del cartón en la tabla 'payments' (cuotas 1..N en estado Pendiente)
@@ -1310,7 +1307,6 @@ const db = {
       risk: 'Verde',
       status: 'Activo',
       estado: 'Activo',
-      carton_id: newCartonUuid,
       numero_carton: newNumeroCarton,
       fecha_apertura: nowIso,
       created_at: nowIso
@@ -1595,33 +1591,22 @@ const db = {
     const cedStr = String(typeof cedula === 'object' && cedula !== null ? (cedula.cedula || cedula.clientCedula || '') : (cedula || ''));
     let targetCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || cedula.id || null) : null);
 
-    // Si no se proporcionó cartonId explícito, obtener obligatoriamente el carton_id del cartón activo actual
+    // Si no se proporcionó cartonId explícito, obtener el ID del cartón activo actual desde la tabla 'cartones'
     if (!targetCartonId && cedStr) {
       try {
-        const { data: clientData } = await supabase
-          .from('clients')
-          .select('carton_id')
-          .eq('cedula', cedStr)
-          .maybeSingle();
+        const { data: cartonData } = await supabase
+          .from('cartones')
+          .select('id')
+          .eq('cliente_id', cedStr)
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO'])
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-        if (clientData && clientData.carton_id) {
-          targetCartonId = clientData.carton_id;
-        } else {
-          // Intentar obtener el ID del cartón activo desde la tabla 'cartones'
-          const { data: cartonData } = await supabase
-            .from('cartones')
-            .select('id')
-            .eq('cliente_id', cedStr)
-            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO'])
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-          if (cartonData && cartonData.length > 0 && cartonData[0].id) {
-            targetCartonId = cartonData[0].id;
-          }
+        if (cartonData && cartonData.length > 0 && cartonData[0].id) {
+          targetCartonId = cartonData[0].id;
         }
       } catch (e) {
-        console.warn("Aviso al consultar el cartón activo del cliente:", e.message);
+        console.warn("Aviso al consultar el cartón activo del cliente desde 'cartones':", e.message);
       }
     }
 
