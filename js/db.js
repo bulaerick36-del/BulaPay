@@ -911,12 +911,12 @@ const db = {
       client.totalDebt = Math.round(Number(client.totalDebt) || 0);
       client.outstanding = Math.round(Number(client.outstanding) || 0);
       client.installmentsCount = Math.round(Number(client.installmentsCount) || 1);
-      client.numero_carton = newNumeroCarton;
-      client.credit_id = newCreditId;
       client.status = client.status || 'Activo';
       client.fecha_apertura = client.fecha_apertura || nowIso;
       client.created_at = client.created_at || nowIso;
       delete client.carton_id;
+      delete client.numero_carton;
+      delete client.credit_id;
       delete client.estado;
       
       // Limpiar undefined
@@ -951,7 +951,6 @@ const db = {
           routeId: client.routeId,
           agent_id: client.agent_id,
           supervisor_id: client.supervisor_id,
-          numero_carton: newNumeroCarton,
           status: 'Activo'
         };
         const retryResult = await supabase
@@ -1055,9 +1054,7 @@ const db = {
       // Asegurar estado activo en la ficha del cliente en 'clients'
       try {
         await supabase.from('clients').update({
-          numero_carton: newNumeroCarton,
-          status: 'Activo',
-          estado: 'Activo'
+          status: 'Activo'
         }).eq('cedula', String(client.cedula));
       } catch (eLink) {
         console.warn("Aviso al actualizar estado en clients:", eLink?.message);
@@ -1305,11 +1302,13 @@ const db = {
       supervisor_id: payload.supervisor_id || null,
       risk: 'Verde',
       status: 'Activo',
-      estado: 'Activo',
-      numero_carton: newNumeroCarton,
       fecha_apertura: nowIso,
       created_at: nowIso
     };
+    delete clientUpdatePayload.carton_id;
+    delete clientUpdatePayload.numero_carton;
+    delete clientUpdatePayload.credit_id;
+    delete clientUpdatePayload.estado;
 
     const { error: clientUpdateErr } = await supabase
       .from('clients')
