@@ -514,7 +514,6 @@ const agentModule = {
             await supabase.from('clients').update({
               risk: 'Rojo',
               status: 'liquidado_perdida',
-              estado: 'liquidado_perdida',
               outstanding: saldoPendienteReal
             }).eq('cedula', cedulaStr);
           }
@@ -3085,7 +3084,7 @@ const agentModule = {
         supervisor_id: supervisorId,
         isRenewal: !!this.isRenewalMode,
         is_renewal: !!this.isRenewalMode,
-        estado: this.isRenewalMode ? 'activo_por_renovacion' : 'activo'
+        status: this.isRenewalMode ? 'activo_por_renovacion' : 'Activo'
       };
 
       console.log('Intentando enviar a Supabase la tabla clients...', payload);

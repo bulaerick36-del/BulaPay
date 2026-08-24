@@ -914,10 +914,10 @@ const db = {
       client.numero_carton = newNumeroCarton;
       client.credit_id = newCreditId;
       client.status = client.status || 'Activo';
-      client.estado = client.estado || 'Activo';
       client.fecha_apertura = client.fecha_apertura || nowIso;
       client.created_at = client.created_at || nowIso;
       delete client.carton_id;
+      delete client.estado;
       
       // Limpiar undefined
       Object.keys(client).forEach(key => {
@@ -952,8 +952,7 @@ const db = {
           agent_id: client.agent_id,
           supervisor_id: client.supervisor_id,
           numero_carton: newNumeroCarton,
-          status: 'Activo',
-          estado: 'Activo'
+          status: 'Activo'
         };
         const retryResult = await supabase
           .from('clients')
@@ -1432,6 +1431,10 @@ const db = {
     if (supId && !payload.supervisor_id) {
       payload.supervisor_id = supId;
     }
+    if (payload) {
+      delete payload.carton_id;
+      delete payload.estado;
+    }
     const { data, error } = await supabase
       .from('clients')
       .update(payload)
@@ -1458,7 +1461,6 @@ const db = {
         newRisk = 'Verde'; // Se pone al día al cancelar crédito
         clientUpdatePayload.risk = 'Verde';
         clientUpdatePayload.status = 'Liquidado_Pagado';
-        clientUpdatePayload.estado = 'liquidado';
       }
 
       const { error } = await supabase
@@ -2702,8 +2704,7 @@ const db = {
     try {
       const clientUpdatePayload = {
         risk: isMora ? 'Rojo' : 'Verde',
-        status: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'liquidado')),
-        estado: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'liquidado'))
+        status: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'liquidado'))
       };
 
       if (isPaid) {
@@ -2914,7 +2915,7 @@ const db = {
       // D) Actualizar cliente en tabla 'clients'
       const clientUpdatePayload = {
         risk: 'Verde',
-        estado: 'liquidado_pagado',
+        status: 'Liquidado_Pagado',
         outstanding: 0
       };
 
