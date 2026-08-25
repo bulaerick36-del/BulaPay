@@ -988,22 +988,17 @@ const db = {
 
       try {
         const cartonPayload = {
-          id: newCartonUuid,
           cliente_id: cedulaStr,
           numero_carton: newNumeroCarton,
           fecha_apertura: nowIso,
-          fecha_inicio: nowIso,
           monto_prestado: montoPrestado,
           estado: cartonState,
-          status: cartonState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
           saldo_anterior: rolloverVal,
-          rollover_amount: rolloverVal,
           total_debt: newTotalDebt,
           outstanding: newOutstanding,
           installments_count: installmentsCount,
           installment_amount: installmentAmount,
           discount_amount: discountVal,
-          discount_reason: client.discount_reason || null,
           net_cash: netCashVal,
           route_id: client.routeId || client.route_id || null,
           agent_id: client.agent_id || client.agentId || null,
@@ -1016,33 +1011,31 @@ const db = {
         if (cErr) {
           console.warn("⚠️ Advertencia al insertar cartón en 'cartones'. Reintentando con payload esencial...", cErr);
           const essentialCartonPayload = {
-            id: newCartonUuid,
             cliente_id: cedulaStr,
             numero_carton: newNumeroCarton,
             fecha_apertura: nowIso,
             monto_prestado: montoPrestado,
             estado: cartonState,
-            status: cartonState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
-            saldo_anterior: rolloverVal,
-            rollover_amount: rolloverVal,
             total_debt: newTotalDebt,
             outstanding: newOutstanding,
             installments_count: installmentsCount,
             installment_amount: installmentAmount,
             discount_amount: discountVal,
-            net_cash: netCashVal,
-            route_id: client.routeId || client.route_id || null,
-            agent_id: client.agent_id || client.agentId || null,
-            supervisor_id: client.supervisor_id || null,
-            created_at: nowIso
+            net_cash: netCashVal
           };
           const retryRes = await supabase.from('cartones').insert([essentialCartonPayload]).select();
           if (retryRes.error) {
             console.error("❌ Error definitivo al insertar cartón en 'cartones':", retryRes.error);
           } else {
+            if (retryRes.data && retryRes.data[0] && retryRes.data[0].id) {
+              newCartonUuid = retryRes.data[0].id;
+            }
             console.log("✅ Cartón esencial creado exitosamente en 'cartones' para cédula:", cedulaStr);
           }
         } else {
+          if (cData && cData[0] && cData[0].id) {
+            newCartonUuid = cData[0].id;
+          }
           console.log("✅ Paso 2 Exitoso: Cartón completo creado en 'cartones' para cédula:", cedulaStr, cData);
         }
       } catch (eCarton) {
@@ -1195,22 +1188,17 @@ const db = {
     // 4. REGISTRO 100% NUEVO: Registrar nuevo cartón independiente con validación estricta de respuesta de Supabase
     try {
       const cartonPayload = {
-        id: newCartonUuid,
         cliente_id: String(clientId),
         numero_carton: newNumeroCarton,
         fecha_apertura: nowIso,
-        fecha_inicio: nowIso,
         monto_prestado: newMontoPrestado,
         estado: newState,
-        status: newState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
         saldo_anterior: rolloverVal,
-        rollover_amount: rolloverVal,
         total_debt: newTotalDebt,
         outstanding: newTotalDebt, // Saldo inicial 100% igual a la nueva deuda total
         installments_count: Number(payload.installmentsCount || 30),
         installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
         discount_amount: discountVal,
-        discount_reason: payload.discount_reason || null,
         net_cash: netCashVal,
         route_id: payload.routeId || payload.route_id || null,
         agent_id: payload.agent_id || payload.agentId || null,
@@ -1231,18 +1219,12 @@ const db = {
           fecha_apertura: nowIso,
           monto_prestado: newMontoPrestado,
           estado: newState,
-          saldo_anterior: rolloverVal,
-          rollover_amount: rolloverVal,
           total_debt: newTotalDebt,
           outstanding: newTotalDebt,
           installments_count: Number(payload.installmentsCount || 30),
           installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
           discount_amount: discountVal,
-          net_cash: netCashVal,
-          route_id: payload.routeId || payload.route_id || null,
-          agent_id: payload.agent_id || payload.agentId || null,
-          supervisor_id: payload.supervisor_id || null,
-          created_at: nowIso
+          net_cash: netCashVal
         };
 
         const { data: retryData, error: retryErr } = await supabase
