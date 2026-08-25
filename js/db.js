@@ -904,33 +904,32 @@ const db = {
       const newNumeroCarton = Math.floor(Date.now() % 100000000);
       const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
       
-      // Verificación estricta de tipos de datos y redondeo a entero absoluto (Payload)
-      client.amount = Math.round(Number(client.amount) || 0);
-      client.discount_amount = Math.round(Number(client.discount_amount) || 0);
-      client.retained_amount = Math.round(Number(client.retained_amount) || 0);
-      client.totalDebt = Math.round(Number(client.totalDebt) || 0);
-      client.outstanding = Math.round(Number(client.outstanding) || 0);
-      client.installmentsCount = Math.round(Number(client.installmentsCount) || 1);
-      client.status = client.status || 'Activo';
-      client.fecha_apertura = client.fecha_apertura || nowIso;
-      client.created_at = client.created_at || nowIso;
-      delete client.carton_id;
-      delete client.numero_carton;
-      delete client.credit_id;
-      delete client.estado;
-      
+      // 1. Inserción de datos personales limpios en la tabla 'clients' (sin mezclar campos de crédito)
+      const clientPayload = {
+        cedula: String(client.cedula),
+        name: client.name || '',
+        phone: client.phone || '',
+        email: client.email || null,
+        city: client.city || '',
+        zone: client.zone || '',
+        risk: client.risk || 'Verde',
+        routeId: client.routeId || client.route_id || null,
+        agent_id: client.agent_id || client.agentId || null,
+        supervisor_id: client.supervisor_id || null
+      };
+
       // Limpiar undefined
-      Object.keys(client).forEach(key => {
-        if (client[key] === undefined) {
-          client[key] = null;
+      Object.keys(clientPayload).forEach(key => {
+        if (clientPayload[key] === undefined) {
+          clientPayload[key] = null;
         }
       });
 
-      console.log('Paso 3: Iniciando petición a Supabase (clients)...', client);
+      console.log('Paso 3: Iniciando petición a Supabase (clients)...', clientPayload);
       
       let { data, error } = await supabase
         .from('clients')
-        .insert([client])
+        .insert([clientPayload])
         .select();
 
       // Si falla debido a columnas adicionales no existentes en la tabla 'clients', reintentar con esquema esencial
@@ -938,20 +937,14 @@ const db = {
         console.warn('Error de columna detectado. Reintentando inserción con payload esencial...', error);
         const essentialPayload = {
           cedula: String(client.cedula),
-          name: client.name,
-          phone: client.phone,
-          email: client.email,
-          city: client.city,
-          zone: client.zone,
+          name: client.name || '',
+          phone: client.phone || '',
+          email: client.email || null,
+          city: client.city || '',
+          zone: client.zone || '',
           risk: client.risk || 'Verde',
-          totalDebt: client.totalDebt,
-          outstanding: client.outstanding,
-          installmentsCount: client.installmentsCount,
-          installmentAmount: client.installmentAmount,
-          routeId: client.routeId,
-          agent_id: client.agent_id,
-          supervisor_id: client.supervisor_id,
-          status: 'Activo'
+          agent_id: client.agent_id || null,
+          supervisor_id: client.supervisor_id || null
         };
         const retryResult = await supabase
           .from('clients')
@@ -1051,14 +1044,7 @@ const db = {
         console.error("Excepción al registrar cartón en 'cartones':", eCarton);
       }
 
-      // Asegurar estado activo en la ficha del cliente en 'clients'
-      try {
-        await supabase.from('clients').update({
-          status: 'Activo'
-        }).eq('cedula', String(client.cedula));
-      } catch (eLink) {
-        console.warn("Aviso al actualizar estado en clients:", eLink?.message);
-      }
+
 
       // Generar e insertar las cuotas iniciales del cartón en la tabla 'payments' (cuotas 1..N en estado Pendiente)
       try {
@@ -1277,38 +1263,24 @@ const db = {
       console.warn("Aviso al archivar cuotas pendientes del cartón anterior:", e.message);
     }
 
-    // 6. Preservar y actualizar la ficha del cliente y crédito activo en la tabla 'clients' con validación de error
+    // 6. Actualizar únicamente la información de contacto/perfil del cliente en la tabla 'clients'
     const clientUpdatePayload = {
-      name: payload.name,
-      phone: payload.phone,
-      city: payload.city,
-      zone: payload.zone,
-      amount: newMontoPrestado,
-      discount_amount: discountVal,
-      retained_amount: payload.retained_amount || 0,
-      retained_fees: payload.retained_fees || payload.retained_amount || 0,
-      rollover_amount: rolloverVal,
-      saldo_anterior: rolloverVal,
-      net_cash: netCashVal,
-      segVal: payload.segVal || 0,
-      papVal: payload.papVal || 0,
-      discount_reason: payload.discount_reason || null,
-      totalDebt: newTotalDebt,
-      outstanding: newTotalDebt,
-      installmentsCount: Number(payload.installmentsCount || 30),
-      installmentAmount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
+      name: payload.name || '',
+      phone: payload.phone || '',
+      email: payload.email || null,
+      city: payload.city || '',
+      zone: payload.zone || '',
+      risk: payload.risk || 'Verde',
       routeId: payload.routeId || payload.route_id || null,
       agent_id: payload.agent_id || payload.agentId || null,
-      supervisor_id: payload.supervisor_id || null,
-      risk: 'Verde',
-      status: 'Activo',
-      fecha_apertura: nowIso,
-      created_at: nowIso
+      supervisor_id: payload.supervisor_id || null
     };
-    delete clientUpdatePayload.carton_id;
-    delete clientUpdatePayload.numero_carton;
-    delete clientUpdatePayload.credit_id;
-    delete clientUpdatePayload.estado;
+
+    Object.keys(clientUpdatePayload).forEach(key => {
+      if (clientUpdatePayload[key] === undefined) {
+        clientUpdatePayload[key] = null;
+      }
+    });
 
     const { error: clientUpdateErr } = await supabase
       .from('clients')
