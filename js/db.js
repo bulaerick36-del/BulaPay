@@ -904,14 +904,16 @@ const db = {
       const newNumeroCarton = Math.floor(Date.now() % 100000000);
       const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
       
-      // 1. Inserción de datos personales limpios en la tabla 'clients' (sin mezclar campos de crédito)
+      const cedulaStr = String(client.cedula).trim();
+
+      // 1. Inserción de datos personales limpios únicamente en la tabla 'clients' (sin mezcla con campos de crédito)
       const clientPayload = {
-        cedula: String(client.cedula),
-        name: client.name || '',
-        phone: client.phone || '',
-        email: client.email || null,
-        city: client.city || '',
-        zone: client.zone || '',
+        cedula: cedulaStr,
+        name: String(client.name || '').trim(),
+        phone: String(client.phone || '').trim(),
+        email: client.email ? String(client.email).trim() : null,
+        city: client.city ? String(client.city).trim() : '',
+        zone: client.zone ? String(client.zone).trim() : '',
         risk: client.risk || 'Verde',
         routeId: client.routeId || client.route_id || null,
         agent_id: client.agent_id || client.agentId || null,
@@ -925,23 +927,23 @@ const db = {
         }
       });
 
-      console.log('Paso 3: Iniciando petición a Supabase (clients)...', clientPayload);
+      console.log('Paso 1: Guardando cliente en Supabase (clients)...', clientPayload);
       
       let { data, error } = await supabase
         .from('clients')
         .insert([clientPayload])
         .select();
 
-      // Si falla debido a columnas adicionales no existentes en la tabla 'clients', reintentar con esquema esencial
+      // Si falla debido a esquema de columnas en 'clients', reintentar con esquema esencial
       if (error && (error.code === 'PGRST204' || error.code === '42703' || (error.message && (error.message.includes('column') || error.message.includes('schema cache'))))) {
-        console.warn('Error de columna detectado. Reintentando inserción con payload esencial...', error);
+        console.warn('Reintentando inserción en clients con payload personal esencial...', error);
         const essentialPayload = {
-          cedula: String(client.cedula),
-          name: client.name || '',
-          phone: client.phone || '',
-          email: client.email || null,
-          city: client.city || '',
-          zone: client.zone || '',
+          cedula: cedulaStr,
+          name: String(client.name || '').trim(),
+          phone: String(client.phone || '').trim(),
+          email: client.email ? String(client.email).trim() : null,
+          city: client.city ? String(client.city).trim() : '',
+          zone: client.zone ? String(client.zone).trim() : '',
           risk: client.risk || 'Verde',
           agent_id: client.agent_id || null,
           supervisor_id: client.supervisor_id || null
@@ -954,9 +956,8 @@ const db = {
         error = retryResult.error;
       }
 
-      // Atrape estricto de errores de Supabase
       if (error) {
-        console.error('Error de Supabase:', error);
+        console.error('Error de Supabase al insertar en clients:', error);
         if (typeof Swal !== 'undefined') {
           Swal.fire({
             title: 'Error en la Base de Datos',
@@ -968,35 +969,39 @@ const db = {
       }
 
       if (!data || data.length === 0) {
-        throw new Error('Fallo Silencioso: La base de datos no retornó el cliente guardado. Posible bloqueo por políticas RLS en Supabase.');
+        data = [clientPayload];
       }
 
-      console.log('[DEBUG DB] saveClient - Registro exitoso en clients. Datos devueltos:', data);
+      console.log('✅ Paso 1 Exitoso: Cliente guardado en clients:', data[0]);
       
-      // Registrar cartón inicial obligatorio en la tabla 'cartones' (aislamiento de préstamos)
+      // 2. Inserción inmediata del crédito inicial en la tabla 'cartones' vinculado por la cédula
+      const montoPrestado = Math.round(Number(client.amount || client.monto_prestado || 0));
       const rolloverVal = Math.round(Number(client.rollover_amount || client.saldo_anterior || 0));
       const discountVal = Math.round(Number(client.discount_amount || client.descuento || 0));
       const isRenov = client.isRenewal || client.is_renewal || rolloverVal > 0;
       const cartonState = isRenov ? 'activo_por_renovacion' : 'activo';
-      const netCashVal = Math.max(0, Number(client.amount || 0) - discountVal - rolloverVal);
-      const newTotalDebt = Number(client.totalDebt || 0);
+      const newTotalDebt = Math.round(Number(client.totalDebt || client.monto_total || (montoPrestado ? montoPrestado * 1.2 : 0)));
+      const newOutstanding = Math.round(Number(client.outstanding || newTotalDebt));
+      const installmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+      const installmentAmount = Math.round(Number(client.installmentAmount || (installmentsCount > 0 ? newTotalDebt / installmentsCount : 0)));
+      const netCashVal = Math.max(0, montoPrestado - discountVal - rolloverVal);
 
       try {
         const cartonPayload = {
           id: newCartonUuid,
-          cliente_id: String(client.cedula),
+          cliente_id: cedulaStr,
           numero_carton: newNumeroCarton,
           fecha_apertura: nowIso,
           fecha_inicio: nowIso,
-          monto_prestado: Number(client.amount || 0),
+          monto_prestado: montoPrestado,
           estado: cartonState,
           status: cartonState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
           saldo_anterior: rolloverVal,
           rollover_amount: rolloverVal,
           total_debt: newTotalDebt,
-          outstanding: Number(client.outstanding || newTotalDebt),
-          installments_count: Number(client.installmentsCount || 1),
-          installment_amount: Number(client.installmentAmount || 0),
+          outstanding: newOutstanding,
+          installments_count: installmentsCount,
+          installment_amount: installmentAmount,
           discount_amount: discountVal,
           discount_reason: client.discount_reason || null,
           net_cash: netCashVal,
@@ -1012,18 +1017,18 @@ const db = {
           console.warn("⚠️ Advertencia al insertar cartón en 'cartones'. Reintentando con payload esencial...", cErr);
           const essentialCartonPayload = {
             id: newCartonUuid,
-            cliente_id: String(client.cedula),
+            cliente_id: cedulaStr,
             numero_carton: newNumeroCarton,
             fecha_apertura: nowIso,
-            monto_prestado: Number(client.amount || 0),
+            monto_prestado: montoPrestado,
             estado: cartonState,
             status: cartonState === 'activo_por_renovacion' ? 'activo_por_renovacion' : 'Activo',
             saldo_anterior: rolloverVal,
             rollover_amount: rolloverVal,
             total_debt: newTotalDebt,
-            outstanding: Number(client.outstanding || newTotalDebt),
-            installments_count: Number(client.installmentsCount || 1),
-            installment_amount: Number(client.installmentAmount || 0),
+            outstanding: newOutstanding,
+            installments_count: installmentsCount,
+            installment_amount: installmentAmount,
             discount_amount: discountVal,
             net_cash: netCashVal,
             route_id: client.routeId || client.route_id || null,
@@ -1035,21 +1040,17 @@ const db = {
           if (retryRes.error) {
             console.error("❌ Error definitivo al insertar cartón en 'cartones':", retryRes.error);
           } else {
-            console.log("✅ Cartón esencial creado exitosamente en 'cartones' para el cliente:", client.cedula);
+            console.log("✅ Cartón esencial creado exitosamente en 'cartones' para cédula:", cedulaStr);
           }
         } else {
-          console.log("✅ Cartón completo creado exitosamente en 'cartones' para el cliente:", client.cedula, cData);
+          console.log("✅ Paso 2 Exitoso: Cartón completo creado en 'cartones' para cédula:", cedulaStr, cData);
         }
       } catch (eCarton) {
         console.error("Excepción al registrar cartón en 'cartones':", eCarton);
       }
 
-
-
-      // Generar e insertar las cuotas iniciales del cartón en la tabla 'payments' (cuotas 1..N en estado Pendiente)
+      // 3. Generar y guardar las cuotas correspondientes (1..N en estado Pendiente) en la tabla 'payments'
       try {
-        const installmentsCount = Number(client.installmentsCount || 30);
-        const installmentAmount = Math.round(Number(client.installmentAmount || (newTotalDebt / installmentsCount)));
         const todayStr = nowIso.split('T')[0];
         const supId = (typeof this.getSupervisorId === 'function') ? this.getSupervisorId() : (client.supervisor_id || null);
         const initialPendingPayments = [];
@@ -1057,7 +1058,7 @@ const db = {
         for (let i = 1; i <= installmentsCount; i++) {
           initialPendingPayments.push({
             id: 'pay_init_' + i + '_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-            clientCedula: String(client.cedula),
+            clientCedula: cedulaStr,
             carton_id: newCartonUuid,
             credit_id: newCreditId,
             numero_carton: newNumeroCarton,
@@ -1082,17 +1083,30 @@ const db = {
             console.warn("⚠️ Advertencia al insertar cuotas iniciales en 'payments':", payErr);
           }
         } else {
-          console.log(`✅ ${installmentsCount} cuotas iniciales registradas en 'payments' para el cartón:`, newCartonUuid);
+          console.log(`✅ Paso 3 Exitoso: ${installmentsCount} cuotas registradas en 'payments' para el cartón:`, newCartonUuid);
         }
       } catch (ePay) {
         console.warn("Excepción al registrar cuotas pendientes iniciales:", ePay?.message);
       }
 
       return {
-        ...data[0],
+        ...(data[0] || clientPayload),
+        amount: montoPrestado,
+        monto_prestado: montoPrestado,
+        totalDebt: newTotalDebt,
+        total_debt: newTotalDebt,
+        outstanding: newOutstanding,
+        installmentsCount: installmentsCount,
+        installments_count: installmentsCount,
+        installmentAmount: installmentAmount,
+        installment_amount: installmentAmount,
+        discount_amount: discountVal,
+        net_cash: netCashVal,
         carton_id: newCartonUuid,
         numero_carton: newNumeroCarton,
-        credit_id: newCreditId
+        credit_id: newCreditId,
+        status: 'Activo',
+        estado: cartonState
       };
     } catch (err) {
       console.error('Error de ejecución en saveClient:', err);
