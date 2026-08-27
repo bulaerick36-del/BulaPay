@@ -36,6 +36,7 @@ const supervisorModule = {
 
     this.bindEvents();
     await this.renderDashboard();
+    this.initOrientationDetector();
     
     if (isCommerce) {
       if (this.mapUpdateInterval) clearInterval(this.mapUpdateInterval);
@@ -3277,7 +3278,94 @@ const supervisorModule = {
     }
   },
 
+  // Detector de Orientación para Dispositivos Móviles en Supervisión
+  isOrientationDismissed: false,
+  _orientationHandler: null,
+
+  initOrientationDetector() {
+    if (this._orientationHandler) {
+      window.removeEventListener('resize', this._orientationHandler);
+      window.removeEventListener('orientationchange', this._orientationHandler);
+    }
+
+    this._orientationHandler = () => this.checkOrientationAndAdjust();
+    window.addEventListener('resize', this._orientationHandler);
+    window.addEventListener('orientationchange', this._orientationHandler);
+
+    // Verificación inicial inmediata
+    this.checkOrientationAndAdjust();
+  },
+
+  checkOrientationAndAdjust() {
+    const supervisorView = document.getElementById('view-supervisor');
+    // Si la vista de supervisor no existe o no está activa, ocultar el aviso
+    if (!supervisorView || (!supervisorView.classList.contains('active') && supervisorView.style.display === 'none')) {
+      this.hideOrientationWarning();
+      return;
+    }
+
+    const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window && window.innerWidth <= 900);
+    const isPortrait = window.innerHeight > window.innerWidth;
+
+    if (isMobile && isPortrait) {
+      if (!this.isOrientationDismissed) {
+        this.showOrientationWarning();
+      }
+    } else {
+      // Al cambiar a horizontal (landscape) o pantalla grande
+      this.isOrientationDismissed = false; // Resetear descarte al rotar a horizontal
+      this.hideOrientationWarning();
+      this.adjustContainersForLandscape();
+    }
+  },
+
+  showOrientationWarning() {
+    const modal = document.getElementById('modal-orientation-warning');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    }
+  },
+
+  hideOrientationWarning() {
+    const modal = document.getElementById('modal-orientation-warning');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
+  },
+
+  dismissOrientationWarning() {
+    this.isOrientationDismissed = true;
+    this.hideOrientationWarning();
+  },
+
+  adjustContainersForLandscape() {
+    // Re-ajustar mapa GPS Leaflet cuando se gire a posición horizontal
+    if (this.mapInstance && typeof this.mapInstance.invalidateSize === 'function') {
+      setTimeout(() => {
+        try {
+          this.mapInstance.invalidateSize();
+        } catch (e) {
+          console.warn("Aviso invalidando tamaño del mapa:", e);
+        }
+      }, 150);
+    }
+
+    const mapContainer = document.getElementById('live-gps-map');
+    if (mapContainer) {
+      mapContainer.style.width = '100%';
+    }
+  },
+
   destroy() {
+    if (this._orientationHandler) {
+      window.removeEventListener('resize', this._orientationHandler);
+      window.removeEventListener('orientationchange', this._orientationHandler);
+      this._orientationHandler = null;
+    }
+    this.hideOrientationWarning();
+
     if (this.mapAnimationInterval) {
       clearInterval(this.mapAnimationInterval);
     }
