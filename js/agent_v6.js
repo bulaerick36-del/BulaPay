@@ -2443,9 +2443,10 @@ const agentModule = {
       
       const todayStr = this.getLocalDateString();
       const firstPending = dailyStatusList.find(c => !c.hasPaid);
+      const currentOutstanding = Number(this.currentClient.outstanding || 0);
 
-      // Búsqueda de la primera cuota pendiente
-      if (!firstPending) {
+      // Búsqueda de la primera cuota pendiente o residuo de saldo pendiente general
+      if (!firstPending && currentOutstanding <= 0) {
         alert('⚠️ El cliente no tiene cuotas pendientes por cobrar.');
         if (this.cobroInvoiceModal) this.cobroInvoiceModal.style.display = 'none';
         return;
@@ -2453,16 +2454,20 @@ const agentModule = {
 
       const hasPaidRecordToday = payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago');
 
-      if (firstPending.isFuture && hasPaidRecordToday) {
+      if (firstPending && firstPending.isFuture && hasPaidRecordToday) {
         alert('Operación denegada: Ya se adelantó una cuota individual hoy. Use Pago Masivo para adelantar más días, o espere a mañana.');
         if (this.cobroInvoiceModal) this.cobroInvoiceModal.style.display = 'none';
         return;
       }
 
-      // Ejecución del pago apuntando a la primera cuota pendiente
+      const targetInstallment = firstPending 
+        ? firstPending.dayNumber 
+        : (dailyStatusList.length > 0 ? dailyStatusList[dailyStatusList.length - 1].dayNumber : Number(this.currentClient.installmentsCount || 30));
+
+      // Ejecución del pago apuntando a la primera cuota pendiente (o a la última si es un residuo)
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        installmentNumber: firstPending.dayNumber,
+        installmentNumber: targetInstallment,
         amount: amount,
         date: todayStr,
         agentName: currentUser.name,
