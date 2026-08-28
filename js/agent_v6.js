@@ -1831,17 +1831,35 @@ const agentModule = {
         return;
       }
 
+      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
+      const amountPaid = Math.round(Number(amount || 0));
+      const newBalance = Math.max(0, currentDebt - amountPaid);
+      const isFinalPayment = newBalance <= 0;
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
+        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
         installmentNumber: installmentNumber,
-        amount: amount,
+        amount: amountPaid,
         date: this.getLocalDateString(),
         agentName: currentUser.name,
-        status: 'Pagado'
+        status: 'Pagado',
+        liquidado: isFinalPayment
       };
 
       // Registrar el pago en Supabase y actualizar el saldo del cliente
       const savedPayment = await window.BulaPayDB.addPayment(newPayment);
+
+      // Si el saldo recalculado llega a 0 o menos, forzar cambio explícito de estado a 'liquidado' en Supabase
+      if (isFinalPayment) {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: this.currentClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0,
+          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          numeroCarton: this.currentClient.numero_carton || null
+        });
+      }
 
       // Reportar geolocalización
       this.captureAndSendLocation();
@@ -1850,7 +1868,17 @@ const agentModule = {
       window.showBulaPayReceipt(savedPayment, this.currentClient);
 
       // Re-consultar los datos del cliente actualizados
-      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: 0,
+          saldo_pendiente: 0,
+          status: 'Liquidado_Pagado',
+          estado: 'liquidado',
+          risk: 'Verde'
+        };
+      }
       this.currentClient = updatedClient;
       
       // Actualizar la interfaz principal del cobrador
@@ -1860,12 +1888,14 @@ const agentModule = {
       await this.renderPaymentCardGrid();
       
       // Actualizar saldo mostrado en el modal
-      this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      if (this.paymentCardClientOutstanding) {
+        this.paymentCardClientOutstanding.textContent = `$${Number(updatedClient.outstanding).toLocaleString('es-CO')}`;
+      }
       
       // Actualizar botón de seguimiento
       await this.updateRouteTracking();
       
-      if (Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
         this.showSuccessLiquidationModal(updatedClient);
       }
     } catch (err) {
@@ -1893,26 +1923,45 @@ const agentModule = {
       this.btnProcessMassPayment.disabled = true;
       this.btnProcessMassPayment.innerText = 'Procesando...';
       
+      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
       let totalAmount = 0;
       let lastPayment = null;
       
       // Procesar en lote (una por una para mantener el ledger intacto)
       for (const cuota of this.selectedInstallments) {
+        const cuotaAmt = Math.round(Number(cuota.amount || 0));
+        totalAmount += cuotaAmt;
+        const tempRem = Math.max(0, currentDebt - totalAmount);
         const newPayment = {
           clientCedula: this.currentClient.cedula,
+          carton_id: this.currentClient.carton_id || this.currentClient.id || null,
           installmentNumber: cuota.number,
-          amount: cuota.amount,
+          amount: cuotaAmt,
           date: todayStr, // La instrucción dice: usar fecha de HOY
           agentName: currentUser.name,
           status: 'Pagado Masivo',
-          is_mass_payment: true
+          is_mass_payment: true,
+          liquidado: tempRem <= 0
         };
         lastPayment = await window.BulaPayDB.addPayment(newPayment);
-        totalAmount += cuota.amount;
       }
+
+      const newBalance = Math.max(0, currentDebt - Math.round(totalAmount));
+      const isFinalPayment = newBalance <= 0;
 
       // 2. Date Shifting (Corrimiento de Fechas) Estricto
       await window.BulaPayDB.shiftPendingDates(this.currentClient.cedula);
+
+      // Si el saldo llega a 0 o menos, forzar cambio explícito de estado a 'liquidado' en Supabase
+      if (isFinalPayment) {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: this.currentClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0,
+          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          numeroCarton: this.currentClient.numero_carton || null
+        });
+      }
 
       // Reportar geolocalización una sola vez
       this.captureAndSendLocation();
@@ -1936,10 +1985,20 @@ const agentModule = {
       }
 
       // Re-consultar los datos del cliente actualizados
-      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: 0,
+          saldo_pendiente: 0,
+          status: 'Liquidado_Pagado',
+          estado: 'liquidado',
+          risk: 'Verde'
+        };
+      }
       this.currentClient = updatedClient;
       
-      if (Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
         // Actualizar la interfaz principal del cobrador, Cartón y estado de liquidación
@@ -2464,18 +2523,35 @@ const agentModule = {
         ? firstPending.dayNumber 
         : (dailyStatusList.length > 0 ? dailyStatusList[dailyStatusList.length - 1].dayNumber : Number(this.currentClient.installmentsCount || 30));
 
+      const amountPaid = Math.round(Number(amount || 0));
+      const newBalance = Math.max(0, currentOutstanding - amountPaid);
+      const isFinalPayment = newBalance <= 0;
+
       // Ejecución del pago apuntando a la primera cuota pendiente (o a la última si es un residuo)
       const newPayment = {
         clientCedula: this.currentClient.cedula,
+        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
         installmentNumber: targetInstallment,
-        amount: amount,
+        amount: amountPaid,
         date: todayStr,
         agentName: currentUser.name,
-        status: amount >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado'
+        status: amountPaid >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado',
+        liquidado: isFinalPayment
       };
 
       await window.BulaPayDB.addPayment(newPayment);
-      
+
+      // Si el pago cancela el residuo / saldo pendiente, recalcular y cambiar estado explícitamente a 'liquidado' en Supabase
+      if (isFinalPayment) {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: this.currentClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0,
+          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          numeroCarton: this.currentClient.numero_carton || null
+        });
+      }
+
       // Si llega aquí, es porque NO hubo error en Supabase
       this.captureAndSendLocation();
 
@@ -2484,20 +2560,28 @@ const agentModule = {
         this.cobroInvoiceModal.style.display = 'none';
       }
 
-      // Forzar re-render descargando las cuotas nuevamente (El Fix visual)
-      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: 0,
+          saldo_pendiente: 0,
+          status: 'Liquidado_Pagado',
+          estado: 'liquidado',
+          risk: 'Verde'
+        };
+      }
       this.currentClient = updatedClient;
       
       if (this.inputCobroAmount) {
         this.inputCobroAmount.value = '';
       }
-      
-      await this.searchClient(); // Recarga y repinta los datos completos
 
       // Liquidación Automática de Última Cuota con Alerta y Aceptar
-      if (Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
+        await this.searchClient(); // Recarga y repinta los datos completos
         // Mostrar modal obligatorio SMS para notificar el pago
         this.showMandatorySmsPrompt(updatedClient, 'payment');
       }
@@ -2596,22 +2680,50 @@ const agentModule = {
         return;
       }
 
+      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
+      const amountToPayNum = Math.round(Number(amountToPay || 0));
+      const newBalance = Math.max(0, currentDebt - amountToPayNum);
+      const isFinalPayment = newBalance <= 0;
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
+        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
         installmentNumber: status.dayNumber, // Insertar asignado al dia exacto
-        amount: amountToPay,
+        amount: amountToPayNum,
         date: todayStr, // La fecha de pago es hoy
         agentName: currentUser.name,
-        status: 'Pagado'
+        status: 'Pagado',
+        liquidado: isFinalPayment
       };
 
       await window.BulaPayDB.addPayment(newPayment);
+
+      if (isFinalPayment) {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: this.currentClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0,
+          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          numeroCarton: this.currentClient.numero_carton || null
+        });
+      }
+
       this.captureAndSendLocation();
 
-      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: 0,
+          saldo_pendiente: 0,
+          status: 'Liquidado_Pagado',
+          estado: 'liquidado',
+          risk: 'Verde'
+        };
+      }
       this.currentClient = updatedClient;
       
-      if (Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
         await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
@@ -2773,17 +2885,34 @@ const agentModule = {
         return;
       }
 
+      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
+      const amountNum = Math.round(Number(amount || 0));
+      const newBalance = Math.max(0, currentDebt - amountNum);
+      const isFinalPayment = newBalance <= 0;
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
+        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
         installmentNumber: payments.length + 1,
-        amount: amount,
+        amount: amountNum,
         date: this.getLocalDateString(),
         agentName: currentUser.name,
-        status: amount >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado'
+        status: amountNum >= Number(this.currentClient.installmentAmount) ? 'Pagado' : 'Abonado',
+        liquidado: isFinalPayment
       };
 
       // Registrar en base de datos
       const savedPayment = await window.BulaPayDB.addPayment(newPayment);
+
+      if (isFinalPayment) {
+        await window.BulaPayDB.liquidateCredit({
+          cedula: this.currentClient.cedula,
+          status: 'Liquidado_Pagado',
+          outstanding: 0,
+          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          numeroCarton: this.currentClient.numero_carton || null
+        });
+      }
 
       // Reportar ubicación
       this.captureAndSendLocation();
@@ -2792,14 +2921,26 @@ const agentModule = {
       window.showBulaPayReceipt(savedPayment, this.currentClient);
 
       // Re-buscar el cliente para actualizar pantalla
-      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
+      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: 0,
+          saldo_pendiente: 0,
+          status: 'Liquidado_Pagado',
+          estado: 'liquidado',
+          risk: 'Verde'
+        };
+      }
+      this.currentClient = updatedClient;
+
       await this.renderClientInfo(updatedClient);
 
       // Actualizar botón de seguimiento
       await this.updateRouteTracking();
 
       // Verificar si completó el 100% de la deuda (última cuota)
-      if (updatedClient && Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
         this.showSuccessLiquidationModal(updatedClient);
       }
     } catch (err) {
@@ -3922,7 +4063,7 @@ const agentModule = {
       if (btnConfirm) btnConfirm.innerText = 'Aceptar';
       if (btnClose) btnClose.style.display = 'none';
 
-      modal.style.display = 'flex';
+      modal.style.setProperty('display', 'flex', 'important');
 
       btnConfirm.onclick = async () => {
         modal.style.display = 'none';
