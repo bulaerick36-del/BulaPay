@@ -4033,7 +4033,7 @@ const agentModule = {
   showSuccessLiquidationModal(client, onCompleteCallback) {
     if (!client) return;
     const clientName = client.name || client.nombre || 'Cliente';
-    const message = `¡Felicitaciones ${clientName}! Esta es tu última cuota. El cartón se liquidará automáticamente. BulaPay te invita a adquirir otro crédito.`;
+    const message = `¡Felicitaciones por pagar las cuotas exitosamente! BulaPay te invita a obtener un nuevo crédito.`;
 
     const doLiquidation = async () => {
       try {
