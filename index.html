@@ -64,12 +64,22 @@
         </div>
         <button class="btn btn-secondary" onclick="document.getElementById('drawer-main-menu').classList.remove('active');" style="padding: 0.25rem 0.5rem; font-size: 0.9rem;">✕</button>
       </div>
+
+      <!-- Secciones de Portales -->
       <div class="drawer-menu-list">
+        <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Navegación de Portales</div>
         <a href="#auth" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">👔 Portal Supervisor</a>
         <a href="#auth" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">💼 Agente Independiente</a>
         <a href="#agent-login" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">📱 Portal de Agentes de Ruta</a>
         <a href="#customer" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">💳 Portal Cliente</a>
-        <a href="#superadmin" class="drawer-menu-item master-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">👑 Superadministrador Maestro</a>
+      </div>
+
+      <!-- Sección Exclusiva: Administración Master -->
+      <div style="margin-top: auto; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Administración Master</div>
+        <a href="#superadmin" class="drawer-menu-item master-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">
+          👑 Acceso Superadministrador
+        </a>
       </div>
     </div>
   </div>
