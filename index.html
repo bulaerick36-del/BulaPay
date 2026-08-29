@@ -25,7 +25,7 @@
     <div class="nav-container" style="display: flex; align-items: center; justify-content: space-between;">
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <!-- Botón Menú Hamburguesa -->
-        <button id="btn-hamburger-menu" class="btn-hamburger" title="Menú Principal BulaPay" onclick="document.getElementById('drawer-main-menu').classList.add('active');">
+        <button id="btn-hamburger-menu" class="btn-hamburger" title="Menú Principal BulaPay" onclick="document.getElementById('drawer-main-menu').classList.add('active'); if(window.superadminModule) superadminModule.clearDrawerInputs();">
           <span style="font-size: 1.25rem;">☰</span>
         </button>
         
@@ -41,15 +41,6 @@
         <span id="nav-user-name" style="display: none;">Usuario</span>
         <span id="nav-user-role" style="display: none;">Rol</span>
         <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
-      </div>
-
-      <!-- Accesos Rápidos para Desarrollo (Sin la palabra Demo) -->
-      <div id="demo-quick-links" style="display: flex; gap: 10px; flex-wrap: wrap; flex-direction: row; align-items: center;">
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'client'); event.preventDefault(); window.location.hash = '#customer'; window.dispatchEvent(new HashChangeEvent('hashchange'));">💳 Cliente</button>
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'route'); event.preventDefault(); window.location.hash = '#agent-login'; window.dispatchEvent(new HashChangeEvent('hashchange'));">📱 Agente de Ruta</button>
-        <button type="button" id="nav-btn-supervisor" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'supervisor'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">👔 Supervisor</button>
-        <button type="button" id="nav-btn-independent" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'independent'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">💼 Agente Independiente</button>
-        <button type="button" id="nav-btn-commerce" class="btn btn-secondary" style="padding: 0.35rem 0.6rem; font-size: 0.72rem; white-space: nowrap;" onclick="localStorage.setItem('bulaRole', 'commerce'); event.preventDefault(); window.location.hash = '#auth'; window.dispatchEvent(new HashChangeEvent('hashchange'));">🏪 Otro Comercio o Tienda</button>
       </div>
     </div>
   </header>
@@ -72,6 +63,7 @@
         <a href="#auth" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'independent'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">💼 Agente Independiente</a>
         <a href="#agent-login" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'route'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">📱 Portal de Agentes de Ruta</a>
         <a href="#customer" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'client'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">💳 Portal Cliente</a>
+        <a href="#auth" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'commerce'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">🏪 Otro Comercio o Tienda</a>
       </div>
 
       <!-- Sección Exclusiva: Administración Master (Incrustada en el Drawer) -->
