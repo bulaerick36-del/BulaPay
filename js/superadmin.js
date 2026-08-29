@@ -39,26 +39,61 @@ const superadminModule = {
   },
 
   async init() {
+    this.bindEvents();
     if (!this.isLoggedIn()) {
-      this.showLoginModal();
+      if (window.location.hash === '#superadmin') {
+        window.location.hash = '#auth';
+      }
+      this.renderDrawerSection();
       return;
     }
-    this.hideLoginModal();
-    this.bindEvents();
+    this.renderDrawerSection();
     await this.renderCurrentTab();
   },
 
-  showLoginModal() {
-    const modal = document.getElementById('superadmin-login-modal');
-    if (modal) modal.classList.add('active');
-  },
+  renderDrawerSection() {
+    const container = document.getElementById('drawer-superadmin-container');
+    if (!container) return;
 
-  hideLoginModal() {
-    const modal = document.getElementById('superadmin-login-modal');
-    if (modal) modal.classList.remove('active');
+    if (this.isLoggedIn()) {
+      container.innerHTML = `
+        <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+          <span>Administración Master</span>
+          <span style="font-size: 0.65rem; background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">Sesión Activa</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <a href="#superadmin" class="drawer-menu-item master-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">
+            👑 Ver Panel Superadmin
+          </a>
+          <button class="btn btn-secondary" style="padding: 0.4rem; font-size: 0.75rem; border-color: #ef4444; color: #fca5a5; width: 100%; font-weight: 600;" onclick="superadminModule.logout()">
+            🚪 Cerrar Sesión Master
+          </button>
+        </div>
+      `;
+    }
   },
 
   bindEvents() {
+    // Evento de submit del formulario de superadmin incrustado en el drawer lateral
+    const formDrawerLogin = document.getElementById('form-drawer-superadmin-login');
+    if (formDrawerLogin) {
+      formDrawerLogin.onsubmit = async (e) => {
+        e.preventDefault();
+        const userInput = document.getElementById('drawer-sa-user').value.trim();
+        const pwdInput = document.getElementById('drawer-sa-pwd').value;
+
+        if (this.login(userInput, pwdInput)) {
+          alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
+          const drawer = document.getElementById('drawer-main-menu');
+          if (drawer) drawer.classList.remove('active');
+          window.location.hash = '#superadmin';
+          await this.init();
+        } else {
+          alert('❌ Credenciales de Superadministrador inválidas. Acceso denegado.');
+        }
+      };
+    }
+
     // Cambio de pestañas en el panel de Superadministrador
     const tabs = document.querySelectorAll('.superadmin-tab');
     tabs.forEach(tab => {
@@ -69,25 +104,6 @@ const superadminModule = {
         await this.renderCurrentTab();
       });
     });
-
-    // Formulario de login del modal superadmin
-    const formLogin = document.getElementById('form-superadmin-login');
-    if (formLogin) {
-      formLogin.onsubmit = async (e) => {
-        e.preventDefault();
-        const userInput = document.getElementById('superadmin-user-input').value.trim();
-        const pwdInput = document.getElementById('superadmin-pwd-input').value;
-
-        if (this.login(userInput, pwdInput)) {
-          alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
-          this.hideLoginModal();
-          window.location.hash = '#superadmin';
-          await this.init();
-        } else {
-          alert('❌ Credenciales de Superadministrador inválidas. Acceso denegado.');
-        }
-      };
-    }
 
     // Botón Cambiar Contraseña Superadmin
     const btnChangePwd = document.getElementById('btn-superadmin-change-pwd');
