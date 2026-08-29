@@ -177,6 +177,12 @@ const app = {
         await window.authModule.init();
       }
 
+      else if (route === 'superadmin') {
+        if (window.superadminModule) {
+          await window.superadminModule.init();
+        }
+      }
+
       // Mostrar la sección correspondiente
       targetSection.classList.add('active');
       

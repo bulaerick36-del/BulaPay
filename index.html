@@ -22,11 +22,18 @@
 
   <!-- Navegación Principal (SPA) -->
   <header>
-    <div class="nav-container">
-      <a href="#" class="brand" id="brand-link" style="display: flex; align-items: center; text-decoration: none;">
-        <!-- Logo Isotipo BulaPay (Sin Texto) -->
-        <img src="assets/logo.png" alt="BulaPay Isotipo" class="w-16 h-auto" style="display: block; max-height: 48px; object-fit: contain;">
-      </a>
+    <div class="nav-container" style="display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <!-- Botón Menú Hamburguesa -->
+        <button id="btn-hamburger-menu" class="btn-hamburger" title="Menú Principal BulaPay" onclick="document.getElementById('drawer-main-menu').classList.add('active');">
+          <span style="font-size: 1.25rem;">☰</span>
+        </button>
+        
+        <a href="#" class="brand" id="brand-link" style="display: flex; align-items: center; text-decoration: none;">
+          <!-- Logo Isotipo BulaPay (Sin Texto) -->
+          <img src="assets/logo.png" alt="BulaPay Isotipo" class="w-16 h-auto" style="display: block; max-height: 48px; object-fit: contain;">
+        </a>
+      </div>
 
       <!-- Información del usuario logueado -->
       <div class="user-nav-info" id="user-nav-info" style="display: none;">
@@ -46,6 +53,26 @@
       </div>
     </div>
   </header>
+
+  <!-- Drawer / Menú Desplegable Lateral Principal -->
+  <div class="drawer-overlay" id="drawer-main-menu">
+    <div class="drawer-content">
+      <div class="drawer-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <img src="assets/logo.png" alt="BulaPay Logo" style="max-height: 36px; object-fit: contain;">
+          <span class="title-gradient" style="font-weight: 700; font-size: 1.1rem;">BulaPay</span>
+        </div>
+        <button class="btn btn-secondary" onclick="document.getElementById('drawer-main-menu').classList.remove('active');" style="padding: 0.25rem 0.5rem; font-size: 0.9rem;">✕</button>
+      </div>
+      <div class="drawer-menu-list">
+        <a href="#auth" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">👔 Portal Supervisor</a>
+        <a href="#auth" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">💼 Agente Independiente</a>
+        <a href="#agent-login" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">📱 Portal de Agentes de Ruta</a>
+        <a href="#customer" class="drawer-menu-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">💳 Portal Cliente</a>
+        <a href="#superadmin" class="drawer-menu-item master-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">👑 Superadministrador Maestro</a>
+      </div>
+    </div>
+  </div>
 
   <!-- Contenido Principal (SPA Router Container) -->
   <main id="main-content">
@@ -1195,6 +1222,32 @@
 
 
 
+    <!-- 4. VISTA DE SUPERADMINISTRADOR MAESTRO -->
+    <section id="view-superadmin" class="view-section">
+      <div class="superadmin-wrapper card" style="max-width: 1200px; margin: 0 auto;">
+        <!-- Header del Panel -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-verde); padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 Panel Superadministrador Maestro</span>
+            <h2 class="title-gradient" style="margin-top: 0.4rem; font-size: 1.6rem;">Administración Global BulaPay</h2>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" id="btn-superadmin-change-pwd" style="padding: 0.5rem 1rem; font-size: 0.85rem;">🔑 Cambiar Clave Superadmin</button>
+            <button class="btn btn-secondary" onclick="superadminModule.logout()" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: #ef4444; color: #fca5a5;">🚪 Salir de Superadmin</button>
+          </div>
+        </div>
+
+        <!-- Pestañas de Módulos del Superadmin -->
+        <div class="superadmin-tabs" style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; overflow-x: auto;">
+          <button class="superadmin-tab active" data-tab="users" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-primary); font-weight: 600; cursor: pointer; border-bottom: 3px solid var(--color-verde);">👥 1. Usuarios y Clientes</button>
+          <button class="superadmin-tab" data-tab="contracts" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📜 2. Contratos y Términos</button>
+          <button class="superadmin-tab" data-tab="performance" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📊 3. Recurso Movido &amp; Gráficas</button>
+        </div>
+
+        <!-- Contenido Dinámico de la Pestaña Activa -->
+        <div id="superadmin-tab-content">
+          <p style="color: var(--text-secondary);">Cargando módulo de superadministrador...</p>
+        </div>
       </div>
     </section>
 
@@ -1529,6 +1582,29 @@
     </div>
   </div>
 
+  <!-- Modal de Login Exclusivo de Superadministrador -->
+  <div class="modal-overlay" id="superadmin-login-modal">
+    <div class="modal-card" style="max-width: 420px; text-align: center; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem;">
+      <h3 class="title-gradient" style="font-size: 1.4rem; margin-bottom: 0.5rem;">👑 Acceso Superadministrador Maestro</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">Ingrese la cédula autorizada de administración master para acceder al panel.</p>
+
+      <form id="form-superadmin-login">
+        <div class="form-group" style="text-align: left; margin-bottom: 1rem;">
+          <label for="superadmin-user-input" style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 0.3rem;">Cédula de Superadministrador</label>
+          <input type="text" id="superadmin-user-input" placeholder="Ingresa cédula master" value="1121338578" required style="width: 100%; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+        </div>
+        <div class="form-group" style="text-align: left; margin-bottom: 1.25rem;">
+          <label for="superadmin-pwd-input" style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 0.3rem;">Contraseña de Acceso Master</label>
+          <input type="password" id="superadmin-pwd-input" placeholder="••••••••" required style="width: 100%; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+        </div>
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.25rem;">
+          <button type="button" class="btn btn-secondary" onclick="superadminModule.hideLoginModal(); window.location.hash='#auth';">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Ingresar al Panel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Pie de Página Fijo -->
   <footer style="border-top: 1px solid var(--border-color); background-color: var(--bg-primary); padding: 1.5rem 2rem; margin-top: auto; font-size: 0.85rem; color: var(--text-secondary); text-align: center;">
     <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
@@ -1543,11 +1619,13 @@
   <!-- MODULOS JAVASCRIPT DE BulaPay -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="js/db.js?v=182"></script>
   <script src="js/auth.js?v=182"></script>
   <script src="js/supervisor.js?v=183"></script>
   <script src="js/agent_v6.js?v=182"></script>
   <script src="js/customer.js?v=182"></script>
+  <script src="js/superadmin.js?v=184"></script>
   <!-- Controlador Principal -->
   <script src="js/app.js?v=182"></script>
 

@@ -236,18 +236,30 @@ const db = {
     return data ? data[0] : user;
   },
 
-  async getUserByUsername(username) {
+  async getAllUsers() {
     const supabase = await initSupabase();
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('username', username.toLowerCase())
-      .maybeSingle();
+      .order('created_at', { ascending: false });
     if (error) {
-      console.error(`Error al buscar usuario "${username}" en Supabase:`, error);
-      return null;
+      console.error("Error al obtener todos los usuarios de Supabase:", error);
+      return [];
     }
-    return data;
+    return data || [];
+  },
+
+  async getAllRoutes() {
+    const supabase = await initSupabase();
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error("Error al obtener todas las rutas de Supabase:", error);
+      return [];
+    }
+    return data || [];
   },
 
   async deleteUser(username) {

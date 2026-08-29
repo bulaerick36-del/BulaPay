@@ -2053,5 +2053,140 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   }
 }
 
+/* ==========================================================================
+   MENÚ HAMBURGUESA Y DRAWER LATERAL DE NAVEGACIÓN
+   ========================================================================== */
+.btn-hamburger {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-hamburger:hover {
+  background: var(--border-color);
+  border-color: var(--color-verde);
+  color: var(--color-verde);
+}
+
+.drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(11, 19, 43, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.drawer-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.drawer-content {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 320px;
+  max-width: 85vw;
+  height: 100vh;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10000;
+}
+
+.drawer-overlay.active .drawer-content {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.5rem;
+}
+
+.drawer-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.drawer-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.drawer-menu-item:hover {
+  border-color: var(--color-verde);
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--color-verde);
+}
+
+.drawer-menu-item.master-item {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+  color: #fbbf24;
+}
+
+.drawer-menu-item.master-item:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #f59e0b;
+}
+
+/* ESTILOS PANEL SUPERADMINISTRADOR */
+.superadmin-wrapper {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.superadmin-card {
+  background: var(--bg-card);
+}
+
+.superadmin-tab.active {
+  color: var(--color-verde) !important;
+  border-bottom-color: var(--color-verde) !important;
+}
+
+.sa-agent-item:hover {
+  background: rgba(16, 185, 129, 0.08) !important;
+}
+
+
 
 
