@@ -44,14 +44,9 @@ const authModule = {
       });
     }
 
-    // Abrir Modal de Términos y Condiciones
+    // Abrir Términos y Condiciones en nueva pestaña (abrir terminos.html de forma nativa)
     if (this.linkTerms) {
-      this.linkTerms.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (this.modalTerms) {
-          this.modalTerms.classList.add('active');
-        }
-      });
+      // No cancelamos la navegación para permitir abrir terminos.html en target="_blank"
     }
 
     // Cerrar Modal de Términos y Condiciones
