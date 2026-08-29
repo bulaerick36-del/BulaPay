@@ -173,6 +173,26 @@ const superadminModule = {
     }
   },
 
+  async switchTab(tabName, e) {
+    if (e) e.preventDefault();
+    this.activeTab = tabName || 'users';
+
+    const tabs = document.querySelectorAll('.superadmin-tab');
+    tabs.forEach(t => {
+      if (t.dataset.tab === this.activeTab) {
+        t.classList.add('active');
+        t.style.color = 'var(--color-verde)';
+        t.style.borderBottom = '3px solid var(--color-verde)';
+      } else {
+        t.classList.remove('active');
+        t.style.color = 'var(--text-secondary)';
+        t.style.borderBottom = 'none';
+      }
+    });
+
+    await this.renderCurrentTab();
+  },
+
   bindEvents() {
     // Eventos de submit y click para el botón de acceso master del drawer
     const formDrawerLogin = document.getElementById('form-drawer-superadmin-login');
@@ -189,10 +209,8 @@ const superadminModule = {
     const tabs = document.querySelectorAll('.superadmin-tab');
     tabs.forEach(tab => {
       tab.onclick = async (e) => {
-        tabs.forEach(t => t.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-        this.activeTab = e.currentTarget.dataset.tab;
-        await this.renderCurrentTab();
+        const tabName = e.currentTarget.dataset.tab || 'users';
+        await this.switchTab(tabName, e);
       };
     });
 

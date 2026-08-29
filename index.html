@@ -1258,9 +1258,9 @@
 
         <!-- Pestañas de Módulos del Superadmin -->
         <div class="superadmin-tabs" style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; overflow-x: auto;">
-          <button class="superadmin-tab active" data-tab="users" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-primary); font-weight: 600; cursor: pointer; border-bottom: 3px solid var(--color-verde);">👥 1. Usuarios y Clientes</button>
-          <button class="superadmin-tab" data-tab="contracts" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📜 2. Contratos y Términos</button>
-          <button class="superadmin-tab" data-tab="performance" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📊 3. Recurso Movido &amp; Gráficas</button>
+          <button class="superadmin-tab active" data-tab="users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--color-verde); font-weight: 600; cursor: pointer; border-bottom: 3px solid var(--color-verde);">👥 1. Usuarios y Clientes</button>
+          <button class="superadmin-tab" data-tab="contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📜 2. Contratos y Términos</button>
+          <button class="superadmin-tab" data-tab="performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📊 3. Recurso Movido &amp; Gráficas</button>
         </div>
 
         <!-- Contenido Dinámico de la Pestaña Activa -->
