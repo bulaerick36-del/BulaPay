@@ -2103,15 +2103,34 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   width: 320px;
   max-width: 85vw;
   height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border-right: 1px solid var(--border-color);
   box-shadow: var(--shadow-lg);
   padding: 1.5rem;
+  padding-bottom: 2.5rem;
   display: flex;
   flex-direction: column;
   transform: translateX(-100%);
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 10000;
+}
+
+.drawer-content::-webkit-scrollbar {
+  width: 6px;
+}
+.drawer-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+.drawer-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+.drawer-content::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 .drawer-overlay.active .drawer-content {
