@@ -47,7 +47,11 @@ CREATE TABLE users (
   "last_location_time" TIMESTAMPTZ,
   "aceptacion_terminos" BOOLEAN DEFAULT true,
   "fecha_aceptacion_terminos" TIMESTAMPTZ DEFAULT NOW(),
-  "version_terminos" TEXT DEFAULT '1.0'
+  "version_terminos" TEXT DEFAULT '1.0',
+  "nombre_firmante" TEXT,
+  "documento_firmante" TEXT,
+  "tipo_documento_firmante" TEXT,
+  "hash_firma_digital" TEXT
 );
 
 -- 3. Tabla de Clientes

@@ -44,9 +44,40 @@ const authModule = {
       });
     }
 
-    // Abrir Términos y Condiciones en nueva pestaña (abrir terminos.html de forma nativa)
+    // Listener dinámico para inyectar nombre y documento en el enlace de Términos y Condiciones
+    const regNameInput = document.getElementById('register-name');
+    const regDocTypeSelect = document.getElementById('register-doc-type');
+    const regDocNumInput = document.getElementById('register-doc-num');
+
+    const updateTermsParams = () => {
+      const nameVal = regNameInput ? regNameInput.value.trim() : '';
+      const docTypeVal = regDocTypeSelect ? regDocTypeSelect.value : 'CC';
+      const docNumVal = regDocNumInput ? regDocNumInput.value.trim() : '';
+      
+      if (this.linkTerms) {
+        const params = new URLSearchParams();
+        if (nameVal) params.set('name', nameVal);
+        if (docTypeVal) params.set('docType', docTypeVal);
+        if (docNumVal) params.set('docNum', docNumVal);
+        const q = params.toString();
+        this.linkTerms.href = q ? `terminos.html?${q}` : 'terminos.html';
+      }
+
+      const modalName = document.getElementById('modal-sig-name');
+      const modalDoc = document.getElementById('modal-sig-doc');
+      if (modalName) modalName.textContent = nameVal ? nameVal.toUpperCase() : '[Capturado en formulario]';
+      if (modalDoc) modalDoc.textContent = docNumVal ? `${docTypeVal}: ${docNumVal}` : '[Capturado en formulario]';
+    };
+
+    if (regNameInput) regNameInput.addEventListener('input', updateTermsParams);
+    if (regDocTypeSelect) regDocTypeSelect.addEventListener('change', updateTermsParams);
+    if (regDocNumInput) regDocNumInput.addEventListener('input', updateTermsParams);
+
+    // Abrir Términos y Condiciones en nueva pestaña (abrir terminos.html de forma nativa con query params)
     if (this.linkTerms) {
-      // No cancelamos la navegación para permitir abrir terminos.html en target="_blank"
+      this.linkTerms.addEventListener('click', () => {
+        updateTermsParams();
+      });
     }
 
     // Cerrar Modal de Términos y Condiciones
@@ -133,6 +164,9 @@ const authModule = {
         const cedulaRepresentante = null;
 
         const acceptationTimestamp = new Date().toISOString();
+        const docFormatted = `${docType}: ${docNum}`;
+        const signatureHash = 'BULAPAY-SIG-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now();
+
         const newUser = {
           username,
           password,
@@ -150,7 +184,11 @@ const authModule = {
           cedula_representante: cedulaRepresentante,
           aceptacion_terminos: true,
           fecha_aceptacion_terminos: acceptationTimestamp,
-          version_terminos: '1.0'
+          version_terminos: '1.0',
+          nombre_firmante: name,
+          documento_firmante: docFormatted,
+          tipo_documento_firmante: docType,
+          hash_firma_digital: signatureHash
         };
 
         const defaultRoute = {

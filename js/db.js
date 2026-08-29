@@ -204,7 +204,7 @@ const db = {
       .insert([user])
       .select();
 
-    if (error && (error.message.includes('representante_legal') || error.message.includes('cedula_representante') || error.message.includes('aceptacion_terminos') || error.code === '42703')) {
+    if (error && (error.message.includes('representante_legal') || error.message.includes('cedula_representante') || error.message.includes('aceptacion_terminos') || error.message.includes('nombre_firmante') || error.code === '42703')) {
       console.warn("Columnas adicionales no encontradas en Supabase, reintentando sin ellas...");
       const fallbackUser = { ...user };
       delete fallbackUser.representante_legal;
@@ -212,6 +212,10 @@ const db = {
       delete fallbackUser.aceptacion_terminos;
       delete fallbackUser.fecha_aceptacion_terminos;
       delete fallbackUser.version_terminos;
+      delete fallbackUser.nombre_firmante;
+      delete fallbackUser.documento_firmante;
+      delete fallbackUser.tipo_documento_firmante;
+      delete fallbackUser.hash_firma_digital;
       
       const retryResult = await supabase
         .from('users')

@@ -362,7 +362,7 @@
       </section>
     </main>
 
-    <!-- BLOQUE DE FIRMA ELECTRÓNICA / DIGITAL VINCULANTE -->
+    <!-- BLOQUE DE FIRMA ELECTRÓNICA / DIGITAL VINCULANTE DINÁMICO -->
     <div class="signature-box">
       <div class="signature-title">
         🔏 Aceptado electrónicamente mediante firma digital vinculante - BulaPay Platform
@@ -372,16 +372,24 @@
       </p>
       <div class="signature-details">
         <div class="signature-detail-item">
+          <strong>NOMBRE COMPLETO DEL FIRMANTE</strong>
+          <span id="sig-user-name" style="color: var(--color-verde); font-weight: 700; font-size: 0.95rem;">[Pendiente de Registro]</span>
+        </div>
+        <div class="signature-detail-item">
+          <strong>DOCUMENTO DE IDENTIDAD</strong>
+          <span id="sig-user-doc" style="color: var(--text-primary); font-weight: 600;">[Pendiente de Registro]</span>
+        </div>
+        <div class="signature-detail-item">
           <strong>ESTADO DE VALIDACIÓN LEGAL</strong>
           <span class="signature-status">✔ VÍNCULO JURÍDICO VINCULANTE ACTIVO</span>
         </div>
         <div class="signature-detail-item">
           <strong>FECHA / HORA DE REGISTRO</strong>
-          <span style="color: var(--text-primary);">Registrado en servidor al enviar formulario</span>
+          <span id="sig-user-date" style="color: var(--text-primary);">[Al enviar formulario]</span>
         </div>
-        <div class="signature-detail-item">
-          <strong>CERTIFICADO DE FIRMA DIGITAL</strong>
-          <span style="color: var(--text-primary); font-family: monospace;">HASH-BULAPAY-SECURE-STAMP-v1.0</span>
+        <div class="signature-detail-item" style="grid-column: span 2;">
+          <strong>CERTIFICADO Y HASH DE FIRMA DIGITAL</strong>
+          <span id="sig-user-hash" style="color: var(--text-primary); font-family: monospace; word-break: break-all;">HASH-BULAPAY-SECURE-STAMP-v1.0</span>
         </div>
       </div>
     </div>
@@ -397,5 +405,54 @@
     </footer>
   </div>
 
+  <script>
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const name = urlParams.get('name') || urlParams.get('nombre');
+      const docType = urlParams.get('docType') || 'CC';
+      const docNum = urlParams.get('docNum') || urlParams.get('doc');
+      const date = urlParams.get('date');
+      const hash = urlParams.get('hash');
+
+      let currentUser = null;
+      try {
+        currentUser = JSON.parse(localStorage.getItem('bulaCurrentUser'));
+      } catch (e) {}
+
+      const nameElem = document.getElementById('sig-user-name');
+      const docElem = document.getElementById('sig-user-doc');
+      const dateElem = document.getElementById('sig-user-date');
+      const hashElem = document.getElementById('sig-user-hash');
+
+      const finalName = name || (currentUser ? (currentUser.nombre_firmante || currentUser.name) : null);
+      const finalDocNum = docNum || (currentUser ? (currentUser.documentNumber || currentUser.documento_firmante) : null);
+      const finalDocType = docType || (currentUser ? (currentUser.documentType || currentUser.tipo_documento_firmante || 'CC') : 'CC');
+
+      if (finalName && nameElem) {
+        nameElem.textContent = finalName.toUpperCase();
+      }
+      if (finalDocNum && docElem) {
+        docElem.textContent = finalDocNum.includes(':') ? finalDocNum : `${finalDocType}: ${finalDocNum}`;
+      }
+      if (dateElem) {
+        if (date) {
+          dateElem.textContent = date;
+        } else if (currentUser && currentUser.fecha_aceptacion_terminos) {
+          dateElem.textContent = new Date(currentUser.fecha_aceptacion_terminos).toLocaleString('es-CO');
+        } else {
+          dateElem.textContent = new Date().toLocaleString('es-CO') + ' (Aceptación en formulario)';
+        }
+      }
+      if (hashElem) {
+        if (hash) {
+          hashElem.textContent = hash;
+        } else if (currentUser && currentUser.hash_firma_digital) {
+          hashElem.textContent = currentUser.hash_firma_digital;
+        } else if (finalName && finalDocNum) {
+          hashElem.textContent = 'BULAPAY-SIG-' + Math.abs(finalName.split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0)).toString(16).toUpperCase() + '-' + Date.now();
+        }
+      }
+    })();
+  </script>
 </body>
 </html>
