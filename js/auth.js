@@ -99,14 +99,14 @@ const authModule = {
       try {
         const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-        if (user && user.password === passwordInput) {
+        if (user && String(user.password).trim() === String(passwordInput).trim()) {
           this.loginUser(user);
         } else {
           alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
         }
       } catch (err) {
-        console.error(err);
-        alert('❌ Error al iniciar sesión.');
+        console.error("Error de inicio de sesión:", err);
+        alert('❌ Error al iniciar sesión. Por favor intente nuevamente.');
       }
     });
 
@@ -120,15 +120,15 @@ const authModule = {
         try {
           const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-          if (user && user.password === passwordInput && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente')) {
+          if (user && String(user.password).trim() === String(passwordInput).trim() && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente')) {
             this.loginUser(user);
-          } else if (user && user.password === passwordInput) {
+          } else if (user && String(user.password).trim() === String(passwordInput).trim()) {
             alert('❌ Acceso denegado. Este portal es exclusivo para Agentes.');
           } else {
             alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
           }
         } catch (err) {
-          console.error(err);
+          console.error("Error de inicio de sesión agente:", err);
           alert('❌ Error al iniciar sesión del agente.');
         }
       });

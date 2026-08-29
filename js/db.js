@@ -236,6 +236,39 @@ const db = {
     return data ? data[0] : user;
   },
 
+  async getUserByUsername(username) {
+    if (!username) return null;
+    try {
+      const cleanInput = String(username).trim();
+      const supabase = await initSupabase();
+
+      // 1. Buscar en la tabla 'users' de Supabase por nombre de usuario (sin importar mayúsculas/minúsculas)
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .ilike('username', cleanInput);
+
+      if (!error && data && data.length > 0) {
+        return data[0];
+      }
+
+      // 2. Búsqueda alternativa por número de documento o correo electrónico
+      const { data: dataAlt, error: errAlt } = await supabase
+        .from('users')
+        .select('*')
+        .or(`username.eq."${cleanInput}",documentNumber.eq."${cleanInput}",email.ilike."${cleanInput}"`);
+
+      if (!errAlt && dataAlt && dataAlt.length > 0) {
+        return dataAlt[0];
+      }
+
+      return null;
+    } catch (e) {
+      console.warn("Error consultando usuario por username en Supabase:", e);
+      return null;
+    }
+  },
+
   async getAllUsers() {
     const supabase = await initSupabase();
     const { data, error } = await supabase
