@@ -39,19 +39,44 @@ const superadminModule = {
   },
 
   showSuperadminView() {
-    // 1. Ocultar el login general y otras secciones SPA
+    // 1. Ocultar la sección de autenticación/login general y cualquier wrapper de auth
+    const authView = document.getElementById('view-auth');
+    if (authView) {
+      authView.classList.remove('active');
+      authView.classList.add('d-none');
+      authView.style.display = 'none';
+    }
+
+    const authWrapper = document.querySelector('.auth-wrapper');
+    if (authWrapper) {
+      authWrapper.style.display = 'none';
+    }
+
+    // 2. Ocultar todas las demás secciones SPA
     const sections = document.querySelectorAll('.view-section');
     sections.forEach(s => {
-      s.classList.remove('active');
-      s.style.display = 'none';
+      if (s.id !== 'view-superadmin') {
+        s.classList.remove('active');
+        s.classList.add('d-none');
+        s.style.display = 'none';
+      }
     });
 
-    // 2. Exponer y activar de inmediato el contenedor del Panel Maestro
+    // 3. Exponer y activar de inmediato el contenedor del Panel de Superadministrador Maestro (#view-superadmin)
     const superadminView = document.getElementById('view-superadmin');
     if (superadminView) {
       superadminView.classList.remove('d-none');
       superadminView.classList.add('active');
       superadminView.style.display = 'block';
+      superadminView.style.visibility = 'visible';
+      superadminView.style.opacity = '1';
+    }
+
+    const superadminWrapper = document.querySelector('.superadmin-wrapper');
+    if (superadminWrapper) {
+      superadminWrapper.style.display = 'block';
+      superadminWrapper.style.visibility = 'visible';
+      superadminWrapper.style.opacity = '1';
     }
   },
 

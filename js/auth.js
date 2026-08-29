@@ -5,6 +5,15 @@ const authModule = {
   isProfileModalOpen: false,
 
   init() {
+    const authWrapper = document.querySelector('.auth-wrapper');
+    if (authWrapper) {
+      if (window.location.hash === '#superadmin' || (window.superadminModule && window.superadminModule.isLoggedIn() && window.location.hash === '#superadmin')) {
+        authWrapper.style.display = 'none';
+      } else {
+        authWrapper.style.display = 'block';
+      }
+    }
+
     if (this.initialized) {
       this.checkCurrentSession();
       return;
