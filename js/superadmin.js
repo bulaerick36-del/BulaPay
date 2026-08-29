@@ -38,21 +38,20 @@ const superadminModule = {
     window.location.reload();
   },
 
-  showSuperadminView() {
-    // 1. Ocultar la sección de autenticación/login general y cualquier wrapper de auth
+  renderFullPanel() {
+    const target = document.getElementById('view-superadmin') || document.getElementById('main-content') || document.getElementById('app');
+    if (!target) return;
+
+    // 1. Ocultar login general y vistas secundarias removiendo d-none y display:none del target
     const authView = document.getElementById('view-auth');
     if (authView) {
       authView.classList.remove('active');
       authView.classList.add('d-none');
       authView.style.display = 'none';
     }
-
     const authWrapper = document.querySelector('.auth-wrapper');
-    if (authWrapper) {
-      authWrapper.style.display = 'none';
-    }
+    if (authWrapper) authWrapper.style.display = 'none';
 
-    // 2. Ocultar todas las demás secciones SPA
     const sections = document.querySelectorAll('.view-section');
     sections.forEach(s => {
       if (s.id !== 'view-superadmin') {
@@ -62,22 +61,45 @@ const superadminModule = {
       }
     });
 
-    // 3. Exponer y activar de inmediato el contenedor del Panel de Superadministrador Maestro (#view-superadmin)
-    const superadminView = document.getElementById('view-superadmin');
-    if (superadminView) {
-      superadminView.classList.remove('d-none');
-      superadminView.classList.add('active');
-      superadminView.style.display = 'block';
-      superadminView.style.visibility = 'visible';
-      superadminView.style.opacity = '1';
-    }
+    // 2. Exponer contenedor destino sin clases d-none
+    target.classList.remove('d-none');
+    target.classList.add('active');
+    target.style.display = 'block';
+    target.style.visibility = 'visible';
+    target.style.opacity = '1';
 
-    const superadminWrapper = document.querySelector('.superadmin-wrapper');
-    if (superadminWrapper) {
-      superadminWrapper.style.display = 'block';
-      superadminWrapper.style.visibility = 'visible';
-      superadminWrapper.style.opacity = '1';
-    }
+    // 3. Inyectar directamente el HTML completo del Panel Maestro
+    target.innerHTML = `
+      <div class="superadmin-wrapper card" style="max-width: 1200px; margin: 0 auto; padding: 2rem; background: var(--bg-card); border-radius: 16px;">
+        <!-- Cabecera Clara Obligatoria -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-verde); padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 Acceso Exclusivo Master</span>
+            <h2 class="title-gradient" style="margin-top: 0.4rem; font-size: 1.6rem; font-weight: 800;">Panel de Superadministrador Maestro</h2>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" id="btn-superadmin-change-pwd" onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">🔑 Cambiar Clave Superadmin</button>
+            <button class="btn btn-secondary" onclick="superadminModule.logout()" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: #ef4444; color: #fca5a5;">🚪 Salir de Superadmin</button>
+          </div>
+        </div>
+
+        <!-- Pestañas de Módulos del Superadmin -->
+        <div class="superadmin-tabs" style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; overflow-x: auto;">
+          <button class="superadmin-tab ${this.activeTab === 'users' ? 'active' : ''}" data-tab="users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? 'var(--color-verde)' : 'var(--text-secondary)'}; font-weight: 600; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid var(--color-verde)' : 'none'};">👥 1. Usuarios y Clientes</button>
+          <button class="superadmin-tab ${this.activeTab === 'contracts' ? 'active' : ''}" data-tab="contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? 'var(--color-verde)' : 'var(--text-secondary)'}; font-weight: 600; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid var(--color-verde)' : 'none'};">📜 2. Contratos y Términos</button>
+          <button class="superadmin-tab ${this.activeTab === 'performance' ? 'active' : ''}" data-tab="performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? 'var(--color-verde)' : 'var(--text-secondary)'}; font-weight: 600; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid var(--color-verde)' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
+        </div>
+
+        <!-- Contenido Dinámico de la Pestaña Activa -->
+        <div id="superadmin-tab-content">
+          <p style="color: var(--text-secondary);">Cargando módulo de superadministrador...</p>
+        </div>
+      </div>
+    `;
+  },
+
+  showSuperadminView() {
+    this.renderFullPanel();
   },
 
   async openSuperadminPanel() {
@@ -85,8 +107,8 @@ const superadminModule = {
     const drawer = document.getElementById('drawer-main-menu');
     if (drawer) drawer.classList.remove('active');
 
-    // 2. Exponer y pintar el panel de superadministrador maestro inmediatamente
-    this.showSuperadminView();
+    // 2. Exponer e inyectar el HTML completo del panel de superadministrador maestro inmediatamente
+    this.renderFullPanel();
 
     window.location.hash = '#superadmin';
 
@@ -105,8 +127,8 @@ const superadminModule = {
       return;
     }
 
-    // Exponer panel superadmin
-    this.showSuperadminView();
+    // Inyectar y exponer panel superadmin completo
+    this.renderFullPanel();
 
     this.renderDrawerSection();
     await this.renderCurrentTab();
@@ -542,7 +564,7 @@ const superadminModule = {
             </div>
 
             <div style="position: relative; height: 320px; width: 100%;">
-              <canvas id="saPerformanceCanvas"></canvas>
+              <canvas id="superadminChart"></canvas>
             </div>
           </div>
         </div>
@@ -628,7 +650,7 @@ const superadminModule = {
   },
 
   renderUserChart(user, routes, clients) {
-    const canvas = document.getElementById('saPerformanceCanvas');
+    const canvas = document.getElementById('superadminChart') || document.getElementById('saPerformanceCanvas');
     if (!canvas) return;
 
     // Calcular valores reales
