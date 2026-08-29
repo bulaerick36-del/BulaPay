@@ -79,16 +79,10 @@
           <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Acceder al Portal</button>
         </form>
 
-        <!-- Formulario Registrarse (Supervisores / Comercios) -->
+        <!-- Formulario Registrarse (Agente Independiente) -->
         <form id="form-register" class="auth-form" style="display: none;">
-          <div class="form-group">
-            <label for="register-type">Tipo de Cuenta</label>
-            <select id="register-type" required>
-              <option value="Administrador de Rutas" selected>Administrador de Rutas</option>
-              <option value="Agente Independiente">Agente Independiente</option>
-              <option value="Otros (Comercios, Compraventas, Mercados)">Otros (Comercios, Compraventas, Mercados)</option>
-            </select>
-          </div>
+          <!-- Tipo de Cuenta forzado fijamente como Agente Independiente -->
+          <input type="hidden" id="register-type" value="Agente Independiente">
           <!-- Campo de Correo Electrónico Global (Obligatorio para todos) -->
           <div class="form-group">
             <label for="register-email">Correo Electrónico</label>

@@ -108,10 +108,10 @@ const authModule = {
       });
     }
 
-    // Submit Registrarse (Usuario Supervisor / Comercio)
+    // Submit Registrarse (Agente Independiente)
     this.formRegister.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const type = document.getElementById('register-type').value;
+      const type = 'Agente Independiente'; // Forzado de manera fija e invariable
       const email = document.getElementById('register-email').value.trim();
       const username = document.getElementById('register-username').value.trim().toLowerCase();
       const password = document.getElementById('register-password').value;
@@ -130,60 +130,44 @@ const authModule = {
           return;
         }
 
-        let name = '';
-        let docType = '';
-        let docNum = '';
-        let company = '';
-        let representanteLegal = null;
-        let cedulaRepresentante = null;
-
-        if (type === 'Otros (Comercios, Compraventas, Mercados)') {
-          company = document.getElementById('register-company-name').value.trim();
-          name = company;
-          docType = 'NIT';
-          docNum = document.getElementById('register-nit').value.trim();
-          representanteLegal = document.getElementById('register-rep-name').value.trim();
-          cedulaRepresentante = document.getElementById('register-rep-doc').value.trim();
-        } else {
-          name = document.getElementById('register-name').value.trim();
-          company = name;
-          docType = document.getElementById('register-doc-type').value;
-          docNum = document.getElementById('register-doc-num').value.trim();
-        }
+        const name = document.getElementById('register-name').value.trim();
+        const company = name;
+        const docType = document.getElementById('register-doc-type').value;
+        const docNum = document.getElementById('register-doc-num').value.trim();
+        const representanteLegal = null;
+        const cedulaRepresentante = null;
 
         const newUser = {
           username,
           password,
           name,
-          role: type,
+          role: 'Agente Independiente',
           company,
           email,
           documentType: docType,
           documentNumber: docNum,
           estado_suscripcion: 'activa_prueba',
           id_metodo_pago: null,
-          routeId: type === 'Agente Independiente' ? 'route_' + username : null,
-          supervisor_id: (type === 'Usuario Supervisor' || type === 'Administrador de Rutas' || type === 'Otros (Comercios, Compraventas, Mercados)' || type === 'Agente Independiente') ? username : null,
+          routeId: 'route_' + username,
+          supervisor_id: username,
           representante_legal: representanteLegal,
           cedula_representante: cedulaRepresentante
         };
 
-        if (type === 'Agente Independiente') {
-          const defaultRoute = {
-            id: 'route_' + username,
-            name: 'Ruta ' + name,
-            agentUsername: username,
-            agentName: name,
-            capital: 0,
-            collected: 0,
-            status: 'En Ruta',
-            supervisor_id: username,
-            opening_time: '06:00',
-            closing_time: '18:00',
-            has_extension: false
-          };
-          await window.BulaPayDB.saveRoute(defaultRoute);
-        }
+        const defaultRoute = {
+          id: 'route_' + username,
+          name: 'Ruta ' + name,
+          agentUsername: username,
+          agentName: name,
+          capital: 0,
+          collected: 0,
+          status: 'En Ruta',
+          supervisor_id: username,
+          opening_time: '06:00',
+          closing_time: '18:00',
+          has_extension: false
+        };
+        await window.BulaPayDB.saveRoute(defaultRoute);
 
         // Guardar en base de datos
         await window.BulaPayDB.saveUser(newUser);
@@ -254,7 +238,8 @@ const authModule = {
   },
 
   handleRegisterTypeChange() {
-    const type = document.getElementById('register-type').value;
+    const registerTypeElem = document.getElementById('register-type');
+    const type = registerTypeElem ? registerTypeElem.value : 'Agente Independiente';
     const stdFields = document.getElementById('register-fields-standard');
     const otherFields = document.getElementById('register-fields-others');
     
@@ -263,19 +248,11 @@ const authModule = {
     const stdInputs = stdFields.querySelectorAll('input, select');
     const otherInputs = otherFields.querySelectorAll('input');
 
-    if (type === 'Otros (Comercios, Compraventas, Mercados)') {
-      stdFields.style.display = 'none';
-      otherFields.style.display = 'block';
-      
-      stdInputs.forEach(i => i.removeAttribute('required'));
-      otherInputs.forEach(i => i.setAttribute('required', ''));
-    } else {
-      stdFields.style.display = 'block';
-      otherFields.style.display = 'none';
-      
-      stdInputs.forEach(i => i.setAttribute('required', ''));
-      otherInputs.forEach(i => i.removeAttribute('required'));
-    }
+    stdFields.style.display = 'block';
+    otherFields.style.display = 'none';
+    
+    stdInputs.forEach(i => i.setAttribute('required', ''));
+    otherInputs.forEach(i => i.removeAttribute('required'));
   },
 
   loginUser(user) {
