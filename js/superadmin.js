@@ -47,6 +47,16 @@ const superadminModule = {
       this.renderDrawerSection();
       return;
     }
+
+    // Ocultar vistas secundarias y activar el Panel de Superadministrador
+    const sections = document.querySelectorAll('.view-section');
+    sections.forEach(s => s.classList.remove('active'));
+
+    const superadminView = document.getElementById('view-superadmin');
+    if (superadminView) {
+      superadminView.classList.add('active');
+    }
+
     this.renderDrawerSection();
     await this.renderCurrentTab();
   },
@@ -87,36 +97,62 @@ const superadminModule = {
     }
   },
 
+  async handleSuperadminAuth(e) {
+    if (e) e.preventDefault();
+
+    const inputUser = document.getElementById('drawer-sa-user');
+    const inputPwd = document.getElementById('drawer-sa-pwd');
+
+    if (!inputUser || !inputPwd) return;
+
+    const userInput = inputUser.value.trim();
+    const pwdInput = inputPwd.value;
+
+    if (this.login(userInput, pwdInput)) {
+      alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
+      
+      // 1. Cerrar el menú lateral (drawer)
+      const drawer = document.getElementById('drawer-main-menu');
+      if (drawer) drawer.classList.remove('active');
+
+      // 2. Ocultar la vista de login general y mostrar la vista de superadmin
+      const sections = document.querySelectorAll('.view-section');
+      sections.forEach(s => s.classList.remove('active'));
+
+      const superadminView = document.getElementById('view-superadmin');
+      if (superadminView) {
+        superadminView.classList.add('active');
+      }
+
+      window.location.hash = '#superadmin';
+      this.renderDrawerSection();
+      await this.renderCurrentTab();
+    } else {
+      alert('❌ Credenciales de Superadministrador inválidas. Acceso denegado.');
+    }
+  },
+
   bindEvents() {
-    // Evento de submit del formulario de superadmin incrustado en el drawer lateral
+    // Eventos de submit y click para el botón de acceso master del drawer
     const formDrawerLogin = document.getElementById('form-drawer-superadmin-login');
     if (formDrawerLogin) {
-      formDrawerLogin.onsubmit = async (e) => {
-        e.preventDefault();
-        const userInput = document.getElementById('drawer-sa-user').value.trim();
-        const pwdInput = document.getElementById('drawer-sa-pwd').value;
+      formDrawerLogin.onsubmit = (e) => this.handleSuperadminAuth(e);
+    }
 
-        if (this.login(userInput, pwdInput)) {
-          alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
-          const drawer = document.getElementById('drawer-main-menu');
-          if (drawer) drawer.classList.remove('active');
-          window.location.hash = '#superadmin';
-          await this.init();
-        } else {
-          alert('❌ Credenciales de Superadministrador inválidas. Acceso denegado.');
-        }
-      };
+    const btnEnter = document.getElementById('btn-enter-superadmin');
+    if (btnEnter) {
+      btnEnter.onclick = (e) => this.handleSuperadminAuth(e);
     }
 
     // Cambio de pestañas en el panel de Superadministrador
     const tabs = document.querySelectorAll('.superadmin-tab');
     tabs.forEach(tab => {
-      tab.addEventListener('click', async (e) => {
+      tab.onclick = async (e) => {
         tabs.forEach(t => t.classList.remove('active'));
         e.currentTarget.classList.add('active');
         this.activeTab = e.currentTarget.dataset.tab;
         await this.renderCurrentTab();
-      });
+      };
     });
 
     // Botón Cambiar Contraseña Superadmin
