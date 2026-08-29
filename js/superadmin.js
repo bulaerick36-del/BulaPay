@@ -51,6 +51,18 @@ const superadminModule = {
     await this.renderCurrentTab();
   },
 
+  clearDrawerInputs() {
+    const inputUser = document.getElementById('drawer-sa-user');
+    const inputPwd = document.getElementById('drawer-sa-pwd');
+    if (inputUser) {
+      inputUser.value = '';
+      inputUser.setAttribute('readonly', 'readonly');
+    }
+    if (inputPwd) {
+      inputPwd.value = '';
+    }
+  },
+
   renderDrawerSection() {
     const container = document.getElementById('drawer-superadmin-container');
     if (!container) return;
@@ -70,6 +82,8 @@ const superadminModule = {
           </button>
         </div>
       `;
+    } else {
+      this.clearDrawerInputs();
     }
   },
 
