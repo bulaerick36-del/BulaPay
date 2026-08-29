@@ -38,6 +38,23 @@ const superadminModule = {
     window.location.reload();
   },
 
+  showSuperadminView() {
+    // 1. Ocultar el login general y otras secciones SPA
+    const sections = document.querySelectorAll('.view-section');
+    sections.forEach(s => {
+      s.classList.remove('active');
+      s.style.display = 'none';
+    });
+
+    // 2. Exponer y activar de inmediato el contenedor del Panel Maestro
+    const superadminView = document.getElementById('view-superadmin');
+    if (superadminView) {
+      superadminView.classList.remove('d-none');
+      superadminView.classList.add('active');
+      superadminView.style.display = 'block';
+    }
+  },
+
   async init() {
     this.bindEvents();
     if (!this.isLoggedIn()) {
@@ -48,14 +65,8 @@ const superadminModule = {
       return;
     }
 
-    // Ocultar vistas secundarias y activar el Panel de Superadministrador
-    const sections = document.querySelectorAll('.view-section');
-    sections.forEach(s => s.classList.remove('active'));
-
-    const superadminView = document.getElementById('view-superadmin');
-    if (superadminView) {
-      superadminView.classList.add('active');
-    }
+    // Exponer panel superadmin
+    this.showSuperadminView();
 
     this.renderDrawerSection();
     await this.renderCurrentTab();
@@ -121,14 +132,8 @@ const superadminModule = {
       const drawer = document.getElementById('drawer-main-menu');
       if (drawer) drawer.classList.remove('active');
 
-      // 2. Ocultar la vista de login general y mostrar la vista del panel superadmin
-      const sections = document.querySelectorAll('.view-section');
-      sections.forEach(s => s.classList.remove('active'));
-
-      const superadminView = document.getElementById('view-superadmin');
-      if (superadminView) {
-        superadminView.classList.add('active');
-      }
+      // 2. Exponer y pintar el panel de superadministrador maestro inmediatamente
+      this.showSuperadminView();
 
       window.location.hash = '#superadmin';
       this.renderDrawerSection();

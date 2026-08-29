@@ -117,9 +117,12 @@ const app = {
         }
       }
 
-      // Ocultar todas las secciones
+      // Ocultar todas las secciones y resetear estilos inline conflictivos
       const sections = document.querySelectorAll('.view-section');
-      sections.forEach(s => s.classList.remove('active'));
+      sections.forEach(s => {
+        s.classList.remove('active');
+        s.style.display = '';
+      });
 
       // Destruir procesos previos si aplica (ej. animaciones del mapa)
       if (window.supervisorModule) {
@@ -183,8 +186,9 @@ const app = {
         }
       }
 
-      // Mostrar la sección correspondiente
+      // Mostrar la sección correspondiente de forma visible
       targetSection.classList.add('active');
+      targetSection.style.display = 'block';
       
       // Scroll al inicio de la página
       window.scrollTo(0, 0);
