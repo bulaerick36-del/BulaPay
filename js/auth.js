@@ -137,6 +137,7 @@ const authModule = {
         const representanteLegal = null;
         const cedulaRepresentante = null;
 
+        const acceptationTimestamp = new Date().toISOString();
         const newUser = {
           username,
           password,
@@ -151,7 +152,10 @@ const authModule = {
           routeId: 'route_' + username,
           supervisor_id: username,
           representante_legal: representanteLegal,
-          cedula_representante: cedulaRepresentante
+          cedula_representante: cedulaRepresentante,
+          aceptacion_terminos: true,
+          fecha_aceptacion_terminos: acceptationTimestamp,
+          version_terminos: '1.0'
         };
 
         const defaultRoute = {

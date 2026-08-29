@@ -44,7 +44,10 @@ CREATE TABLE users (
   "created_at" TIMESTAMPTZ DEFAULT NOW(),
   "last_lat" NUMERIC,
   "last_lng" NUMERIC,
-  "last_location_time" TIMESTAMPTZ
+  "last_location_time" TIMESTAMPTZ,
+  "aceptacion_terminos" BOOLEAN DEFAULT true,
+  "fecha_aceptacion_terminos" TIMESTAMPTZ DEFAULT NOW(),
+  "version_terminos" TEXT DEFAULT '1.0'
 );
 
 -- 3. Tabla de Clientes

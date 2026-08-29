@@ -204,11 +204,14 @@ const db = {
       .insert([user])
       .select();
 
-    if (error && (error.message.includes('representante_legal') || error.message.includes('cedula_representante') || error.code === '42703')) {
-      console.warn("Columnas de representante no encontradas en Supabase, reintentando sin ellas...");
+    if (error && (error.message.includes('representante_legal') || error.message.includes('cedula_representante') || error.message.includes('aceptacion_terminos') || error.code === '42703')) {
+      console.warn("Columnas adicionales no encontradas en Supabase, reintentando sin ellas...");
       const fallbackUser = { ...user };
       delete fallbackUser.representante_legal;
       delete fallbackUser.cedula_representante;
+      delete fallbackUser.aceptacion_terminos;
+      delete fallbackUser.fecha_aceptacion_terminos;
+      delete fallbackUser.version_terminos;
       
       const retryResult = await supabase
         .from('users')
