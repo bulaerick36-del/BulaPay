@@ -160,6 +160,7 @@ const authModule = {
         const company = name;
         const docType = document.getElementById('register-doc-type').value;
         const docNum = document.getElementById('register-doc-num').value.trim();
+        const phone = document.getElementById('register-phone') ? document.getElementById('register-phone').value.trim() : '';
         const representanteLegal = null;
         const cedulaRepresentante = null;
 
@@ -173,6 +174,7 @@ const authModule = {
           name,
           role: 'Agente Independiente',
           company,
+          phone,
           email,
           documentType: docType,
           documentNumber: docNum,

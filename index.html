@@ -83,18 +83,14 @@
         <form id="form-register" class="auth-form" style="display: none;">
           <!-- Tipo de Cuenta forzado fijamente como Agente Independiente -->
           <input type="hidden" id="register-type" value="Agente Independiente">
-          <!-- Campo de Correo Electrónico Global (Obligatorio para todos) -->
-          <div class="form-group">
-            <label for="register-email">Correo Electrónico</label>
-            <input type="email" id="register-email" placeholder="ejemplo@correo.com" required autocomplete="email">
-          </div>
 
-          <!-- Campos Dinámicos para Administrador de Rutas / Agente Independiente -->
+          <!-- 1. Nombre Completo -->
           <div id="register-fields-standard">
             <div class="form-group">
               <label for="register-name">Nombre Completo</label>
               <input type="text" id="register-name" placeholder="Ej. Carlos Mendoza" required>
             </div>
+            <!-- 2. Tipo y Número de Documento -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
               <div class="form-group">
                 <label for="register-doc-type">Tipo de Documento</label>
@@ -109,6 +105,18 @@
                 <input type="number" id="register-doc-num" placeholder="Ingresa el documento" required>
               </div>
             </div>
+          </div>
+
+          <!-- 3. Número de Teléfono -->
+          <div class="form-group">
+            <label for="register-phone">Número de Teléfono</label>
+            <input type="tel" id="register-phone" placeholder="Ej. 3001234567" required autocomplete="tel">
+          </div>
+
+          <!-- 4. Correo Electrónico Global -->
+          <div class="form-group">
+            <label for="register-email">Correo Electrónico</label>
+            <input type="email" id="register-email" placeholder="ejemplo@correo.com" required autocomplete="email">
           </div>
 
           <!-- Campos Dinámicos para Otros (Comercios, Compraventas, Mercados) -->
@@ -130,14 +138,20 @@
               <input type="number" id="register-rep-doc" placeholder="Ej. 12345678">
             </div>
           </div>
+
+          <!-- 5. Usuario Administrador -->
           <div class="form-group">
             <label for="register-username">Usuario Administrador</label>
             <input type="text" id="register-username" placeholder="Elige tu nombre de usuario" required autocomplete="username">
           </div>
+
+          <!-- 6. Contraseña de Seguridad -->
           <div class="form-group">
             <label for="register-password">Contraseña de Seguridad</label>
             <input type="password" id="register-password" placeholder="Elige tu contraseña" required autocomplete="new-password">
           </div>
+
+          <!-- 7. Sección Términos y Condiciones -->
           <div class="form-group" style="display: flex; gap: 0.5rem; align-items: flex-start; margin-top: 1rem; margin-bottom: 1rem;">
             <input type="checkbox" id="register-legal" required style="width: 16px; height: 16px; min-height: 16px; min-width: 16px; margin-top: 0.2rem; cursor: pointer; flex-shrink: 0;">
             <label for="register-legal" style="font-size: 0.75rem; text-transform: none; line-height: 1.4; color: var(--text-secondary); cursor: pointer; user-select: none;">
