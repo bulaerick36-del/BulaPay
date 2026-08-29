@@ -55,6 +55,21 @@ const superadminModule = {
     }
   },
 
+  async openSuperadminPanel() {
+    // 1. Cerrar el menú lateral (drawer)
+    const drawer = document.getElementById('drawer-main-menu');
+    if (drawer) drawer.classList.remove('active');
+
+    // 2. Exponer y pintar el panel de superadministrador maestro inmediatamente
+    this.showSuperadminView();
+
+    window.location.hash = '#superadmin';
+
+    // 3. Sincronizar estado del drawer y renderizar los 3 módulos
+    this.renderDrawerSection();
+    await this.renderCurrentTab();
+  },
+
   async init() {
     this.bindEvents();
     if (!this.isLoggedIn()) {
@@ -95,9 +110,9 @@ const superadminModule = {
           <span style="font-size: 0.65rem; background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">Sesión Activa</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-          <a href="#superadmin" class="drawer-menu-item master-item" onclick="document.getElementById('drawer-main-menu').classList.remove('active');">
+          <button type="button" class="drawer-menu-item master-item" style="width: 100%; text-align: left; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; align-items: center; gap: 0.5rem;" onclick="superadminModule.openSuperadminPanel();">
             👑 Ver Panel Superadmin
-          </a>
+          </button>
           <button class="btn btn-secondary" style="padding: 0.4rem; font-size: 0.75rem; border-color: #ef4444; color: #fca5a5; width: 100%; font-weight: 600;" onclick="superadminModule.logout()">
             🚪 Cerrar Sesión Master
           </button>
@@ -127,17 +142,7 @@ const superadminModule = {
 
     if (this.login(userInput, pwdInput)) {
       alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
-      
-      // 1. Cerrar el menú lateral (drawer)
-      const drawer = document.getElementById('drawer-main-menu');
-      if (drawer) drawer.classList.remove('active');
-
-      // 2. Exponer y pintar el panel de superadministrador maestro inmediatamente
-      this.showSuperadminView();
-
-      window.location.hash = '#superadmin';
-      this.renderDrawerSection();
-      await this.renderCurrentTab();
+      await this.openSuperadminPanel();
     } else {
       alert('Credenciales de Superadministrador incorrectas');
     }

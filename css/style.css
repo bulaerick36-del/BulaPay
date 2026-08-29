@@ -2185,12 +2185,24 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
 }
 
 /* ESTILOS PANEL SUPERADMINISTRADOR */
+#view-superadmin {
+  width: 100%;
+  min-height: 85vh;
+  position: relative;
+  z-index: 10;
+}
+
+#view-superadmin.active {
+  display: block !important;
+}
+
 .superadmin-wrapper {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 2rem;
   box-shadow: var(--shadow-lg);
+  width: 100%;
 }
 
 .superadmin-card {
