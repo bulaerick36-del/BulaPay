@@ -98,12 +98,18 @@ const superadminModule = {
   },
 
   async handleSuperadminAuth(e) {
-    if (e) e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
 
     const inputUser = document.getElementById('drawer-sa-user');
-    const inputPwd = document.getElementById('drawer-sa-pwd');
+    const inputPwd = document.getElementById('drawer-sa-pwd') || document.getElementById('drawer-sa-pass');
 
-    if (!inputUser || !inputPwd) return;
+    if (!inputUser || !inputPwd) {
+      alert('Credenciales de Superadministrador incorrectas');
+      return;
+    }
 
     const userInput = inputUser.value.trim();
     const pwdInput = inputPwd.value;
@@ -115,7 +121,7 @@ const superadminModule = {
       const drawer = document.getElementById('drawer-main-menu');
       if (drawer) drawer.classList.remove('active');
 
-      // 2. Ocultar la vista de login general y mostrar la vista de superadmin
+      // 2. Ocultar la vista de login general y mostrar la vista del panel superadmin
       const sections = document.querySelectorAll('.view-section');
       sections.forEach(s => s.classList.remove('active'));
 
@@ -128,7 +134,7 @@ const superadminModule = {
       this.renderDrawerSection();
       await this.renderCurrentTab();
     } else {
-      alert('❌ Credenciales de Superadministrador inválidas. Acceso denegado.');
+      alert('Credenciales de Superadministrador incorrectas');
     }
   },
 
