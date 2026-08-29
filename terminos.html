@@ -133,6 +133,60 @@
       font-size: 0.875rem;
     }
 
+    .signature-box {
+      margin-top: 2rem;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(30, 41, 59, 0.9) 100%);
+      border: 2px dashed rgba(16, 185, 129, 0.4);
+      border-radius: 12px;
+      padding: 1.75rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .signature-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--color-verde);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .signature-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-align: left;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-top: 1rem;
+    }
+
+    .signature-detail-item strong {
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 0.2rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .signature-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: #34d399;
+      font-weight: 600;
+    }
+
     .actions-footer {
       display: flex;
       justify-content: space-between;
@@ -289,16 +343,48 @@
         </div>
       </section>
 
-      <!-- CLÁUSULA 6 -->
+      <!-- CLÁUSULA 7 -->
       <section class="clause">
-        <h2 class="clause-title">✍️ CLÁUSULA SEXTA: VALIDEZ DE LA ACEPTACIÓN ELECTRÓNICA</h2>
+        <h2 class="clause-title">💳 CLÁUSULA SÉPTIMA: OBLIGACIÓN DE PAGO DE SUSCRIPCIÓN Y CONSECUENCIAS POR MORA</h2>
         <div class="clause-content">
           <p>
-            De conformidad con la legislación aplicable en materia de mensajes de datos, firma digital y comercio electrónico (incluyendo la Ley 527 de 1999 o regulaciones equivalentes), la marcación de la casilla de aceptación <em>"Acepto los Términos y Condiciones"</em> al momento de completar el formulario de registro en BulaPay constituye una <strong>manifestación inequívoca de voluntad y firma electrónica vinculante</strong>, la cual queda registrada junto con la fecha, hora y datos del usuario en la base de datos del sistema como prueba plena del contrato de adhesión.
+            Al registrarse y hacer uso del servicio, el Usuario adquiere de forma expresa e incondicional la <strong>obligación legal y contractual de pagar mes a mes la tarifa o cuota de suscripción</strong> acordada por el derecho de uso, licenciamiento de software, mantenimiento de infraestructura tecnológica en la nube y soporte técnico de la plataforma BulaPay.
           </p>
+          <div class="highlight-warning">
+            <strong>⚠️ BLOQUEO INMEDIATO Y ACCIONES JURÍDICAS DE COBRO POR INCUMPLIMIENTO:</strong><br>
+            El incumplimiento o mora en el pago de la cuota de suscripción mensual facultará de forma inmediata e incondicional a la Administración de BulaPay para:
+            <ul style="margin-left: 1.25rem; margin-top: 0.4rem; list-style-type: disc;">
+              <li><strong>Efectuar el bloqueo e inhabilitación inmediata de la cuenta y el acceso a la plataforma</strong>, suspendiendo la operatividad de sus usuarios, perfiles y rutas asociadas.</li>
+              <li><strong>Iniciar las acciones jurídicas, judiciales y extrajudiciales de cobro</strong> correspondientes para la recuperación de la totalidad de la deuda exigible, sumados los intereses moratorios y gastos de cobranza a los que haya lugar conforme a la ley.</li>
+            </ul>
+          </div>
         </div>
       </section>
     </main>
+
+    <!-- BLOQUE DE FIRMA ELECTRÓNICA / DIGITAL VINCULANTE -->
+    <div class="signature-box">
+      <div class="signature-title">
+        🔏 Aceptado electrónicamente mediante firma digital vinculante - BulaPay Platform
+      </div>
+      <p style="font-size: 0.825rem; color: var(--text-secondary); margin-bottom: 0.5rem; max-width: 750px; margin-left: auto; margin-right: auto;">
+        El envío del formulario de registro y la marcación de la casilla de Términos y Condiciones constituye la suscripción de un contrato de adhesión con plena validez probatoria conforme a la Ley 527 de 1999 y normatividad comercial aplicable.
+      </p>
+      <div class="signature-details">
+        <div class="signature-detail-item">
+          <strong>ESTADO DE VALIDACIÓN LEGAL</strong>
+          <span class="signature-status">✔ VÍNCULO JURÍDICO VINCULANTE ACTIVO</span>
+        </div>
+        <div class="signature-detail-item">
+          <strong>FECHA / HORA DE REGISTRO</strong>
+          <span style="color: var(--text-primary);">Registrado en servidor al enviar formulario</span>
+        </div>
+        <div class="signature-detail-item">
+          <strong>CERTIFICADO DE FIRMA DIGITAL</strong>
+          <span style="color: var(--text-primary); font-family: monospace;">HASH-BULAPAY-SECURE-STAMP-v1.0</span>
+        </div>
+      </div>
+    </div>
 
     <footer class="actions-footer">
       <div style="font-size: 0.8rem; color: var(--text-muted);">
