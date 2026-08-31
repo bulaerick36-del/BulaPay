@@ -204,47 +204,16 @@ const superadminModule = {
             </div>
           </div>
 
-          <!-- Pestañas de Módulos Flotantes -->
+          <!-- Pestañas de Módulos Flotantes (Navegación Dinámica de 4 Pestañas) -->
           <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; overflow-x: auto;">
-            <button id="sa-tab-users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid #34d399' : 'none'};">👥 1. Usuarios y Clientes</button>
-            <button id="sa-tab-contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid #34d399' : 'none'};">📜 2. Contratos y Términos</button>
-            <button id="sa-tab-performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid #34d399' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
+            <button id="sa-tab-users" class="sa-floating-tab ${this.activeTab === 'users' ? 'active' : ''}" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid #34d399' : 'none'};">👥 1. Usuarios y Clientes</button>
+            <button id="sa-tab-contracts" class="sa-floating-tab ${this.activeTab === 'contracts' ? 'active' : ''}" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid #34d399' : 'none'};">📜 2. Contratos y Términos</button>
+            <button id="sa-tab-performance" class="sa-floating-tab ${this.activeTab === 'performance' ? 'active' : ''}" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid #34d399' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
+            <button id="sa-tab-advances" class="sa-floating-tab ${this.activeTab === 'advances' ? 'active' : ''}" onclick="superadminModule.switchTab('advances', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'advances' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'advances' ? '3px solid #34d399' : 'none'};">📈 4. Avances y Movimientos</button>
           </div>
 
           <!-- Contenido Dinámico del Módulo Activo -->
-          <div id="superadmin-tab-content" style="margin-bottom: 2rem;">
-            <div style="background: #0b132b; border-radius: 12px; padding: 1.25rem; border: 1px solid rgba(255,255,255,0.1);">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
-                <h3 style="font-size: 1.25rem; color: #fbbf24; margin: 0; font-weight: 800;">👥 Gestión de Usuarios y Clientes (Supabase)</h3>
-                <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula..." style="padding: 0.5rem 0.8rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; width: 280px;">
-              </div>
-              <div id="sa-users-list-wrapper" style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
-                  <thead>
-                    <tr style="border-bottom: 2px solid rgba(255,255,255,0.2); color: #34d399; text-transform: uppercase; font-size: 0.75rem;">
-                      <th style="padding: 0.75rem;">Usuario / Cédula</th>
-                      <th style="padding: 0.75rem;">Nombre Completo</th>
-                      <th style="padding: 0.75rem;">Rol</th>
-                      <th style="padding: 0.75rem;">Contacto</th>
-                      <th style="padding: 0.75rem;">Estado</th>
-                      <th style="padding: 0.75rem; text-align: right;">Acciones de Gestión</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${userRowsHtml}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Contenedor Canvas para Chart.js -->
-          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem;" id="sa-global-chart-wrapper">
-            <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;">📊 Gráfica de Rendimiento Financiero (Chart.js)</h4>
-            <div style="position: relative; height: 300px; width: 100%;">
-              <canvas id="superadminChart"></canvas>
-            </div>
-          </div>
+          <div id="superadmin-tab-content" style="margin-bottom: 1rem;"></div>
         </div>
       `;
 
@@ -253,31 +222,13 @@ const superadminModule = {
       console.error("Fallo inyectando HTML en overlay:", e);
     }
 
-    // 7. Sincronizaciones secundarias (drawer y chart) sin bloquear
+    // 7. Sincronizaciones secundarias y renderizado inicial de pestaña
     try {
       this.renderDrawerSection();
     } catch(e) {}
 
     try {
-      const searchInput = document.getElementById('sa-users-search');
-      if (searchInput) {
-        searchInput.oninput = () => {
-          const query = searchInput.value.toLowerCase().trim();
-          const filtered = users.filter(u =>
-            (u.name && u.name.toLowerCase().includes(query)) ||
-            (u.username && u.username.toLowerCase().includes(query)) ||
-            (u.documentNumber && u.documentNumber.toLowerCase().includes(query)) ||
-            (u.role && u.role.toLowerCase().includes(query))
-          );
-          this.renderUsersListTable(filtered);
-        };
-      }
-    } catch(e) {}
-
-    try {
-      setTimeout(() => {
-        this.initSuperadminChart();
-      }, 100);
+      await this.renderCurrentTab();
     } catch(e) {}
   },
 
