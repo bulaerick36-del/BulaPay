@@ -935,30 +935,32 @@ const superadminModule = {
 
   async renderAdvancesTab(container) {
     container.innerHTML = `
-      <div class="superadmin-card" style="background: var(--bg-card); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color);">
+      <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(168, 85, 247, 0.25) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
           <div>
-            <h3 class="title-gradient" style="font-size: 1.3rem; margin-bottom: 0.25rem;">📈 Módulo de Avances y Movimientos Financieros</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Evolución del flujo monetario y avances registrados en el tiempo (Marzo a Octubre) por usuario.</p>
+            <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); padding: 0.3rem 0.8rem; font-weight: 800; font-size: 0.78rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.06em; box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);">
+              ⚡ NÚCLEOS OPERATIVOS DE ALTO RANGO • MÓDULO ÉLITE FANTASMA
+            </div>
+            <h3 style="font-size: 1.45rem; font-weight: 900; margin-top: 0.5rem; margin-bottom: 0.25rem; background: linear-gradient(135deg, #c084fc 0%, #38bdf8 50%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 8px rgba(168, 85, 247, 0.3));">📈 Módulo de Avances y Flujo de Núcleos Operativos</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Supervisión estratégica exclusiva para <strong>Supervisores de Zona</strong>, <strong>Agentes Independientes</strong> y <strong>Comercios</strong>. <span style="color: #f43f5e; font-weight: 600;">(Agentes de Ruta Excluidos)</span></p>
           </div>
         </div>
 
-        <!-- FILTROS Y CONTROLES DE AVANCES -->
-        <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+        <!-- FILTROS Y CONTROLES DE AVANCES (ESTILO FANTASMA ÉLITE) -->
+        <div style="background: linear-gradient(180deg, #0b132b 0%, #0f172a 100%); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; justify-content: space-between; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 20px -5px rgba(0,0,0,0.5);">
           <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
             <div>
-              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; font-weight: 700;">👤 Seleccionar Usuario / Agente:</label>
-              <select id="sa-advances-user-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.55rem 0.9rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 220px;">
+              <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #c084fc; margin-bottom: 0.35rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;">👑 Selector Élite de Núcleos Operativos:</label>
+              <select id="sa-advances-user-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.4); background: #1c2541; color: #ffffff; font-weight: 700; min-width: 260px; outline: none; box-shadow: 0 0 10px rgba(168, 85, 247, 0.15);">
                 <option value="king">👑 King (Supervisor de Zona)</option>
-                <option value="daina">💼 Daina (Agente Logístico)</option>
-                <option value="carlos">👤 Carlos Mendoza (Agente)</option>
+                <option value="carlos">💼 Carlos Mendoza (Agente Independiente)</option>
                 <option value="admin">🔑 Admin General (Master)</option>
               </select>
             </div>
 
             <div>
-              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; font-weight: 700;">📅 Filtro de Rango / Meses:</label>
-              <select id="sa-advances-month-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.55rem 0.9rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 220px;">
+              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">📅 Filtro de Rango / Meses:</label>
+              <select id="sa-advances-month-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 220px; outline: none;">
                 <option value="all">📅 Todos los Meses (Marzo - Octubre)</option>
                 <option value="mar-jun">🌱 Trimestre Inicial (Marzo - Junio)</option>
                 <option value="jul-oct">🚀 Periodo Reciente (Julio - Octubre)</option>
@@ -974,29 +976,29 @@ const superadminModule = {
             </div>
           </div>
 
-          <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.8rem; color: #34d399; font-weight: 700;">
-            📊 Gráfico solo de lectura
+          <div style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.8rem; color: #c084fc; font-weight: 800; display: flex; align-items: center; gap: 0.4rem;">
+            ⚡ Núcleos Auditados • Solo Lectura
           </div>
         </div>
 
         <!-- TARJETAS DE MÉTRICAS DEL USUARIO SELECCIONADO -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-advances-metrics">
-          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+          <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
             <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Monto Acumulado Octubre</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #34d399;" id="adv-metric-total">$29,500,000</div>
           </div>
-          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+          <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
             <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Promedio Mensual Movido</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #60a5fa;" id="adv-metric-avg">$13,512,500</div>
           </div>
-          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+          <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
             <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Pico Máximo de Flujo</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">Octubre 2026</div>
           </div>
         </div>
 
         <!-- CONTENEDOR GRÁFICO CHART.JS -->
-        <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem;">
+        <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1.25rem;">
           <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;" id="sa-advances-chart-title">📈 Evolución Temporal del Dinero (Marzo - Octubre)</h4>
           <div style="position: relative; height: 350px; width: 100%;">
             <canvas id="saAdvancesCanvas"></canvas>
@@ -1009,16 +1011,49 @@ const superadminModule = {
       const allUsers = await window.BulaPayDB.getAllUsers();
       const userSelect = document.getElementById('sa-advances-user-select');
       if (allUsers && allUsers.length > 0 && userSelect) {
+        // Función de filtrado estricto: Excluir Agentes de Ruta / Logísticos y permitir solo Supervisores, Agentes Independientes y Comercios/Otros
+        const isAllowedRole = (u) => {
+          if (!u) return false;
+          const role = (u.role || '').toLowerCase().trim();
+          const username = (u.username || '').toLowerCase().trim();
+
+          // Exclusión estricta de Agentes de Ruta o Logísticos
+          if (role.includes('ruta') || role.includes('logístico') || role.includes('logistico') || username === 'daina') {
+            return false;
+          }
+
+          // Inclusión permitida: Supervisor, Master, Agente Independiente, Comercios/Otros
+          if (role.includes('supervisor') || role.includes('master') || role.includes('admin') ||
+              role.includes('agente independiente') || role === 'agente' || role.includes('independiente') ||
+              role.includes('comercio') || role.includes('compraventa') || role.includes('mercado') || role.includes('otros')) {
+            return true;
+          }
+
+          return false;
+        };
+
         allUsers.forEach(u => {
-          if (!['king', 'daina', 'carlos', 'admin'].includes(u.username.toLowerCase())) {
-            const opt = document.createElement('option');
-            opt.value = u.username.toLowerCase();
-            opt.textContent = `👤 ${u.name || u.username} (${u.role || 'Usuario'})`;
-            userSelect.appendChild(opt);
+          const uNameLower = (u.username || '').toLowerCase().trim();
+          if (!['king', 'carlos', 'admin'].includes(uNameLower)) {
+            if (isAllowedRole(u)) {
+              const opt = document.createElement('option');
+              opt.value = uNameLower;
+              const roleLower = (u.role || '').toLowerCase();
+              let icon = '💼';
+              if (roleLower.includes('supervisor') || roleLower.includes('master') || roleLower.includes('admin')) {
+                icon = '👑';
+              } else if (roleLower.includes('comercio') || roleLower.includes('compraventa') || roleLower.includes('mercado')) {
+                icon = '🛒';
+              }
+              opt.textContent = `${icon} ${u.name || u.username} (${u.role || 'Núcleo Operativo'})`;
+              userSelect.appendChild(opt);
+            }
           }
         });
       }
-    } catch(e) {}
+    } catch(e) {
+      console.warn("Fallo filtrando usuarios para selector de avances:", e);
+    }
 
     setTimeout(() => {
       this.updateAdvancesChart();
@@ -1041,13 +1076,8 @@ const superadminModule = {
         data: [2500000, 4800000, 7200000, 10500000, 14000000, 18300000, 23100000, 29500000],
         advances: [1200000, 2100000, 3400000, 5000000, 6800000, 9100000, 11500000, 14800000]
       },
-      daina: {
-        name: 'Daina (Agente Logístico)',
-        data: [1800000, 3500000, 5900000, 8800000, 11500000, 15200000, 19800000, 24000000],
-        advances: [900000, 1700000, 2800000, 4200000, 5600000, 7500000, 9900000, 12100000]
-      },
       carlos: {
-        name: 'Carlos Mendoza (Agente)',
+        name: 'Carlos Mendoza (Agente Independiente)',
         data: [1200000, 2900000, 4500000, 6800000, 9200000, 12400000, 16100000, 20500000],
         advances: [600000, 1400000, 2100000, 3300000, 4500000, 6100000, 8000000, 10200000]
       },
