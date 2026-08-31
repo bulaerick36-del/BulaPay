@@ -2349,6 +2349,21 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   transform: translateY(-1px);
 }
 
+/* BOTÓN DE SOPORTE BARRA SUPERIOR (CONTÁCTANOS) */
+#btn-top-contactus {
+  transition: all 0.25s ease-in-out !important;
+}
+
+#btn-top-contactus:hover {
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.6) !important;
+}
+
+#btn-top-contactus:active {
+  transform: translateY(0) scale(0.98) !important;
+}
+
 
 
 

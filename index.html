@@ -35,12 +35,19 @@
         </a>
       </div>
 
-      <!-- Información del usuario logueado -->
-      <div class="user-nav-info" id="user-nav-info" style="display: none;">
-        <!-- Elementos ocultos para mantener compatibilidad con scripts existentes -->
-        <span id="nav-user-name" style="display: none;">Usuario</span>
-        <span id="nav-user-role" style="display: none;">Rol</span>
-        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <button type="button" id="btn-top-contactus" onclick="if(window.authModule) window.authModule.openSupportModal();" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.5rem 1.1rem; font-size: 0.85rem; font-weight: 800; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: all 0.2s;">
+          💬 Contáctanos
+        </button>
+        
+        <!-- Información del usuario logueado -->
+        <div class="user-nav-info" id="user-nav-info" style="display: none;">
+          <!-- Elementos ocultos para mantener compatibilidad con scripts existentes -->
+          <span id="nav-user-name" style="display: none;">Usuario</span>
+          <span id="nav-user-role" style="display: none;">Rol</span>
+          <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+        </div>
       </div>
     </div>
   </header>
@@ -123,12 +130,6 @@
             <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
           </div>
           <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Acceder al Portal</button>
-          
-          <div style="margin-top: 1rem; text-align: center;">
-            <button type="button" onclick="if(window.authModule) window.authModule.openSupportModal();" style="background: none; border: none; color: #38bdf8; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: underline; transition: all 0.2s;">
-              🔑 ¿Problemas para ingresar o necesitas ayuda?
-            </button>
-          </div>
         </form>
 
         <!-- Formulario Registrarse (Agente Independiente) -->
@@ -217,12 +218,8 @@
           </div>
         </form>
 
-        <div class="auth-footer" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; margin-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
-          <p id="auth-switch-text" style="margin: 0;">¿No tienes cuenta? <a href="#" id="auth-link-register">Regístrate gratis</a></p>
-          
-          <button type="button" id="btn-global-login-support" onclick="if(window.authModule) window.authModule.openSupportModal();" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 800; font-size: 0.85rem; padding: 0.6rem 1.1rem; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; transition: all 0.2s; box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);">
-            🔑 ¿Problemas para ingresar o necesitas ayuda?
-          </button>
+        <div class="auth-footer">
+          <p id="auth-switch-text">¿No tienes cuenta? <a href="#" id="auth-link-register">Regístrate gratis</a></p>
         </div>
       </div>
     </section>
@@ -247,12 +244,6 @@
             <input type="password" id="agent-login-password" placeholder="••••••••" required autocomplete="current-password">
           </div>
           <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Acceder al Portal</button>
-
-          <div style="margin-top: 1rem; text-align: center;">
-            <button type="button" onclick="if(window.authModule) window.authModule.openSupportModal();" style="background: none; border: none; color: #38bdf8; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: underline; transition: all 0.2s;">
-              🔑 ¿Problemas para ingresar o necesitas ayuda?
-            </button>
-          </div>
         </form>
 
         <div class="auth-note" style="margin-top: 1.5rem;">
