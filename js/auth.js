@@ -479,6 +479,69 @@ const authModule = {
       modal.classList.remove('active');
       this.isProfileModalOpen = false;
     }
+  },
+
+  openSupportModal() {
+    const modal = document.getElementById('modal-login-support');
+    if (modal) {
+      modal.style.display = 'flex';
+    }
+  },
+
+  closeSupportModal() {
+    const modal = document.getElementById('modal-login-support');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  },
+
+  async handleSupportSubmit(e) {
+    if (e) {
+      e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+
+    const nameInput = document.getElementById('support-name');
+    const roleSelect = document.getElementById('support-role');
+    const docInput = document.getElementById('support-doc');
+    const msgInput = document.getElementById('support-message');
+
+    if (!nameInput || !docInput || !msgInput) return;
+
+    const nameVal = nameInput.value.trim();
+    const roleVal = roleSelect ? roleSelect.value : 'Usuario';
+    const docVal = docInput.value.trim();
+    const msgVal = msgInput.value.trim();
+
+    if (!nameVal || !docVal || !msgVal) {
+      alert('⚠️ Por favor completa todos los campos del formulario de soporte.');
+      return;
+    }
+
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
+        await window.BulaPayDB.createSupportTicket({
+          name: nameVal,
+          role: roleVal,
+          documentNumber: docVal,
+          message: msgVal
+        });
+
+        alert('✅ ¡Tu mensaje de soporte ha sido enviado con éxito! El Superadministrador lo revisará de inmediato.');
+
+        nameInput.value = '';
+        docInput.value = '';
+        msgInput.value = '';
+        this.closeSupportModal();
+
+        if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
+          window.superadminModule.loadSupportTickets();
+        }
+      }
+    } catch(err) {
+      console.error("Error al enviar solicitud de soporte:", err);
+      alert('❌ Ocurrió un error al enviar la solicitud. Por favor reintenta.');
+    }
   }
 };
 

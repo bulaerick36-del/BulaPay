@@ -3441,6 +3441,130 @@ const db = {
       throw error;
     }
     return data;
+  },
+
+  // ==========================================
+  // MÓDULO DE SOPORTE Y MENSAJERÍA DIRECTA
+  // ==========================================
+  async createSupportTicket(ticketData) {
+    const newTicket = {
+      id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      name: ticketData.name || 'Sin Nombre',
+      role: ticketData.role || 'Usuario',
+      document_number: ticketData.documentNumber || ticketData.document_number || 'N/A',
+      message: ticketData.message || '',
+      status: 'Pendiente',
+      created_at: new Date().toISOString()
+    };
+
+    // 1. Intentar persistir en Supabase
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase.from('support_tickets').insert([newTicket]).select();
+        if (!error && data && data.length > 0) {
+          console.log("✅ Ticket de soporte guardado en Supabase:", data[0]);
+          this._saveSupportTicketLocal(data[0]);
+          return data[0];
+        }
+      }
+    } catch(e) {
+      console.warn("Fallo guardando ticket en Supabase, usando almacenamiento local:", e);
+    }
+
+    // 2. Fallback seguro local
+    this._saveSupportTicketLocal(newTicket);
+    return newTicket;
+  },
+
+  _saveSupportTicketLocal(ticket) {
+    try {
+      const raw = localStorage.getItem('bula_support_tickets');
+      const tickets = raw ? JSON.parse(raw) : [];
+      const existsIndex = tickets.findIndex(t => t.id === ticket.id);
+      if (existsIndex >= 0) {
+        tickets[existsIndex] = ticket;
+      } else {
+        tickets.unshift(ticket);
+      }
+      localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+    } catch(e) {
+      console.warn("Error guardando ticket en localStorage:", e);
+    }
+  },
+
+  async getSupportTickets() {
+    let supabaseTickets = [];
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+          supabaseTickets = data;
+        }
+      }
+    } catch(e) {
+      console.warn("Fallo leyendo tickets de Supabase:", e);
+    }
+
+    let localTickets = [];
+    try {
+      const raw = localStorage.getItem('bula_support_tickets');
+      if (raw) localTickets = JSON.parse(raw);
+    } catch(e) {}
+
+    const ticketsMap = new Map();
+    supabaseTickets.forEach(t => ticketsMap.set(t.id, t));
+    localTickets.forEach(t => {
+      if (!ticketsMap.has(t.id)) ticketsMap.set(t.id, t);
+    });
+
+    const allTickets = Array.from(ticketsMap.values());
+    allTickets.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    return allTickets;
+  },
+
+  async updateSupportTicketStatus(ticketId, newStatus) {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('support_tickets').update({ status: newStatus }).eq('id', ticketId);
+      }
+    } catch(e) {
+      console.warn("Fallo actualizando ticket en Supabase:", e);
+    }
+
+    try {
+      const raw = localStorage.getItem('bula_support_tickets');
+      if (raw) {
+        const tickets = JSON.parse(raw);
+        const target = tickets.find(t => t.id === ticketId);
+        if (target) {
+          target.status = newStatus;
+          localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+        }
+      }
+    } catch(e) {}
+  },
+
+  async deleteSupportTicket(ticketId) {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('support_tickets').delete().eq('id', ticketId);
+      }
+    } catch(e) {
+      console.warn("Fallo eliminando ticket en Supabase:", e);
+    }
+
+    try {
+      const raw = localStorage.getItem('bula_support_tickets');
+      if (raw) {
+        let tickets = JSON.parse(raw);
+        tickets = tickets.filter(t => t.id !== ticketId);
+        localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+      }
+    } catch(e) {}
   }
 };
 

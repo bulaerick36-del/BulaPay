@@ -222,12 +222,13 @@ const superadminModule = {
             </div>
           </div>
 
-          <!-- Pestañas de Módulos Flotantes (Navegación Dinámica de 4 Pestañas) -->
+          <!-- Pestañas de Módulos Flotantes (Navegación Dinámica de 5 Pestañas) -->
           <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; overflow-x: auto;">
             <button id="sa-tab-users" class="sa-floating-tab active" onclick="superadminModule.switchSuperadminTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #34d399; font-weight: 700; cursor: pointer; border-bottom: 3px solid #34d399;">👥 1. Usuarios y Clientes</button>
             <button id="sa-tab-contracts" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📜 2. Contratos y Términos</button>
             <button id="sa-tab-performance" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('resources', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📊 3. Recurso Movido &amp; Gráficas</button>
             <button id="sa-tab-advances" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('advances', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📈 4. Avances y Movimientos</button>
+            <button id="sa-tab-support" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('support', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">💬 5. Soporte y Mensajes</button>
           </div>
 
           <!-- Contenedores Independientes por Pestaña -->
@@ -236,6 +237,7 @@ const superadminModule = {
             <div id="tab-content-contracts" class="sa-tab-pane" style="display: none;"></div>
             <div id="tab-content-resources" class="sa-tab-pane" style="display: none;"></div>
             <div id="tab-content-advances" class="sa-tab-pane" style="display: none;"></div>
+            <div id="tab-content-support" class="sa-tab-pane" style="display: none;"></div>
           </div>
         </div>
       `;
@@ -348,6 +350,7 @@ const superadminModule = {
     else if (target === 2 || target === '2' || target === 'contracts') key = 'contracts';
     else if (target === 3 || target === '3' || target === 'resources' || target === 'performance') key = 'resources';
     else if (target === 4 || target === '4' || target === 'advances') key = 'advances';
+    else if (target === 5 || target === '5' || target === 'support') key = 'support';
 
     this.activeTab = key === 'resources' ? 'performance' : key;
 
@@ -356,7 +359,8 @@ const superadminModule = {
       { id: 'tab-content-users', key: 'users' },
       { id: 'tab-content-contracts', key: 'contracts' },
       { id: 'tab-content-resources', key: 'resources' },
-      { id: 'tab-content-advances', key: 'advances' }
+      { id: 'tab-content-advances', key: 'advances' },
+      { id: 'tab-content-support', key: 'support' }
     ];
 
     panes.forEach(pane => {
@@ -375,7 +379,8 @@ const superadminModule = {
       users: 'sa-tab-users',
       contracts: 'sa-tab-contracts',
       resources: 'sa-tab-performance',
-      advances: 'sa-tab-advances'
+      advances: 'sa-tab-advances',
+      support: 'sa-tab-support'
     };
 
     Object.keys(btnMap).forEach(k => {
@@ -404,6 +409,9 @@ const superadminModule = {
       } else if (key === 'advances') {
         const c = document.getElementById('tab-content-advances');
         if (c) await this.renderAdvancesTab(c);
+      } else if (key === 'support') {
+        const c = document.getElementById('tab-content-support');
+        if (c) await this.renderSupportTab(c);
       }
     } catch(err) {
       console.warn("Fallo al renderizar pestaña activa:", err);
@@ -1344,6 +1352,189 @@ const superadminModule = {
 
     this.setSuperadminPassword(newPwd.trim());
     alert('🎉 Contraseña de Superadministrador actualizada correctamente.');
+  },
+
+  // ==========================================
+  // PESTAÑA 5: SOPORTE Y MENSAJES DIRECTOS
+  // ==========================================
+  async renderSupportTab(container) {
+    container.innerHTML = `
+      <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(168, 85, 247, 0.25) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+          <div>
+            <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 0.3rem 0.8rem; font-weight: 800; font-size: 0.78rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.06em;">
+              💬 BUZÓN DE MENSAJES Y TICKETS EN TIEMPO REAL
+            </div>
+            <h3 style="font-size: 1.45rem; font-weight: 900; margin-top: 0.5rem; margin-bottom: 0.25rem; background: linear-gradient(135deg, #38bdf8 0%, #a855f7 50%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">💬 Centro de Soporte y Consultas Directas</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Gestión e inspección de inquietudes enviadas desde la pantalla de inicio de sesión de BulaPay.</p>
+          </div>
+          <div>
+            <button onclick="superadminModule.loadSupportTickets()" style="padding: 0.6rem 1.1rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">
+              🔄 Actualizar Mensajes
+            </button>
+          </div>
+        </div>
+
+        <!-- TARJETAS DE MÉTRICAS DE SOPORTE -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div style="background: #0b132b; border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 1.1rem; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total de Mensajes</div>
+              <div style="font-size: 1.6rem; font-weight: 900; color: #ffffff;" id="sa-supp-count-total">0</div>
+            </div>
+            <div style="font-size: 2rem;">📬</div>
+          </div>
+          <div style="background: #0b132b; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 1.1rem; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Pendientes de Atención</div>
+              <div style="font-size: 1.6rem; font-weight: 900; color: #fbbf24;" id="sa-supp-count-pending">0</div>
+            </div>
+            <div style="font-size: 2rem;">⏳</div>
+          </div>
+          <div style="background: #0b132b; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 1.1rem; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Resueltos / Atendidos</div>
+              <div style="font-size: 1.6rem; font-weight: 900; color: #34d399;" id="sa-supp-count-resolved">0</div>
+            </div>
+            <div style="font-size: 2rem;">✅</div>
+          </div>
+        </div>
+
+        <!-- TABLA DE GESTIÓN DE TICKETS -->
+        <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden;">
+          <div style="padding: 1rem 1.25rem; background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 700; color: #f8fafc; font-size: 0.95rem;">
+            📋 Registros Directos de Soporte
+          </div>
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; min-width: 800px;">
+              <thead>
+                <tr style="background: #1c2541; border-bottom: 1px solid rgba(255,255,255,0.1); color: #38bdf8; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">
+                  <th style="padding: 0.9rem 1rem;">📅 Fecha / Hora</th>
+                  <th style="padding: 0.9rem 1rem;">👤 Usuario / Cédula</th>
+                  <th style="padding: 0.9rem 1rem;">🏷️ Rol / Cargo</th>
+                  <th style="padding: 0.9rem 1rem;">💬 Mensaje / Inquietud</th>
+                  <th style="padding: 0.9rem 1rem;">📌 Estado</th>
+                  <th style="padding: 0.9rem 1rem; text-align: center;">⚡ Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="sa-support-table-body">
+                <tr>
+                  <td colspan="6" style="padding: 2rem; text-align: center; color: #94a3b8;">Cargando mensajes de soporte...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    await this.loadSupportTickets();
+  },
+
+  async loadSupportTickets() {
+    const tbody = document.getElementById('sa-support-table-body');
+    if (!tbody) return;
+
+    let tickets = [];
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getSupportTickets === 'function') {
+        tickets = await window.BulaPayDB.getSupportTickets();
+      }
+    } catch(e) {
+      console.warn("Fallo cargando tickets de soporte:", e);
+    }
+
+    const countTotalEl = document.getElementById('sa-supp-count-total');
+    const countPendingEl = document.getElementById('sa-supp-count-pending');
+    const countResolvedEl = document.getElementById('sa-supp-count-resolved');
+
+    const pendingCount = tickets.filter(t => t.status === 'Pendiente').length;
+    const resolvedCount = tickets.filter(t => t.status === 'Resuelto').length;
+
+    if (countTotalEl) countTotalEl.textContent = tickets.length;
+    if (countPendingEl) countPendingEl.textContent = pendingCount;
+    if (countResolvedEl) countResolvedEl.textContent = resolvedCount;
+
+    if (tickets.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="padding: 2.5rem; text-align: center; color: #94a3b8;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
+            <div style="font-weight: 700; color: #ffffff;">No hay mensajes de soporte recibidos.</div>
+            <div style="font-size: 0.8rem; margin-top: 0.25rem;">Los mensajes enviados desde la pantalla de login aparecerán aquí al instante.</div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    let rowsHtml = '';
+    tickets.forEach(t => {
+      const dateStr = t.created_at ? new Date(t.created_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
+      const isPending = t.status === 'Pendiente';
+
+      const statusBadge = isPending
+        ? `<span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.72rem; display: inline-block;">⏳ Pendiente</span>`
+        : `<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.72rem; display: inline-block;">✅ Resuelto</span>`;
+
+      const roleBadge = `<span style="background: rgba(168, 85, 247, 0.18); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); padding: 0.2rem 0.55rem; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">${t.role || 'Usuario'}</span>`;
+
+      rowsHtml += `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); background: ${isPending ? 'rgba(245, 158, 11, 0.02)' : 'transparent'};">
+          <td style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
+            ${dateStr}
+          </td>
+          <td style="padding: 0.85rem 1rem;">
+            <div style="font-weight: 800; color: #ffffff; font-size: 0.9rem;">${t.name || 'Sin Nombre'}</div>
+            <div style="font-size: 0.75rem; color: #38bdf8; font-weight: 600; margin-top: 0.15rem;">💳 CC: ${t.document_number || 'N/A'}</div>
+          </td>
+          <td style="padding: 0.85rem 1rem; vertical-align: middle;">
+            ${roleBadge}
+          </td>
+          <td style="padding: 0.85rem 1rem; color: #e2e8f0; line-height: 1.4; max-width: 320px;">
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.83rem;">
+              "${t.message}"
+            </div>
+          </td>
+          <td style="padding: 0.85rem 1rem; vertical-align: middle;">
+            ${statusBadge}
+          </td>
+          <td style="padding: 0.85rem 1rem; vertical-align: middle; text-align: center;">
+            <div style="display: flex; gap: 0.4rem; justify-content: center;">
+              ${isPending ? `
+                <button onclick="superadminModule.toggleTicketStatus('${t.id}', 'Resuelto')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-weight: 700; border-radius: 6px; cursor: pointer;">
+                  ✅ Resolver
+                </button>
+              ` : `
+                <button onclick="superadminModule.toggleTicketStatus('${t.id}', 'Pendiente')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; font-weight: 700; border-radius: 6px; cursor: pointer;">
+                  ↩️ Pendiente
+                </button>
+              `}
+              <button onclick="superadminModule.deleteTicket('${t.id}')" style="padding: 0.4rem 0.6rem; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; font-weight: 700; border-radius: 6px; cursor: pointer;" title="Eliminar Ticket">
+                🗑️
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+    tbody.innerHTML = rowsHtml;
+  },
+
+  async toggleTicketStatus(id, newStatus) {
+    if (window.BulaPayDB && typeof window.BulaPayDB.updateSupportTicketStatus === 'function') {
+      await window.BulaPayDB.updateSupportTicketStatus(id, newStatus);
+      await this.loadSupportTickets();
+    }
+  },
+
+  async deleteTicket(id) {
+    if (!confirm('¿Estás seguro de eliminar este ticket de soporte?')) return;
+    if (window.BulaPayDB && typeof window.BulaPayDB.deleteSupportTicket === 'function') {
+      await window.BulaPayDB.deleteSupportTicket(id);
+      await this.loadSupportTickets();
+    }
   }
 };
 

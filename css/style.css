@@ -2336,6 +2336,19 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   word-break: break-word !important;
 }
 
+/* MODAL DE SOPORTE DIRECTO DE LOGIN */
+#modal-login-support input:focus,
+#modal-login-support select:focus,
+#modal-login-support textarea:focus {
+  border-color: #a855f7 !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.25) !important;
+}
+
+#modal-login-support button:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
 
 
 
