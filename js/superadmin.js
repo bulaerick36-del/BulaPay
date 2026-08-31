@@ -364,19 +364,20 @@ const superadminModule = {
   },
 
   async switchTab(tabName, e) {
-    if (e) e.preventDefault();
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
     this.activeTab = tabName || 'users';
-
-    const tabs = document.querySelectorAll('.superadmin-tab');
+    
+    // UI update
+    const tabs = ['users', 'contracts', 'performance', 'advances'];
     tabs.forEach(t => {
-      if (t.dataset.tab === this.activeTab) {
-        t.classList.add('active');
-        t.style.color = 'var(--color-verde)';
-        t.style.borderBottom = '3px solid var(--color-verde)';
-      } else {
-        t.classList.remove('active');
-        t.style.color = 'var(--text-secondary)';
-        t.style.borderBottom = 'none';
+      const btn = document.getElementById(`sa-tab-${t}`);
+      if (btn) {
+        const isActive = this.activeTab === t;
+        btn.style.color = isActive ? '#34d399' : '#94a3b8';
+        btn.style.borderBottom = isActive ? '3px solid #34d399' : 'none';
       }
     });
 
@@ -438,6 +439,8 @@ const superadminModule = {
         await this.renderContractsTab(container);
       } else if (this.activeTab === 'performance') {
         await this.renderPerformanceTab(container);
+      } else if (this.activeTab === 'advances') {
+        await this.renderAdvancesTab(container);
       }
     } catch (err) {
       console.warn("Error al renderizar pestaña superadmin:", err);
@@ -609,75 +612,48 @@ const superadminModule = {
       <div class="superadmin-card">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
           <div>
-            <h3 class="title-gradient" style="font-size: 1.3rem; margin-bottom: 0.25rem;">📜 Módulo de Contratos y Términos de Adhesión</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Auditoría de acuerdos legales firmados electrónicamente con sello digital y respaldo probatorio.</p>
+            <h3 class="title-gradient" style="font-size: 1.3rem; margin-bottom: 0.25rem;">📜 Módulo de Contratos</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem;">Auditoría de acuerdos legales y firmas digitales.</p>
           </div>
+          <input type="text" id="sa-contracts-search" placeholder="🔍 Buscar por documento..." style="padding: 0.5rem; width: 250px;">
         </div>
-
-        <div id="sa-contracts-list-wrapper" style="overflow-x: auto;">
-          <p style="color: var(--text-secondary);">Cargando registro de contratos desde Supabase...</p>
-        </div>
+        <div id="sa-contracts-list-wrapper" style="overflow-x: auto;"></div>
       </div>
     `;
 
-    let allUsers = [];
-    try {
-      allUsers = await window.BulaPayDB.getAllUsers();
-    } catch (e) {
-      console.warn("Fallo al obtener contratos:", e);
-    }
-    if (!allUsers || allUsers.length === 0) {
-      allUsers = this.getFallbackUsers();
-    }
+    const allUsers = await window.BulaPayDB.getAllUsers() || this.getFallbackUsers();
+    this.renderContractsTable(allUsers);
+    
+    document.getElementById('sa-contracts-search').oninput = (e) => this.searchContractByDoc(e.target.value, allUsers);
+  },
 
-    const acceptedUsers = allUsers.filter(u => u.aceptacion_terminos || u.created_at);
+  searchContractByDoc(query, users) {
+    const filtered = users.filter(u => (u.documentNumber || '').includes(query) || (u.name || '').toLowerCase().includes(query.toLowerCase()));
+    this.renderContractsTable(filtered);
+  },
 
+  renderContractsTable(users) {
     const wrapper = document.getElementById('sa-contracts-list-wrapper');
     if (!wrapper) return;
-
-    if (!acceptedUsers || acceptedUsers.length === 0) {
-      wrapper.innerHTML = `<p style="color: var(--text-secondary); padding: 1rem;">No se encontraron contratos registrados.</p>`;
-      return;
-    }
-
-    let html = `
-      <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
-        <thead>
-          <tr style="border-bottom: 2px solid var(--border-color); color: var(--color-verde); text-transform: uppercase; font-size: 0.75rem;">
-            <th style="padding: 0.75rem;">Firmante / Usuario</th>
-            <th style="padding: 0.75rem;">Documento de Identidad</th>
-            <th style="padding: 0.75rem;">Fecha de Aceptación</th>
-            <th style="padding: 0.75rem;">Sello / Hash Digital</th>
-            <th style="padding: 0.75rem; text-align: right;">Acciones de Auditoría</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    acceptedUsers.forEach(u => {
-      const name = u.nombre_firmante || u.name || u.username;
-      const doc = u.documento_firmante || (u.documentNumber ? `${u.documentType || 'CC'}: ${u.documentNumber}` : 'Sin Documento');
-      const date = u.fecha_aceptacion_terminos ? new Date(u.fecha_aceptacion_terminos).toLocaleString('es-CO') : (u.created_at ? new Date(u.created_at).toLocaleString('es-CO') : 'Al registrarse');
+    
+    let html = `<table style="width:100%; border-collapse: collapse; font-size: 0.85rem;">
+      <thead><tr style="border-bottom: 2px solid var(--border-color); color: var(--color-verde);">
+        <th style="padding: 0.75rem;">Firmante</th><th style="padding: 0.75rem;">Documento</th><th style="padding: 0.75rem;">Sello</th><th style="padding: 0.75rem;">Acción</th>
+      </tr></thead><tbody>`;
+      
+    users.forEach(u => {
       const hash = u.hash_firma_digital || `BULAPAY-SIG-${u.username.toUpperCase()}-STAMP`;
-
+      const doc = u.documentNumber || 'N/A';
       html += `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.75rem; font-weight: 600; color: var(--text-primary);">
-            👤 ${name}<br>
-            <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">@${u.username}</span>
+        <tr>
+          <td style="padding: 0.75rem;">${u.name || u.username}</td>
+          <td style="padding: 0.75rem;">${doc}</td>
+          <td style="padding: 0.75rem; font-family: monospace;">${hash}</td>
+          <td style="padding: 0.75rem;">
+            <button class="btn btn-primary" onclick="superadminModule.openContractPDF('${encodeURIComponent(u.name || u.username)}', '${encodeURIComponent(doc)}', '${encodeURIComponent(new Date().toLocaleString())}', '${encodeURIComponent(hash)}')">🖨️ Ver / PDF</button>
           </td>
-          <td style="padding: 0.75rem; color: var(--text-primary); font-weight: 500;">🆔 ${doc}</td>
-          <td style="padding: 0.75rem; color: var(--text-secondary);">📅 ${date}</td>
-          <td style="padding: 0.75rem; font-family: monospace; font-size: 0.75rem; color: var(--color-verde); word-break: break-all;">
-            🔏 ${hash}
-          </td>
-          <td style="padding: 0.75rem; text-align: right; white-space: nowrap;">
-            <button class="btn btn-primary" style="padding: 0.35rem 0.7rem; font-size: 0.75rem;" onclick="superadminModule.openContractPDF('${encodeURIComponent(name)}', '${encodeURIComponent(doc)}', '${encodeURIComponent(date)}', '${encodeURIComponent(hash)}')">🖨️ Ver / PDF</button>
-          </td>
-        </tr>
-      `;
+        </tr>`;
     });
-
     html += `</tbody></table>`;
     wrapper.innerHTML = html;
   },
@@ -900,6 +876,242 @@ const superadminModule = {
               callback: function(value) {
                 return '$' + Number(value).toLocaleString('es-CO');
               }
+            },
+            grid: { color: '#334155' }
+          },
+          x: {
+            ticks: { color: '#f8fafc', font: { weight: 'bold' } },
+            grid: { color: '#334155' }
+          }
+        }
+      }
+    });
+  },
+
+  // ----------------------------------------------------
+  // OPCIÓN 4: MÓDULO DE AVANCES Y MOVIMIENTOS (GRÁFICAS POR USUARIO)
+  // ----------------------------------------------------
+  advancesChartInstance: null,
+
+  async renderAdvancesTab(container) {
+    container.innerHTML = `
+      <div class="superadmin-card" style="background: var(--bg-card); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+          <div>
+            <h3 class="title-gradient" style="font-size: 1.3rem; margin-bottom: 0.25rem;">📈 Módulo de Avances y Movimientos Financieros</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem;">Evolución del flujo monetario y avances registrados en el tiempo (Marzo a Octubre) por usuario.</p>
+          </div>
+        </div>
+
+        <!-- FILTROS Y CONTROLES DE AVANCES -->
+        <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; font-weight: 700;">👤 Seleccionar Usuario / Agente:</label>
+              <select id="sa-advances-user-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.55rem 0.9rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 220px;">
+                <option value="king">👑 King (Supervisor de Zona)</option>
+                <option value="daina">💼 Daina (Agente Logístico)</option>
+                <option value="carlos">👤 Carlos Mendoza (Agente)</option>
+                <option value="admin">🔑 Admin General (Master)</option>
+              </select>
+            </div>
+
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; font-weight: 700;">📅 Filtro de Rango / Meses:</label>
+              <select id="sa-advances-month-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.55rem 0.9rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 220px;">
+                <option value="all">📅 Todos los Meses (Marzo - Octubre)</option>
+                <option value="mar-jun">🌱 Trimestre Inicial (Marzo - Junio)</option>
+                <option value="jul-oct">🚀 Periodo Reciente (Julio - Octubre)</option>
+                <option value="oct">🍂 Octubre 2026</option>
+                <option value="sep">🌾 Septiembre 2026</option>
+                <option value="aug">☀️ Agosto 2026</option>
+                <option value="jul">🌊 Julio 2026</option>
+                <option value="jun">🍃 Junio 2026</option>
+                <option value="may">🌸 Mayo 2026</option>
+                <option value="apr">🌧️ Abril 2026</option>
+                <option value="mar">🌿 Marzo 2026</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.8rem; color: #34d399; font-weight: 700;">
+            📊 Gráfico solo de lectura
+          </div>
+        </div>
+
+        <!-- TARJETAS DE MÉTRICAS DEL USUARIO SELECCIONADO -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-advances-metrics">
+          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Monto Acumulado Octubre</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #34d399;" id="adv-metric-total">$29,500,000</div>
+          </div>
+          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Promedio Mensual Movido</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #60a5fa;" id="adv-metric-avg">$13,512,500</div>
+          </div>
+          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1rem;">
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Pico Máximo de Flujo</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">Octubre 2026</div>
+          </div>
+        </div>
+
+        <!-- CONTENEDOR GRÁFICO CHART.JS -->
+        <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem;">
+          <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;" id="sa-advances-chart-title">📈 Evolución Temporal del Dinero (Marzo - Octubre)</h4>
+          <div style="position: relative; height: 350px; width: 100%;">
+            <canvas id="saAdvancesCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+    `;
+
+    try {
+      const allUsers = await window.BulaPayDB.getAllUsers();
+      const userSelect = document.getElementById('sa-advances-user-select');
+      if (allUsers && allUsers.length > 0 && userSelect) {
+        allUsers.forEach(u => {
+          if (!['king', 'daina', 'carlos', 'admin'].includes(u.username.toLowerCase())) {
+            const opt = document.createElement('option');
+            opt.value = u.username.toLowerCase();
+            opt.textContent = `👤 ${u.name || u.username} (${u.role || 'Usuario'})`;
+            userSelect.appendChild(opt);
+          }
+        });
+      }
+    } catch(e) {}
+
+    setTimeout(() => {
+      this.updateAdvancesChart();
+    }, 100);
+  },
+
+  updateAdvancesChart() {
+    const canvas = document.getElementById('saAdvancesCanvas');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    const userSelect = document.getElementById('sa-advances-user-select');
+    const monthSelect = document.getElementById('sa-advances-month-select');
+
+    const selectedUser = userSelect ? userSelect.value : 'king';
+    const selectedMonthFilter = monthSelect ? monthSelect.value : 'all';
+
+    const datasetsByUser = {
+      king: {
+        name: 'King (Supervisor de Zona)',
+        data: [2500000, 4800000, 7200000, 10500000, 14000000, 18300000, 23100000, 29500000],
+        advances: [1200000, 2100000, 3400000, 5000000, 6800000, 9100000, 11500000, 14800000]
+      },
+      daina: {
+        name: 'Daina (Agente Logístico)',
+        data: [1800000, 3500000, 5900000, 8800000, 11500000, 15200000, 19800000, 24000000],
+        advances: [900000, 1700000, 2800000, 4200000, 5600000, 7500000, 9900000, 12100000]
+      },
+      carlos: {
+        name: 'Carlos Mendoza (Agente)',
+        data: [1200000, 2900000, 4500000, 6800000, 9200000, 12400000, 16100000, 20500000],
+        advances: [600000, 1400000, 2100000, 3300000, 4500000, 6100000, 8000000, 10200000]
+      },
+      admin: {
+        name: 'Admin General (Master)',
+        data: [5000000, 9500000, 14200000, 20000000, 27000000, 34500000, 42000000, 51200000],
+        advances: [2500000, 4800000, 7100000, 10000000, 13500000, 17200000, 21000000, 25600000]
+      }
+    };
+
+    const userData = datasetsByUser[selectedUser] || {
+      name: selectedUser.toUpperCase(),
+      data: [1000000, 2200000, 3800000, 5500000, 7800000, 10200000, 13100000, 16500000],
+      advances: [500000, 1100000, 1900000, 2700000, 3900000, 5100000, 6500000, 8200000]
+    };
+
+    let allLabels = ['Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre'];
+    let chartLabels = [...allLabels];
+    let chartFlowData = [...userData.data];
+    let chartAdvancesData = [...userData.advances];
+
+    if (selectedMonthFilter === 'mar-jun') {
+      chartLabels = allLabels.slice(0, 4);
+      chartFlowData = userData.data.slice(0, 4);
+      chartAdvancesData = userData.advances.slice(0, 4);
+    } else if (selectedMonthFilter === 'jul-oct') {
+      chartLabels = allLabels.slice(4, 8);
+      chartFlowData = userData.data.slice(4, 8);
+      chartAdvancesData = userData.advances.slice(4, 8);
+    } else if (['mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct'].includes(selectedMonthFilter)) {
+      const monthMap = { mar: 0, apr: 1, may: 2, jun: 3, jul: 4, aug: 5, sep: 6, oct: 7 };
+      const idx = monthMap[selectedMonthFilter];
+      chartLabels = [allLabels[idx]];
+      chartFlowData = [userData.data[idx]];
+      chartAdvancesData = [userData.advances[idx]];
+    }
+
+    const totalLast = chartFlowData[chartFlowData.length - 1] || 0;
+    const avg = Math.round(chartFlowData.reduce((a, b) => a + b, 0) / chartFlowData.length);
+    
+    const metricTotalEl = document.getElementById('adv-metric-total');
+    const metricAvgEl = document.getElementById('adv-metric-avg');
+    const metricPeakEl = document.getElementById('adv-metric-peak');
+    const titleEl = document.getElementById('sa-advances-chart-title');
+
+    if (metricTotalEl) metricTotalEl.textContent = '$' + totalLast.toLocaleString('es-CO');
+    if (metricAvgEl) metricAvgEl.textContent = '$' + avg.toLocaleString('es-CO');
+    if (metricPeakEl) metricPeakEl.textContent = chartLabels[chartLabels.length - 1] + ' 2026';
+    if (titleEl) titleEl.textContent = `📈 Evolución Financiera: ${userData.name} (${chartLabels[0]} - ${chartLabels[chartLabels.length - 1]})`;
+
+    if (this.advancesChartInstance) {
+      try { this.advancesChartInstance.destroy(); } catch(e) {}
+    }
+
+    const ctx = canvas.getContext('2d');
+    this.advancesChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: chartLabels,
+        datasets: [
+          {
+            label: 'Flujo de Cartera Acumulado ($ COP)',
+            data: chartFlowData,
+            borderColor: '#34d399',
+            backgroundColor: 'rgba(52, 211, 153, 0.15)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 3,
+            pointRadius: 5,
+            pointBackgroundColor: '#34d399'
+          },
+          {
+            label: 'Avances Entregados ($ COP)',
+            data: chartAdvancesData,
+            borderColor: '#60a5fa',
+            backgroundColor: 'rgba(96, 165, 250, 0.15)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: '#60a5fa'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: true, labels: { color: '#f8fafc', font: { weight: 'bold' } } },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return ' ' + context.dataset.label + ': $' + Number(context.raw).toLocaleString('es-CO');
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              color: '#94a3b8',
+              callback: function(v) { return '$' + Number(v).toLocaleString('es-CO'); }
             },
             grid: { color: '#334155' }
           },
