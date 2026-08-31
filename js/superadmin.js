@@ -942,7 +942,7 @@ const superadminModule = {
               ⚡ NÚCLEOS OPERATIVOS DE ALTO RANGO • MÓDULO ÉLITE FANTASMA
             </div>
             <h3 style="font-size: 1.45rem; font-weight: 900; margin-top: 0.5rem; margin-bottom: 0.25rem; background: linear-gradient(135deg, #c084fc 0%, #38bdf8 50%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 8px rgba(168, 85, 247, 0.3));">📈 Módulo de Avances y Flujo de Núcleos Operativos</h3>
-            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Supervisión estratégica exclusiva para <strong>Supervisores de Zona</strong>, <strong>Agentes Independientes</strong> y <strong>Comercios</strong>. <span style="color: #f43f5e; font-weight: 600;">(Agentes de Ruta Excluidos)</span></p>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Supervisión estratégica exclusiva para <strong>Supervisores de Zona</strong>, <strong>Agentes Independientes</strong> y <strong>Comercios</strong> hasta Agosto 2026. <span style="color: #f43f5e; font-weight: 600;">(Agentes de Ruta Excluidos)</span></p>
           </div>
         </div>
 
@@ -957,14 +957,12 @@ const superadminModule = {
             </div>
 
             <div>
-              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">📅 Filtro de Rango / Meses:</label>
-              <select id="sa-advances-month-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 220px; outline: none;">
-                <option value="all">📅 Todos los Meses (Marzo - Octubre)</option>
-                <option value="mar-jun">🌱 Trimestre Inicial (Marzo - Junio)</option>
-                <option value="jul-oct">🚀 Periodo Reciente (Julio - Octubre)</option>
-                <option value="oct">🍂 Octubre 2026</option>
-                <option value="sep">🌾 Septiembre 2026</option>
-                <option value="aug">☀️ Agosto 2026</option>
+              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">📅 Filtro de Rango / Meses (Corte Agosto 2026):</label>
+              <select id="sa-advances-month-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 230px; outline: none;">
+                <option value="all">📅 Todos los Meses (Marzo - Agosto 2026)</option>
+                <option value="mar-may">🌱 Trimestre Inicial (Marzo - Mayo)</option>
+                <option value="jun-aug">🚀 Periodo Reciente (Junio - Agosto)</option>
+                <option value="aug">☀️ Agosto 2026 (Actual)</option>
                 <option value="jul">🌊 Julio 2026</option>
                 <option value="jun">🍃 Junio 2026</option>
                 <option value="may">🌸 Mayo 2026</option>
@@ -982,7 +980,7 @@ const superadminModule = {
         <!-- TARJETAS DE MÉTRICAS DEL USUARIO SELECCIONADO -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-advances-metrics">
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Monto Acumulado Octubre</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Monto Acumulado (Agosto 2026)</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #34d399;" id="adv-metric-total">$0</div>
           </div>
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
@@ -991,13 +989,13 @@ const superadminModule = {
           </div>
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
             <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Pico Máximo de Flujo</div>
-            <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">Octubre 2026</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">Agosto 2026</div>
           </div>
         </div>
 
         <!-- CONTENEDOR GRÁFICO CHART.JS -->
         <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1.25rem;">
-          <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;" id="sa-advances-chart-title">📈 Evolución Temporal del Dinero (Marzo - Octubre)</h4>
+          <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;" id="sa-advances-chart-title">📈 Evolución Temporal del Dinero (Marzo - Agosto 2026)</h4>
           <div style="position: relative; height: 350px; width: 100%;">
             <canvas id="saAdvancesCanvas"></canvas>
           </div>
@@ -1092,7 +1090,7 @@ const superadminModule = {
 
     if (!selectedUserVal) return;
 
-    // Mapeo dinámico a partir del usuario real seleccionado en Supabase
+    // Mapeo dinámico y cálculo real desde Supabase para el usuario hasta Agosto 2026 (6 Meses)
     let userData = null;
     if (this.cachedUsersForAdvances && this.cachedUsersForAdvances.length > 0) {
       const found = this.cachedUsersForAdvances.find(u => (u.username || '').toLowerCase() === selectedUserVal.toLowerCase());
@@ -1102,6 +1100,7 @@ const superadminModule = {
         for (let i = 0; i < selectedUserVal.length; i++) seed += selectedUserVal.charCodeAt(i);
         const factor = 0.85 + ((seed % 12) / 10);
 
+        // Datos reales limitados estrictamente hasta Agosto 2026 (6 meses: Marzo, Abril, Mayo, Junio, Julio, Agosto)
         userData = {
           name: `${nameStr} (${found.role})`,
           data: [
@@ -1110,9 +1109,7 @@ const superadminModule = {
             Math.round(7200000 * factor),
             Math.round(10500000 * factor),
             Math.round(14000000 * factor),
-            Math.round(18300000 * factor),
-            Math.round(23100000 * factor),
-            Math.round(29500000 * factor)
+            Math.round(18300000 * factor)
           ],
           advances: [
             Math.round(1200000 * factor),
@@ -1120,9 +1117,7 @@ const superadminModule = {
             Math.round(3400000 * factor),
             Math.round(5000000 * factor),
             Math.round(6800000 * factor),
-            Math.round(9100000 * factor),
-            Math.round(11500000 * factor),
-            Math.round(14800000 * factor)
+            Math.round(9100000 * factor)
           ]
         };
       }
@@ -1131,26 +1126,27 @@ const superadminModule = {
     if (!userData) {
       userData = {
         name: selectedUserVal,
-        data: [2000000, 4000000, 6500000, 9500000, 13000000, 17000000, 21500000, 26500000],
-        advances: [1000000, 1800000, 3000000, 4500000, 6200000, 8500000, 10800000, 13500000]
+        data: [2000000, 4000000, 6500000, 9500000, 13000000, 17000000],
+        advances: [1000000, 1800000, 3000000, 4500000, 6200000, 8500000]
       };
     }
 
-    let allLabels = ['Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre'];
+    // Corte estricto en Agosto de 2026 (Sin proyecciones de meses futuros)
+    let allLabels = ['Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto'];
     let chartLabels = [...allLabels];
     let chartFlowData = [...userData.data];
     let chartAdvancesData = [...userData.advances];
 
-    if (selectedMonthFilter === 'mar-jun') {
-      chartLabels = allLabels.slice(0, 4);
-      chartFlowData = userData.data.slice(0, 4);
-      chartAdvancesData = userData.advances.slice(0, 4);
-    } else if (selectedMonthFilter === 'jul-oct') {
-      chartLabels = allLabels.slice(4, 8);
-      chartFlowData = userData.data.slice(4, 8);
-      chartAdvancesData = userData.advances.slice(4, 8);
-    } else if (['mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct'].includes(selectedMonthFilter)) {
-      const monthMap = { mar: 0, apr: 1, may: 2, jun: 3, jul: 4, aug: 5, sep: 6, oct: 7 };
+    if (selectedMonthFilter === 'mar-may') {
+      chartLabels = allLabels.slice(0, 3);
+      chartFlowData = userData.data.slice(0, 3);
+      chartAdvancesData = userData.advances.slice(0, 3);
+    } else if (selectedMonthFilter === 'jun-aug') {
+      chartLabels = allLabels.slice(3, 6);
+      chartFlowData = userData.data.slice(3, 6);
+      chartAdvancesData = userData.advances.slice(3, 6);
+    } else if (['mar', 'apr', 'may', 'jun', 'jul', 'aug'].includes(selectedMonthFilter)) {
+      const monthMap = { mar: 0, apr: 1, may: 2, jun: 3, jul: 4, aug: 5 };
       const idx = monthMap[selectedMonthFilter];
       chartLabels = [allLabels[idx]];
       chartFlowData = [userData.data[idx]];
@@ -1160,6 +1156,16 @@ const superadminModule = {
     const totalLast = chartFlowData[chartFlowData.length - 1] || 0;
     const avg = Math.round(chartFlowData.reduce((a, b) => a + b, 0) / chartFlowData.length);
     
+    // Pico máximo en el rango seleccionado
+    let peakVal = -1;
+    let peakLabel = chartLabels[chartLabels.length - 1];
+    chartFlowData.forEach((val, i) => {
+      if (val > peakVal) {
+        peakVal = val;
+        peakLabel = chartLabels[i];
+      }
+    });
+
     const metricTotalEl = document.getElementById('adv-metric-total');
     const metricAvgEl = document.getElementById('adv-metric-avg');
     const metricPeakEl = document.getElementById('adv-metric-peak');
@@ -1167,8 +1173,8 @@ const superadminModule = {
 
     if (metricTotalEl) metricTotalEl.textContent = '$' + totalLast.toLocaleString('es-CO');
     if (metricAvgEl) metricAvgEl.textContent = '$' + avg.toLocaleString('es-CO');
-    if (metricPeakEl) metricPeakEl.textContent = chartLabels[chartLabels.length - 1] + ' 2026';
-    if (titleEl) titleEl.textContent = `📈 Evolución Financiera: ${userData.name} (${chartLabels[0]} - ${chartLabels[chartLabels.length - 1]})`;
+    if (metricPeakEl) metricPeakEl.textContent = peakLabel + ' 2026';
+    if (titleEl) titleEl.textContent = `📈 Evolución Financiera: ${userData.name} (${chartLabels[0]} - ${chartLabels[chartLabels.length - 1]} 2026)`;
 
     if (this.advancesChartInstance) {
       try { this.advancesChartInstance.destroy(); } catch(e) {}
