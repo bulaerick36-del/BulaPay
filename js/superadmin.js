@@ -34,171 +34,52 @@ const superadminModule = {
 
   logout() {
     sessionStorage.removeItem('bula_superadmin_active');
+    const overlay = document.getElementById('superadmin-fixed-overlay');
+    if (overlay) overlay.remove();
     window.location.hash = '#auth';
     window.location.reload();
   },
 
-  hideAllViewsAndShowSuperadmin() {
-    const authView = document.getElementById('view-auth');
-    if (authView) {
-      authView.classList.remove('active');
-      authView.classList.add('d-none');
-      authView.style.setProperty('display', 'none', 'important');
-    }
+  async renderFloatingSuperadminPanel() {
+    const drawer = document.getElementById('drawer-main-menu');
+    if (drawer) drawer.classList.remove('active');
 
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) {
-      authContainer.style.setProperty('display', 'none', 'important');
-    }
+    sessionStorage.setItem('bula_superadmin_active', 'true');
+    window.location.hash = '#superadmin';
 
-    const authWrapper = document.querySelector('.auth-wrapper');
-    if (authWrapper) {
-      authWrapper.style.setProperty('display', 'none', 'important');
-    }
+    // Ocultar vistas secundarias de la SPA por seguridad
+    this.hideAllViewsAndShowSuperadmin();
 
-    const sections = document.querySelectorAll('.view-section');
-    sections.forEach(s => {
-      if (s.id !== 'view-superadmin') {
-        s.classList.remove('active');
-        s.classList.add('d-none');
-        s.style.setProperty('display', 'none', 'important');
-      }
-    });
+    let existing = document.getElementById('superadmin-fixed-overlay');
+    if (existing) existing.remove();
 
-    const targetContainers = [
-      document.getElementById('view-superadmin'),
-      document.getElementById('main-content'),
-      document.getElementById('app')
-    ].filter(Boolean);
-
-    targetContainers.forEach(el => {
-      el.classList.remove('d-none', 'hidden', 'invisible', 'hide');
-      el.classList.add('active');
-      el.style.removeProperty('display');
-      el.style.removeProperty('visibility');
-      el.style.removeProperty('opacity');
-      el.style.setProperty('display', 'block', 'important');
-      el.style.setProperty('visibility', 'visible', 'important');
-      el.style.setProperty('opacity', '1', 'important');
-    });
-
-    return document.getElementById('view-superadmin') || document.getElementById('main-content') || document.getElementById('app');
-  },
-
-  renderEmergencyFallback(target) {
-    if (!target) return;
-    const users = this.getFallbackUsers();
-    target.style.setProperty('display', 'block', 'important');
-    target.style.setProperty('visibility', 'visible', 'important');
-    target.style.setProperty('opacity', '1', 'important');
-    target.classList.remove('d-none', 'hidden', 'invisible');
-    target.classList.add('active');
-
-    let tableRows = '';
-    users.forEach(u => {
-      tableRows += `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.75rem;"><strong>${u.username}</strong><br><span style="font-size:0.75rem; color:var(--text-secondary);">${u.documentType || 'CC'}: ${u.documentNumber}</span></td>
-          <td style="padding: 0.75rem; font-weight: 600;">${u.name}</td>
-          <td style="padding: 0.75rem;"><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${u.role}</span></td>
-          <td style="padding: 0.75rem; color: #34d399; font-weight: 500;">Activo</td>
-        </tr>
-      `;
-    });
-
-    target.innerHTML = `
-      <div class="superadmin-wrapper card" style="max-width: 1200px; margin: 0 auto; padding: 2rem; background: var(--bg-card); border-radius: 16px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-          <div>
-            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-verde); padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 Acceso Exclusivo Master</span>
-            <h1 id="sa-master-heading" style="font-size: 1.6rem; font-weight: 900; color: #fbbf24; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-top: 0.4rem; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.03em;">PANEL DE SUPERADMINISTRADOR MAESTRO - ACTIVO</h1>
-          </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-            <button id="btn-test-dom" class="btn btn-primary" onclick="alert('✅ ¡El DOM del Panel de Superadministrador Maestro responde correctamente!')" style="padding: 0.5rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer;">🧪 Probador de Respuesta DOM</button>
-            <button class="btn btn-primary" onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-EMERGENCY-STAMP')" style="padding: 0.5rem 1rem; font-size: 0.85rem;">📜 Auditoría de Contratos PDF</button>
-            <button class="btn btn-secondary" onclick="superadminModule.logout()" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: #ef4444; color: #fca5a5;">🚪 Salir de Superadmin</button>
-          </div>
-        </div>
-
-        <div id="superadmin-emergency-content" style="display: flex; flex-direction: column; gap: 1.5rem;">
-          <div class="superadmin-card" style="background: var(--bg-secondary); border-radius: 12px; padding: 1.25rem; border: 1px solid var(--border-color);">
-            <h3 class="title-gradient" style="font-size: 1.2rem; margin-bottom: 1rem;">👥 Tabla de Usuarios (Supabase)</h3>
-            <div style="overflow-x: auto;">
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
-                <thead>
-                  <tr style="border-bottom: 2px solid var(--border-color); color: var(--color-verde);">
-                    <th style="padding: 0.75rem;">Usuario / Cédula</th>
-                    <th style="padding: 0.75rem;">Nombre Completo</th>
-                    <th style="padding: 0.75rem;">Rol</th>
-                    <th style="padding: 0.75rem;">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${tableRows}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem;">
-            <h4 style="font-size: 0.95rem; color: var(--text-primary); margin-bottom: 1rem;">📊 Gráfica de Rendimiento (Chart.js)</h4>
-            <div style="position: relative; height: 280px; width: 100%;">
-              <canvas id="superadminChart"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
+    const overlay = document.createElement('div');
+    overlay.id = 'superadmin-fixed-overlay';
+    overlay.style.cssText = `
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: #0b132b !important;
+      color: #f8fafc !important;
+      z-index: 99999 !important;
+      overflow-y: auto !important;
+      padding: 1.5rem !important;
+      box-sizing: border-box !important;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
     `;
-
-    setTimeout(() => {
-      const canvas = document.getElementById('superadminChart');
-      if (canvas && typeof Chart !== 'undefined') {
-        try {
-          const ctx = canvas.getContext('2d');
-          new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: ['Capital Inicial', 'Monto Administrado Actual'],
-              datasets: [{
-                label: 'Monto ($ COP)',
-                data: [2000000, 3500000],
-                backgroundColor: ['rgba(59, 130, 246, 0.6)', 'rgba(16, 185, 129, 0.7)'],
-                borderColor: ['#3b82f6', '#10b981'],
-                borderWidth: 2
-              }]
-            },
-            options: { responsive: true, maintainAspectRatio: false }
-          });
-        } catch (e) {
-          console.warn("Chart emergency init error:", e);
-        }
-      }
-    }, 100);
-  },
-
-  ensureEmergencyRender(target) {
-    if (!target) {
-      target = document.getElementById('view-superadmin') || document.getElementById('main-content') || document.getElementById('app');
-    }
-    if (!target) return;
-
-    if (!target.firstElementChild || target.children.length === 0 || !target.innerHTML.trim()) {
-      console.warn("⚠️ Panel Superadmin sin elementos hijos. Ejecutando Renderizado de Emergencia...");
-      this.renderEmergencyFallback(target);
-    }
-  },
-
-  async renderFullPanel() {
-    const target = this.hideAllViewsAndShowSuperadmin();
-    if (!target) return;
 
     let users = [];
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.getAllUsers === 'function') {
         users = await window.BulaPayDB.getAllUsers();
       }
-    } catch(e) {
-      console.warn("Error al cargar usuarios de Supabase:", e);
+    } catch (e) {
+      console.warn("Fallo al obtener usuarios Supabase:", e);
     }
     if (!users || users.length === 0) {
       users = this.getFallbackUsers();
@@ -207,60 +88,65 @@ const superadminModule = {
     let userRowsHtml = '';
     users.forEach(u => {
       userRowsHtml += `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.75rem;"><strong>${u.username}</strong><br><span style="font-size:0.75rem; color:var(--text-secondary);">${u.documentType || 'CC'}: ${u.documentNumber || u.username}</span></td>
-          <td style="padding: 0.75rem; font-weight: 600;">${u.name || u.nombre_firmante || 'Sin Nombre'}</td>
-          <td style="padding: 0.75rem;"><span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">${u.role || 'Usuario'}</span></td>
-          <td style="padding: 0.75rem; color: var(--text-secondary);">${u.phone || u.email || 'N/A'}</td>
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+          <td style="padding: 0.75rem; color: #f8fafc;">
+            <strong>${u.username}</strong><br>
+            <span style="font-size: 0.75rem; color: #94a3b8;">${u.documentType || 'CC'}: ${u.documentNumber || u.username}</span>
+          </td>
+          <td style="padding: 0.75rem; font-weight: 600; color: #f8fafc;">${u.name || u.nombre_firmante || 'Sin Nombre'}</td>
+          <td style="padding: 0.75rem;"><span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;">${u.role || 'Usuario'}</span></td>
+          <td style="padding: 0.75rem; color: #94a3b8;">📞 ${u.phone || 'N/A'}<br>✉️ ${u.email || 'N/A'}</td>
           <td style="padding: 0.75rem; color: #34d399; font-weight: 500;">Activo</td>
           <td style="padding: 0.75rem; text-align: right; white-space: nowrap;">
-            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; margin-right: 0.3rem;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
-            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
+            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; margin-right: 0.3rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
+            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
           </td>
         </tr>
       `;
     });
 
-    target.innerHTML = `
-      <div class="superadmin-wrapper card" style="max-width: 1200px; margin: 0 auto; padding: 2rem; background: var(--bg-card); border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);">
-        <!-- Cabecera Maestro -->
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    overlay.innerHTML = `
+      <div style="max-width: 1200px; margin: 0 auto; background: #1c2541; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+        
+        <!-- Cabecera Principal del Panel Maestro Flotante -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1.25rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div>
-            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-verde); padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 Acceso Exclusivo Master</span>
-            <h1 id="sa-master-heading" style="font-size: 1.8rem; font-weight: 900; color: #fbbf24; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-top: 0.4rem; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.03em;">PANEL DE SUPERADMINISTRADOR MAESTRO</h1>
+            <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 0.3rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 PANEL DE SUPERADMINISTRADOR MAESTRO - ACTIVO</span>
+            <h1 style="font-size: 1.8rem; font-weight: 900; color: #ffffff; margin-top: 0.5rem; margin-bottom: 0.2rem;">Panel de Superadministrador Maestro</h1>
+            <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-            <button id="btn-test-dom" class="btn btn-primary" onclick="alert('✅ ¡El DOM del Panel de Superadministrador Maestro responde perfectamente!')" style="padding: 0.5rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer;">🧪 Probador de Respuesta DOM</button>
-            <button class="btn btn-primary" onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.5rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border: none; color: white; font-weight: 700; border-radius: 8px; cursor: pointer;">📜 Exportar / Auditoría de Contratos PDF</button>
-            <button class="btn btn-secondary" id="btn-superadmin-change-pwd" onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">🔑 Cambiar Clave</button>
-            <button class="btn btn-secondary" onclick="superadminModule.logout()" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: #ef4444; color: #fca5a5;">🚪 Salir</button>
+            <button id="btn-test-dom" onclick="alert('✅ ¡El DOM del Panel Maestro Flotante responde perfectamente!')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">🧪 Probador DOM</button>
+            <button onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border: none; color: white; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">📜 Exportar Contratos PDF</button>
+            <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
+            <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
           </div>
         </div>
 
-        <!-- Pestañas de Módulos del Superadmin -->
-        <div class="superadmin-tabs" style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; overflow-x: auto;">
-          <button class="superadmin-tab ${this.activeTab === 'users' ? 'active' : ''}" data-tab="users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? 'var(--color-verde)' : 'var(--text-secondary)'}; font-weight: 600; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid var(--color-verde)' : 'none'};">👥 1. Usuarios y Clientes</button>
-          <button class="superadmin-tab ${this.activeTab === 'contracts' ? 'active' : ''}" data-tab="contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? 'var(--color-verde)' : 'var(--text-secondary)'}; font-weight: 600; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid var(--color-verde)' : 'none'};">📜 2. Contratos y Términos</button>
-          <button class="superadmin-tab ${this.activeTab === 'performance' ? 'active' : ''}" data-tab="performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? 'var(--color-verde)' : 'var(--text-secondary)'}; font-weight: 600; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid var(--color-verde)' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
+        <!-- Pestañas de Módulos Flotantes -->
+        <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; overflow-x: auto;">
+          <button id="sa-tab-users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid #34d399' : 'none'};">👥 1. Usuarios y Clientes</button>
+          <button id="sa-tab-contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid #34d399' : 'none'};">📜 2. Contratos y Términos</button>
+          <button id="sa-tab-performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid #34d399' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
         </div>
 
-        <!-- Contenido Dinámico de Pestaña -->
+        <!-- Contenido Dinámico del Módulo Activo -->
         <div id="superadmin-tab-content" style="margin-bottom: 2rem;">
-          <div class="superadmin-card" style="background: var(--bg-secondary); border-radius: 12px; padding: 1.25rem; border: 1px solid var(--border-color);">
+          <div style="background: #0b132b; border-radius: 12px; padding: 1.25rem; border: 1px solid rgba(255,255,255,0.1);">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
-              <h3 class="title-gradient" style="font-size: 1.3rem; margin: 0;">👥 Usuarios y Clientes en Supabase</h3>
-              <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula..." style="padding: 0.5rem 0.8rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); width: 280px;">
+              <h3 style="font-size: 1.25rem; color: #fbbf24; margin: 0; font-weight: 800;">👥 Gestión de Usuarios y Clientes (Supabase)</h3>
+              <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula..." style="padding: 0.5rem 0.8rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; width: 280px;">
             </div>
             <div id="sa-users-list-wrapper" style="overflow-x: auto;">
               <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
                 <thead>
-                  <tr style="border-bottom: 2px solid var(--border-color); color: var(--color-verde); text-transform: uppercase; font-size: 0.75rem;">
+                  <tr style="border-bottom: 2px solid rgba(255,255,255,0.2); color: #34d399; text-transform: uppercase; font-size: 0.75rem;">
                     <th style="padding: 0.75rem;">Usuario / Cédula</th>
                     <th style="padding: 0.75rem;">Nombre Completo</th>
                     <th style="padding: 0.75rem;">Rol</th>
                     <th style="padding: 0.75rem;">Contacto</th>
                     <th style="padding: 0.75rem;">Estado</th>
-                    <th style="padding: 0.75rem; text-align: right;">Acciones</th>
+                    <th style="padding: 0.75rem; text-align: right;">Acciones de Gestión</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -272,8 +158,8 @@ const superadminModule = {
         </div>
 
         <!-- Contenedor Canvas para Chart.js -->
-        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-top: 1rem;" id="sa-global-chart-wrapper">
-          <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 1rem;">📊 Gráfica de Rendimiento Financiero (Chart.js)</h4>
+        <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem;" id="sa-global-chart-wrapper">
+          <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;">📊 Gráfica de Rendimiento Financiero (Chart.js)</h4>
           <div style="position: relative; height: 300px; width: 100%;">
             <canvas id="superadminChart"></canvas>
           </div>
@@ -281,91 +167,36 @@ const superadminModule = {
       </div>
     `;
 
+    document.body.appendChild(overlay);
+    this.renderDrawerSection();
+
+    // Inicializar búsqueda
+    const searchInput = document.getElementById('sa-users-search');
+    if (searchInput) {
+      searchInput.oninput = () => {
+        const query = searchInput.value.toLowerCase().trim();
+        const filtered = users.filter(u =>
+          (u.name && u.name.toLowerCase().includes(query)) ||
+          (u.username && u.username.toLowerCase().includes(query)) ||
+          (u.documentNumber && u.documentNumber.toLowerCase().includes(query)) ||
+          (u.role && u.role.toLowerCase().includes(query))
+        );
+        this.renderUsersListTable(filtered);
+      };
+    }
+
+    // Inicializar Chart.js
     setTimeout(() => {
       this.initSuperadminChart();
-    }, 50);
-  },
-
-  initSuperadminChart() {
-    const canvas = document.getElementById('superadminChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-
-    if (this.performanceChartInstance) {
-      try { this.performanceChartInstance.destroy(); } catch(e) {}
-    }
-
-    try {
-      const ctx = canvas.getContext('2d');
-      this.performanceChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: ['Capital Inicial Base (Junio 2026)', 'Monto Administrado Actual (Tiempo Real)'],
-          datasets: [{
-            label: 'Capital Financiero ($ COP)',
-            data: [25000000, 48500000],
-            backgroundColor: [
-              'rgba(59, 130, 246, 0.7)',
-              'rgba(16, 185, 129, 0.8)'
-            ],
-            borderColor: [
-              '#3b82f6',
-              '#10b981'
-            ],
-            borderWidth: 2,
-            borderRadius: 8
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, labels: { color: '#94a3b8' } },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return ' ' + context.dataset.label + ': $' + Number(context.raw).toLocaleString('es-CO');
-                }
-              }
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                color: '#94a3b8',
-                callback: function(v) { return '$' + Number(v).toLocaleString('es-CO'); }
-              },
-              grid: { color: '#334155' }
-            },
-            x: {
-              ticks: { color: '#f8fafc', font: { weight: 'bold' } },
-              grid: { color: '#334155' }
-            }
-          }
-        }
-      });
-    } catch(e) {
-      console.warn("Chart.js render error:", e);
-    }
+    }, 100);
   },
 
   showSuperadminView() {
-    this.openSuperadminPanel();
+    this.renderFloatingSuperadminPanel();
   },
 
   async openSuperadminPanel() {
-    // 1. Cerrar el menú lateral (drawer)
-    const drawer = document.getElementById('drawer-main-menu');
-    if (drawer) drawer.classList.remove('active');
-
-    // 2. Exponer e inyectar el HTML completo del panel de superadministrador maestro inmediatamente ocultando demás vistas
-    const target = this.hideAllViewsAndShowSuperadmin();
-    await this.renderFullPanel();
-
-    window.location.hash = '#superadmin';
-
-    // 3. Sincronizar estado del drawer y renderizar módulo activo si aplica
-    this.renderDrawerSection();
+    await this.renderFloatingSuperadminPanel();
   },
 
   async init() {
@@ -378,11 +209,7 @@ const superadminModule = {
       return;
     }
 
-    // Inyectar y exponer panel superadmin completo
-    this.renderFullPanel();
-
-    this.renderDrawerSection();
-    await this.renderCurrentTab();
+    await this.renderFloatingSuperadminPanel();
   },
 
   clearDrawerInputs() {
