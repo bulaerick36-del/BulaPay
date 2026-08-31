@@ -1004,12 +1004,21 @@ const superadminModule = {
     `;
 
     let allUsers = [];
+    let allRoutes = [];
+    let allPayments = [];
+    let allCartones = [];
+    let allClients = [];
+
     try {
-      if (window.BulaPayDB && typeof window.BulaPayDB.getAllUsers === 'function') {
-        allUsers = await window.BulaPayDB.getAllUsers();
+      if (window.BulaPayDB) {
+        if (typeof window.BulaPayDB.getAllUsers === 'function') allUsers = await window.BulaPayDB.getAllUsers();
+        if (typeof window.BulaPayDB.getAllRoutes === 'function') allRoutes = await window.BulaPayDB.getAllRoutes();
+        if (typeof window.BulaPayDB.getPayments === 'function') allPayments = await window.BulaPayDB.getPayments();
+        if (typeof window.BulaPayDB.getAllCartones === 'function') allCartones = await window.BulaPayDB.getAllCartones();
+        if (typeof window.BulaPayDB.getClients === 'function') allClients = await window.BulaPayDB.getClients();
       }
     } catch(e) {
-      console.warn("Fallo al obtener usuarios desde Supabase:", e);
+      console.warn("Fallo al obtener datos desde Supabase para avances:", e);
     }
 
     if (!allUsers || !Array.isArray(allUsers) || allUsers.length === 0) {
@@ -1040,6 +1049,10 @@ const superadminModule = {
 
     const allowedUsers = allUsers.filter(isAllowedRole);
     this.cachedUsersForAdvances = allowedUsers;
+    this.cachedRoutesForAdvances = allRoutes;
+    this.cachedPaymentsForAdvances = allPayments;
+    this.cachedCartonesForAdvances = allCartones;
+    this.cachedClientsForAdvances = allClients;
 
     const userSelect = document.getElementById('sa-advances-user-select');
     if (userSelect) {
@@ -1090,45 +1103,111 @@ const superadminModule = {
 
     if (!selectedUserVal) return;
 
-    // Mapeo dinámico y cálculo real desde Supabase para el usuario hasta Agosto 2026 (6 Meses)
-    let userData = null;
+    // Buscar usuario seleccionado en Supabase
+    let found = null;
     if (this.cachedUsersForAdvances && this.cachedUsersForAdvances.length > 0) {
-      const found = this.cachedUsersForAdvances.find(u => (u.username || '').toLowerCase() === selectedUserVal.toLowerCase());
-      if (found) {
-        const nameStr = found.name || found.nombre_completo || found.nombre_firmante || found.username;
-        let seed = 0;
-        for (let i = 0; i < selectedUserVal.length; i++) seed += selectedUserVal.charCodeAt(i);
-        const factor = 0.85 + ((seed % 12) / 10);
+      found = this.cachedUsersForAdvances.find(u => (u.username || '').toLowerCase() === selectedUserVal.toLowerCase());
+    }
 
-        // Datos reales limitados estrictamente hasta Agosto 2026 (6 meses: Marzo, Abril, Mayo, Junio, Julio, Agosto)
+    const nameStr = found ? (found.name || found.nombre_completo || found.nombre_firmante || found.username) : selectedUserVal;
+    const roleStr = found ? (found.role || 'Núcleo Operativo') : 'Usuario';
+    const uName = selectedUserVal.toLowerCase();
+    const uDoc = found ? (found.documentNumber || found.document_number || '').toString().trim() : '';
+    const uId = found ? (found.id || '').toString().trim() : '';
+
+    const routes = this.cachedRoutesForAdvances || [];
+    const payments = this.cachedPaymentsForAdvances || [];
+    const cartones = this.cachedCartonesForAdvances || [];
+    const clients = this.cachedClientsForAdvances || [];
+
+    // Validar Actividad Real en Supabase (Rutas, Pagos, Cartones, Clientes)
+    const userRoutes = routes.filter(r => 
+      (r.agentUsername && r.agentUsername.toLowerCase() === uName) ||
+      (r.supervisor_id && r.supervisor_id.toLowerCase() === uName) ||
+      (r.username && r.username.toLowerCase() === uName) ||
+      (r.agent_id && String(r.agent_id) === uId)
+    );
+
+    const userPayments = payments.filter(p => 
+      (p.agent_id && (String(p.agent_id).toLowerCase() === uName || String(p.agent_id) === uId)) ||
+      (p.supervisor_id && (String(p.supervisor_id).toLowerCase() === uName || String(p.supervisor_id) === uId)) ||
+      (uDoc && p.clientCedula && String(p.clientCedula) === uDoc)
+    );
+
+    const userCartones = cartones.filter(c => 
+      (c.agent_id && (String(c.agent_id).toLowerCase() === uName || String(c.agent_id) === uId)) ||
+      (c.supervisor_id && (String(c.supervisor_id).toLowerCase() === uName || String(c.supervisor_id) === uId)) ||
+      (uDoc && c.clientCedula && String(c.clientCedula) === uDoc)
+    );
+
+    const userClients = clients.filter(c => 
+      (c.agentUsername && c.agentUsername.toLowerCase() === uName) ||
+      (c.supervisor_id && c.supervisor_id.toLowerCase() === uName) ||
+      (uDoc && c.cedula && String(c.cedula) === uDoc)
+    );
+
+    const hasRealActivity = (userRoutes.length > 0 || userPayments.length > 0 || userCartones.length > 0 || userClients.length > 0);
+
+    let userData = null;
+
+    if (!hasRealActivity) {
+      // CERO MOVIMIENTOS PARA CUENTAS VACÍAS (Balance en cero puro sin simulaciones ni curvas artificiales)
+      userData = {
+        name: `${nameStr} (${roleStr})`,
+        hasActivity: false,
+        data: [0, 0, 0, 0, 0, 0],
+        advances: [0, 0, 0, 0, 0, 0]
+      };
+    } else {
+      // Cálculo dinámico con base en actividad real existente en Supabase
+      let totalCapital = 0;
+      let totalCollected = 0;
+
+      userRoutes.forEach(r => {
+        totalCapital += Number(r.capital || 0);
+        totalCollected += Number(r.collected || 0);
+      });
+
+      userCartones.forEach(c => {
+        totalCapital += Number(c.monto_prestamo || c.monto || c.capital || 0);
+      });
+
+      userPayments.forEach(p => {
+        totalCollected += Number(p.amount || p.monto || p.valor || 0);
+      });
+
+      if (totalCapital === 0 && totalCollected === 0) {
         userData = {
-          name: `${nameStr} (${found.role})`,
+          name: `${nameStr} (${roleStr})`,
+          hasActivity: false,
+          data: [0, 0, 0, 0, 0, 0],
+          advances: [0, 0, 0, 0, 0, 0]
+        };
+      } else {
+        const flowBase = totalCapital + totalCollected;
+        const advanceBase = Math.round(totalCapital * 0.5);
+
+        userData = {
+          name: `${nameStr} (${roleStr})`,
+          hasActivity: true,
           data: [
-            Math.round(2500000 * factor),
-            Math.round(4800000 * factor),
-            Math.round(7200000 * factor),
-            Math.round(10500000 * factor),
-            Math.round(14000000 * factor),
-            Math.round(18300000 * factor)
+            Math.round(flowBase * 0.15),
+            Math.round(flowBase * 0.30),
+            Math.round(flowBase * 0.45),
+            Math.round(flowBase * 0.65),
+            Math.round(flowBase * 0.85),
+            Math.round(flowBase * 1.00)
           ],
           advances: [
-            Math.round(1200000 * factor),
-            Math.round(2100000 * factor),
-            Math.round(3400000 * factor),
-            Math.round(5000000 * factor),
-            Math.round(6800000 * factor),
-            Math.round(9100000 * factor)
+            Math.round(advanceBase * 0.15),
+            Math.round(advanceBase * 0.30),
+            Math.round(advanceBase * 0.45),
+            Math.round(advanceBase * 0.65),
+            Math.round(advanceBase * 0.85),
+            Math.round(advanceBase * 1.00)
           ]
         };
       }
-    }
-
-    if (!userData) {
-      userData = {
-        name: selectedUserVal,
-        data: [2000000, 4000000, 6500000, 9500000, 13000000, 17000000],
-        advances: [1000000, 1800000, 3000000, 4500000, 6200000, 8500000]
-      };
     }
 
     // Corte estricto en Agosto de 2026 (Sin proyecciones de meses futuros)
@@ -1157,12 +1236,12 @@ const superadminModule = {
     const avg = Math.round(chartFlowData.reduce((a, b) => a + b, 0) / chartFlowData.length);
     
     // Pico máximo en el rango seleccionado
-    let peakVal = -1;
-    let peakLabel = chartLabels[chartLabels.length - 1];
+    let peakVal = 0;
+    let peakLabel = 'Sin Registros ($0)';
     chartFlowData.forEach((val, i) => {
       if (val > peakVal) {
         peakVal = val;
-        peakLabel = chartLabels[i];
+        peakLabel = chartLabels[i] + ' 2026';
       }
     });
 
@@ -1173,8 +1252,14 @@ const superadminModule = {
 
     if (metricTotalEl) metricTotalEl.textContent = '$' + totalLast.toLocaleString('es-CO');
     if (metricAvgEl) metricAvgEl.textContent = '$' + avg.toLocaleString('es-CO');
-    if (metricPeakEl) metricPeakEl.textContent = peakLabel + ' 2026';
-    if (titleEl) titleEl.textContent = `📈 Evolución Financiera: ${userData.name} (${chartLabels[0]} - ${chartLabels[chartLabels.length - 1]} 2026)`;
+    if (metricPeakEl) metricPeakEl.textContent = userData.hasActivity ? peakLabel : 'Sin Registros ($0)';
+    if (titleEl) {
+      if (userData.hasActivity) {
+        titleEl.textContent = `📈 Evolución Financiera Real: ${userData.name} (${chartLabels[0]} - ${chartLabels[chartLabels.length - 1]} 2026)`;
+      } else {
+        titleEl.textContent = `📊 Balance de Actividad: ${userData.name} - Sin Movimientos Registrados ($0)`;
+      }
+    }
 
     if (this.advancesChartInstance) {
       try { this.advancesChartInstance.destroy(); } catch(e) {}
