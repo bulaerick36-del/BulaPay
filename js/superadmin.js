@@ -206,14 +206,19 @@ const superadminModule = {
 
           <!-- Pestañas de Módulos Flotantes (Navegación Dinámica de 4 Pestañas) -->
           <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; overflow-x: auto;">
-            <button id="sa-tab-users" class="sa-floating-tab ${this.activeTab === 'users' ? 'active' : ''}" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid #34d399' : 'none'};">👥 1. Usuarios y Clientes</button>
-            <button id="sa-tab-contracts" class="sa-floating-tab ${this.activeTab === 'contracts' ? 'active' : ''}" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid #34d399' : 'none'};">📜 2. Contratos y Términos</button>
-            <button id="sa-tab-performance" class="sa-floating-tab ${this.activeTab === 'performance' ? 'active' : ''}" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid #34d399' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
-            <button id="sa-tab-advances" class="sa-floating-tab ${this.activeTab === 'advances' ? 'active' : ''}" onclick="superadminModule.switchTab('advances', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'advances' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'advances' ? '3px solid #34d399' : 'none'};">📈 4. Avances y Movimientos</button>
+            <button id="sa-tab-users" class="sa-floating-tab active" onclick="superadminModule.switchSuperadminTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #34d399; font-weight: 700; cursor: pointer; border-bottom: 3px solid #34d399;">👥 1. Usuarios y Clientes</button>
+            <button id="sa-tab-contracts" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📜 2. Contratos y Términos</button>
+            <button id="sa-tab-performance" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('resources', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📊 3. Recurso Movido &amp; Gráficas</button>
+            <button id="sa-tab-advances" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('advances', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📈 4. Avances y Movimientos</button>
           </div>
 
-          <!-- Contenido Dinámico del Módulo Activo -->
-          <div id="superadmin-tab-content" style="margin-bottom: 1rem;"></div>
+          <!-- Contenedores Independientes por Pestaña -->
+          <div id="superadmin-tab-content" style="margin-bottom: 1rem;">
+            <div id="tab-content-users" class="sa-tab-pane" style="display: block;"></div>
+            <div id="tab-content-contracts" class="sa-tab-pane" style="display: none;"></div>
+            <div id="tab-content-resources" class="sa-tab-pane" style="display: none;"></div>
+            <div id="tab-content-advances" class="sa-tab-pane" style="display: none;"></div>
+          </div>
         </div>
       `;
 
@@ -222,13 +227,13 @@ const superadminModule = {
       console.error("Fallo inyectando HTML en overlay:", e);
     }
 
-    // 7. Sincronizaciones secundarias y renderizado inicial de pestaña
+    // 7. Sincronizaciones secundarias y carga inicial automática de la Pestaña 1
     try {
       this.renderDrawerSection();
     } catch(e) {}
 
     try {
-      await this.renderCurrentTab();
+      await this.switchSuperadminTab('users');
     } catch(e) {}
   },
 
@@ -314,25 +319,81 @@ const superadminModule = {
     }
   },
 
-  async switchTab(tabName, e) {
+  async switchSuperadminTab(target, e) {
     if (e) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
     }
-    this.activeTab = tabName || 'users';
-    
-    // UI update
-    const tabs = ['users', 'contracts', 'performance', 'advances'];
-    tabs.forEach(t => {
-      const btn = document.getElementById(`sa-tab-${t}`);
-      if (btn) {
-        const isActive = this.activeTab === t;
-        btn.style.color = isActive ? '#34d399' : '#94a3b8';
-        btn.style.borderBottom = isActive ? '3px solid #34d399' : 'none';
+
+    let key = 'users';
+    if (target === 1 || target === '1' || target === 'users') key = 'users';
+    else if (target === 2 || target === '2' || target === 'contracts') key = 'contracts';
+    else if (target === 3 || target === '3' || target === 'resources' || target === 'performance') key = 'resources';
+    else if (target === 4 || target === '4' || target === 'advances') key = 'advances';
+
+    this.activeTab = key === 'resources' ? 'performance' : key;
+
+    // 1. Ocultar todos los contenedores de pestañas y mostrar sólo el seleccionado
+    const panes = [
+      { id: 'tab-content-users', key: 'users' },
+      { id: 'tab-content-contracts', key: 'contracts' },
+      { id: 'tab-content-resources', key: 'resources' },
+      { id: 'tab-content-advances', key: 'advances' }
+    ];
+
+    panes.forEach(pane => {
+      const el = document.getElementById(pane.id);
+      if (el) {
+        if (pane.key === key) {
+          el.style.setProperty('display', 'block', 'important');
+        } else {
+          el.style.setProperty('display', 'none', 'important');
+        }
       }
     });
 
-    await this.renderCurrentTab();
+    // 2. Mover el indicador verde inferior (#34d399) y estilo activo a la pestaña seleccionada
+    const btnMap = {
+      users: 'sa-tab-users',
+      contracts: 'sa-tab-contracts',
+      resources: 'sa-tab-performance',
+      advances: 'sa-tab-advances'
+    };
+
+    Object.keys(btnMap).forEach(k => {
+      const btn = document.getElementById(btnMap[k]);
+      if (btn) {
+        const isActive = (k === key);
+        btn.style.color = isActive ? '#34d399' : '#94a3b8';
+        btn.style.borderBottom = isActive ? '3px solid #34d399' : 'none';
+        btn.style.fontWeight = isActive ? '700' : '600';
+        if (isActive) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    });
+
+    // 3. Renderizar el contenido dinámico en el contenedor correspondiente
+    try {
+      if (key === 'users') {
+        const c = document.getElementById('tab-content-users');
+        if (c) await this.renderUsersTab(c);
+      } else if (key === 'contracts') {
+        const c = document.getElementById('tab-content-contracts');
+        if (c) await this.renderContractsTab(c);
+      } else if (key === 'resources') {
+        const c = document.getElementById('tab-content-resources');
+        if (c) await this.renderPerformanceTab(c);
+      } else if (key === 'advances') {
+        const c = document.getElementById('tab-content-advances');
+        if (c) await this.renderAdvancesTab(c);
+      }
+    } catch(err) {
+      console.warn("Fallo al renderizar pestaña activa:", err);
+    }
+  },
+
+  async switchTab(tabName, e) {
+    await this.switchSuperadminTab(tabName, e);
   },
 
   bindEvents() {
