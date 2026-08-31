@@ -163,19 +163,37 @@ const superadminModule = {
     let userRowsHtml = '';
     try {
       users.forEach(u => {
+        const doc = u.documentNumber ? `${u.documentType || 'CC'}: ${u.documentNumber}` : 'Sin Documento';
+        const roleBadge = u.role === 'Agente Independiente' 
+          ? `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">💼 ${u.role}</span>`
+          : `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa !important; border: 1px solid rgba(59, 130, 246, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">👔 ${u.role || 'Usuario'}</span>`;
+
         userRowsHtml += `
-          <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
-            <td style="padding: 0.75rem; color: #f8fafc;">
-              <strong>${u.username}</strong><br>
-              <span style="font-size: 0.75rem; color: #94a3b8;">${u.documentType || 'CC'}: ${u.documentNumber || u.username}</span>
+          <tr class="sa-user-row" style="border-bottom: 1px solid rgba(255,255,255,0.07);">
+            <td class="sa-user-col-username" style="padding: 0.85rem 1rem; vertical-align: middle;">
+              <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;">
+                <span class="sa-user-title" style="color: #ffffff !important; font-weight: 800; font-size: 0.92rem; display: block; line-height: 1.2;">${u.username}</span>
+                <span class="sa-user-doc-badge" style="font-size: 0.75rem; color: #38bdf8 !important; font-weight: 600; display: inline-block; background: rgba(56, 189, 248, 0.14); padding: 0.2rem 0.55rem; border-radius: 5px; border: 1px solid rgba(56, 189, 248, 0.3); white-space: nowrap;">💳 ${doc}</span>
+              </div>
             </td>
-            <td style="padding: 0.75rem; font-weight: 600; color: #f8fafc;">${u.name || u.nombre_firmante || 'Sin Nombre'}</td>
-            <td style="padding: 0.75rem;"><span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;">${u.role || 'Usuario'}</span></td>
-            <td style="padding: 0.75rem; color: #94a3b8;">📞 ${u.phone || 'N/A'}<br>✉️ ${u.email || 'N/A'}</td>
-            <td style="padding: 0.75rem; color: #34d399; font-weight: 500;">Activo</td>
-            <td style="padding: 0.75rem; text-align: right; white-space: nowrap;">
-              <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; margin-right: 0.3rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
-              <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
+            <td class="sa-user-col-name" style="padding: 0.85rem 1rem; vertical-align: middle;">
+              <span class="sa-user-fullname" style="color: #f8fafc !important; font-weight: 700; font-size: 0.9rem; display: block; line-height: 1.3;">${u.name || u.nombre_firmante || 'Sin Nombre'}</span>
+            </td>
+            <td class="sa-user-col-role" style="padding: 0.85rem 1rem; vertical-align: middle;">${roleBadge}</td>
+            <td class="sa-user-col-contact" style="padding: 0.85rem 1rem; vertical-align: middle;">
+              <div style="display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem;">
+                <span style="color: #e2e8f0 !important; font-weight: 600;">📞 ${u.phone || 'N/A'}</span>
+                <span style="color: #94a3b8 !important; font-size: 0.75rem;">✉️ ${u.email || 'N/A'}</span>
+              </div>
+            </td>
+            <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle;">
+              <span style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700; font-size: 0.75rem; display: inline-block;">Activo</span>
+            </td>
+            <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
+              <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(59, 130, 246, 0.2); color: #93c5fd !important; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(255, 255, 255, 0.12); color: #f8fafc !important; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
+              </div>
             </td>
           </tr>
         `;
@@ -470,19 +488,19 @@ const superadminModule = {
   // ----------------------------------------------------
   async renderUsersTab(container) {
     container.innerHTML = `
-      <div class="superadmin-card">
+      <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(255,255,255,0.12) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
           <div>
-            <h3 class="title-gradient" style="font-size: 1.3rem; margin-bottom: 0.25rem;">👥 Módulo de Usuarios y Clientes</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Gestión centralizada de credenciales, perfiles y restablecimiento de contraseñas de supervisores y agentes.</p>
+            <h3 style="font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-bottom: 0.25rem; background: linear-gradient(135deg, #34d399 0%, #10b981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">👥 Módulo de Usuarios y Clientes</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Gestión centralizada de credenciales, perfiles y restablecimiento de contraseñas de supervisores y agentes.</p>
           </div>
           <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; max-width: 380px;">
-            <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula o rol..." style="padding: 0.5rem 0.8rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); width: 100%;">
+            <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula o rol..." style="padding: 0.55rem 0.85rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: #1e293b; color: #ffffff; width: 100%; outline: none;">
           </div>
         </div>
 
-        <div id="sa-users-list-wrapper" style="overflow-x: auto;">
-          <p style="color: var(--text-secondary);">Cargando usuarios desde Supabase...</p>
+        <div id="sa-users-list-wrapper" style="overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); background: #0b132b;">
+          <p style="color: #94a3b8; padding: 1.5rem; text-align: center;">Cargando usuarios desde Supabase...</p>
         </div>
       </div>
     `;
@@ -520,49 +538,59 @@ const superadminModule = {
     if (!wrapper) return;
 
     if (!users || users.length === 0) {
-      wrapper.innerHTML = `<p style="color: var(--text-secondary); padding: 1rem;">No se encontraron usuarios registrados.</p>`;
+      wrapper.innerHTML = `<p style="color: #94a3b8; padding: 1.5rem; text-align: center;">No se encontraron usuarios registrados.</p>`;
       return;
     }
 
     let html = `
-      <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+      <table class="sa-users-table" style="width: 100%; min-width: 950px; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; text-align: left; background: #0b132b; border-radius: 10px; overflow: hidden;">
         <thead>
-          <tr style="border-bottom: 2px solid var(--border-color); color: var(--color-verde); text-transform: uppercase; font-size: 0.75rem;">
-            <th style="padding: 0.75rem;">Usuario / Cédula</th>
-            <th style="padding: 0.75rem;">Nombre Completo</th>
-            <th style="padding: 0.75rem;">Rol</th>
-            <th style="padding: 0.75rem;">Teléfono / Correo</th>
-            <th style="padding: 0.75rem;">Estado</th>
-            <th style="padding: 0.75rem; text-align: right;">Acciones de Gestión</th>
+          <tr style="background: #1e293b; color: #34d399; text-transform: uppercase; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; border-bottom: 2px solid rgba(52, 211, 153, 0.3);">
+            <th class="sa-user-col-username" style="padding: 0.9rem 1rem; width: 22%; min-width: 180px;">Usuario / Cédula</th>
+            <th class="sa-user-col-name" style="padding: 0.9rem 1rem; width: 24%; min-width: 190px;">Nombre Completo</th>
+            <th class="sa-user-col-role" style="padding: 0.9rem 1rem; width: 16%; min-width: 140px;">Rol</th>
+            <th class="sa-user-col-contact" style="padding: 0.9rem 1rem; width: 18%; min-width: 170px;">Teléfono / Correo</th>
+            <th class="sa-user-col-status" style="padding: 0.9rem 1rem; width: 8%; min-width: 80px;">Estado</th>
+            <th class="sa-user-col-actions" style="padding: 0.9rem 1rem; width: 12%; min-width: 190px; text-align: right;">Acciones de Gestión</th>
           </tr>
         </thead>
         <tbody>
     `;
 
-    users.forEach(u => {
+    users.forEach((u, idx) => {
       const doc = u.documentNumber ? `${u.documentType || 'CC'}: ${u.documentNumber}` : 'Sin Documento';
       const roleBadge = u.role === 'Agente Independiente' 
-        ? `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">💼 ${u.role}</span>`
-        : `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">👔 ${u.role}</span>`;
+        ? `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">💼 ${u.role}</span>`
+        : `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa !important; border: 1px solid rgba(59, 130, 246, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">👔 ${u.role || 'Usuario'}</span>`;
+      
+      const rowBg = (idx % 2 === 0) ? '#0f172a' : '#1e293b';
 
       html += `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.75rem;">
-            <strong>${u.username}</strong><br>
-            <span style="font-size: 0.75rem; color: var(--text-secondary);">${doc}</span>
+        <tr class="sa-user-row" style="background: ${rowBg}; border-bottom: 1px solid rgba(255,255,255,0.07);">
+          <td class="sa-user-col-username" style="padding: 0.85rem 1rem; vertical-align: middle; width: 22%;">
+            <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;">
+              <span class="sa-user-title" style="color: #ffffff !important; font-weight: 800; font-size: 0.92rem; display: block; line-height: 1.2;">${u.username}</span>
+              <span class="sa-user-doc-badge" style="font-size: 0.75rem; color: #38bdf8 !important; font-weight: 600; display: inline-block; background: rgba(56, 189, 248, 0.14); padding: 0.2rem 0.55rem; border-radius: 5px; border: 1px solid rgba(56, 189, 248, 0.3); white-space: nowrap;">💳 ${doc}</span>
+            </div>
           </td>
-          <td style="padding: 0.75rem; font-weight: 600;">${u.name || 'Sin Nombre'}</td>
-          <td style="padding: 0.75rem;">${roleBadge}</td>
-          <td style="padding: 0.75rem; color: var(--text-secondary);">
-            📞 ${u.phone || 'N/A'}<br>
-            ✉️ ${u.email || 'N/A'}
+          <td class="sa-user-col-name" style="padding: 0.85rem 1rem; vertical-align: middle; width: 24%;">
+            <span class="sa-user-fullname" style="color: #f8fafc !important; font-weight: 700; font-size: 0.9rem; display: block; line-height: 1.3;">${u.name || u.nombre_firmante || 'Sin Nombre'}</span>
           </td>
-          <td style="padding: 0.75rem;">
-            <span style="color: #34d399; font-weight: 500;">Activo</span>
+          <td class="sa-user-col-role" style="padding: 0.85rem 1rem; vertical-align: middle; width: 16%;">${roleBadge}</td>
+          <td class="sa-user-col-contact" style="padding: 0.85rem 1rem; vertical-align: middle; width: 18%;">
+            <div style="display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem;">
+              <span style="color: #e2e8f0 !important; font-weight: 600;">📞 ${u.phone || 'N/A'}</span>
+              <span style="color: #94a3b8 !important; font-size: 0.75rem;">✉️ ${u.email || 'N/A'}</span>
+            </div>
           </td>
-          <td style="padding: 0.75rem; text-align: right; white-space: nowrap;">
-            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; margin-right: 0.3rem;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
-            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
+          <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle; width: 8%;">
+            <span style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700; font-size: 0.75rem; display: inline-block;">Activo</span>
+          </td>
+          <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
+            <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
+              <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(59, 130, 246, 0.2); color: #93c5fd !important; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
+              <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(255, 255, 255, 0.12); color: #f8fafc !important; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
+            </div>
           </td>
         </tr>
       `;
