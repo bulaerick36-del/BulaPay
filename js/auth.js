@@ -484,14 +484,17 @@ const authModule = {
   openSupportModal() {
     const modal = document.getElementById('modal-login-support');
     if (modal) {
-      modal.style.display = 'flex';
+      modal.style.setProperty('display', 'flex', 'important');
+      modal.style.setProperty('visibility', 'visible', 'important');
+      modal.style.setProperty('opacity', '1', 'important');
+      modal.style.setProperty('z-index', '999999', 'important');
     }
   },
 
   closeSupportModal() {
     const modal = document.getElementById('modal-login-support');
     if (modal) {
-      modal.style.display = 'none';
+      modal.style.setProperty('display', 'none', 'important');
     }
   },
 
