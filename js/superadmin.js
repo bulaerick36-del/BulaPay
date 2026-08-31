@@ -40,39 +40,107 @@ const superadminModule = {
     window.location.reload();
   },
 
+  hideAllViewsAndShowSuperadmin() {
+    try {
+      const authView = document.getElementById('view-auth');
+      if (authView) {
+        authView.classList.remove('active');
+        authView.classList.add('d-none');
+        authView.style.setProperty('display', 'none', 'important');
+      }
+
+      const authContainer = document.getElementById('auth-container');
+      if (authContainer) {
+        authContainer.style.setProperty('display', 'none', 'important');
+      }
+
+      const authWrapper = document.querySelector('.auth-wrapper');
+      if (authWrapper) {
+        authWrapper.style.setProperty('display', 'none', 'important');
+      }
+
+      const sections = document.querySelectorAll('.view-section');
+      sections.forEach(s => {
+        if (s.id !== 'view-superadmin') {
+          s.classList.remove('active');
+          s.classList.add('d-none');
+          s.style.setProperty('display', 'none', 'important');
+        }
+      });
+
+      const targetContainers = [
+        document.getElementById('view-superadmin'),
+        document.getElementById('main-content'),
+        document.getElementById('app')
+      ].filter(Boolean);
+
+      targetContainers.forEach(el => {
+        el.classList.remove('d-none', 'hidden', 'invisible', 'hide');
+        el.classList.add('active');
+        el.style.removeProperty('display');
+        el.style.removeProperty('visibility');
+        el.style.removeProperty('opacity');
+        el.style.setProperty('display', 'block', 'important');
+        el.style.setProperty('visibility', 'visible', 'important');
+        el.style.setProperty('opacity', '1', 'important');
+      });
+
+      return document.getElementById('view-superadmin') || document.getElementById('main-content') || document.getElementById('app');
+    } catch(err) {
+      console.warn("Fallo secundario al ocultar vistas SPA:", err);
+    }
+  },
+
   async renderFloatingSuperadminPanel() {
-    const drawer = document.getElementById('drawer-main-menu');
-    if (drawer) drawer.classList.remove('active');
+    // 1. Cerrar el menú lateral (drawer) de forma segura
+    try {
+      const drawer = document.getElementById('drawer-main-menu');
+      if (drawer) drawer.classList.remove('active');
+    } catch(e) {}
 
     sessionStorage.setItem('bula_superadmin_active', 'true');
     window.location.hash = '#superadmin';
 
-    // Ocultar vistas secundarias de la SPA por seguridad
-    this.hideAllViewsAndShowSuperadmin();
+    // 2. Intentar ocultar vistas secundarias de la SPA (blindado sin bloqueo)
+    try {
+      if (typeof this.hideAllViewsAndShowSuperadmin === 'function') {
+        this.hideAllViewsAndShowSuperadmin();
+      }
+    } catch(e) {
+      console.warn("Advertencia al ocultar vistas secundarias:", e);
+    }
 
-    let existing = document.getElementById('superadmin-fixed-overlay');
-    if (existing) existing.remove();
+    // 3. Crear o limpiar el overlay flotante
+    let overlay;
+    try {
+      let existing = document.getElementById('superadmin-fixed-overlay');
+      if (existing) existing.remove();
 
-    const overlay = document.createElement('div');
-    overlay.id = 'superadmin-fixed-overlay';
-    overlay.style.cssText = `
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      background: #0b132b !important;
-      color: #f8fafc !important;
-      z-index: 99999 !important;
-      overflow-y: auto !important;
-      padding: 1.5rem !important;
-      box-sizing: border-box !important;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-      display: block !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-    `;
+      overlay = document.createElement('div');
+      overlay.id = 'superadmin-fixed-overlay';
+      overlay.style.cssText = `
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        background: #0b132b !important;
+        color: #f8fafc !important;
+        z-index: 99999 !important;
+        overflow-y: auto !important;
+        padding: 1.5rem !important;
+        box-sizing: border-box !important;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      `;
+    } catch(e) {
+      console.error("Fallo crítico creando elemento overlay:", e);
+      return;
+    }
 
+    // 4. Cargar usuarios (con fallback seguro ante cualquier error)
     let users = [];
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.getAllUsers === 'function') {
@@ -81,114 +149,136 @@ const superadminModule = {
     } catch (e) {
       console.warn("Fallo al obtener usuarios Supabase:", e);
     }
-    if (!users || users.length === 0) {
-      users = this.getFallbackUsers();
+    if (!users || !Array.isArray(users) || users.length === 0) {
+      try {
+        users = this.getFallbackUsers();
+      } catch(e) {
+        users = [
+          { username: 'admin', name: 'Administrador General', role: 'Usuario Supervisor', phone: '3000000000', email: 'admin@bulapay.com', documentType: 'CC', documentNumber: '1121338578' }
+        ];
+      }
     }
 
+    // 5. Construir filas de tabla de usuarios de forma segura
     let userRowsHtml = '';
-    users.forEach(u => {
-      userRowsHtml += `
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
-          <td style="padding: 0.75rem; color: #f8fafc;">
-            <strong>${u.username}</strong><br>
-            <span style="font-size: 0.75rem; color: #94a3b8;">${u.documentType || 'CC'}: ${u.documentNumber || u.username}</span>
-          </td>
-          <td style="padding: 0.75rem; font-weight: 600; color: #f8fafc;">${u.name || u.nombre_firmante || 'Sin Nombre'}</td>
-          <td style="padding: 0.75rem;"><span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;">${u.role || 'Usuario'}</span></td>
-          <td style="padding: 0.75rem; color: #94a3b8;">📞 ${u.phone || 'N/A'}<br>✉️ ${u.email || 'N/A'}</td>
-          <td style="padding: 0.75rem; color: #34d399; font-weight: 500;">Activo</td>
-          <td style="padding: 0.75rem; text-align: right; white-space: nowrap;">
-            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; margin-right: 0.3rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
-            <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
-          </td>
-        </tr>
-      `;
-    });
-
-    overlay.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; background: #1c2541; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
-        
-        <!-- Cabecera Principal del Panel Maestro Flotante -->
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1.25rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-          <div>
-            <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 0.3rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 PANEL DE SUPERADMINISTRADOR MAESTRO - ACTIVO</span>
-            <h1 style="font-size: 1.8rem; font-weight: 900; color: #ffffff; margin-top: 0.5rem; margin-bottom: 0.2rem;">Panel de Superadministrador Maestro</h1>
-            <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
-          </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-            <button id="btn-test-dom" onclick="alert('✅ ¡El DOM del Panel Maestro Flotante responde perfectamente!')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">🧪 Probador DOM</button>
-            <button onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border: none; color: white; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">📜 Exportar Contratos PDF</button>
-            <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
-            <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
-          </div>
-        </div>
-
-        <!-- Pestañas de Módulos Flotantes -->
-        <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; overflow-x: auto;">
-          <button id="sa-tab-users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid #34d399' : 'none'};">👥 1. Usuarios y Clientes</button>
-          <button id="sa-tab-contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid #34d399' : 'none'};">📜 2. Contratos y Términos</button>
-          <button id="sa-tab-performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid #34d399' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
-        </div>
-
-        <!-- Contenido Dinámico del Módulo Activo -->
-        <div id="superadmin-tab-content" style="margin-bottom: 2rem;">
-          <div style="background: #0b132b; border-radius: 12px; padding: 1.25rem; border: 1px solid rgba(255,255,255,0.1);">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
-              <h3 style="font-size: 1.25rem; color: #fbbf24; margin: 0; font-weight: 800;">👥 Gestión de Usuarios y Clientes (Supabase)</h3>
-              <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula..." style="padding: 0.5rem 0.8rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; width: 280px;">
-            </div>
-            <div id="sa-users-list-wrapper" style="overflow-x: auto;">
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
-                <thead>
-                  <tr style="border-bottom: 2px solid rgba(255,255,255,0.2); color: #34d399; text-transform: uppercase; font-size: 0.75rem;">
-                    <th style="padding: 0.75rem;">Usuario / Cédula</th>
-                    <th style="padding: 0.75rem;">Nombre Completo</th>
-                    <th style="padding: 0.75rem;">Rol</th>
-                    <th style="padding: 0.75rem;">Contacto</th>
-                    <th style="padding: 0.75rem;">Estado</th>
-                    <th style="padding: 0.75rem; text-align: right;">Acciones de Gestión</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${userRowsHtml}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Contenedor Canvas para Chart.js -->
-        <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem;" id="sa-global-chart-wrapper">
-          <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;">📊 Gráfica de Rendimiento Financiero (Chart.js)</h4>
-          <div style="position: relative; height: 300px; width: 100%;">
-            <canvas id="superadminChart"></canvas>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-    this.renderDrawerSection();
-
-    // Inicializar búsqueda
-    const searchInput = document.getElementById('sa-users-search');
-    if (searchInput) {
-      searchInput.oninput = () => {
-        const query = searchInput.value.toLowerCase().trim();
-        const filtered = users.filter(u =>
-          (u.name && u.name.toLowerCase().includes(query)) ||
-          (u.username && u.username.toLowerCase().includes(query)) ||
-          (u.documentNumber && u.documentNumber.toLowerCase().includes(query)) ||
-          (u.role && u.role.toLowerCase().includes(query))
-        );
-        this.renderUsersListTable(filtered);
-      };
+    try {
+      users.forEach(u => {
+        userRowsHtml += `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <td style="padding: 0.75rem; color: #f8fafc;">
+              <strong>${u.username}</strong><br>
+              <span style="font-size: 0.75rem; color: #94a3b8;">${u.documentType || 'CC'}: ${u.documentNumber || u.username}</span>
+            </td>
+            <td style="padding: 0.75rem; font-weight: 600; color: #f8fafc;">${u.name || u.nombre_firmante || 'Sin Nombre'}</td>
+            <td style="padding: 0.75rem;"><span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;">${u.role || 'Usuario'}</span></td>
+            <td style="padding: 0.75rem; color: #94a3b8;">📞 ${u.phone || 'N/A'}<br>✉️ ${u.email || 'N/A'}</td>
+            <td style="padding: 0.75rem; color: #34d399; font-weight: 500;">Activo</td>
+            <td style="padding: 0.75rem; text-align: right; white-space: nowrap;">
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; margin-right: 0.3rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
+            </td>
+          </tr>
+        `;
+      });
+    } catch(e) {
+      console.warn("Fallo construyendo filas de usuario:", e);
     }
 
-    // Inicializar Chart.js
-    setTimeout(() => {
-      this.initSuperadminChart();
-    }, 100);
+    // 6. Inyectar HTML en el overlay y montarlo en document.body
+    try {
+      overlay.innerHTML = `
+        <div style="max-width: 1200px; margin: 0 auto; background: #1c2541; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+          
+          <!-- Cabecera Principal del Panel Maestro Flotante -->
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1.25rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 0.3rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 PANEL DE SUPERADMINISTRADOR MAESTRO - ACTIVO</span>
+              <h1 style="font-size: 1.8rem; font-weight: 900; color: #ffffff; margin-top: 0.5rem; margin-bottom: 0.2rem;">Panel de Superadministrador Maestro</h1>
+              <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              <button id="btn-test-dom" onclick="alert('✅ ¡El DOM del Panel Maestro Flotante responde perfectamente!')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">🧪 Probador DOM</button>
+              <button onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border: none; color: white; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">📜 Exportar Contratos PDF</button>
+              <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
+              <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
+            </div>
+          </div>
+
+          <!-- Pestañas de Módulos Flotantes -->
+          <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; overflow-x: auto;">
+            <button id="sa-tab-users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'users' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'users' ? '3px solid #34d399' : 'none'};">👥 1. Usuarios y Clientes</button>
+            <button id="sa-tab-contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'contracts' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'contracts' ? '3px solid #34d399' : 'none'};">📜 2. Contratos y Términos</button>
+            <button id="sa-tab-performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: ${this.activeTab === 'performance' ? '#34d399' : '#94a3b8'}; font-weight: 700; cursor: pointer; border-bottom: ${this.activeTab === 'performance' ? '3px solid #34d399' : 'none'};">📊 3. Recurso Movido &amp; Gráficas</button>
+          </div>
+
+          <!-- Contenido Dinámico del Módulo Activo -->
+          <div id="superadmin-tab-content" style="margin-bottom: 2rem;">
+            <div style="background: #0b132b; border-radius: 12px; padding: 1.25rem; border: 1px solid rgba(255,255,255,0.1);">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+                <h3 style="font-size: 1.25rem; color: #fbbf24; margin: 0; font-weight: 800;">👥 Gestión de Usuarios y Clientes (Supabase)</h3>
+                <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula..." style="padding: 0.5rem 0.8rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; width: 280px;">
+              </div>
+              <div id="sa-users-list-wrapper" style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                  <thead>
+                    <tr style="border-bottom: 2px solid rgba(255,255,255,0.2); color: #34d399; text-transform: uppercase; font-size: 0.75rem;">
+                      <th style="padding: 0.75rem;">Usuario / Cédula</th>
+                      <th style="padding: 0.75rem;">Nombre Completo</th>
+                      <th style="padding: 0.75rem;">Rol</th>
+                      <th style="padding: 0.75rem;">Contacto</th>
+                      <th style="padding: 0.75rem;">Estado</th>
+                      <th style="padding: 0.75rem; text-align: right;">Acciones de Gestión</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${userRowsHtml}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contenedor Canvas para Chart.js -->
+          <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.25rem;" id="sa-global-chart-wrapper">
+            <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;">📊 Gráfica de Rendimiento Financiero (Chart.js)</h4>
+            <div style="position: relative; height: 300px; width: 100%;">
+              <canvas id="superadminChart"></canvas>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+    } catch(e) {
+      console.error("Fallo inyectando HTML en overlay:", e);
+    }
+
+    // 7. Sincronizaciones secundarias (drawer y chart) sin bloquear
+    try {
+      this.renderDrawerSection();
+    } catch(e) {}
+
+    try {
+      const searchInput = document.getElementById('sa-users-search');
+      if (searchInput) {
+        searchInput.oninput = () => {
+          const query = searchInput.value.toLowerCase().trim();
+          const filtered = users.filter(u =>
+            (u.name && u.name.toLowerCase().includes(query)) ||
+            (u.username && u.username.toLowerCase().includes(query)) ||
+            (u.documentNumber && u.documentNumber.toLowerCase().includes(query)) ||
+            (u.role && u.role.toLowerCase().includes(query))
+          );
+          this.renderUsersListTable(filtered);
+        };
+      }
+    } catch(e) {}
+
+    try {
+      setTimeout(() => {
+        this.initSuperadminChart();
+      }, 100);
+    } catch(e) {}
   },
 
   showSuperadminView() {
