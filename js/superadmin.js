@@ -65,16 +65,24 @@ const superadminModule = {
       }
     });
 
-    const target = document.getElementById('view-superadmin') || document.getElementById('main-content') || document.getElementById('app');
-    if (target) {
-      target.classList.remove('d-none', 'hidden');
-      target.classList.add('active');
-      target.style.setProperty('display', 'block', 'important');
-      target.style.setProperty('visibility', 'visible', 'important');
-      target.style.setProperty('opacity', '1', 'important');
-    }
+    const targetContainers = [
+      document.getElementById('view-superadmin'),
+      document.getElementById('main-content'),
+      document.getElementById('app')
+    ].filter(Boolean);
 
-    return target;
+    targetContainers.forEach(el => {
+      el.classList.remove('d-none', 'hidden', 'invisible', 'hide');
+      el.classList.add('active');
+      el.style.removeProperty('display');
+      el.style.removeProperty('visibility');
+      el.style.removeProperty('opacity');
+      el.style.setProperty('display', 'block', 'important');
+      el.style.setProperty('visibility', 'visible', 'important');
+      el.style.setProperty('opacity', '1', 'important');
+    });
+
+    return document.getElementById('view-superadmin') || document.getElementById('main-content') || document.getElementById('app');
   },
 
   renderEmergencyFallback(target) {
@@ -83,7 +91,7 @@ const superadminModule = {
     target.style.setProperty('display', 'block', 'important');
     target.style.setProperty('visibility', 'visible', 'important');
     target.style.setProperty('opacity', '1', 'important');
-    target.classList.remove('d-none', 'hidden');
+    target.classList.remove('d-none', 'hidden', 'invisible');
     target.classList.add('active');
 
     let tableRows = '';
@@ -102,10 +110,11 @@ const superadminModule = {
       <div class="superadmin-wrapper card" style="max-width: 1200px; margin: 0 auto; padding: 2rem; background: var(--bg-card); border-radius: 16px;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div>
-            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-verde); padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 Panel Superadministrador</span>
-            <h2 class="title-gradient" style="margin-top: 0.4rem; font-size: 1.6rem; font-weight: 800;">Panel de Superadministrador</h2>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-verde); padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 Acceso Exclusivo Master</span>
+            <h1 id="sa-master-heading" style="font-size: 1.6rem; font-weight: 900; color: #fbbf24; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-top: 0.4rem; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.03em;">PANEL DE SUPERADMINISTRADOR MAESTRO - ACTIVO</h1>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button id="btn-test-dom" class="btn btn-primary" onclick="alert('✅ ¡El DOM del Panel de Superadministrador Maestro responde correctamente!')" style="padding: 0.5rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer;">🧪 Probador de Respuesta DOM</button>
             <button class="btn btn-primary" onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-EMERGENCY-STAMP')" style="padding: 0.5rem 1rem; font-size: 0.85rem;">📜 Auditoría de Contratos PDF</button>
             <button class="btn btn-secondary" onclick="superadminModule.logout()" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: #ef4444; color: #fca5a5;">🚪 Salir de Superadmin</button>
           </div>
@@ -189,9 +198,10 @@ const superadminModule = {
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div>
             <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: var(--color-verde); padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.8rem; border-radius: 9999px; text-transform: uppercase;">👑 Acceso Exclusivo Master</span>
-            <h2 class="title-gradient" style="margin-top: 0.4rem; font-size: 1.6rem; font-weight: 800;">Panel de Superadministrador Maestro</h2>
+            <h1 id="sa-master-heading" style="font-size: 1.6rem; font-weight: 900; color: #fbbf24; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-top: 0.4rem; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.03em;">PANEL DE SUPERADMINISTRADOR MAESTRO - ACTIVO</h1>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button id="btn-test-dom" class="btn btn-primary" onclick="alert('✅ ¡El DOM del Panel de Superadministrador Maestro responde correctamente!')" style="padding: 0.5rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer;">🧪 Probador de Respuesta DOM</button>
             <button class="btn btn-primary" onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.5rem 1rem; font-size: 0.85rem;">📜 Auditoría de Contratos PDF</button>
             <button class="btn btn-secondary" id="btn-superadmin-change-pwd" onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">🔑 Cambiar Clave Superadmin</button>
             <button class="btn btn-secondary" onclick="superadminModule.logout()" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: #ef4444; color: #fca5a5;">🚪 Salir de Superadmin</button>

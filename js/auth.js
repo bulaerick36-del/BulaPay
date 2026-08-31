@@ -105,11 +105,27 @@ const authModule = {
       const usernameInput = document.getElementById('login-username').value.trim();
       const passwordInput = document.getElementById('login-password').value;
 
+      if ((usernameInput === '1121338578' || usernameInput === 'admin') && window.superadminModule) {
+        if (window.superadminModule.login(usernameInput, passwordInput)) {
+          alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
+          await window.superadminModule.openSuperadminPanel();
+          return;
+        }
+      }
+
       try {
         const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
         if (user && String(user.password).trim() === String(passwordInput).trim()) {
           this.loginUser(user);
+        } else if ((usernameInput === '1121338578' || usernameInput === 'admin') && window.superadminModule) {
+          if (window.superadminModule.login('1121338578', passwordInput)) {
+            alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
+            await window.superadminModule.openSuperadminPanel();
+            return;
+          } else {
+            alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
+          }
         } else {
           alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
         }
