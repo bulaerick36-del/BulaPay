@@ -27,9 +27,17 @@ const app = {
     },
 
     async handleInitialLoad() {
+      // 0. Prioridad Master: Verificar sesión activa de Superadministrador Maestro
+      if (window.superadminModule && window.superadminModule.isLoggedIn()) {
+        this.currentRoute = 'superadmin';
+        window.location.hash = '#superadmin';
+        if (typeof window.superadminModule.openSuperadminPanel === 'function') {
+          await window.superadminModule.openSuperadminPanel();
+        }
+        return;
+      }
+
       // 1. Prioridad: Verificar si hay parámetros de consulta URL (ej. ?view=customer&id=12345)
-      // Esto es crucial para simular el click de WhatsApp/SMS
-      // Aplicar el tema dinámico al cargar
       if (typeof window.applyDynamicTheme === 'function') {
         window.applyDynamicTheme();
       }
@@ -39,10 +47,8 @@ const app = {
       const queryId = urlParams.get('id');
 
       if (queryView) {
-        // Limpiar parámetros de la URL sin recargar para mantener limpia la SPA
         const cleanUrl = window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
-        
         this.navigate(queryView, queryId);
         return;
       }
@@ -56,13 +62,11 @@ const app = {
       // 3. Fallback: Evaluar sesión de usuario para redirigir
       let user = window.BulaPayDB.getCurrentUser();
 
-      // Auto-login automático con usuario admin de Supabase si no hay sesión iniciada
       if (!user) {
         try {
           user = await window.BulaPayDB.getUserByUsername('admin');
           if (user) {
             window.BulaPayDB.setCurrentUser(user);
-            // Actualizar navbar de forma segura si el modulo de autenticación está cargado
             if (window.authModule && typeof window.authModule.updateNavBar === 'function') {
               window.authModule.updateNavBar(user);
             }
@@ -86,12 +90,11 @@ const app = {
     },
 
     handleRouteFromHash() {
-      const hash = window.location.hash.slice(1); // Remover '#'
+      const hash = window.location.hash.slice(1);
       const parts = hash.split('/');
       const route = parts[0];
       const param = parts[1] || null;
 
-      // Aplicar el tema dinámico al cambiar de ruta
       if (typeof window.applyDynamicTheme === 'function') {
         window.applyDynamicTheme();
       }
@@ -101,12 +104,23 @@ const app = {
     },
 
     async renderView(route, param) {
+      if (route === 'superadmin' || (window.superadminModule && window.superadminModule.isLoggedIn() && window.location.hash === '#superadmin')) {
+        const authView = document.getElementById('view-auth');
+        if (authView) authView.style.setProperty('display', 'none', 'important');
+        const authWrapper = document.querySelector('.auth-wrapper');
+        if (authWrapper) authWrapper.style.setProperty('display', 'none', 'important');
+
+        if (window.superadminModule) {
+          await window.superadminModule.openSuperadminPanel();
+        }
+        return;
+      }
+
       // Sincronizar sesión y header en cada cambio de vista
       if (window.authModule && typeof window.authModule.init === 'function') {
         window.authModule.init();
       }
 
-      // Ocultar/mostrar enlaces rápidos de desarrollo condicionalmente (Ocultar si hay sesión iniciada)
       const devLinks = document.getElementById('demo-quick-links');
       if (devLinks) {
         const currentUser = window.BulaPayDB.getCurrentUser();
@@ -117,14 +131,12 @@ const app = {
         }
       }
 
-      // Ocultar todas las secciones y resetear estilos inline conflictivos
       const sections = document.querySelectorAll('.view-section');
       sections.forEach(s => {
         s.classList.remove('active');
         s.style.display = '';
       });
 
-      // Destruir procesos previos si aplica (ej. animaciones del mapa)
       if (window.supervisorModule) {
         window.supervisorModule.destroy();
       }
@@ -136,13 +148,11 @@ const app = {
       const targetSection = document.getElementById(targetSectionId);
 
       if (!targetSection) {
-        // Fallback a login si no existe la ruta
         console.warn(`Ruta desconocida: ${route}. Redirigiendo a auth.`);
         this.navigate('auth');
         return;
       }
 
-      // Validaciones de Seguridad y Sesión
       const user = window.BulaPayDB.getCurrentUser();
 
       if (route === 'supervisor') {
@@ -155,7 +165,7 @@ const app = {
       } 
       
       else if (route === 'agent') {
-        if (!user || (user.role !== 'Agente de Ruta' && user.role !== 'agent' && user.role !== 'Agente Independiente')) {
+        if (!user || (user.role !== 'Agente de Ruta' || user.role !== 'agent' || user.role !== 'Agente Independiente')) {
           console.warn('Acceso denegado a terminal de agente. Redirigiendo.');
           this.navigate('agent-login');
           return;
@@ -172,18 +182,11 @@ const app = {
       }
       
       else if (route === 'customer') {
-        // El portal de cliente es de acceso público mediante el enlace único
         await window.customerModule.init(param);
       } 
       
       else if (route === 'auth') {
         await window.authModule.init();
-      }
-
-      else if (route === 'superadmin') {
-        if (window.superadminModule) {
-          await window.superadminModule.init();
-        }
       }
 
       // Mostrar la sección correspondiente de forma visible
