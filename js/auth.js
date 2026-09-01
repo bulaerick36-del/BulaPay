@@ -645,7 +645,14 @@ window.ensureSupportModalExists = function() {
 };
 
 window.openSupportModal = function() {
-  authModule.openSupportModal();
+  const m = document.getElementById('modal-login-support') || (typeof window.ensureSupportModalExists === 'function' ? window.ensureSupportModalExists() : null);
+  if (m) {
+    m.style.setProperty('display', 'flex', 'important');
+    m.style.setProperty('visibility', 'visible', 'important');
+    m.style.setProperty('opacity', '1', 'important');
+    m.style.setProperty('z-index', '999999', 'important');
+    m.classList.add('active');
+  }
 };
 
 window.handleSupportSubmit = function(e) {

@@ -19,18 +19,14 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <!-- Script Global e Independiente para Módulo de Soporte -->
   <script>
-    function openSupportModal(e) {
-      if (e) {
-        if (typeof e.preventDefault === 'function') e.preventDefault();
-        if (typeof e.stopPropagation === 'function') e.stopPropagation();
-      }
-      var modal = document.getElementById('modal-login-support');
-      if (!modal && typeof window.ensureSupportModalExists === 'function') {
-        modal = window.ensureSupportModalExists();
-      }
-      if (modal) {
-        modal.style.cssText = 'display: flex !important; visibility: visible !important; opacity: 1 !important; z-index: 999999 !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; background: rgba(11, 19, 43, 0.85) !important; backdrop-filter: blur(8px) !important; justify-content: center !important; align-items: center !important; padding: 1rem !important; box-sizing: border-box !important;';
-        modal.classList.add('active');
+    window.openSupportModal = function() {
+      const m = document.getElementById('modal-login-support');
+      if (m) {
+        m.style.setProperty('display', 'flex', 'important');
+        m.style.setProperty('visibility', 'visible', 'important');
+        m.style.setProperty('opacity', '1', 'important');
+        m.style.setProperty('z-index', '999999', 'important');
+        m.classList.add('active');
       }
 
       setTimeout(function() {
@@ -55,26 +51,30 @@
           console.warn("Storage u objeto de usuario no disponible (ignorado):", err);
         }
       }, 10);
-    }
+    };
 
-    function closeSupportModal(e) {
+    window.closeSupportModal = function(e) {
       if (e && typeof e.preventDefault === 'function') e.preventDefault();
-      var modal = document.getElementById('modal-login-support');
-      if (modal) {
-        modal.style.setProperty('display', 'none', 'important');
-        modal.classList.remove('active');
+      const m = document.getElementById('modal-login-support');
+      if (m) {
+        m.style.setProperty('display', 'none', 'important');
+        m.classList.remove('active');
       }
-    }
+    };
 
-    window.openSupportModal = openSupportModal;
-    window.closeSupportModal = closeSupportModal;
-    window.openSupportModalDirect = openSupportModal;
+    window.openSupportModalDirect = window.openSupportModal;
 
     var bindSupportButtonDirect = function() {
       var btn = document.getElementById('btn-contactanos') || document.getElementById('btn-open-support');
       if (btn) {
-        btn.onclick = openSupportModal;
-        btn.addEventListener('click', openSupportModal, true);
+        btn.onclick = function(e) {
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          window.openSupportModal();
+        };
+        btn.addEventListener('click', function(e) {
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          window.openSupportModal();
+        }, true);
       }
     };
 
@@ -104,7 +104,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <button type="button" id="btn-contactanos" class="btn-open-support btn-contactanos" onclick="openSupportModal(event);" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.5rem 1.1rem; font-size: 0.85rem; font-weight: 800; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: all 0.2s;">
+        <button type="button" id="btn-contactanos" class="btn-open-support btn-contactanos" onclick="window.openSupportModal ? window.openSupportModal() : alert('Cargando soporte...');" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.5rem 1.1rem; font-size: 0.85rem; font-weight: 800; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: all 0.2s;">
           💬 Contáctanos
         </button>
         
