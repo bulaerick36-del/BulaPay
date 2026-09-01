@@ -3454,10 +3454,11 @@ const db = {
   async createSupportTicket(ticketData) {
     const newTicket = {
       id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-      name: ticketData.name || 'Sin Nombre',
-      role: ticketData.role || 'Usuario',
-      document_number: ticketData.documentNumber || ticketData.document_number || 'N/A',
-      message: ticketData.message || '',
+      name: ticketData.name || ticketData.sop_nombre || 'Sin Nombre',
+      role: ticketData.role || ticketData.sop_rol || 'Usuario',
+      document_number: ticketData.documentNumber || ticketData.document_number || ticketData.sop_cedula || 'N/A',
+      message: ticketData.message || ticketData.sop_mensaje || '',
+      attachment: ticketData.attachment || ticketData.sop_archivo || null,
       status: 'Pendiente',
       created_at: new Date().toISOString()
     };

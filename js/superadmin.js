@@ -1493,7 +1493,13 @@ const superadminModule = {
           </td>
           <td style="padding: 0.85rem 1rem; color: #e2e8f0; line-height: 1.4; max-width: 320px;">
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.83rem;">
-              "${t.message}"
+              "${t.message || ''}"
+              ${t.attachment ? `
+                <div style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 0.75rem; color: #38bdf8;">
+                  📎 Adjunto: <strong>${t.attachment.name || 'Archivo'}</strong>
+                  ${t.attachment.data ? `<br><a href="${t.attachment.data}" download="${t.attachment.name || 'adjunto'}" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: 700;">Descargar / Ver Adjunto</a>` : ''}
+                </div>
+              ` : ''}
             </div>
           </td>
           <td style="padding: 0.85rem 1rem; vertical-align: middle;">

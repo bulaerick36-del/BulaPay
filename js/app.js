@@ -710,7 +710,7 @@ window.ensureSupportModalExists = function() {
     <div style="background: #1c2541; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 16px; padding: 1.75rem; width: 100%; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; position: relative;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
         <div style="display: flex; align-items: center; gap: 0.6rem;">
-          <span style="font-size: 1.4rem;">🔑</span>
+          <span style="font-size: 1.4rem;">💬</span>
           <div>
             <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Módulo de Soporte Directo</h3>
             <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
@@ -719,33 +719,35 @@ window.ensureSupportModalExists = function() {
         <button type="button" onclick="if(typeof window.closeSupportModal === 'function'){ window.closeSupportModal(event); } else { const m = document.getElementById('modal-login-support'); if(m) m.style.display = 'none'; }" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
       </div>
 
-      <form id="form-login-support" onsubmit="event.preventDefault(); if(window.authModule && typeof window.authModule.handleSupportSubmit === 'function'){ window.authModule.handleSupportSubmit(event); } else if(typeof window.handleSupportSubmit === 'function'){ window.handleSupportSubmit(event); }">
-        <div class="form-group" style="margin-bottom: 1rem;">
-          <label for="support-name" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Nombre Completo:</label>
-          <input type="text" id="support-name" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+      <form id="form-login-support" onsubmit="event.preventDefault(); if(typeof window.enviarSoporteNativo === 'function'){ window.enviarSoporteNativo(event); } else if(window.authModule && typeof window.authModule.handleSupportSubmit === 'function'){ window.authModule.handleSupportSubmit(event); }">
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label for="sop_nombre" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">1. Nombre Completo:</label>
+          <input type="text" id="sop_nombre" name="sop_nombre" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 1rem;">
-          <div class="form-group">
-            <label for="support-role" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Rol o Cargo:</label>
-            <select id="support-role" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
-              <option value="Agente de Ruta" selected>📱 Agente de Ruta</option>
-              <option value="Supervisor de Zona">👑 Supervisor de Zona</option>
-              <option value="Agente Independiente">💼 Agente Independiente</option>
-              <option value="Comercio / Otro">🛒 Comercio / Otro</option>
-              <option value="Cliente / Usuario">👤 Cliente / Usuario</option>
-            </select>
-          </div>
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label for="sop_cedula" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">2. Número de Cédula:</label>
+          <input type="text" id="sop_cedula" name="sop_cedula" placeholder="Ej. 1098765432" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+        </div>
 
-          <div class="form-group">
-            <label for="support-doc" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Número de Cédula:</label>
-            <input type="text" id="support-doc" placeholder="Ej. 1098765432" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
-          </div>
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label for="sop_rol" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">3. Rol o Cargo:</label>
+          <select id="sop_rol" name="sop_rol" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+            <option value="Agente de Ruta" selected>📱 Agente de Ruta</option>
+            <option value="Agente Independiente">💼 Agente Independiente</option>
+            <option value="Comercio">🛒 Comercio</option>
+            <option value="Otro">❓ Otro</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label for="sop_mensaje" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">4. Inquietud o Mensaje Detallado:</label>
+          <textarea id="sop_mensaje" name="sop_mensaje" rows="3" placeholder="Describe detalladamente tu inconveniente o solicitud..." required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
         </div>
 
         <div class="form-group" style="margin-bottom: 1.25rem;">
-          <label for="support-message" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Mensaje o Inquietud:</label>
-          <textarea id="support-message" rows="3" placeholder="Describe brevemente el inconveniente (ej. Olvidé mi contraseña / Tengo una duda con mi ruta...)" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
+          <label for="sop_archivo" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">5. Adjuntar Documento o Imagen (Opcional):</label>
+          <input type="file" id="sop_archivo" name="sop_archivo" accept="image/*,.pdf,.doc,.docx,.txt" style="width: 100%; padding: 0.5rem; background: #0f172a; border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; font-size: 0.82rem; box-sizing: border-box; cursor: pointer;">
         </div>
 
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
@@ -769,7 +771,7 @@ window.ensureSupportModalExists = function() {
   return modal;
 };
 
-window.openSupportModal = function() {
+window.abrirSoporteNativo = function() {
   let modal = document.getElementById('modal-login-support');
   if (!modal) {
     modal = window.ensureSupportModalExists();
@@ -787,16 +789,16 @@ window.openSupportModal = function() {
       if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
         var user = window.BulaPayDB.getCurrentUser();
         if (user) {
-          var nameInp = document.getElementById('support-name');
-          var docInp = document.getElementById('support-doc');
-          var roleSel = document.getElementById('support-role');
+          var nameInp = document.getElementById('sop_nombre') || document.getElementById('support-name');
+          var docInp = document.getElementById('sop_cedula') || document.getElementById('support-doc');
+          var roleSel = document.getElementById('sop_rol') || document.getElementById('support-role');
           if (nameInp && !nameInp.value && user.name) nameInp.value = user.name;
           if (docInp && !docInp.value && (user.documentNumber || user.cedula)) docInp.value = user.documentNumber || user.cedula;
           if (roleSel && user.role) {
             if (user.role.includes('Agente de Ruta') || user.role === 'agent') roleSel.value = 'Agente de Ruta';
-            else if (user.role.includes('Supervisor') || user.role === 'supervisor') roleSel.value = 'Supervisor de Zona';
             else if (user.role.includes('Independiente')) roleSel.value = 'Agente Independiente';
-            else if (user.role.includes('Comercio')) roleSel.value = 'Comercio / Otro';
+            else if (user.role.includes('Comercio')) roleSel.value = 'Comercio';
+            else roleSel.value = 'Otro';
           }
         }
       }
@@ -806,12 +808,107 @@ window.openSupportModal = function() {
   }, 10);
 };
 
+window.openSupportModal = window.abrirSoporteNativo;
+window.openSupportModalDirect = window.abrirSoporteNativo;
+
 window.closeSupportModal = function(e) {
   if (e && typeof e.preventDefault === 'function') e.preventDefault();
   const m = document.getElementById('modal-login-support');
   if (m) {
     m.style.setProperty('display', 'none', 'important');
     m.classList.remove('active');
+  }
+};
+
+window.enviarSoporteNativo = async function(e) {
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
+
+  const nameInput = document.getElementById('sop_nombre') || document.getElementById('support-name');
+  const docInput = document.getElementById('sop_cedula') || document.getElementById('support-doc');
+  const roleSelect = document.getElementById('sop_rol') || document.getElementById('support-role');
+  const msgInput = document.getElementById('sop_mensaje') || document.getElementById('support-message');
+  const fileInput = document.getElementById('sop_archivo');
+
+  const nameVal = nameInput ? nameInput.value.trim() : '';
+  const docVal = docInput ? docInput.value.trim() : '';
+  const roleVal = roleSelect ? roleSelect.value : 'Otro';
+  const msgVal = msgInput ? msgInput.value.trim() : '';
+
+  if (!nameVal || !docVal || !msgVal) {
+    alert('⚠️ Por favor completa todos los campos obligatorios: Nombre Completo, Cédula y Mensaje.');
+    return;
+  }
+
+  let attachment = null;
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    const file = fileInput.files[0];
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = err => reject(err);
+        reader.readAsDataURL(file);
+      });
+      attachment = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        data: base64
+      };
+    } catch(fileErr) {
+      console.warn("No se pudo leer el archivo adjunto:", fileErr);
+      attachment = { name: file.name, size: file.size, type: file.type };
+    }
+  }
+
+  const ticketData = {
+    name: nameVal,
+    documentNumber: docVal,
+    role: roleVal,
+    message: msgVal,
+    attachment: attachment
+  };
+
+  try {
+    if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
+      await window.BulaPayDB.createSupportTicket(ticketData);
+    } else {
+      const raw = localStorage.getItem('bula_support_tickets');
+      const tickets = raw ? JSON.parse(raw) : [];
+      tickets.unshift({
+        id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        name: nameVal,
+        document_number: docVal,
+        role: roleVal,
+        message: msgVal,
+        attachment: attachment,
+        status: 'Pendiente',
+        created_at: new Date().toISOString()
+      });
+      localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+    }
+  } catch(err) {
+    console.warn("Advertencia al guardar ticket:", err);
+  }
+
+  alert('✅ ¡Tu solicitud de soporte ha sido enviada con éxito! El Superadministrador la revisará de inmediato.');
+
+  if (nameInput) nameInput.value = '';
+  if (docInput) docInput.value = '';
+  if (msgInput) msgInput.value = '';
+  if (fileInput) fileInput.value = '';
+
+  window.closeSupportModal(e);
+
+  try {
+    if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
+      await window.superadminModule.loadSupportTickets();
+    }
+  } catch(err) {
+    console.warn("Error refrescando tickets de superadmin:", err);
   }
 };
 
@@ -825,7 +922,9 @@ window.closeSupportModal = function(e) {
           e.preventDefault();
           e.stopPropagation();
         }
-        if (typeof window.openSupportModal === 'function') {
+        if (typeof window.abrirSoporteNativo === 'function') {
+          window.abrirSoporteNativo();
+        } else if (typeof window.openSupportModal === 'function') {
           window.openSupportModal();
         }
       }, true);
@@ -836,10 +935,10 @@ window.closeSupportModal = function(e) {
       if (btn) {
         e.preventDefault();
         e.stopPropagation();
-        if (typeof window.openSupportModal === 'function') {
+        if (typeof window.abrirSoporteNativo === 'function') {
+          window.abrirSoporteNativo();
+        } else if (typeof window.openSupportModal === 'function') {
           window.openSupportModal();
-        } else if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
-          window.authModule.openSupportModal();
         } else {
           const modal = window.ensureSupportModalExists ? window.ensureSupportModalExists() : document.getElementById('modal-login-support');
           if (modal) {
