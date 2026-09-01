@@ -549,3 +549,6 @@ const authModule = {
 };
 
 window.authModule = authModule;
+window.openSupportModal = function() {
+  authModule.openSupportModal();
+};

@@ -154,9 +154,11 @@ const app = {
       }
 
       const user = window.BulaPayDB.getCurrentUser();
+      const supervisorRoles = ['Usuario Supervisor', 'Comercio Independiente', 'supervisor', 'Administrador de Rutas', 'Otros (Comercios, Compraventas, Mercados)'];
+      const agentRoles = ['Agente de Ruta', 'agent', 'Agente Independiente'];
 
       if (route === 'supervisor') {
-        if (!user || (user.role !== 'Usuario Supervisor' && user.role !== 'Comercio Independiente' && user.role !== 'supervisor' && user.role !== 'Administrador de Rutas' && user.role !== 'Otros (Comercios, Compraventas, Mercados)')) {
+        if (!user || !supervisorRoles.includes(user.role)) {
           console.warn('Acceso denegado a panel de supervisor. Redirigiendo.');
           this.navigate('auth');
           return;
@@ -165,7 +167,7 @@ const app = {
       } 
       
       else if (route === 'agent') {
-        if (!user || (user.role !== 'Agente de Ruta' || user.role !== 'agent' || user.role !== 'Agente Independiente')) {
+        if (!user || !agentRoles.includes(user.role)) {
           console.warn('Acceso denegado a terminal de agente. Redirigiendo.');
           this.navigate('agent-login');
           return;
@@ -174,7 +176,7 @@ const app = {
       } 
       
       else if (route === 'agent-login') {
-        if (user && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente')) {
+        if (user && agentRoles.includes(user.role)) {
           this.navigate('agent');
           return;
         }
@@ -258,6 +260,7 @@ const app = {
     // Capa de validación de GPS (primera en ejecutarse)
     await this.checkGPSPermission();
     this.setupGPSInstructionsEvents();
+    this.setupSupportModalEvents();
 
     this.pwa.init();
     await this.router.init();
@@ -352,6 +355,27 @@ const app = {
 
     if (btnCloseX) btnCloseX.addEventListener('click', closeModal);
     if (btnCloseOk) btnCloseOk.addEventListener('click', closeModal);
+  },
+
+  setupSupportModalEvents() {
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support');
+      if (btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
+          window.authModule.openSupportModal();
+        } else {
+          const modal = document.getElementById('modal-login-support');
+          if (modal) {
+            modal.style.setProperty('display', 'flex', 'important');
+            modal.style.setProperty('visibility', 'visible', 'important');
+            modal.style.setProperty('opacity', '1', 'important');
+            modal.style.setProperty('z-index', '999999', 'important');
+          }
+        }
+      }
+    });
   },
 
   startPhoneClock() {
