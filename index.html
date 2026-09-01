@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=188">
+  <link rel="stylesheet" href="css/style.css?v=189">
   
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -32,7 +32,7 @@
             <div style="display: flex; align-items: center; gap: 0.6rem;">
               <span style="font-size: 1.4rem;">💬</span>
               <div>
-                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Módulo de Soporte Directo</h3>
+                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Soporte y Consultas BulaPay</h3>
                 <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
               </div>
             </div>
@@ -55,36 +55,39 @@
               <select id="sop_rol" name="sop_rol" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
                 <option value="Agente de Ruta" selected>📱 Agente de Ruta</option>
                 <option value="Agente Independiente">💼 Agente Independiente</option>
-                <option value="Comercio / Otro">🛒 Comercio / Otro</option>
+                <option value="Comercio">🛒 Comercio</option>
+                <option value="Otro">❓ Otro</option>
               </select>
             </div>
 
             <div class="form-group" style="margin-bottom: 0.85rem;">
-              <label for="sop_mensaje" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Inquietud o Mensaje Detallado:</label>
+              <label for="sop_mensaje" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Inquietud / Mensaje:</label>
               <textarea id="sop_mensaje" name="sop_mensaje" rows="3" placeholder="Describe detalladamente tu inconveniente o solicitud..." required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
             </div>
 
             <div class="form-group" style="margin-bottom: 1.25rem;">
-              <label for="sop_archivo" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Adjuntar Documento o Imagen (Opcional):</label>
+              <label for="sop_archivo" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Adjuntar Archivo (Opcional):</label>
               <input type="file" id="sop_archivo" name="sop_archivo" accept="image/*,.pdf,.doc,.docx,.txt" style="width: 100%; padding: 0.5rem; background: #0f172a; border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; font-size: 0.82rem; box-sizing: border-box; cursor: pointer;">
             </div>
 
             <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
               <button type="button" onclick="window.cerrarModalSoporteDirecto(event);" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
               <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
-                🚀 Enviar Solicitud a Superadmin
+                🚀 Enviar Ticket
               </button>
             </div>
           </form>
         </div>`;
-        if (document.body) document.body.appendChild(modal);
-      } else {
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.setProperty('visibility', 'visible', 'important');
-        modal.style.setProperty('opacity', '1', 'important');
-        modal.style.setProperty('z-index', '999999', 'important');
-        modal.classList.add('active');
+        if (document.body) {
+          document.body.appendChild(modal);
+        }
       }
+
+      modal.style.setProperty('display', 'flex', 'important');
+      modal.style.setProperty('z-index', '999999', 'important');
+      modal.style.setProperty('visibility', 'visible', 'important');
+      modal.style.setProperty('opacity', '1', 'important');
+      modal.classList.add('active');
 
       setTimeout(function() {
         try {
@@ -231,7 +234,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <button id="btn-contactanos" class="btn-contactanos" onclick="alert('Abriendo soporte...'); var m=document.getElementById('modal-login-support'); if(m){m.style.display='flex'; m.style.zIndex='999999'; m.style.visibility='visible'; m.style.opacity='1';}else{console.error('Modal no encontrado');}" style="cursor: pointer;">💬 Contáctanos</button>
+        <button id="btn-contactanos" class="btn-contactanos" onclick="if(typeof window.abrirModalSoporteDirecto==='function'){window.abrirModalSoporteDirecto();}else{var m=document.getElementById('modal-login-support');if(m){m.style.display='flex';m.style.zIndex='999999';}}" style="cursor: pointer;">💬 Contáctanos</button>
         
         <!-- Información del usuario logueado -->
         <div class="user-nav-info" id="user-nav-info" style="display: none;">
@@ -1815,14 +1818,14 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=188"></script>
-  <script src="js/auth.js?v=188"></script>
-  <script src="js/supervisor.js?v=188"></script>
-  <script src="js/agent_v6.js?v=188"></script>
-  <script src="js/customer.js?v=188"></script>
-  <script src="js/superadmin.js?v=188"></script>
+  <script src="js/db.js?v=189"></script>
+  <script src="js/auth.js?v=189"></script>
+  <script src="js/supervisor.js?v=189"></script>
+  <script src="js/agent_v6.js?v=189"></script>
+  <script src="js/customer.js?v=189"></script>
+  <script src="js/superadmin.js?v=189"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=188"></script>
+  <script src="js/app.js?v=189"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2473,7 +2476,7 @@
         <div style="display: flex; align-items: center; gap: 0.6rem;">
           <span style="font-size: 1.4rem;">💬</span>
           <div>
-            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Módulo de Soporte Directo</h3>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Soporte y Consultas BulaPay</h3>
             <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
           </div>
         </div>
@@ -2520,7 +2523,7 @@
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
           <button type="button" onclick="const m=document.getElementById('modal-login-support'); if(m) m.style.display='none';" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
           <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
-            🚀 Enviar Solicitud a Superadmin
+            🚀 Enviar Ticket
           </button>
         </div>
       </form>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bulapay-v188';
+const CACHE_NAME = 'bulapay-v189';
 const ASSETS = [
   './',
   './index.html',
