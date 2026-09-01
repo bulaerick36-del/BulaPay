@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=186">
+  <link rel="stylesheet" href="css/style.css?v=188">
   
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -231,7 +231,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <button id="btn-contactanos-directo" class="btn-contactanos" onclick="window.abrirModalSoporteDirecto()" style="cursor: pointer;">💬 Contáctanos</button>
+        <button id="btn-contactanos" class="btn-contactanos" onclick="alert('Abriendo soporte...'); var m=document.getElementById('modal-login-support'); if(m){m.style.display='flex'; m.style.zIndex='999999'; m.style.visibility='visible'; m.style.opacity='1';}else{console.error('Modal no encontrado');}" style="cursor: pointer;">💬 Contáctanos</button>
         
         <!-- Información del usuario logueado -->
         <div class="user-nav-info" id="user-nav-info" style="display: none;">
@@ -1815,14 +1815,14 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=186"></script>
-  <script src="js/auth.js?v=186"></script>
-  <script src="js/supervisor.js?v=186"></script>
-  <script src="js/agent_v6.js?v=186"></script>
-  <script src="js/customer.js?v=186"></script>
-  <script src="js/superadmin.js?v=186"></script>
+  <script src="js/db.js?v=188"></script>
+  <script src="js/auth.js?v=188"></script>
+  <script src="js/supervisor.js?v=188"></script>
+  <script src="js/agent_v6.js?v=188"></script>
+  <script src="js/customer.js?v=188"></script>
+  <script src="js/superadmin.js?v=188"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=186"></script>
+  <script src="js/app.js?v=188"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2477,10 +2477,10 @@
             <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
           </div>
         </div>
-        <button type="button" onclick="closeSupportModal(event);" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        <button type="button" onclick="const m=document.getElementById('modal-login-support'); if(m) m.style.display='none';" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
       </div>
 
-      <form id="form-login-support" onsubmit="event.preventDefault(); if(typeof window.enviarSoporteNativo === 'function'){ window.enviarSoporteNativo(event); } else if(window.authModule && typeof window.authModule.handleSupportSubmit === 'function'){ window.authModule.handleSupportSubmit(event); }">
+      <form id="form-login-support" onsubmit="event.preventDefault(); if(typeof window.enviarSoporteDirecto === 'function'){ window.enviarSoporteDirecto(event); } else { alert('Enviando mensaje de soporte...'); const m=document.getElementById('modal-login-support'); if(m) m.style.display='none'; }">
         
         <!-- Campo 1: Nombre completo -->
         <div class="form-group" style="margin-bottom: 0.85rem;">
@@ -2518,7 +2518,7 @@
         </div>
 
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-          <button type="button" onclick="closeSupportModal(event);" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
+          <button type="button" onclick="const m=document.getElementById('modal-login-support'); if(m) m.style.display='none';" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
           <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
             🚀 Enviar Solicitud a Superadmin
           </button>
