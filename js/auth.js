@@ -482,40 +482,9 @@ const authModule = {
   },
 
   openSupportModal() {
-    const modal = window.ensureSupportModalExists();
-    if (!modal) return;
-
-    // Auto-completar datos del usuario logueado en la sesión de forma segura
-    try {
-      if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
-        const user = window.BulaPayDB.getCurrentUser();
-        if (user) {
-          const nameInp = document.getElementById('support-name');
-          const docInp = document.getElementById('support-doc');
-          const roleSel = document.getElementById('support-role');
-          if (nameInp && !nameInp.value && user.name) {
-            nameInp.value = user.name;
-          }
-          if (docInp && !docInp.value && (user.documentNumber || user.cedula)) {
-            docInp.value = user.documentNumber || user.cedula;
-          }
-          if (roleSel && user.role) {
-            if (user.role.includes('Agente de Ruta') || user.role === 'agent') roleSel.value = 'Agente de Ruta';
-            else if (user.role.includes('Supervisor') || user.role === 'supervisor') roleSel.value = 'Supervisor de Zona';
-            else if (user.role.includes('Independiente')) roleSel.value = 'Agente Independiente';
-            else if (user.role.includes('Comercio')) roleSel.value = 'Comercio / Otro';
-          }
-        }
-      }
-    } catch(err) {
-      console.warn("Auto-completado de perfil en soporte omitido:", err);
+    if (typeof window.abrirModalSoporteDirecto === 'function') {
+      window.abrirModalSoporteDirecto();
     }
-
-    modal.style.setProperty('display', 'flex', 'important');
-    modal.style.setProperty('visibility', 'visible', 'important');
-    modal.style.setProperty('opacity', '1', 'important');
-    modal.style.setProperty('z-index', '999999', 'important');
-    modal.classList.add('active');
   },
 
   closeSupportModal() {
@@ -527,54 +496,8 @@ const authModule = {
   },
 
   async handleSupportSubmit(e) {
-    if (e) {
-      e.preventDefault();
-      if (typeof e.stopPropagation === 'function') e.stopPropagation();
-    }
-
-    const nameInput = document.getElementById('support-name');
-    const roleSelect = document.getElementById('support-role');
-    const docInput = document.getElementById('support-doc');
-    const msgInput = document.getElementById('support-message');
-
-    if (!nameInput || !docInput || !msgInput) return;
-
-    const nameVal = nameInput.value.trim();
-    const roleVal = roleSelect ? roleSelect.value : 'Usuario';
-    const docVal = docInput.value.trim();
-    const msgVal = msgInput.value.trim();
-
-    if (!nameVal || !docVal || !msgVal) {
-      alert('⚠️ Por favor completa todos los campos del formulario de soporte.');
-      return;
-    }
-
-    try {
-      if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
-        await window.BulaPayDB.createSupportTicket({
-          name: nameVal,
-          role: roleVal,
-          documentNumber: docVal,
-          message: msgVal
-        });
-      }
-    } catch(err) {
-      console.warn("Advertencia en el envío de soporte (no bloqueante):", err);
-    }
-
-    alert('✅ ¡Tu mensaje de soporte ha sido enviado con éxito! El Superadministrador lo revisará de inmediato.');
-
-    nameInput.value = '';
-    docInput.value = '';
-    msgInput.value = '';
-    this.closeSupportModal();
-
-    try {
-      if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
-        await window.superadminModule.loadSupportTickets();
-      }
-    } catch(err) {
-      console.warn("Advertencia al actualizar el buzón de superadmin:", err);
+    if (typeof window.enviarSoporteDirecto === 'function') {
+      await window.enviarSoporteDirecto(e);
     }
   }
 };
@@ -645,37 +568,13 @@ window.ensureSupportModalExists = function() {
 };
 
 window.openSupportModal = function() {
-  const m = document.getElementById('modal-login-support') || (typeof window.ensureSupportModalExists === 'function' ? window.ensureSupportModalExists() : null);
-  if (m) {
-    m.style.setProperty('display', 'flex', 'important');
-    m.style.setProperty('visibility', 'visible', 'important');
-    m.style.setProperty('opacity', '1', 'important');
-    m.style.setProperty('z-index', '999999', 'important');
-    m.classList.add('active');
+  if (typeof window.abrirModalSoporteDirecto === 'function') {
+    window.abrirModalSoporteDirecto();
   }
-};
-
-window.handleSupportSubmit = function(e) {
-  authModule.handleSupportSubmit(e);
 };
 
 window.openSupportModalDirect = function(e) {
-  if (e) {
-    if (typeof e.preventDefault === 'function') e.preventDefault();
-    if (typeof e.stopPropagation === 'function') e.stopPropagation();
-  }
-  if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
-    window.authModule.openSupportModal();
-  } else if (typeof window.openSupportModal === 'function') {
-    window.openSupportModal();
-  } else {
-    const modal = window.ensureSupportModalExists ? window.ensureSupportModalExists() : document.getElementById('modal-login-support');
-    if (modal) {
-      modal.style.setProperty('display', 'flex', 'important');
-      modal.style.setProperty('visibility', 'visible', 'important');
-      modal.style.setProperty('opacity', '1', 'important');
-      modal.style.setProperty('z-index', '999999', 'important');
-      modal.classList.add('active');
-    }
+  if (typeof window.abrirModalSoporteDirecto === 'function') {
+    window.abrirModalSoporteDirecto();
   }
 };

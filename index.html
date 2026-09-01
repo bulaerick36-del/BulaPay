@@ -12,51 +12,102 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=185">
+  <link rel="stylesheet" href="css/style.css?v=186">
   
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <!-- Script Global e Independiente para Módulo de Soporte Nativo -->
+  <!-- Script Global Autocontenido de Soporte Directo -->
   <script>
-    window.abrirSoporteNativo = function() {
-      var m = document.getElementById('modal-login-support') || (typeof window.ensureSupportModalExists === 'function' ? window.ensureSupportModalExists() : null);
-      if (m) {
-        m.style.setProperty('display', 'flex', 'important');
-        m.style.setProperty('visibility', 'visible', 'important');
-        m.style.setProperty('opacity', '1', 'important');
-        m.style.setProperty('z-index', '999999', 'important');
-        m.classList.add('active');
+    window.abrirModalSoporteDirecto = function() {
+      var modal = document.getElementById('modal-login-support');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-login-support';
+        modal.className = 'modal';
+        modal.style.cssText = 'display: flex !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; background: rgba(11, 19, 43, 0.85) !important; backdrop-filter: blur(8px) !important; z-index: 999999 !important; justify-content: center !important; align-items: center !important; padding: 1rem !important; box-sizing: border-box !important; opacity: 1 !important; visibility: visible !important;';
+        modal.innerHTML = `
+        <div style="background: #1c2541; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 16px; padding: 1.75rem; width: 100%; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; position: relative;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span style="font-size: 1.4rem;">💬</span>
+              <div>
+                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Módulo de Soporte Directo</h3>
+                <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
+              </div>
+            </div>
+            <button type="button" onclick="window.cerrarModalSoporteDirecto(event);" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+          </div>
+
+          <form id="form-login-support" onsubmit="window.enviarSoporteDirecto(event);">
+            <div class="form-group" style="margin-bottom: 0.85rem;">
+              <label for="sop_nombre" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Nombre Completo:</label>
+              <input type="text" id="sop_nombre" name="sop_nombre" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0.85rem;">
+              <label for="sop_cedula" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Número de Cédula:</label>
+              <input type="text" id="sop_cedula" name="sop_cedula" placeholder="Ej. 1098765432" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0.85rem;">
+              <label for="sop_rol" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Rol o Cargo:</label>
+              <select id="sop_rol" name="sop_rol" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+                <option value="Agente de Ruta" selected>📱 Agente de Ruta</option>
+                <option value="Agente Independiente">💼 Agente Independiente</option>
+                <option value="Comercio / Otro">🛒 Comercio / Otro</option>
+              </select>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0.85rem;">
+              <label for="sop_mensaje" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Inquietud o Mensaje Detallado:</label>
+              <textarea id="sop_mensaje" name="sop_mensaje" rows="3" placeholder="Describe detalladamente tu inconveniente o solicitud..." required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1.25rem;">
+              <label for="sop_archivo" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Adjuntar Documento o Imagen (Opcional):</label>
+              <input type="file" id="sop_archivo" name="sop_archivo" accept="image/*,.pdf,.doc,.docx,.txt" style="width: 100%; padding: 0.5rem; background: #0f172a; border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; font-size: 0.82rem; box-sizing: border-box; cursor: pointer;">
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+              <button type="button" onclick="window.cerrarModalSoporteDirecto(event);" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
+              <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
+                🚀 Enviar Solicitud a Superadmin
+              </button>
+            </div>
+          </form>
+        </div>`;
+        if (document.body) document.body.appendChild(modal);
+      } else {
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('z-index', '999999', 'important');
+        modal.classList.add('active');
       }
 
       setTimeout(function() {
         try {
           if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
-            var user = window.BulaPayDB.getCurrentUser();
-            if (user) {
-              var nameInp = document.getElementById('sop_nombre') || document.getElementById('support-name');
-              var docInp = document.getElementById('sop_cedula') || document.getElementById('support-doc');
-              var roleSel = document.getElementById('sop_rol') || document.getElementById('support-role');
-              if (nameInp && !nameInp.value && user.name) nameInp.value = user.name;
-              if (docInp && !docInp.value && (user.documentNumber || user.cedula)) docInp.value = user.documentNumber || user.cedula;
-              if (roleSel && user.role) {
-                if (user.role.includes('Agente de Ruta') || user.role === 'agent') roleSel.value = 'Agente de Ruta';
-                else if (user.role.includes('Independiente')) roleSel.value = 'Agente Independiente';
-                else if (user.role.includes('Comercio')) roleSel.value = 'Comercio';
-                else roleSel.value = 'Otro';
+            var u = window.BulaPayDB.getCurrentUser();
+            if (u) {
+              var n = document.getElementById('sop_nombre');
+              var c = document.getElementById('sop_cedula');
+              var r = document.getElementById('sop_rol');
+              if (n && !n.value && u.name) n.value = u.name;
+              if (c && !c.value && (u.documentNumber || u.cedula)) c.value = u.documentNumber || u.cedula;
+              if (r && u.role) {
+                if (u.role.includes('Agente de Ruta') || u.role === 'agent') r.value = 'Agente de Ruta';
+                else if (u.role.includes('Independiente')) r.value = 'Agente Independiente';
+                else r.value = 'Comercio / Otro';
               }
             }
           }
-        } catch(err) {
-          console.warn("Storage u objeto de usuario no disponible (ignorado):", err);
-        }
+        } catch(e) {}
       }, 10);
     };
 
-    window.openSupportModal = window.abrirSoporteNativo;
-    window.openSupportModalDirect = window.abrirSoporteNativo;
-
-    window.closeSupportModal = function(e) {
+    window.cerrarModalSoporteDirecto = function(e) {
       if (e && typeof e.preventDefault === 'function') e.preventDefault();
       var m = document.getElementById('modal-login-support');
       if (m) {
@@ -65,25 +116,29 @@
       }
     };
 
-    window.enviarSoporteNativo = async function(e) {
+    window.openSupportModal = window.abrirModalSoporteDirecto;
+    window.abrirSoporteNativo = window.abrirModalSoporteDirecto;
+    window.closeSupportModal = window.cerrarModalSoporteDirecto;
+
+    window.enviarSoporteDirecto = async function(e) {
       if (e) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
       }
 
-      var nameInput = document.getElementById('sop_nombre') || document.getElementById('support-name');
-      var docInput = document.getElementById('sop_cedula') || document.getElementById('support-doc');
-      var roleSelect = document.getElementById('sop_rol') || document.getElementById('support-role');
-      var msgInput = document.getElementById('sop_mensaje') || document.getElementById('support-message');
+      var nameInput = document.getElementById('sop_nombre');
+      var docInput = document.getElementById('sop_cedula');
+      var roleSelect = document.getElementById('sop_rol');
+      var msgInput = document.getElementById('sop_mensaje');
       var fileInput = document.getElementById('sop_archivo');
 
       var nameVal = nameInput ? nameInput.value.trim() : '';
       var docVal = docInput ? docInput.value.trim() : '';
-      var roleVal = roleSelect ? roleSelect.value : 'Otro';
+      var roleVal = roleSelect ? roleSelect.value : 'Comercio / Otro';
       var msgVal = msgInput ? msgInput.value.trim() : '';
 
       if (!nameVal || !docVal || !msgVal) {
-        alert('⚠️ Por favor completa todos los campos obligatorios: Nombre Completo, Cédula y Mensaje.');
+        alert('⚠️ Por favor completa todos los campos requeridos (Nombre, Cédula y Mensaje).');
         return;
       }
 
@@ -104,78 +159,57 @@
             data: base64
           };
         } catch(fileErr) {
-          console.warn("No se pudo leer el archivo adjunto:", fileErr);
           attachment = { name: file.name, size: file.size, type: file.type };
         }
       }
 
-      var ticketData = {
+      var newTicket = {
+        id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
         name: nameVal,
-        documentNumber: docVal,
+        document_number: docVal,
         role: roleVal,
         message: msgVal,
-        attachment: attachment
+        attachment: attachment,
+        status: 'Pendiente',
+        created_at: new Date().toISOString()
       };
 
+      // 1. Guardar en localStorage (Respaldo Infalible Inmediato)
       try {
-        if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
-          await window.BulaPayDB.createSupportTicket(ticketData);
-        } else {
-          var raw = localStorage.getItem('bula_support_tickets');
-          var tickets = raw ? JSON.parse(raw) : [];
-          tickets.unshift({
-            id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-            name: nameVal,
-            document_number: docVal,
-            role: roleVal,
-            message: msgVal,
-            attachment: attachment,
-            status: 'Pendiente',
-            created_at: new Date().toISOString()
-          });
-          localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
-        }
+        var raw = localStorage.getItem('bula_support_tickets');
+        var tickets = raw ? JSON.parse(raw) : [];
+        tickets.unshift(newTicket);
+        localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
       } catch(err) {
-        console.warn("Advertencia al guardar ticket:", err);
+        console.warn("Fallo guardando ticket en localStorage:", err);
       }
 
-      alert('✅ ¡Tu solicitud de soporte ha sido enviada con éxito! El Superadministrador la revisará de inmediato.');
+      // 2. Sincronizar con Supabase si está disponible
+      try {
+        if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
+          await window.BulaPayDB.createSupportTicket(newTicket);
+        }
+      } catch(err) {
+        console.warn("Fallo al sincronizar ticket con Supabase:", err);
+      }
+
+      // 3. Alerta de éxito y cerrar ventana
+      alert('✅ ¡Tu mensaje de soporte ha sido enviado con éxito! El Superadministrador lo revisará de inmediato.');
 
       if (nameInput) nameInput.value = '';
       if (docInput) docInput.value = '';
       if (msgInput) msgInput.value = '';
       if (fileInput) fileInput.value = '';
 
-      window.closeSupportModal(e);
+      window.cerrarModalSoporteDirecto(e);
 
+      // 4. Actualizar tabla superadmin si existe
       try {
         if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
           await window.superadminModule.loadSupportTickets();
         }
-      } catch(err) {
-        console.warn("Error refrescando tickets de superadmin:", err);
-      }
+      } catch(err) {}
     };
-
-    var bindSupportButtonDirect = function() {
-      var btn = document.getElementById('btn-contactanos') || document.getElementById('btn-open-support');
-      if (btn) {
-        btn.onclick = function(e) {
-          if (e && typeof e.preventDefault === 'function') e.preventDefault();
-          if (typeof window.abrirSoporteNativo === 'function') {
-            window.abrirSoporteNativo();
-          } else if (typeof window.openSupportModal === 'function') {
-            window.openSupportModal();
-          }
-        };
-      }
-    };
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', bindSupportButtonDirect);
-    } else {
-      bindSupportButtonDirect();
-    }
   </script>
 </head>
 <body class="w-full min-h-screen overflow-x-hidden">
@@ -197,7 +231,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <button id="btn-contactanos" class="btn-contactanos" onclick="event.stopPropagation(); event.preventDefault(); if(typeof window.abrirSoporteNativo === 'function') { window.abrirSoporteNativo(); } else if(typeof window.openSupportModal === 'function') { window.openSupportModal(); } else { alert('Sistema de soporte cargando... intente en un momento'); }">💬 Contáctanos</button>
+        <button id="btn-contactanos-directo" class="btn-contactanos" onclick="window.abrirModalSoporteDirecto()" style="cursor: pointer;">💬 Contáctanos</button>
         
         <!-- Información del usuario logueado -->
         <div class="user-nav-info" id="user-nav-info" style="display: none;">
@@ -1781,14 +1815,14 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=185"></script>
-  <script src="js/auth.js?v=185"></script>
-  <script src="js/supervisor.js?v=185"></script>
-  <script src="js/agent_v6.js?v=185"></script>
-  <script src="js/customer.js?v=185"></script>
-  <script src="js/superadmin.js?v=185"></script>
+  <script src="js/db.js?v=186"></script>
+  <script src="js/auth.js?v=186"></script>
+  <script src="js/supervisor.js?v=186"></script>
+  <script src="js/agent_v6.js?v=186"></script>
+  <script src="js/customer.js?v=186"></script>
+  <script src="js/superadmin.js?v=186"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=185"></script>
+  <script src="js/app.js?v=186"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
