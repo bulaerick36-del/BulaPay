@@ -485,26 +485,30 @@ const authModule = {
     const modal = window.ensureSupportModalExists();
     if (!modal) return;
 
-    // Auto-completar datos del usuario logueado en la sesión
-    if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
-      const user = window.BulaPayDB.getCurrentUser();
-      if (user) {
-        const nameInp = document.getElementById('support-name');
-        const docInp = document.getElementById('support-doc');
-        const roleSel = document.getElementById('support-role');
-        if (nameInp && !nameInp.value && user.name) {
-          nameInp.value = user.name;
-        }
-        if (docInp && !docInp.value && (user.documentNumber || user.cedula)) {
-          docInp.value = user.documentNumber || user.cedula;
-        }
-        if (roleSel && user.role) {
-          if (user.role.includes('Agente de Ruta') || user.role === 'agent') roleSel.value = 'Agente de Ruta';
-          else if (user.role.includes('Supervisor') || user.role === 'supervisor') roleSel.value = 'Supervisor de Zona';
-          else if (user.role.includes('Independiente')) roleSel.value = 'Agente Independiente';
-          else if (user.role.includes('Comercio')) roleSel.value = 'Comercio / Otro';
+    // Auto-completar datos del usuario logueado en la sesión de forma segura
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
+        const user = window.BulaPayDB.getCurrentUser();
+        if (user) {
+          const nameInp = document.getElementById('support-name');
+          const docInp = document.getElementById('support-doc');
+          const roleSel = document.getElementById('support-role');
+          if (nameInp && !nameInp.value && user.name) {
+            nameInp.value = user.name;
+          }
+          if (docInp && !docInp.value && (user.documentNumber || user.cedula)) {
+            docInp.value = user.documentNumber || user.cedula;
+          }
+          if (roleSel && user.role) {
+            if (user.role.includes('Agente de Ruta') || user.role === 'agent') roleSel.value = 'Agente de Ruta';
+            else if (user.role.includes('Supervisor') || user.role === 'supervisor') roleSel.value = 'Supervisor de Zona';
+            else if (user.role.includes('Independiente')) roleSel.value = 'Agente Independiente';
+            else if (user.role.includes('Comercio')) roleSel.value = 'Comercio / Otro';
+          }
         }
       }
+    } catch(err) {
+      console.warn("Auto-completado de perfil en soporte omitido:", err);
     }
 
     modal.style.setProperty('display', 'flex', 'important');
@@ -646,4 +650,25 @@ window.openSupportModal = function() {
 
 window.handleSupportSubmit = function(e) {
   authModule.handleSupportSubmit(e);
+};
+
+window.openSupportModalDirect = function(e) {
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
+  if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
+    window.authModule.openSupportModal();
+  } else if (typeof window.openSupportModal === 'function') {
+    window.openSupportModal();
+  } else {
+    const modal = window.ensureSupportModalExists ? window.ensureSupportModalExists() : document.getElementById('modal-login-support');
+    if (modal) {
+      modal.style.setProperty('display', 'flex', 'important');
+      modal.style.setProperty('visibility', 'visible', 'important');
+      modal.style.setProperty('opacity', '1', 'important');
+      modal.style.setProperty('z-index', '999999', 'important');
+      modal.classList.add('active');
+    }
+  }
 };
