@@ -482,19 +482,43 @@ const authModule = {
   },
 
   openSupportModal() {
-    const modal = document.getElementById('modal-login-support');
-    if (modal) {
-      modal.style.setProperty('display', 'flex', 'important');
-      modal.style.setProperty('visibility', 'visible', 'important');
-      modal.style.setProperty('opacity', '1', 'important');
-      modal.style.setProperty('z-index', '999999', 'important');
+    const modal = window.ensureSupportModalExists();
+    if (!modal) return;
+
+    // Auto-completar datos del usuario logueado en la sesión
+    if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
+      const user = window.BulaPayDB.getCurrentUser();
+      if (user) {
+        const nameInp = document.getElementById('support-name');
+        const docInp = document.getElementById('support-doc');
+        const roleSel = document.getElementById('support-role');
+        if (nameInp && !nameInp.value && user.name) {
+          nameInp.value = user.name;
+        }
+        if (docInp && !docInp.value && (user.documentNumber || user.cedula)) {
+          docInp.value = user.documentNumber || user.cedula;
+        }
+        if (roleSel && user.role) {
+          if (user.role.includes('Agente de Ruta') || user.role === 'agent') roleSel.value = 'Agente de Ruta';
+          else if (user.role.includes('Supervisor') || user.role === 'supervisor') roleSel.value = 'Supervisor de Zona';
+          else if (user.role.includes('Independiente')) roleSel.value = 'Agente Independiente';
+          else if (user.role.includes('Comercio')) roleSel.value = 'Comercio / Otro';
+        }
+      }
     }
+
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('z-index', '999999', 'important');
+    modal.classList.add('active');
   },
 
   closeSupportModal() {
     const modal = document.getElementById('modal-login-support');
     if (modal) {
       modal.style.setProperty('display', 'none', 'important');
+      modal.classList.remove('active');
     }
   },
 
@@ -523,7 +547,7 @@ const authModule = {
 
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
-        await window.BulaPayDB.createSupportTicket({
+        const ticket = await window.BulaPayDB.createSupportTicket({
           name: nameVal,
           role: roleVal,
           documentNumber: docVal,
@@ -538,7 +562,7 @@ const authModule = {
         this.closeSupportModal();
 
         if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
-          window.superadminModule.loadSupportTickets();
+          await window.superadminModule.loadSupportTickets();
         }
       }
     } catch(err) {
@@ -549,6 +573,74 @@ const authModule = {
 };
 
 window.authModule = authModule;
+
+// Creador e inyector dinámico forzado del Modal de Soporte
+window.ensureSupportModalExists = function() {
+  let modal = document.getElementById('modal-login-support');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-login-support';
+    modal.className = 'modal';
+    modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(11, 19, 43, 0.85); backdrop-filter: blur(8px); z-index: 999999; justify-content: center; align-items: center; padding: 1rem; box-sizing: border-box;';
+    modal.innerHTML = `
+    <div style="background: #1c2541; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 16px; padding: 1.75rem; width: 100%; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span style="font-size: 1.4rem;">🔑</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Módulo de Soporte Directo</h3>
+            <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
+          </div>
+        </div>
+        <button type="button" onclick="if(window.authModule && typeof window.authModule.closeSupportModal === 'function'){ window.authModule.closeSupportModal(); } else { const m = document.getElementById('modal-login-support'); if(m) m.style.display = 'none'; }" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+
+      <form id="form-login-support" onsubmit="event.preventDefault(); if(window.authModule && typeof window.authModule.handleSupportSubmit === 'function'){ window.authModule.handleSupportSubmit(event); } else if(typeof window.handleSupportSubmit === 'function'){ window.handleSupportSubmit(event); }">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label for="support-name" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Nombre Completo:</label>
+          <input type="text" id="support-name" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label for="support-role" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Rol o Cargo:</label>
+            <select id="support-role" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+              <option value="Agente de Ruta" selected>📱 Agente de Ruta</option>
+              <option value="Supervisor de Zona">👑 Supervisor de Zona</option>
+              <option value="Agente Independiente">💼 Agente Independiente</option>
+              <option value="Comercio / Otro">🛒 Comercio / Otro</option>
+              <option value="Cliente / Usuario">👤 Cliente / Usuario</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="support-doc" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Número de Cédula:</label>
+            <input type="text" id="support-doc" placeholder="Ej. 1098765432" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label for="support-message" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Mensaje o Inquietud:</label>
+          <textarea id="support-message" rows="3" placeholder="Describe brevemente el inconveniente (ej. Olvidé mi contraseña / Tengo una duda con mi ruta...)" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" onclick="if(window.authModule && typeof window.authModule.closeSupportModal === 'function'){ window.authModule.closeSupportModal(); } else { const m = document.getElementById('modal-login-support'); if(m) m.style.display = 'none'; }" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
+          <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
+            🚀 Enviar Solicitud a Superadmin
+          </button>
+        </div>
+      </form>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+  return modal;
+};
+
 window.openSupportModal = function() {
   authModule.openSupportModal();
+};
+
+window.handleSupportSubmit = function(e) {
+  authModule.handleSupportSubmit(e);
 };

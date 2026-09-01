@@ -394,23 +394,26 @@ const app = {
 
   setupSupportModalEvents() {
     document.addEventListener('click', (e) => {
-      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support');
+      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support, [data-action="open-support"]');
       if (btn) {
         e.preventDefault();
         e.stopPropagation();
-        if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
+        if (typeof window.openSupportModal === 'function') {
+          window.openSupportModal();
+        } else if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
           window.authModule.openSupportModal();
         } else {
-          const modal = document.getElementById('modal-login-support');
+          const modal = window.ensureSupportModalExists ? window.ensureSupportModalExists() : document.getElementById('modal-login-support');
           if (modal) {
             modal.style.setProperty('display', 'flex', 'important');
             modal.style.setProperty('visibility', 'visible', 'important');
             modal.style.setProperty('opacity', '1', 'important');
             modal.style.setProperty('z-index', '999999', 'important');
+            modal.classList.add('active');
           }
         }
       }
-    });
+    }, true);
   },
 
   startPhoneClock() {
@@ -681,25 +684,26 @@ if ('serviceWorker' in navigator) {
 (function initGlobalSupportListener() {
   const bindSupportEvent = () => {
     document.addEventListener('click', (e) => {
-      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support');
+      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support, [data-action="open-support"]');
       if (btn) {
         e.preventDefault();
         e.stopPropagation();
-        if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
-          window.authModule.openSupportModal();
-        } else if (typeof window.openSupportModal === 'function') {
+        if (typeof window.openSupportModal === 'function') {
           window.openSupportModal();
+        } else if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
+          window.authModule.openSupportModal();
         } else {
-          const modal = document.getElementById('modal-login-support');
+          const modal = window.ensureSupportModalExists ? window.ensureSupportModalExists() : document.getElementById('modal-login-support');
           if (modal) {
             modal.style.setProperty('display', 'flex', 'important');
             modal.style.setProperty('visibility', 'visible', 'important');
             modal.style.setProperty('opacity', '1', 'important');
             modal.style.setProperty('z-index', '999999', 'important');
+            modal.classList.add('active');
           }
         }
       }
-    });
+    }, true);
   };
 
   if (document.readyState === 'loading') {

@@ -213,5 +213,21 @@ GRANT ALL ON TABLE cartones TO anon, authenticated;
 GRANT ALL ON SEQUENCE cartones_numero_carton_seq TO anon, authenticated;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
+-- 6. Tabla de Tickets de Soporte Directo
+CREATE TABLE IF NOT EXISTS support_tickets (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "role" TEXT NOT NULL,
+  "document_number" TEXT,
+  "message" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'Pendiente',
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en support_tickets" ON support_tickets;
+CREATE POLICY "Permitir todo a anonimos en support_tickets" ON support_tickets FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE support_tickets TO anon, authenticated;
+
 
 
