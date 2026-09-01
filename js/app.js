@@ -257,34 +257,41 @@ const app = {
 
   // Inicialización global
   async init() {
-    // Capa de validación de GPS (primera en ejecutarse)
-    await this.checkGPSPermission();
-    this.setupGPSInstructionsEvents();
+    // 1. Eventos e interfaz inmediata (Non-blocking)
     this.setupSupportModalEvents();
+    this.setupGPSInstructionsEvents();
 
+    // 2. Capa de validación de GPS en segundo plano (Non-blocking)
+    this.checkGPSPermission().catch(err => console.warn("[GPS] Error no bloqueante en checkGPSPermission:", err));
+
+    // 3. PWA y enrutamiento SPA
     this.pwa.init();
     await this.router.init();
     
-    // Inicializar reloj del teléfono móvil simulado
+    // 4. Inicializar reloj del teléfono móvil simulado
     this.startPhoneClock();
   },
 
-  // Capa de validación de GPS
+  // Capa de validación de GPS (No Bloqueante)
   async checkGPSPermission() {
-    if (navigator.permissions && navigator.permissions.query) {
-      try {
-        const result = await navigator.permissions.query({ name: 'geolocation' });
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        const queryPromise = navigator.permissions.query({ name: 'geolocation' });
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout en navigator.permissions.query')), 2000)
+        );
+        const result = await Promise.race([queryPromise, timeoutPromise]);
         this.handleGPSPermissionStatus(result.state);
         
         // Escuchar cambios de estado del permiso
         result.onchange = () => {
           this.handleGPSPermissionStatus(result.state);
         };
-      } catch (err) {
-        console.warn("Fallo al consultar navigator.permissions:", err);
+      } else {
         await this.detectGPSPermissionFallback();
       }
-    } else {
+    } catch (err) {
+      console.warn("Fallo o timeout al consultar navigator.permissions:", err);
       await this.detectGPSPermissionFallback();
     }
   },
@@ -296,21 +303,49 @@ const app = {
     }
     
     return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        () => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.warn("[GPS Fallback] Timeout al obtener posición. Continuando sin bloquear.");
           this.handleGPSPermissionStatus('granted');
           resolve();
-        },
-        (err) => {
-          if (err.code === err.PERMISSION_DENIED) {
-            this.handleGPSPermissionStatus('denied');
-          } else {
-            this.handleGPSPermissionStatus('granted');
-          }
+        }
+      }, 3000);
+
+      try {
+        navigator.geolocation.getCurrentPosition(
+          () => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timer);
+              this.handleGPSPermissionStatus('granted');
+              resolve();
+            }
+          },
+          (err) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timer);
+              if (err && err.code === err.PERMISSION_DENIED) {
+                this.handleGPSPermissionStatus('denied');
+              } else {
+                this.handleGPSPermissionStatus('granted');
+              }
+              resolve();
+            }
+          },
+          { enableHighAccuracy: false, timeout: 3000, maximumAge: 10000 }
+        );
+      } catch (err) {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          console.warn("[GPS Fallback] Excepción no controlada en getCurrentPosition:", err);
+          this.handleGPSPermissionStatus('granted');
           resolve();
-        },
-        { enableHighAccuracy: false, timeout: 3000 }
-      );
+        }
+      }
     });
   },
 
@@ -641,3 +676,35 @@ if ('serviceWorker' in navigator) {
     }).catch((err) => console.warn('[PWA] Error al registrar SW:', err));
   });
 }
+
+// Registro incondicional e inmediato para el botón "💬 Contáctanos" (DOM-ready e independiente)
+(function initGlobalSupportListener() {
+  const bindSupportEvent = () => {
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support');
+      if (btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (window.authModule && typeof window.authModule.openSupportModal === 'function') {
+          window.authModule.openSupportModal();
+        } else if (typeof window.openSupportModal === 'function') {
+          window.openSupportModal();
+        } else {
+          const modal = document.getElementById('modal-login-support');
+          if (modal) {
+            modal.style.setProperty('display', 'flex', 'important');
+            modal.style.setProperty('visibility', 'visible', 'important');
+            modal.style.setProperty('opacity', '1', 'important');
+            modal.style.setProperty('z-index', '999999', 'important');
+          }
+        }
+      }
+    });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindSupportEvent);
+  } else {
+    bindSupportEvent();
+  }
+})();

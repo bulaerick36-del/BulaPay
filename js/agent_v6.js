@@ -3441,70 +3441,78 @@ const agentModule = {
   },
 
   async captureAndSendLocation() {
-    const currentUser = window.BulaPayDB.getCurrentUser();
-    if (!currentUser || !navigator.geolocation) return;
+    try {
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      if (!currentUser || !navigator.geolocation) return;
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        try {
-          await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
-          console.log(`[GPS] Ubicación crítica reportada: ${latitude}, ${longitude}`);
-        } catch (e) {
-          console.warn("Fallo al actualizar geolocalización crítica en Supabase:", e);
-        }
-      },
-      (error) => {
-        console.warn("Error al capturar ubicación crítica:", error);
-      },
-      { enableHighAccuracy: true, timeout: 5000 }
-    );
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
+            console.log(`[GPS] Ubicación crítica reportada: ${latitude}, ${longitude}`);
+          } catch (e) {
+            console.warn("Fallo al actualizar geolocalización crítica en Supabase:", e);
+          }
+        },
+        (error) => {
+          console.warn("Error al capturar ubicación crítica:", error);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
+      );
+    } catch (err) {
+      console.warn("[GPS] Excepción no controlada en captureAndSendLocation:", err);
+    }
   },
 
   startLocationMonitoring() {
-    if (!navigator.geolocation) return;
+    try {
+      if (!navigator.geolocation) return;
 
-    // Detener cualquier monitoreo anterior
-    this.stopLocationMonitoring();
+      // Detener cualquier monitoreo anterior
+      this.stopLocationMonitoring();
 
-    let lastPosition = null;
+      let lastPosition = null;
 
-    // Iniciar watchPosition con alta precisión y sin caché
-    this.locationWatchId = navigator.geolocation.watchPosition(
-      (position) => {
-        lastPosition = position;
-        // Al recibir la primera posición, la enviamos de inmediato
-        if (!this.hasSentInitialLocation) {
-          this.hasSentInitialLocation = true;
-          this.sendWatchPosition(position);
-        }
-      },
-      (error) => {
-        console.warn("[GPS Watch] Error al rastrear ubicación:", error);
-        if (error.code === error.PERMISSION_DENIED) {
-          window.gpsBlocked = true;
-          if (window.app && typeof window.app.handleGPSPermissionStatus === 'function') {
-            window.app.handleGPSPermissionStatus('denied');
+      // Iniciar watchPosition con alta precisión y sin caché
+      this.locationWatchId = navigator.geolocation.watchPosition(
+        (position) => {
+          lastPosition = position;
+          // Al recibir la primera posición, la enviamos de inmediato
+          if (!this.hasSentInitialLocation) {
+            this.hasSentInitialLocation = true;
+            this.sendWatchPosition(position);
           }
-        }
-      },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-    );
+        },
+        (error) => {
+          console.warn("[GPS Watch] Error al rastrear ubicación:", error);
+          if (error && error.code === error.PERMISSION_DENIED) {
+            window.gpsBlocked = true;
+            if (window.app && typeof window.app.handleGPSPermissionStatus === 'function') {
+              window.app.handleGPSPermissionStatus('denied');
+            }
+          }
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
 
-    // Enviar a Supabase cada 30 segundos
-    this.locationInterval = setInterval(() => {
-      if (lastPosition) {
-        this.sendWatchPosition(lastPosition);
-      }
-    }, 30000);
+      // Enviar a Supabase cada 30 segundos
+      this.locationInterval = setInterval(() => {
+        if (lastPosition) {
+          this.sendWatchPosition(lastPosition);
+        }
+      }, 30000);
+    } catch (err) {
+      console.warn("[GPS Watch] Excepción al iniciar monitoreo de ubicación:", err);
+    }
   },
 
   async sendWatchPosition(position) {
-    const currentUser = window.BulaPayDB.getCurrentUser();
-    if (!currentUser) return;
-
-    const { latitude, longitude } = position.coords;
     try {
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      if (!currentUser || !position || !position.coords) return;
+
+      const { latitude, longitude } = position.coords;
       await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
       console.log(`[GPS Watch] Ubicación reportada a Supabase cada 30s: ${latitude}, ${longitude}`);
     } catch (e) {
@@ -3513,15 +3521,19 @@ const agentModule = {
   },
 
   stopLocationMonitoring() {
-    if (this.locationWatchId !== undefined && this.locationWatchId !== null) {
-      navigator.geolocation.clearWatch(this.locationWatchId);
-      this.locationWatchId = null;
+    try {
+      if (this.locationWatchId !== undefined && this.locationWatchId !== null) {
+        navigator.geolocation.clearWatch(this.locationWatchId);
+        this.locationWatchId = null;
+      }
+      if (this.locationInterval) {
+        clearInterval(this.locationInterval);
+        this.locationInterval = null;
+      }
+      this.hasSentInitialLocation = false;
+    } catch (err) {
+      console.warn("[GPS Watch] Excepción al detener monitoreo:", err);
     }
-    if (this.locationInterval) {
-      clearInterval(this.locationInterval);
-      this.locationInterval = null;
-    }
-    this.hasSentInitialLocation = false;
   },
 
   async initGeography() {
