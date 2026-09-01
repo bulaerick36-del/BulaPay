@@ -17,6 +17,43 @@
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Script Global e Independiente para Módulo de Soporte -->
+  <script>
+    function openSupportModal(e) {
+      if (e) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      }
+      var modal = document.getElementById('modal-login-support');
+      if (modal) {
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('z-index', '999999', 'important');
+        modal.classList.add('active');
+      }
+    }
+
+    function closeSupportModal(e) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      var modal = document.getElementById('modal-login-support');
+      if (modal) {
+        modal.style.setProperty('display', 'none', 'important');
+        modal.classList.remove('active');
+      }
+    }
+
+    window.openSupportModal = openSupportModal;
+    window.closeSupportModal = closeSupportModal;
+    window.openSupportModalDirect = openSupportModal;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var btn = document.getElementById('btn-contactanos');
+      if (btn) {
+        btn.addEventListener('click', openSupportModal, true);
+      }
+    });
+  </script>
 </head>
 <body class="w-full min-h-screen overflow-x-hidden">
 
@@ -37,7 +74,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <button type="button" id="btn-contactanos" class="btn-open-support btn-contactanos" onclick="if(typeof window.openSupportModalDirect === 'function'){ window.openSupportModalDirect(event); } else if(typeof window.openSupportModal === 'function'){ window.openSupportModal(); }" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.5rem 1.1rem; font-size: 0.85rem; font-weight: 800; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: all 0.2s;">
+        <button type="button" id="btn-contactanos" class="btn-open-support btn-contactanos" onclick="openSupportModal(event);" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.5rem 1.1rem; font-size: 0.85rem; font-weight: 800; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: all 0.2s;">
           💬 Contáctanos
         </button>
         
@@ -2285,10 +2322,10 @@
             <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
           </div>
         </div>
-        <button type="button" onclick="if(window.authModule) window.authModule.closeSupportModal();" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        <button type="button" onclick="closeSupportModal(event);" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
       </div>
 
-      <form id="form-login-support" onsubmit="event.preventDefault(); if(window.authModule) window.authModule.handleSupportSubmit(event);">
+      <form id="form-login-support" onsubmit="event.preventDefault(); if(window.authModule && typeof window.authModule.handleSupportSubmit === 'function'){ window.authModule.handleSupportSubmit(event); } else if(typeof window.handleSupportSubmit === 'function'){ window.handleSupportSubmit(event); }">
         <div class="form-group" style="margin-bottom: 1rem;">
           <label for="support-name" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Nombre Completo:</label>
           <input type="text" id="support-name" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
@@ -2318,7 +2355,7 @@
         </div>
 
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-          <button type="button" onclick="if(window.authModule) window.authModule.closeSupportModal();" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
+          <button type="button" onclick="closeSupportModal(event);" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
           <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
             🚀 Enviar Solicitud a Superadmin
           </button>
