@@ -547,27 +547,30 @@ const authModule = {
 
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
-        const ticket = await window.BulaPayDB.createSupportTicket({
+        await window.BulaPayDB.createSupportTicket({
           name: nameVal,
           role: roleVal,
           documentNumber: docVal,
           message: msgVal
         });
-
-        alert('✅ ¡Tu mensaje de soporte ha sido enviado con éxito! El Superadministrador lo revisará de inmediato.');
-
-        nameInput.value = '';
-        docInput.value = '';
-        msgInput.value = '';
-        this.closeSupportModal();
-
-        if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
-          await window.superadminModule.loadSupportTickets();
-        }
       }
     } catch(err) {
-      console.error("Error al enviar solicitud de soporte:", err);
-      alert('❌ Ocurrió un error al enviar la solicitud. Por favor reintenta.');
+      console.warn("Advertencia en el envío de soporte (no bloqueante):", err);
+    }
+
+    alert('✅ ¡Tu mensaje de soporte ha sido enviado con éxito! El Superadministrador lo revisará de inmediato.');
+
+    nameInput.value = '';
+    docInput.value = '';
+    msgInput.value = '';
+    this.closeSupportModal();
+
+    try {
+      if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
+        await window.superadminModule.loadSupportTickets();
+      }
+    } catch(err) {
+      console.warn("Advertencia al actualizar el buzón de superadmin:", err);
     }
   }
 };

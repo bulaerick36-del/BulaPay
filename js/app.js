@@ -393,8 +393,24 @@ const app = {
   },
 
   setupSupportModalEvents() {
+    const bindDirectId = () => {
+      const btnDirect = document.getElementById('btn-contactanos') || document.getElementById('btn-open-support') || document.getElementById('btn-top-contactus');
+      if (btnDirect) {
+        btnDirect.onclick = (e) => {
+          if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          if (typeof window.openSupportModal === 'function') {
+            window.openSupportModal();
+          }
+        };
+      }
+    };
+    bindDirectId();
+
     document.addEventListener('click', (e) => {
-      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support, [data-action="open-support"]');
+      const btn = e.target.closest('#btn-contactanos, #btn-open-support, #btn-top-contactus, .btn-contactanos, .btn-open-support, [data-action="open-support"]');
       if (btn) {
         e.preventDefault();
         e.stopPropagation();
@@ -683,8 +699,21 @@ if ('serviceWorker' in navigator) {
 // Registro incondicional e inmediato para el botón "💬 Contáctanos" (DOM-ready e independiente)
 (function initGlobalSupportListener() {
   const bindSupportEvent = () => {
+    const btnDirect = document.getElementById('btn-contactanos') || document.getElementById('btn-open-support') || document.getElementById('btn-top-contactus');
+    if (btnDirect) {
+      btnDirect.addEventListener('click', (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        if (typeof window.openSupportModal === 'function') {
+          window.openSupportModal();
+        }
+      }, true);
+    }
+
     document.addEventListener('click', (e) => {
-      const btn = e.target.closest('#btn-open-support, #btn-top-contactus, .btn-open-support, [data-action="open-support"]');
+      const btn = e.target.closest('#btn-contactanos, #btn-open-support, #btn-top-contactus, .btn-contactanos, .btn-open-support, [data-action="open-support"]');
       if (btn) {
         e.preventDefault();
         e.stopPropagation();
