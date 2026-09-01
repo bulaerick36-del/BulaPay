@@ -309,7 +309,12 @@ const db = {
 
   // CURRENT SESSION
   getCurrentUser() {
-    return JSON.parse(localStorage.getItem(DB_KEYS.CURRENT_USER)) || null;
+    try {
+      return JSON.parse(localStorage.getItem(DB_KEYS.CURRENT_USER)) || null;
+    } catch(e) {
+      console.warn("Acceso a localStorage bloqueado en getCurrentUser:", e);
+      return null;
+    }
   },
 
   getSupervisorId() {

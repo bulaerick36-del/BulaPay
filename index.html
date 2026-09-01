@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=182">
+  <link rel="stylesheet" href="css/style.css?v=183">
   
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -25,13 +25,36 @@
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
       }
       var modal = document.getElementById('modal-login-support');
+      if (!modal && typeof window.ensureSupportModalExists === 'function') {
+        modal = window.ensureSupportModalExists();
+      }
       if (modal) {
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.setProperty('visibility', 'visible', 'important');
-        modal.style.setProperty('opacity', '1', 'important');
-        modal.style.setProperty('z-index', '999999', 'important');
+        modal.style.cssText = 'display: flex !important; visibility: visible !important; opacity: 1 !important; z-index: 999999 !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; background: rgba(11, 19, 43, 0.85) !important; backdrop-filter: blur(8px) !important; justify-content: center !important; align-items: center !important; padding: 1rem !important; box-sizing: border-box !important;';
         modal.classList.add('active');
       }
+
+      setTimeout(function() {
+        try {
+          if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
+            var user = window.BulaPayDB.getCurrentUser();
+            if (user) {
+              var nameInp = document.getElementById('support-name');
+              var docInp = document.getElementById('support-doc');
+              var roleSel = document.getElementById('support-role');
+              if (nameInp && !nameInp.value && user.name) nameInp.value = user.name;
+              if (docInp && !docInp.value && (user.documentNumber || user.cedula)) docInp.value = user.documentNumber || user.cedula;
+              if (roleSel && user.role) {
+                if (user.role.includes('Agente de Ruta') || user.role === 'agent') roleSel.value = 'Agente de Ruta';
+                else if (user.role.includes('Supervisor') || user.role === 'supervisor') roleSel.value = 'Supervisor de Zona';
+                else if (user.role.includes('Independiente')) roleSel.value = 'Agente Independiente';
+                else if (user.role.includes('Comercio')) roleSel.value = 'Comercio / Otro';
+              }
+            }
+          }
+        } catch(err) {
+          console.warn("Storage u objeto de usuario no disponible (ignorado):", err);
+        }
+      }, 10);
     }
 
     function closeSupportModal(e) {
@@ -47,12 +70,19 @@
     window.closeSupportModal = closeSupportModal;
     window.openSupportModalDirect = openSupportModal;
 
-    document.addEventListener('DOMContentLoaded', function() {
-      var btn = document.getElementById('btn-contactanos');
+    var bindSupportButtonDirect = function() {
+      var btn = document.getElementById('btn-contactanos') || document.getElementById('btn-open-support');
       if (btn) {
+        btn.onclick = openSupportModal;
         btn.addEventListener('click', openSupportModal, true);
       }
-    });
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindSupportButtonDirect);
+    } else {
+      bindSupportButtonDirect();
+    }
   </script>
 </head>
 <body class="w-full min-h-screen overflow-x-hidden">
