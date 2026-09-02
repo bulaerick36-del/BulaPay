@@ -412,7 +412,10 @@ const superadminModule = {
         if (c) await this.renderAdvancesTab(c);
       } else if (key === 'support') {
         const c = document.getElementById('tab-content-support');
-        if (c) await this.renderSupportTab(c);
+        if (c) {
+          await this.renderSupportTab(c);
+          await this.loadSupportTickets();
+        }
       }
     } catch(err) {
       console.warn("Fallo al renderizar pestaña activa:", err);
@@ -1356,7 +1359,7 @@ const superadminModule = {
   },
 
   getSupportEmail() {
-    return localStorage.getItem('bula_support_email') || 'soporte.bulapay@gmail.com';
+    return localStorage.getItem('bula_support_email') || 'soporte.bulapay.oficial@gmail.com';
   },
 
   saveSupportEmail() {
@@ -1419,10 +1422,54 @@ const superadminModule = {
           </div>
           <p style="color: #94a3b8; font-size: 0.8rem; margin: 0 0 1rem 0;">Los reportes enviados por el botón "Contáctanos" se dirigirán automáticamente a este correo configurado:</p>
           <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <input type="email" id="sa-support-email-input" value="${currentSupportEmail}" placeholder="soporte.bulapay@gmail.com" style="flex: 1; min-width: 260px; padding: 0.6rem 0.85rem; font-size: 0.88rem; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3); background: #0f172a; color: #ffffff; outline: none; font-weight: 600;">
+            <input type="email" id="sa-support-email-input" value="${currentSupportEmail}" placeholder="soporte.bulapay.oficial@gmail.com" style="flex: 1; min-width: 260px; padding: 0.6rem 0.85rem; font-size: 0.88rem; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3); background: #0f172a; color: #ffffff; outline: none; font-weight: 600;">
             <button onclick="superadminModule.saveSupportEmail()" style="padding: 0.6rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: flex; align-items: center; gap: 0.4rem;">
               💾 Guardar y Actualizar Correo
             </button>
+          </div>
+        </div>
+
+        <!-- TARJETA DE GESTIÓN DE ANUNCIOS Y ALERTAS GLOBALES -->
+        <div style="background: linear-gradient(180deg, #0b132b 0%, #1e293b 100%); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 8px 20px -5px rgba(0,0,0,0.5);">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.2rem;">📢</span>
+              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: #ffffff;">Anuncios y Alertas Globales PWA</h4>
+            </div>
+            <span style="font-size: 0.7rem; background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700;">Banner Flotante en Tiempo Real</span>
+          </div>
+          <p style="color: #94a3b8; font-size: 0.8rem; margin: 0 0 1rem 0;">Publica un aviso o alerta global visible inmediatamente para usuarios y agentes al ingresar a BulaPay.</p>
+          
+          <form onsubmit="event.preventDefault(); superadminModule.publishGlobalAnnouncement();" style="display: flex; flex-direction: column; gap: 0.85rem;">
+            <div>
+              <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 0.3rem; font-weight: 700;">Mensaje del Anuncio / Comunicado:</label>
+              <textarea id="sa-announcement-message" placeholder="Escribe aquí el comunicado importante (ej. Mantenimiento programado de sistema hoy a las 11:00 PM)..." style="width: 100%; min-height: 75px; padding: 0.65rem; font-size: 0.88rem; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.3); background: #0f172a; color: #ffffff; outline: none; box-sizing: border-box; resize: vertical;"></textarea>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 0.3rem; font-weight: 700;">Tipo de Alerta:</label>
+                <select id="sa-announcement-type" style="width: 100%; padding: 0.6rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.3); background: #0f172a; color: #ffffff; outline: none; font-weight: 600;">
+                  <option value="info">Informativa ℹ️</option>
+                  <option value="warning">Advertencia ⚠️</option>
+                  <option value="success">Éxito 📢</option>
+                </select>
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+                <button type="submit" style="padding: 0.65rem 1.2rem; background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3); display: flex; align-items: center; gap: 0.4rem;">
+                  🚀 Publicar Aviso Global
+                </button>
+                <button type="button" onclick="superadminModule.clearGlobalAnnouncement()" style="padding: 0.65rem 1rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
+                  🗑️ Desactivar Aviso
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- VISTA PREVIA DEL ANUNCIO ACTUAL -->
+          <div id="sa-announcement-status-box" style="margin-top: 1rem; padding: 0.8rem; border-radius: 8px; font-size: 0.8rem; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08);">
+            <!-- Se actualiza por código -->
           </div>
         </div>
 
@@ -1480,27 +1527,147 @@ const superadminModule = {
     `;
 
     await this.loadSupportTickets();
+    this.updateAnnouncementAdminUI();
+  },
+
+  publishGlobalAnnouncement() {
+    const msgEl = document.getElementById('sa-announcement-message');
+    const typeEl = document.getElementById('sa-announcement-type');
+    if (!msgEl) return;
+
+    const message = msgEl.value.trim();
+    if (!message) {
+      alert('Por favor ingresa un mensaje para el anuncio global.');
+      return;
+    }
+
+    const type = typeEl ? typeEl.value : 'info';
+    const announcement = {
+      id: Date.now(),
+      message: message,
+      type: type, // 'info' | 'warning' | 'success'
+      active: true,
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem('bula_global_announcement', JSON.stringify(announcement));
+      alert('¡Aviso global publicado con éxito en BulaPay!');
+      this.updateAnnouncementAdminUI();
+
+      // Disparar eventos para refrescar el banner en las vistas activas
+      window.dispatchEvent(new CustomEvent('bula_announcement_updated'));
+      if (window.app && typeof window.app.checkGlobalAnnouncement === 'function') {
+        window.app.checkGlobalAnnouncement();
+      }
+    } catch(err) {
+      console.error("Error guardando anuncio global:", err);
+      alert("Fallo al guardar el anuncio global en el almacenamiento local.");
+    }
+  },
+
+  clearGlobalAnnouncement() {
+    if (!confirm('¿Estás seguro de desactivar el aviso global actual?')) return;
+
+    try {
+      const raw = localStorage.getItem('bula_global_announcement');
+      if (raw) {
+        const ann = JSON.parse(raw);
+        ann.active = false;
+        localStorage.setItem('bula_global_announcement', JSON.stringify(ann));
+      } else {
+        localStorage.removeItem('bula_global_announcement');
+      }
+
+      alert('El aviso global ha sido desactivado.');
+      this.updateAnnouncementAdminUI();
+      window.dispatchEvent(new CustomEvent('bula_announcement_updated'));
+      if (window.app && typeof window.app.checkGlobalAnnouncement === 'function') {
+        window.app.checkGlobalAnnouncement();
+      }
+    } catch(err) {
+      console.warn("Fallo desactivando anuncio:", err);
+    }
+  },
+
+  updateAnnouncementAdminUI() {
+    const box = document.getElementById('sa-announcement-status-box');
+    const msgEl = document.getElementById('sa-announcement-message');
+    const typeEl = document.getElementById('sa-announcement-type');
+    if (!box) return;
+
+    let ann = null;
+    try {
+      const raw = localStorage.getItem('bula_global_announcement');
+      if (raw) ann = JSON.parse(raw);
+    } catch(e) {}
+
+    if (ann && ann.active && ann.message) {
+      if (msgEl && !msgEl.value) msgEl.value = ann.message;
+      if (typeEl && ann.type) typeEl.value = ann.type;
+
+      const typeBadge = ann.type === 'warning'
+        ? '<span style="color: #fbbf24; font-weight: 800;">⚠️ Advertencia</span>'
+        : ann.type === 'success'
+        ? '<span style="color: #34d399; font-weight: 800;">📢 Éxito</span>'
+        : '<span style="color: #38bdf8; font-weight: 800;">ℹ️ Informativa</span>';
+
+      const dateStr = ann.created_at ? new Date(ann.created_at).toLocaleString('es-CO') : 'Reciente';
+
+      box.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
+          <div><strong style="color: #34d399;">🟢 Anuncio Activo Publicado</strong> &bull; Tipo: ${typeBadge}</div>
+          <div style="color: #94a3b8; font-size: 0.75rem;">📅 ${dateStr}</div>
+        </div>
+        <div style="color: #f8fafc; font-weight: 600; font-size: 0.85rem; line-height: 1.4; background: rgba(0,0,0,0.3); padding: 0.6rem; border-radius: 6px; border-left: 3px solid #a855f7;">
+          "${ann.message}"
+        </div>
+      `;
+    } else {
+      box.innerHTML = `
+        <div style="color: #94a3b8; font-style: italic; display: flex; align-items: center; gap: 0.4rem;">
+          <span>⚪</span> <span>No hay ningún aviso global activo en este momento.</span>
+        </div>
+      `;
+    }
   },
 
   async loadSupportTickets() {
     const tbody = document.getElementById('sa-support-table-body');
     if (!tbody) return;
 
-    let tickets = [];
+    let dbTickets = [];
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.getSupportTickets === 'function') {
-        tickets = await window.BulaPayDB.getSupportTickets();
+        dbTickets = await window.BulaPayDB.getSupportTickets();
       }
     } catch(e) {
-      console.warn("Fallo cargando tickets de soporte:", e);
+      console.warn("Fallo cargando tickets de soporte de BulaPayDB:", e);
     }
+
+    let localTickets = [];
+    try {
+      const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets') || '[]';
+      localTickets = JSON.parse(raw);
+      if (!Array.isArray(localTickets)) localTickets = [];
+    } catch(e) {
+      localTickets = [];
+    }
+
+    // Combinar tickets asegurando que los registros guardados localmente en 'bula_support_tickets' siempre se rendericen
+    const ticketsMap = new Map();
+    (dbTickets || []).forEach(t => { if (t && t.id) ticketsMap.set(t.id, t); });
+    (localTickets || []).forEach(t => { if (t && t.id && !ticketsMap.has(t.id)) ticketsMap.set(t.id, t); });
+
+    const tickets = Array.from(ticketsMap.values());
+    tickets.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
     const countTotalEl = document.getElementById('sa-supp-count-total');
     const countPendingEl = document.getElementById('sa-supp-count-pending');
     const countResolvedEl = document.getElementById('sa-supp-count-resolved');
 
     const pendingCount = tickets.filter(t => t.status === 'Pendiente').length;
-    const resolvedCount = tickets.filter(t => t.status === 'Resuelto').length;
+    const resolvedCount = tickets.filter(t => t.status === 'Resuelto' || t.status === 'Resuelto / Atendido').length;
 
     if (countTotalEl) countTotalEl.textContent = tickets.length;
     if (countPendingEl) countPendingEl.textContent = pendingCount;
@@ -1512,7 +1679,7 @@ const superadminModule = {
           <td colspan="6" style="padding: 2.5rem; text-align: center; color: #94a3b8;">
             <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
             <div style="font-weight: 700; color: #ffffff;">No hay mensajes de soporte recibidos.</div>
-            <div style="font-size: 0.8rem; margin-top: 0.25rem;">Los mensajes enviados desde la pantalla de login aparecerán aquí al instante.</div>
+            <div style="font-size: 0.8rem; margin-top: 0.25rem;">Los mensajes enviados desde la interfaz de soporte aparecerán aquí al instante.</div>
           </td>
         </tr>
       `;
@@ -1580,19 +1747,59 @@ const superadminModule = {
   },
 
   async toggleTicketStatus(id, newStatus) {
-    if (window.BulaPayDB && typeof window.BulaPayDB.updateSupportTicketStatus === 'function') {
-      await window.BulaPayDB.updateSupportTicketStatus(id, newStatus);
-      await this.loadSupportTickets();
+    try {
+      const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets') || '[]';
+      let tickets = JSON.parse(raw);
+      const target = tickets.find(t => t.id === id);
+      if (target) {
+        target.status = newStatus;
+        localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+        localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
+      }
+    } catch(e) {
+      console.warn("Fallo actualizando ticket en localStorage:", e);
     }
+
+    if (window.BulaPayDB && typeof window.BulaPayDB.updateSupportTicketStatus === 'function') {
+      try {
+        await window.BulaPayDB.updateSupportTicketStatus(id, newStatus);
+      } catch(e) {
+        console.warn("Fallo actualizando ticket en BulaPayDB:", e);
+      }
+    }
+
+    await this.loadSupportTickets();
   },
 
   async deleteTicket(id) {
-    if (!confirm('¿Estás seguro de eliminar este ticket de soporte?')) return;
-    if (window.BulaPayDB && typeof window.BulaPayDB.deleteSupportTicket === 'function') {
-      await window.BulaPayDB.deleteSupportTicket(id);
-      await this.loadSupportTickets();
+    if (!confirm('¿Estás seguro de eliminar este registro de soporte?')) return;
+
+    try {
+      const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets') || '[]';
+      let tickets = JSON.parse(raw);
+      tickets = tickets.filter(t => t.id !== id);
+      localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+      localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
+    } catch(e) {
+      console.warn("Fallo eliminando ticket en localStorage:", e);
     }
+
+    if (window.BulaPayDB && typeof window.BulaPayDB.deleteSupportTicket === 'function') {
+      try {
+        await window.BulaPayDB.deleteSupportTicket(id);
+      } catch(e) {
+        console.warn("Fallo eliminando ticket en BulaPayDB:", e);
+      }
+    }
+
+    await this.loadSupportTickets();
   }
 };
+
+window.addEventListener('bula_support_updated', () => {
+  if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
+    window.superadminModule.loadSupportTickets();
+  }
+});
 
 window.superadminModule = superadminModule;

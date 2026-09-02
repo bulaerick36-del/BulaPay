@@ -339,11 +339,15 @@ const authModule = {
       window.applyDynamicTheme();
     }
 
-    // Redirigir según el rol del usuario
+    // Redirigir según el rol del usuario y verificar aviso global
     if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor' || user.role === 'Administrador de Rutas' || user.role === 'Otros (Comercios, Compraventas, Mercados)') {
       window.app.router.navigate('supervisor');
     } else if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
       window.app.router.navigate('agent');
+    }
+
+    if (typeof window.checkGlobalAnnouncement === 'function') {
+      window.checkGlobalAnnouncement();
     }
   },
 

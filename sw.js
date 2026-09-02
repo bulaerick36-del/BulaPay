@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bulapay-v193';
+const CACHE_NAME = 'bulapay-v196';
 const ASSETS = [
   './',
   './index.html',
@@ -13,7 +13,7 @@ const ASSETS = [
   './assets/logo.svg'
 ];
 
-// Instalar el Service Worker y almacenar en caché los activos estáticos (v167)
+// Instalar el Service Worker y almacenar en caché los activos estáticos
 self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
@@ -42,8 +42,17 @@ self.addEventListener('activate', (e) => {
 
 // Estrategia Network First falling back to Cache para asegurar datos frescos
 self.addEventListener('fetch', (e) => {
-  // Evitar interceptar solicitudes que no sean HTTP/HTTPS (por ejemplo, chrome-extension)
-  if (!e.request.url.startsWith(self.location.origin)) return;
+  const url = e.request ? e.request.url : '';
+
+  // 1. Excluir explícitamente cualquier URL que empiece por mailto: o esquemas que no sean HTTP/HTTPS
+  if (!url || url.startsWith('mailto:') || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+    return; // Permite que el navegador lo maneje de forma nativa sin interceptar
+  }
+
+  // 2. Evitar interceptar solicitudes de otros orígenes
+  if (!url.startsWith(self.location.origin)) {
+    return;
+  }
 
   e.respondWith(
     fetch(e.request)

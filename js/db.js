@@ -3485,7 +3485,7 @@ const db = {
 
   _saveSupportTicketLocal(ticket) {
     try {
-      const raw = localStorage.getItem('bula_support_tickets');
+      const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets');
       const tickets = raw ? JSON.parse(raw) : [];
       const existsIndex = tickets.findIndex(t => t.id === ticket.id);
       if (existsIndex >= 0) {
@@ -3494,6 +3494,7 @@ const db = {
         tickets.unshift(ticket);
       }
       localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+      localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
     } catch(e) {
       console.warn("Error guardando ticket en localStorage:", e);
     }
@@ -3515,7 +3516,7 @@ const db = {
 
     let localTickets = [];
     try {
-      const raw = localStorage.getItem('bula_support_tickets');
+      const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets');
       if (raw) localTickets = JSON.parse(raw);
     } catch(e) {}
 

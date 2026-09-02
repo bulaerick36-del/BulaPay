@@ -21,18 +21,10 @@
   <script>
     window.abrirContactoMailto = function(e) {
       if (e) e.preventDefault();
-      const supportEmail = localStorage.getItem('bula_support_email') || 'soporte.bulapay@gmail.com';
-      const subject = encodeURIComponent('Soporte BulaPay - Reporte de Agente');
-      const body = encodeURIComponent('Nombre:\nCédula:\nCargo:\nInquietud:\n');
-      const mailtoUrl = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
-
-      const btn = document.getElementById('btn-contactanos');
-      if (btn) btn.setAttribute('href', mailtoUrl);
-
       const modal = document.getElementById('modal-login-support');
-      if (modal) modal.style.display = 'flex';
-
-      window.location.href = mailtoUrl;
+      if (modal) {
+        modal.style.display = 'flex';
+      }
     };
     window.abrirSoporteGlobal = window.abrirContactoMailto;
     window.abrirModalSoporteDirecto = window.abrirContactoMailto;
@@ -58,7 +50,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <a id="btn-contactanos" class="btn-contactanos" href="mailto:soporte.bulapay@gmail.com?subject=Soporte%20BulaPay%20-%20Reporte%20de%20Agente&body=Nombre%3A%0AC%C3%A9dula%3A%0ACargo%3A%0AInquietud%3A" onclick="abrirContactoMailto(event)" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important; text-decoration: none; display: inline-flex; align-items: center;">💬 Contáctanos</a>
+        <a id="btn-contactanos" class="btn-contactanos" href="mailto:soporte.bulapay.oficial@gmail.com?subject=Soporte%20BulaPay%20-%20Reporte%20de%20Agente&body=Nombre%3A%0AC%C3%A9dula%3A%0ACargo%3A%0AInquietud%3A" onclick="abrirContactoMailto(event)" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important; text-decoration: none; display: inline-flex; align-items: center;">💬 Contáctanos</a>
         
         <!-- Información del usuario logueado -->
         <div class="user-nav-info" id="user-nav-info" style="display: none;">
@@ -2327,7 +2319,7 @@
     </div>
   </div>
 
-  <!-- SCRIPT DE LÓGICA DE ENVÍO DE SOPORTE ESTÁTICO -->
+  <!-- SCRIPT DE LÓGICA DE ENVÍO DE SOPORTE -->
   <script>
     (function() {
       function initSupportModalEvents() {
@@ -2342,7 +2334,9 @@
         }
 
         if (btnEnviar && modal) {
-          btnEnviar.onclick = function() {
+          btnEnviar.onclick = async function(e) {
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+
             const nomInp = document.getElementById('sop_nombre');
             const cedInp = document.getElementById('sop_cedula');
             const rolInp = document.getElementById('sop_rol');
@@ -2359,46 +2353,81 @@
               return;
             }
 
+            let attachmentData = null;
+            if (fileInp && fileInp.files && fileInp.files[0]) {
+              const file = fileInp.files[0];
+              try {
+                const base64 = await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result);
+                  reader.onerror = error => reject(error);
+                  reader.readAsDataURL(file);
+                });
+                attachmentData = { name: file.name, data: base64 };
+              } catch(e) {
+                console.warn("No se pudo procesar el archivo adjunto:", e);
+              }
+            }
+
             const ticketObj = {
               id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
               name: nom,
               document_number: ced,
               role: rol,
               message: msg,
+              attachment: attachmentData,
               status: 'Pendiente',
               created_at: new Date().toISOString()
             };
 
+            // 1. Guardar obligatoriamente en localStorage bajo la clave 'bula_support_tickets' antes de disparar el enlace de correo
             try {
-              // 1. Guardar en localStorage como respaldo para Superadmin (Pestaña 5)
-              const rawLocal = localStorage.getItem('bula_local_tickets') || localStorage.getItem('bula_support_tickets') || '[]';
+              const rawLocal = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets') || '[]';
               let tickets = [];
               try { tickets = JSON.parse(rawLocal); } catch(e) { tickets = []; }
+              if (!Array.isArray(tickets)) tickets = [];
               tickets.unshift(ticketObj);
-              localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
               localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+              localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
+              console.log("✅ Reporte de soporte guardado exitosamente en localStorage ('bula_support_tickets'):", ticketObj);
 
-              // 2. Si BulaPayDB está listo, enviarlo a Supabase / DB
+              // 2. Si BulaPayDB está disponible, guardar también en la base de datos
               if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
                 window.BulaPayDB.createSupportTicket({
                   name: nom,
                   documentNumber: ced,
                   role: rol,
-                  message: msg
+                  message: msg,
+                  attachment: attachmentData
                 }).catch(function(err) { console.warn("Error enviando a BulaPayDB:", err); });
               }
             } catch(err) {
               console.warn("Fallo guardando ticket en localStorage:", err);
             }
 
-            alert('¡Ticket de soporte enviado con éxito! El superadministrador lo revisará en su panel.');
+            // 3. Notificar cambios en tiempo real a la interfaz del superadministrador
+            window.dispatchEvent(new CustomEvent('bula_support_updated'));
+            if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
+              window.superadminModule.loadSupportTickets();
+            }
+
+            // 4. Construir y disparar cliente de correo con mailto
+            const supportEmail = localStorage.getItem('bula_support_email') || 'soporte.bulapay.oficial@gmail.com';
+            const subject = encodeURIComponent(`Soporte BulaPay - Reporte de ${nom} (${rol})`);
+            const body = encodeURIComponent(`Nombre: ${nom}\nCédula: ${ced}\nRol: ${rol}\nFecha/Hora: ${new Date().toLocaleString('es-CO')}\n\nInquietud / Mensaje:\n${msg}`);
+            const mailtoUrl = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+
+            alert('¡Reporte de soporte registrado en el sistema! Se abrirá tu aplicación de correo para enviar el mensaje a Soporte BulaPay.');
             modal.style.display = 'none';
 
-            // Resetear campos
+            // Resetear campos del formulario
             if (nomInp) nomInp.value = '';
             if (cedInp) cedInp.value = '';
             if (msgInp) msgInp.value = '';
             if (fileInp) fileInp.value = '';
+
+            // Disparar navegación mailto para que el sistema operativo o navegador abra el cliente de correo
+            window.location.href = mailtoUrl;
           };
         }
       }
