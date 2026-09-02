@@ -218,6 +218,7 @@ const superadminModule = {
               <button id="btn-test-dom" onclick="alert('✅ ¡El DOM del Panel Maestro Flotante responde perfectamente!')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">🧪 Probador DOM</button>
               <button onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border: none; color: white; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">📜 Exportar Contratos PDF</button>
               <button onclick="superadminModule.openChangeSupportEmailModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer;">📧 Correo Soporte</button>
+              <button onclick="superadminModule.openQuickAnnouncementModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);">📢 Comunicado</button>
               <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
               <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
             </div>
@@ -1630,6 +1631,99 @@ const superadminModule = {
         </div>
       `;
     }
+  },
+
+  openQuickAnnouncementModal() {
+    const existingModal = document.getElementById('sa-quick-announcement-modal');
+    if (existingModal) existingModal.remove();
+
+    let currentMsg = '';
+    let currentType = 'info';
+    try {
+      const currentAnn = JSON.parse(localStorage.getItem('bula_global_announcement') || '{}');
+      if (currentAnn && currentAnn.message) currentMsg = currentAnn.message;
+      if (currentAnn && currentAnn.type) currentType = currentAnn.type;
+    } catch(e) {}
+
+    const modal = document.createElement('div');
+    modal.id = 'sa-quick-announcement-modal';
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); z-index: 99999999;
+      display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+    `;
+
+    modal.innerHTML = `
+      <div style="background: #1e293b; border: 1px solid rgba(168, 85, 247, 0.4); padding: 22px; border-radius: 12px; width: 90%; max-width: 440px; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="margin: 0; color: #c084fc; font-size: 1.1rem; display: flex; align-items: center; gap: 0.4rem;">
+            <span>📢</span> <span>Publicar Comunicado Global</span>
+          </h3>
+          <button id="btn-close-sa-ann-modal" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+        <p style="font-size: 0.8rem; color: #94a3b8; margin: 0 0 14px 0;">Este mensaje se mostrará como banner flotante inmediato a todos los agentes y usuarios.</p>
+        
+        <form id="form-quick-announcement">
+          <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 700;">Mensaje del Anuncio / Comunicado:</label>
+          <textarea id="qa_message" placeholder="Escribe el mensaje de la alerta o comunicado..." style="width: 100%; height: 80px; padding: 9px; margin-bottom: 12px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; resize: vertical; font-size: 0.88rem;" required>${currentMsg}</textarea>
+          
+          <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 700;">Tipo de Alerta:</label>
+          <select id="qa_type" style="width: 100%; padding: 9px; margin-bottom: 16px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; font-size: 0.88rem; font-weight: 600;">
+            <option value="info" ${currentType === 'info' ? 'selected' : ''}>Informativa ℹ️</option>
+            <option value="warning" ${currentType === 'warning' ? 'selected' : ''}>Advertencia ⚠️</option>
+            <option value="success" ${currentType === 'success' ? 'selected' : ''}>Éxito 📢</option>
+          </select>
+          
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" id="btn-cancel-sa-ann-modal" style="background: #475569; color: #fff; border: none; padding: 9px 14px; border-radius: 6px; cursor: pointer; font-size: 0.83rem; font-weight: 700;">Cancelar</button>
+            <button type="submit" style="background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%); color: #fff; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-weight: 800; font-size: 0.83rem; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);">🚀 Publicar Global</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeModal = () => modal.remove();
+    modal.querySelector('#btn-close-sa-ann-modal').onclick = closeModal;
+    modal.querySelector('#btn-cancel-sa-ann-modal').onclick = closeModal;
+
+    modal.querySelector('#form-quick-announcement').onsubmit = (e) => {
+      e.preventDefault();
+      const msg = modal.querySelector('#qa_message').value.trim();
+      const type = modal.querySelector('#qa_type').value;
+
+      if (!msg) {
+        alert('Por favor ingresa un mensaje.');
+        return;
+      }
+
+      const announcement = {
+        id: Date.now(),
+        message: msg,
+        type: type,
+        active: true,
+        created_at: new Date().toISOString()
+      };
+
+      try {
+        localStorage.setItem('bula_global_announcement', JSON.stringify(announcement));
+        alert('¡Comunicado global activado con éxito! Ahora es visible para todos los agentes.');
+        closeModal();
+
+        this.updateAnnouncementAdminUI();
+        window.dispatchEvent(new CustomEvent('bula_announcement_updated'));
+        if (window.checkGlobalAnnouncement) {
+          window.checkGlobalAnnouncement();
+        } else if (window.app && typeof window.app.checkGlobalAnnouncement === 'function') {
+          window.app.checkGlobalAnnouncement();
+        }
+      } catch(err) {
+        console.error("Error guardando aviso global:", err);
+        alert("Fallo al guardar en localStorage.");
+      }
+    };
   },
 
   async loadSupportTickets() {
