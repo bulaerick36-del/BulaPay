@@ -17,132 +17,14 @@
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <!-- Script Global Autocontenido de Soporte de Emergencia -->
+  <!-- Script Global Soporte -->
   <script>
-    (function emergencySupportInjector() {
-      const setupSupport = () => {
-        let btn = document.getElementById('btn-contactanos');
-        if (!btn) {
-          btn = document.createElement('button');
-          btn.id = 'btn-contactanos';
-          btn.className = 'btn-contactanos';
-          btn.innerHTML = '💬 Contáctanos';
-          btn.style.cssText = 'position: fixed !important; top: 12px !important; right: 16px !important; z-index: 9999999 !important; pointer-events: auto !important; cursor: pointer !important; background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%) !important; color: #ffffff !important; font-weight: 700 !important; font-size: 0.88rem !important; border: none !important; border-radius: 9999px !important; padding: 0.5rem 1rem !important; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4) !important;';
-          if (document.body) document.body.appendChild(btn);
-        } else {
-          btn.style.setProperty('pointer-events', 'auto', 'important');
-          btn.style.setProperty('z-index', '9999999', 'important');
-          btn.style.setProperty('cursor', 'pointer', 'important');
-        }
-
-        btn.onclick = (e) => {
-          if (e) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-          
-          let modal = document.getElementById('modal-login-support');
-          if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'modal-login-support';
-            modal.style.cssText = 'position:fixed !important;top:0 !important;left:0 !important;width:100vw !important;height:100vh !important;background:rgba(0,0,0,0.85) !important;z-index:9999999 !important;display:flex !important;align-items:center !important;justify-content:center !important;padding:1rem !important;box-sizing:border-box !important;pointer-events:auto !important;';
-            modal.innerHTML = `
-              <div style="background:#1e293b;padding:25px;border-radius:12px;width:90%;max-width:420px;color:#fff;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 10px 25px rgba(0,0,0,0.5);position:relative;">
-                <h3 style="margin-top:0;color:#38bdf8;font-size:18px;">💬 Soporte y Consultas BulaPay</h3>
-                <p style="font-size:13px;color:#94a3b8;margin-bottom:15px;">Completa los datos de tu solicitud:</p>
-                
-                <label style="font-size:12px;color:#cbd5e1;display:block;margin-bottom:4px;">Nombre Completo:</label>
-                <input id="sop_nombre" type="text" placeholder="Ej. Juan Pérez" style="width:100%;padding:9px;margin-bottom:10px;background:#0f172a;border:1px solid #334155;color:#fff;border-radius:6px;box-sizing:border-box;">
-                
-                <label style="font-size:12px;color:#cbd5e1;display:block;margin-bottom:4px;">Número de Cédula:</label>
-                <input id="sop_cedula" type="text" placeholder="Ej. 1121338578" style="width:100%;padding:9px;margin-bottom:10px;background:#0f172a;border:1px solid #334155;color:#fff;border-radius:6px;box-sizing:border-box;">
-                
-                <label style="font-size:12px;color:#cbd5e1;display:block;margin-bottom:4px;">Rol o Cargo:</label>
-                <select id="sop_rol" style="width:100%;padding:9px;margin-bottom:10px;background:#0f172a;border:1px solid #334155;color:#fff;border-radius:6px;box-sizing:border-box;">
-                  <option value="Agente de Ruta">Agente de Ruta</option>
-                  <option value="Agente Independiente">Agente Independiente</option>
-                  <option value="Comercio">Comercio</option>
-                  <option value="Otro">Otro</option>
-                </select>
-                
-                <label style="font-size:12px;color:#cbd5e1;display:block;margin-bottom:4px;">Inquietud / Problema:</label>
-                <textarea id="sop_mensaje" placeholder="¿Qué problema presentas? (ej. Olvidé mi contraseña)" style="width:100%;padding:9px;margin-bottom:10px;background:#0f172a;border:1px solid #334155;color:#fff;border-radius:6px;height:70px;box-sizing:border-box;"></textarea>
-                
-                <label style="font-size:12px;color:#cbd5e1;display:block;margin-bottom:4px;">Adjuntar Archivo o Foto (Opcional):</label>
-                <input id="sop_archivo" type="file" style="width:100%;margin-bottom:15px;color:#94a3b8;font-size:12px;">
-                
-                <div style="display:flex;justify-content:space-between;gap:10px;">
-                  <button type="button" id="sop_cerrar" style="flex:1;background:#475569;color:#fff;border:none;padding:10px;border-radius:6px;cursor:pointer;font-weight:bold;">Cancelar</button>
-                  <button type="button" id="sop_enviar" style="flex:1;background:#22c55e;color:#fff;border:none;padding:10px;border-radius:6px;cursor:pointer;font-weight:bold;">Enviar Ticket</button>
-                </div>
-              </div>
-            `;
-            if (document.body) document.body.appendChild(modal);
-
-            const btnCerrar = document.getElementById('sop_cerrar');
-            if (btnCerrar) {
-              btnCerrar.onclick = () => {
-                modal.style.display = 'none';
-              };
-            }
-
-            const btnEnviar = document.getElementById('sop_enviar');
-            if (btnEnviar) {
-              btnEnviar.onclick = () => {
-                const nomInp = document.getElementById('sop_nombre');
-                const cedInp = document.getElementById('sop_cedula');
-                const rolInp = document.getElementById('sop_rol');
-                const msgInp = document.getElementById('sop_mensaje');
-
-                const nom = nomInp ? nomInp.value.trim() : '';
-                const ced = cedInp ? cedInp.value.trim() : '';
-                const rol = rolInp ? rolInp.value : 'Otro';
-                const msg = msgInp ? msgInp.value.trim() : '';
-
-                if (!nom || !msg) {
-                  alert('Por favor ingresa tu nombre y el mensaje.');
-                  return;
-                }
-                
-                try {
-                  const tickets = JSON.parse(localStorage.getItem('bula_local_tickets') || '[]');
-                  const newTicket = { name: nom, document_number: ced, role: rol, message: msg, status: 'Pendiente', created_at: new Date().toISOString() };
-                  tickets.unshift(newTicket);
-                  localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
-                  localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
-
-                  if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
-                    window.BulaPayDB.createSupportTicket({ name: nom, documentNumber: ced, role: rol, message: msg }).catch(e => console.warn(e));
-                  }
-                } catch(err) {
-                  console.warn(err);
-                }
-                
-                alert('¡Ticket enviado con éxito! El administrador lo revisará en su panel.');
-                modal.style.display = 'none';
-              };
-            }
-          }
-          modal.style.setProperty('display', 'flex', 'important');
-          modal.style.setProperty('z-index', '9999999', 'important');
-        };
-      };
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupSupport);
-      } else {
-        setupSupport();
-      }
-      setTimeout(setupSupport, 500);
-      setTimeout(setupSupport, 1500);
-
-      window.abrirSoporteGlobal = function() {
-        const btn = document.getElementById('btn-contactanos');
-        if (btn) btn.click();
-      };
-      window.abrirModalSoporteDirecto = window.abrirSoporteGlobal;
-      window.openSupportModal = window.abrirSoporteGlobal;
-    })();
+    window.abrirSoporteGlobal = function() {
+      const modal = document.getElementById('modal-login-support');
+      if (modal) modal.style.display = 'flex';
+    };
+    window.abrirModalSoporteDirecto = window.abrirSoporteGlobal;
+    window.openSupportModal = window.abrirSoporteGlobal;
   </script>
 </head>
 <body class="w-full min-h-screen overflow-x-hidden">
@@ -164,7 +46,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <button id="btn-contactanos" class="btn-contactanos" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important;">💬 Contáctanos</button>
+        <button id="btn-contactanos" class="btn-contactanos" onclick="document.getElementById('modal-login-support').style.display='flex'" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important;">💬 Contáctanos</button>
         
         <!-- Información del usuario logueado -->
         <div class="user-nav-info" id="user-nav-info" style="display: none;">
@@ -2398,66 +2280,123 @@
       }
     });
   </script>
-  <!-- MODAL DE SOPORTE Y MENSAJERÍA DIRECTA LOGIN -->
-  <div id="modal-login-support" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(11, 19, 43, 0.85); backdrop-filter: blur(8px); z-index: 999999; justify-content: center; align-items: center; padding: 1rem; box-sizing: border-box;">
-    <div style="background: #1c2541; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 16px; padding: 1.75rem; width: 100%; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; position: relative;">
+  <!-- MODAL DE SOPORTE Y MENSAJERÍA DIRECTA (MARCADO ESTÁTICO) -->
+  <div id="modal-login-support" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; align-items: center; justify-content: center;">
+    <div style="background: #1e293b; padding: 25px; border-radius: 12px; width: 90%; max-width: 420px; color: #fff; font-family: system-ui, -apple-system, sans-serif; box-shadow: 0 10px 25px rgba(0,0,0,0.5); position: relative;">
+      <h3 style="margin-top: 0; color: #38bdf8; font-size: 18px;">💬 Soporte y Consultas BulaPay</h3>
+      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 15px;">Completa los datos de tu solicitud:</p>
       
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
-        <div style="display: flex; align-items: center; gap: 0.6rem;">
-          <span style="font-size: 1.4rem;">💬</span>
-          <div>
-            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Soporte y Consultas BulaPay</h3>
-            <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
-          </div>
-        </div>
-        <button type="button" onclick="const m=document.getElementById('modal-login-support'); if(m) m.style.display='none';" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
-      </div>
-
-      <form id="form-login-support" onsubmit="event.preventDefault(); if(typeof window.enviarSoporteDirecto === 'function'){ window.enviarSoporteDirecto(event); } else { alert('Enviando mensaje de soporte...'); const m=document.getElementById('modal-login-support'); if(m) m.style.display='none'; }">
+      <form id="form-login-support" onsubmit="event.preventDefault();">
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Nombre Completo:</label>
+        <input id="sop_nombre" type="text" placeholder="Ej. Juan Pérez" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
         
-        <!-- Campo 1: Nombre completo -->
-        <div class="form-group" style="margin-bottom: 0.85rem;">
-          <label for="sop_nombre" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">1. Nombre Completo:</label>
-          <input type="text" id="sop_nombre" name="sop_nombre" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
-        </div>
-
-        <!-- Campo 2: Número de cédula -->
-        <div class="form-group" style="margin-bottom: 0.85rem;">
-          <label for="sop_cedula" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">2. Número de Cédula:</label>
-          <input type="text" id="sop_cedula" name="sop_cedula" placeholder="Ej. 1098765432" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
-        </div>
-
-        <!-- Campo 3: Selector de Rol o Cargo -->
-        <div class="form-group" style="margin-bottom: 0.85rem;">
-          <label for="sop_rol" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">3. Rol o Cargo:</label>
-          <select id="sop_rol" name="sop_rol" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
-            <option value="Agente de Ruta" selected>📱 Agente de Ruta</option>
-            <option value="Agente Independiente">💼 Agente Independiente</option>
-            <option value="Comercio">🛒 Comercio</option>
-            <option value="Otro">❓ Otro</option>
-          </select>
-        </div>
-
-        <!-- Campo 4: Inquietud o mensaje detallado -->
-        <div class="form-group" style="margin-bottom: 0.85rem;">
-          <label for="sop_mensaje" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">4. Inquietud o Mensaje Detallado:</label>
-          <textarea id="sop_mensaje" name="sop_mensaje" rows="3" placeholder="Describe detalladamente tu inconveniente o solicitud..." required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
-        </div>
-
-        <!-- Campo 5: Selector de archivos -->
-        <div class="form-group" style="margin-bottom: 1.25rem;">
-          <label for="sop_archivo" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">5. Adjuntar Documento o Imagen (Opcional):</label>
-          <input type="file" id="sop_archivo" name="sop_archivo" accept="image/*,.pdf,.doc,.docx,.txt" style="width: 100%; padding: 0.5rem; background: #0f172a; border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; font-size: 0.82rem; box-sizing: border-box; cursor: pointer;">
-        </div>
-
-        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-          <button type="button" onclick="const m=document.getElementById('modal-login-support'); if(m) m.style.display='none';" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
-          <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
-            🚀 Enviar Ticket
-          </button>
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Número de Cédula:</label>
+        <input id="sop_cedula" type="text" placeholder="Ej. 1121338578" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
+        
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Rol o Cargo:</label>
+        <select id="sop_rol" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;">
+          <option value="Agente de Ruta">Agente de Ruta</option>
+          <option value="Agente Independiente">Agente Independiente</option>
+          <option value="Comercio">Comercio</option>
+          <option value="Otro">Otro</option>
+        </select>
+        
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Inquietud / Mensaje:</label>
+        <textarea id="sop_mensaje" placeholder="¿Qué problema presentas? (ej. Olvidé mi contraseña)" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; height: 70px; box-sizing: border-box;" required></textarea>
+        
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Adjuntar Archivo:</label>
+        <input id="sop_archivo" type="file" style="width: 100%; margin-bottom: 15px; color: #94a3b8; font-size: 12px;">
+        
+        <div style="display: flex; justify-content: space-between; gap: 10px;">
+          <button type="button" id="sop_cerrar" style="flex: 1; background: #475569; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cancelar</button>
+          <button type="button" id="sop_enviar" style="flex: 1; background: #22c55e; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Enviar Ticket</button>
         </div>
       </form>
     </div>
   </div>
+
+  <!-- SCRIPT DE LÓGICA DE ENVÍO DE SOPORTE ESTÁTICO -->
+  <script>
+    (function() {
+      function initSupportModalEvents() {
+        const btnCerrar = document.getElementById('sop_cerrar');
+        const btnEnviar = document.getElementById('sop_enviar');
+        const modal = document.getElementById('modal-login-support');
+
+        if (btnCerrar && modal) {
+          btnCerrar.onclick = function() {
+            modal.style.display = 'none';
+          };
+        }
+
+        if (btnEnviar && modal) {
+          btnEnviar.onclick = function() {
+            const nomInp = document.getElementById('sop_nombre');
+            const cedInp = document.getElementById('sop_cedula');
+            const rolInp = document.getElementById('sop_rol');
+            const msgInp = document.getElementById('sop_mensaje');
+            const fileInp = document.getElementById('sop_archivo');
+
+            const nom = nomInp ? nomInp.value.trim() : '';
+            const ced = cedInp ? cedInp.value.trim() : '';
+            const rol = rolInp ? rolInp.value : 'Otro';
+            const msg = msgInp ? msgInp.value.trim() : '';
+
+            if (!nom || !msg) {
+              alert('Por favor ingresa tu nombre completo y la inquietud / mensaje.');
+              return;
+            }
+
+            const ticketObj = {
+              id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+              name: nom,
+              document_number: ced,
+              role: rol,
+              message: msg,
+              status: 'Pendiente',
+              created_at: new Date().toISOString()
+            };
+
+            try {
+              // 1. Guardar en localStorage como respaldo para Superadmin (Pestaña 5)
+              const rawLocal = localStorage.getItem('bula_local_tickets') || localStorage.getItem('bula_support_tickets') || '[]';
+              let tickets = [];
+              try { tickets = JSON.parse(rawLocal); } catch(e) { tickets = []; }
+              tickets.unshift(ticketObj);
+              localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
+              localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+
+              // 2. Si BulaPayDB está listo, enviarlo a Supabase / DB
+              if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
+                window.BulaPayDB.createSupportTicket({
+                  name: nom,
+                  documentNumber: ced,
+                  role: rol,
+                  message: msg
+                }).catch(function(err) { console.warn("Error enviando a BulaPayDB:", err); });
+              }
+            } catch(err) {
+              console.warn("Fallo guardando ticket en localStorage:", err);
+            }
+
+            alert('¡Ticket de soporte enviado con éxito! El superadministrador lo revisará en su panel.');
+            modal.style.display = 'none';
+
+            // Resetear campos
+            if (nomInp) nomInp.value = '';
+            if (cedInp) cedInp.value = '';
+            if (msgInp) msgInp.value = '';
+            if (fileInp) fileInp.value = '';
+          };
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSupportModalEvents);
+      } else {
+        initSupportModalEvents();
+      }
+    })();
+  </script>
 </body>
 </html>
