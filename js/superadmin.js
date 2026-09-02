@@ -217,6 +217,7 @@ const superadminModule = {
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
               <button id="btn-test-dom" onclick="alert('✅ ¡El DOM del Panel Maestro Flotante responde perfectamente!')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">🧪 Probador DOM</button>
               <button onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border: none; color: white; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">📜 Exportar Contratos PDF</button>
+              <button onclick="superadminModule.openChangeSupportEmailModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer;">📧 Correo Soporte</button>
               <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
               <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
             </div>
@@ -1354,23 +1355,73 @@ const superadminModule = {
     alert('🎉 Contraseña de Superadministrador actualizada correctamente.');
   },
 
+  getSupportEmail() {
+    return localStorage.getItem('bula_support_email') || 'soporte.bulapay@gmail.com';
+  },
+
+  saveSupportEmail() {
+    const input = document.getElementById('sa-support-email-input');
+    const val = input ? input.value.trim() : '';
+    if (!val || !val.includes('@')) {
+      alert('⚠️ Por favor ingresa un correo electrónico válido.');
+      return;
+    }
+    localStorage.setItem('bula_support_email', val);
+    alert(`🎉 Correo oficial de soporte actualizado exitosamente a: ${val}\n\nLos reportes y enlaces "Contáctanos" ahora se dirigirán automáticamente a esta dirección.`);
+  },
+
+  openChangeSupportEmailModal() {
+    const current = this.getSupportEmail();
+    const newEmail = prompt('📧 Actualizar Correo Electrónico Oficial de Soporte:', current);
+    if (newEmail === null) return;
+    const cleanEmail = newEmail.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      alert('⚠️ Correo no válido.');
+      return;
+    }
+    localStorage.setItem('bula_support_email', cleanEmail);
+    alert(`✅ Correo de soporte actualizado a: ${cleanEmail}`);
+    const input = document.getElementById('sa-support-email-input');
+    if (input) input.value = cleanEmail;
+  },
+
   // ==========================================
   // PESTAÑA 5: SOPORTE Y MENSAJES DIRECTOS
   // ==========================================
   async renderSupportTab(container) {
+    const currentSupportEmail = this.getSupportEmail();
+
     container.innerHTML = `
       <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(168, 85, 247, 0.25) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
           <div>
             <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 0.3rem 0.8rem; font-weight: 800; font-size: 0.78rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.06em;">
-              💬 BUZÓN DE MENSAJES Y TICKETS EN TIEMPO REAL
+              💬 BUZÓN DE MENSAJES Y CONFIGURACIÓN DE SOPORTE
             </div>
             <h3 style="font-size: 1.45rem; font-weight: 900; margin-top: 0.5rem; margin-bottom: 0.25rem; background: linear-gradient(135deg, #38bdf8 0%, #a855f7 50%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">💬 Centro de Soporte y Consultas Directas</h3>
-            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Gestión e inspección de inquietudes enviadas desde la pantalla de inicio de sesión de BulaPay.</p>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Gestión de correo oficial y recepción de inquietudes enviadas desde BulaPay.</p>
           </div>
           <div>
             <button onclick="superadminModule.loadSupportTickets()" style="padding: 0.6rem 1.1rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">
               🔄 Actualizar Mensajes
+            </button>
+          </div>
+        </div>
+
+        <!-- TARJETA DE CONFIGURACIÓN DEL CORREO DE SOPORTE -->
+        <div style="background: linear-gradient(180deg, #0b132b 0%, #1e293b 100%); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 8px 20px -5px rgba(0,0,0,0.5);">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.2rem;">📧</span>
+              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: #ffffff;">Correo Electrónico Oficial de Soporte</h4>
+            </div>
+            <span style="font-size: 0.7rem; background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700;">Enlace Mailto Dinámico</span>
+          </div>
+          <p style="color: #94a3b8; font-size: 0.8rem; margin: 0 0 1rem 0;">Los reportes enviados por el botón "Contáctanos" se dirigirán automáticamente a este correo configurado:</p>
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <input type="email" id="sa-support-email-input" value="${currentSupportEmail}" placeholder="soporte.bulapay@gmail.com" style="flex: 1; min-width: 260px; padding: 0.6rem 0.85rem; font-size: 0.88rem; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3); background: #0f172a; color: #ffffff; outline: none; font-weight: 600;">
+            <button onclick="superadminModule.saveSupportEmail()" style="padding: 0.6rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: flex; align-items: center; gap: 0.4rem;">
+              💾 Guardar y Actualizar Correo
             </button>
           </div>
         </div>

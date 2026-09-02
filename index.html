@@ -19,12 +19,24 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <!-- Script Global Soporte -->
   <script>
-    window.abrirSoporteGlobal = function() {
+    window.abrirContactoMailto = function(e) {
+      if (e) e.preventDefault();
+      const supportEmail = localStorage.getItem('bula_support_email') || 'soporte.bulapay@gmail.com';
+      const subject = encodeURIComponent('Soporte BulaPay - Reporte de Agente');
+      const body = encodeURIComponent('Nombre:\nCédula:\nCargo:\nInquietud:\n');
+      const mailtoUrl = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+
+      const btn = document.getElementById('btn-contactanos');
+      if (btn) btn.setAttribute('href', mailtoUrl);
+
       const modal = document.getElementById('modal-login-support');
       if (modal) modal.style.display = 'flex';
+
+      window.location.href = mailtoUrl;
     };
-    window.abrirModalSoporteDirecto = window.abrirSoporteGlobal;
-    window.openSupportModal = window.abrirSoporteGlobal;
+    window.abrirSoporteGlobal = window.abrirContactoMailto;
+    window.abrirModalSoporteDirecto = window.abrirContactoMailto;
+    window.openSupportModal = window.abrirContactoMailto;
   </script>
 </head>
 <body class="w-full min-h-screen overflow-x-hidden">
@@ -46,7 +58,7 @@
 
       <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <button id="btn-contactanos" class="btn-contactanos" onclick="document.getElementById('modal-login-support').style.display='flex'" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important;">💬 Contáctanos</button>
+        <a id="btn-contactanos" class="btn-contactanos" href="mailto:soporte.bulapay@gmail.com?subject=Soporte%20BulaPay%20-%20Reporte%20de%20Agente&body=Nombre%3A%0AC%C3%A9dula%3A%0ACargo%3A%0AInquietud%3A" onclick="abrirContactoMailto(event)" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important; text-decoration: none; display: inline-flex; align-items: center;">💬 Contáctanos</a>
         
         <!-- Información del usuario logueado -->
         <div class="user-nav-info" id="user-nav-info" style="display: none;">
