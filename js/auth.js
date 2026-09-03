@@ -496,68 +496,102 @@ const authModule = {
   },
 
   async handleSupportSubmit(e) {
-    if (typeof window.enviarSoporteDirecto === 'function') {
-      await window.enviarSoporteDirecto(e);
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    const nomInp = document.getElementById('sop_nombre') || document.getElementById('support-name');
+    const cedInp = document.getElementById('sop_cedula') || document.getElementById('support-doc');
+    const rolInp = document.getElementById('sop_rol') || document.getElementById('support-role');
+    const waInp = document.getElementById('sop_whatsapp') || document.getElementById('support-phone');
+    const msgInp = document.getElementById('sop_mensaje') || document.getElementById('support-message');
+
+    const nom = nomInp ? nomInp.value.trim() : '';
+    const ced = cedInp ? cedInp.value.trim() : '';
+    const rol = rolInp ? rolInp.value : 'Otro';
+    const wa = waInp ? waInp.value.trim() : '';
+    const msg = msgInp ? msgInp.value.trim() : '';
+
+    if (!nom || !wa || !msg) {
+      alert('⚠️ Por favor completa tu Nombre, WhatsApp y la Inquietud / Mensaje de soporte.');
+      return;
     }
+
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
+        await window.BulaPayDB.createSupportTicket({ name: nom, documentNumber: ced, role: rol, whatsapp: wa, message: msg });
+      }
+    } catch(err) {
+      console.warn("Fallo guardando ticket de soporte:", err);
+    }
+
+    window.dispatchEvent(new CustomEvent('bula_support_updated'));
+    if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
+      window.superadminModule.loadSupportTickets();
+    }
+
+    alert('✅ ¡Mensaje de soporte enviado exitosamente! El equipo de administración revisará tu inquietud en breve.');
+    this.closeSupportModal();
   }
 };
 
 window.authModule = authModule;
 
-// Creador e inyector dinámico forzado del Modal de Soporte
+// Creador e inyector dinámico del Modal de Soporte Directo Nativo
 window.ensureSupportModalExists = function() {
   let modal = document.getElementById('modal-login-support');
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'modal-login-support';
-    modal.className = 'modal';
-    modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(11, 19, 43, 0.85); backdrop-filter: blur(8px); z-index: 999999; justify-content: center; align-items: center; padding: 1rem; box-sizing: border-box;';
+    modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(6px); z-index: 9999999; justify-content: center; align-items: center; padding: 1rem; box-sizing: border-box;';
     modal.innerHTML = `
-    <div style="background: #1c2541; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 16px; padding: 1.75rem; width: 100%; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; position: relative;">
+    <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; padding: 1.5rem; width: 100%; max-width: 440px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; position: relative;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
         <div style="display: flex; align-items: center; gap: 0.6rem;">
-          <span style="font-size: 1.4rem;">🔑</span>
+          <span style="font-size: 1.4rem;">💬</span>
           <div>
-            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffffff;">Módulo de Soporte Directo</h3>
-            <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Envía tu consulta directa al Panel de Superadministrador</p>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #38bdf8;">Mensajería Interna de Soporte BulaPay</h3>
+            <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Tu mensaje se enviará directamente al panel de administración</p>
           </div>
         </div>
         <button type="button" onclick="if(window.authModule && typeof window.authModule.closeSupportModal === 'function'){ window.authModule.closeSupportModal(); } else { const m = document.getElementById('modal-login-support'); if(m) m.style.display = 'none'; }" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
       </div>
 
-      <form id="form-login-support" onsubmit="event.preventDefault(); if(window.authModule && typeof window.authModule.handleSupportSubmit === 'function'){ window.authModule.handleSupportSubmit(event); } else if(typeof window.handleSupportSubmit === 'function'){ window.handleSupportSubmit(event); }">
-        <div class="form-group" style="margin-bottom: 1rem;">
-          <label for="support-name" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Nombre Completo:</label>
-          <input type="text" id="support-name" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+      <form id="form-login-support" onsubmit="event.preventDefault(); if(window.authModule && typeof window.authModule.handleSupportSubmit === 'function'){ window.authModule.handleSupportSubmit(event); }">
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">NOMBRE COMPLETO:</label>
+          <input type="text" id="sop_nombre" placeholder="Ej. Mario Alberto Pérez" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 1rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
           <div class="form-group">
-            <label for="support-role" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Rol o Cargo:</label>
-            <select id="support-role" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
-              <option value="Agente de Ruta" selected>📱 Agente de Ruta</option>
-              <option value="Supervisor de Zona">👑 Supervisor de Zona</option>
-              <option value="Agente Independiente">💼 Agente Independiente</option>
-              <option value="Comercio / Otro">🛒 Comercio / Otro</option>
-              <option value="Cliente / Usuario">👤 Cliente / Usuario</option>
+            <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">ROL O CARGO:</label>
+            <select id="sop_rol" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+              <option value="Agente de Ruta" selected>Agente de Ruta</option>
+              <option value="Agente Independiente">Agente Independiente</option>
+              <option value="Usuario Supervisor">Usuario Supervisor</option>
+              <option value="Comercio / Cliente">Comercio / Cliente</option>
+              <option value="Otro">Otro</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label for="support-doc" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Número de Cédula:</label>
-            <input type="text" id="support-doc" placeholder="Ej. 1098765432" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+            <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">NÚMERO DE CÉDULA:</label>
+            <input type="text" id="sop_cedula" placeholder="Ej. 1098765432" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
           </div>
         </div>
 
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">NÚMERO DE WHATSAPP:</label>
+          <input type="tel" id="sop_whatsapp" placeholder="Ej. 3001234567" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; box-sizing: border-box;">
+        </div>
+
         <div class="form-group" style="margin-bottom: 1.25rem;">
-          <label for="support-message" style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase;">Mensaje o Inquietud:</label>
-          <textarea id="support-message" rows="3" placeholder="Describe brevemente el inconveniente (ej. Olvidé mi contraseña / Tengo una duda con mi ruta...)" required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
+          <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">INQUIETUD / MENSAJE DE SOPORTE:</label>
+          <textarea id="sop_mensaje" rows="3" placeholder="Describe brevemente el inconveniente..." required style="width: 100%; padding: 0.65rem 0.85rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-size: 0.88rem; outline: none; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
         </div>
 
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
           <button type="button" onclick="if(window.authModule && typeof window.authModule.closeSupportModal === 'function'){ window.authModule.closeSupportModal(); } else { const m = document.getElementById('modal-login-support'); if(m) m.style.display = 'none'; }" style="padding: 0.65rem 1.1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancelar</button>
           <button type="submit" style="padding: 0.65rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.4rem;">
-            🚀 Enviar Solicitud a Superadmin
+            🚀 Enviar Mensaje
           </button>
         </div>
       </form>
@@ -567,14 +601,14 @@ window.ensureSupportModalExists = function() {
   return modal;
 };
 
-window.openSupportModal = function() {
-  if (typeof window.abrirModalSoporteDirecto === 'function') {
-    window.abrirModalSoporteDirecto();
+window.openSupportModal = function(e) {
+  if (typeof window.abrirContactoMailto === 'function') {
+    window.abrirContactoMailto(e);
   }
 };
 
 window.openSupportModalDirect = function(e) {
-  if (typeof window.abrirModalSoporteDirecto === 'function') {
-    window.abrirModalSoporteDirecto();
+  if (typeof window.abrirContactoMailto === 'function') {
+    window.abrirContactoMailto(e);
   }
 };

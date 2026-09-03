@@ -57,10 +57,19 @@
   <!-- Script Global Soporte -->
   <script>
     window.abrirContactoMailto = function(e) {
-      if (e) e.preventDefault();
-      const modal = document.getElementById('modal-login-support');
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      let modal = document.getElementById('modal-login-support');
+      if (!modal && typeof window.ensureSupportModalExists === 'function') {
+        modal = window.ensureSupportModalExists();
+      }
       if (modal) {
-        modal.style.display = 'flex';
+        modal.style.removeProperty('display');
+        modal.style.removeProperty('visibility');
+        modal.style.removeProperty('opacity');
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('z-index', '9999999', 'important');
       }
     };
     window.abrirSoporteGlobal = window.abrirContactoMailto;
@@ -2369,7 +2378,10 @@
       // Función global para abrir el modal de soporte e ingresar autorellenado de la sesión activa
       window.abrirContactoMailto = function(e) {
         if (e && typeof e.preventDefault === 'function') e.preventDefault();
-        const modal = document.getElementById('modal-login-support');
+        let modal = document.getElementById('modal-login-support');
+        if (!modal && typeof window.ensureSupportModalExists === 'function') {
+          modal = window.ensureSupportModalExists();
+        }
         if (!modal) return;
 
         try {
@@ -2396,11 +2408,26 @@
           console.warn("Fallo autorrellenando formulario de soporte:", err);
         }
 
-        modal.style.display = 'flex';
+        modal.style.removeProperty('display');
+        modal.style.removeProperty('visibility');
+        modal.style.removeProperty('opacity');
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('z-index', '9999999', 'important');
       };
       window.abrirSoporteGlobal = window.abrirContactoMailto;
       window.abrirModalSoporteDirecto = window.abrirContactoMailto;
       window.openSupportModal = window.abrirContactoMailto;
+
+      // Event Listener Global para garantizar que CUALQUIER clic en el botón Contáctanos abra el modal
+      document.addEventListener('click', function(evt) {
+        const btn = evt.target.closest('#btn-contactanos, .btn-contactanos, [onclick*="abrirContactoMailto"]');
+        if (btn) {
+          if (evt.cancelable) evt.preventDefault();
+          window.abrirContactoMailto(evt);
+        }
+      });
 
       function initSupportModalEvents() {
         const btnCerrar = document.getElementById('sop_cerrar');
@@ -2408,7 +2435,11 @@
         const btnEnviar = document.getElementById('sop_enviar');
         const modal = document.getElementById('modal-login-support');
 
-        const closeModal = () => { if (modal) modal.style.display = 'none'; };
+        const closeModal = () => {
+          if (modal) {
+            modal.style.setProperty('display', 'none', 'important');
+          }
+        };
 
         if (btnCerrar) btnCerrar.onclick = closeModal;
         if (btnCloseIcon) btnCloseIcon.onclick = closeModal;

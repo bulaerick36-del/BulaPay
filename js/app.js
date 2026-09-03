@@ -641,12 +641,12 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers obsoletos y registro forzado (v302)
+// Purga automática de Service Workers obsoletos y registro forzado (v303)
 window.forcePurgeAndRegisterServiceWorker = async function() {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // 1. Desinscribir de inmediato cualquier Service Worker antiguo (v193, v204, v206, v207, v208, v209, v300, v301, etc.)
+    // 1. Desinscribir de inmediato cualquier Service Worker antiguo (v193, v204, v206, v207, v208, v209, v300, v301, v302, etc.)
     const registrations = await navigator.serviceWorker.getRegistrations();
     if (registrations && registrations.length > 0) {
       for (const registration of registrations) {
@@ -673,17 +673,17 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     }
 
     // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico
-    const swUrl = './sw.js?v=302&t=' + Date.now();
+    const swUrl = './sw.js?v=303&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker v302 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker v303 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW v302 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW v303 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v302 Actualizada)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v303 Actualizada)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -692,7 +692,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v302)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v303)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();
