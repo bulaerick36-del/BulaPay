@@ -85,9 +85,7 @@
         </a>
       </div>
 
-      <!-- Botón de Soporte Contáctanos en la Barra Superior Derecha -->
-      <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <a id="btn-contactanos" class="btn-contactanos" href="mailto:soporte.bulapay.oficial@gmail.com?subject=Soporte%20BulaPay%20-%20Reporte%20de%20Agente&body=Nombre%3A%0AC%C3%A9dula%3A%0ACargo%3A%0AInquietud%3A" onclick="abrirContactoMailto(event)" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important; text-decoration: none; display: inline-flex; align-items: center;">💬 Contáctanos</a>
+        <a id="btn-contactanos" class="btn-contactanos" href="javascript:void(0)" onclick="abrirContactoMailto(event)" style="pointer-events: auto !important; z-index: 9999999 !important; cursor: pointer !important; position: relative !important; text-decoration: none; display: inline-flex; align-items: center;">💬 Contáctanos</a>
         
         <!-- Información del usuario logueado -->
         <div class="user-nav-info" id="user-nav-info" style="display: none;">
@@ -2508,6 +2506,7 @@
         initSupportModalEvents();
       }
     })();
+  </script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
         const eliminarBotonesSobrantes = () => {
