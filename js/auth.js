@@ -345,10 +345,6 @@ const authModule = {
     } else if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
       window.app.router.navigate('agent');
     }
-
-    if (typeof window.checkGlobalAnnouncement === 'function') {
-      window.checkGlobalAnnouncement();
-    }
   },
 
   updateNavBar(user) {

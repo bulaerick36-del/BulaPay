@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bulapay-v196';
+const CACHE_NAME = 'bulapay-v300';
 const ASSETS = [
   './',
   './index.html',
@@ -13,70 +13,91 @@ const ASSETS = [
   './assets/logo.svg'
 ];
 
-// Instalar el Service Worker y almacenar en caché los activos estáticos
+// 1. Instalar el Service Worker y forzar la activación inmediata (skipWaiting)
 self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell');
+      console.log('[Service Worker] Caching app shell v300');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// Activar y limpiar cachés antiguas
+// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v198, etc.)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker] Removing old cache', key);
+            console.log('[Service Worker] Purgando caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
-    }).then(() => self.clients.claim())
+    }).then(() => {
+      console.log('[Service Worker] Reclamando clientes para control inmediato');
+      return self.clients.claim();
+    })
   );
 });
 
-// Estrategia Network First falling back to Cache para asegurar datos frescos
+// 3. Estrategia Network-First estricta para navegación y archivos HTML
 self.addEventListener('fetch', (e) => {
   const url = e.request ? e.request.url : '';
 
-  // 1. Excluir explícitamente cualquier URL que empiece por mailto: o esquemas que no sean HTTP/HTTPS
+  // Excluir esquemas no HTTP/HTTPS (como mailto:, tel:) y peticiones de orígenes externos
   if (!url || url.startsWith('mailto:') || (!url.startsWith('http://') && !url.startsWith('https://'))) {
-    return; // Permite que el navegador lo maneje de forma nativa sin interceptar
+    return;
   }
 
-  // 2. Evitar interceptar solicitudes de otros orígenes
   if (!url.startsWith(self.location.origin)) {
     return;
   }
 
+  const isHTMLRequest = e.request.mode === 'navigate' || 
+                        (e.request.headers.get('accept') && e.request.headers.get('accept').includes('text/html')) || 
+                        url.endsWith('.html') || 
+                        url.includes('index.html');
+
+  if (isHTMLRequest) {
+    // ESTRATEGIA NETWORK FIRST PARA NAVEGACIÓN Y ARCHIVOS HTML
+    e.respondWith(
+      fetch(e.request, { cache: 'no-cache' })
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(e.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          console.warn('[Service Worker] Sin conexión. Sirviendo HTML desde caché fallback.');
+          return caches.match(e.request).then((cachedResponse) => {
+            return cachedResponse || caches.match('./index.html');
+          });
+        })
+    );
+    return;
+  }
+
+  // Estrategia Network-First para activos estáticos (JS, CSS, Imágenes)
   e.respondWith(
     fetch(e.request)
-      .then((response) => {
-        // Clonar la respuesta y guardarla en cache si es exitosa
-        if (response.status === 200) {
-          const responseClone = response.clone();
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(e.request, responseClone);
           });
         }
-        return response;
+        return networkResponse;
       })
       .catch(() => {
-        // En caso de fallo de red, intentar servir desde caché
-        return caches.match(e.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          // Si es navegación y no está en caché, devolver la shell principal
-          if (e.request.mode === 'navigate') {
-            return caches.match('./index.html');
-          }
-        });
+        return caches.match(e.request);
       })
   );
 });

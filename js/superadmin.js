@@ -1,5 +1,26 @@
+document.addEventListener("DOMContentLoaded", () => {
+    const eliminarBotonesSobrantes = () => {
+        const botones = document.querySelectorAll('button, a, div');
+        botones.forEach(el => {
+            const texto = el.textContent.trim();
+            if (
+                texto.includes("Probador DOM") || 
+                texto.includes("Exportar Contratos PDF") || 
+                texto.includes("Correo Soporte") || 
+                texto.includes("Comunicado")
+            ) {
+                // Si es el botón completo o su contenedor inmediato de acción, elimínalo
+                el.remove();
+            }
+        });
+    };
+
+    eliminarBotonesSobrantes();
+    setTimeout(eliminarBotonesSobrantes, 500);
+    setTimeout(eliminarBotonesSobrantes, 1500);
+});
+
 // Módulo de Superadministrador Maestro de BulaPay
-// Acceso Exclusivo: Cédula 1121338578
 
 const superadminModule = {
   activeTab: 'users', // 'users' | 'contracts' | 'performance'
@@ -215,10 +236,6 @@ const superadminModule = {
               <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-              <button id="btn-test-dom" onclick="alert('✅ ¡El DOM del Panel Maestro Flotante responde perfectamente!')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">🧪 Probador DOM</button>
-              <button onclick="superadminModule.openContractPDF('Administrador General', 'CC: 1121338578', new Date().toLocaleString('es-CO'), 'BULAPAY-SIG-ADMIN-STAMP')" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border: none; color: white; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">📜 Exportar Contratos PDF</button>
-              <button onclick="superadminModule.openChangeSupportEmailModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer;">📧 Correo Soporte</button>
-              <button onclick="superadminModule.openQuickAnnouncementModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);">📢 Comunicado</button>
               <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
               <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
             </div>
@@ -1374,21 +1391,6 @@ const superadminModule = {
     alert(`🎉 Correo oficial de soporte actualizado exitosamente a: ${val}\n\nLos reportes y enlaces "Contáctanos" ahora se dirigirán automáticamente a esta dirección.`);
   },
 
-  openChangeSupportEmailModal() {
-    const current = this.getSupportEmail();
-    const newEmail = prompt('📧 Actualizar Correo Electrónico Oficial de Soporte:', current);
-    if (newEmail === null) return;
-    const cleanEmail = newEmail.trim();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      alert('⚠️ Correo no válido.');
-      return;
-    }
-    localStorage.setItem('bula_support_email', cleanEmail);
-    alert(`✅ Correo de soporte actualizado a: ${cleanEmail}`);
-    const input = document.getElementById('sa-support-email-input');
-    if (input) input.value = cleanEmail;
-  },
-
   // ==========================================
   // PESTAÑA 5: SOPORTE Y MENSAJES DIRECTOS
   // ==========================================
@@ -1427,50 +1429,6 @@ const superadminModule = {
             <button onclick="superadminModule.saveSupportEmail()" style="padding: 0.6rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: flex; align-items: center; gap: 0.4rem;">
               💾 Guardar y Actualizar Correo
             </button>
-          </div>
-        </div>
-
-        <!-- TARJETA DE GESTIÓN DE ANUNCIOS Y ALERTAS GLOBALES -->
-        <div style="background: linear-gradient(180deg, #0b132b 0%, #1e293b 100%); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 8px 20px -5px rgba(0,0,0,0.5);">
-          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span style="font-size: 1.2rem;">📢</span>
-              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: #ffffff;">Anuncios y Alertas Globales PWA</h4>
-            </div>
-            <span style="font-size: 0.7rem; background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700;">Banner Flotante en Tiempo Real</span>
-          </div>
-          <p style="color: #94a3b8; font-size: 0.8rem; margin: 0 0 1rem 0;">Publica un aviso o alerta global visible inmediatamente para usuarios y agentes al ingresar a BulaPay.</p>
-          
-          <form onsubmit="event.preventDefault(); superadminModule.publishGlobalAnnouncement();" style="display: flex; flex-direction: column; gap: 0.85rem;">
-            <div>
-              <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 0.3rem; font-weight: 700;">Mensaje del Anuncio / Comunicado:</label>
-              <textarea id="sa-announcement-message" placeholder="Escribe aquí el comunicado importante (ej. Mantenimiento programado de sistema hoy a las 11:00 PM)..." style="width: 100%; min-height: 75px; padding: 0.65rem; font-size: 0.88rem; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.3); background: #0f172a; color: #ffffff; outline: none; box-sizing: border-box; resize: vertical;"></textarea>
-            </div>
-            
-            <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-              <div style="flex: 1; min-width: 200px;">
-                <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 0.3rem; font-weight: 700;">Tipo de Alerta:</label>
-                <select id="sa-announcement-type" style="width: 100%; padding: 0.6rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.3); background: #0f172a; color: #ffffff; outline: none; font-weight: 600;">
-                  <option value="info">Informativa ℹ️</option>
-                  <option value="warning">Advertencia ⚠️</option>
-                  <option value="success">Éxito 📢</option>
-                </select>
-              </div>
-
-              <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
-                <button type="submit" style="padding: 0.65rem 1.2rem; background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3); display: flex; align-items: center; gap: 0.4rem;">
-                  🚀 Publicar Aviso Global
-                </button>
-                <button type="button" onclick="superadminModule.clearGlobalAnnouncement()" style="padding: 0.65rem 1rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
-                  🗑️ Desactivar Aviso
-                </button>
-              </div>
-            </div>
-          </form>
-
-          <!-- VISTA PREVIA DEL ANUNCIO ACTUAL -->
-          <div id="sa-announcement-status-box" style="margin-top: 1rem; padding: 0.8rem; border-radius: 8px; font-size: 0.8rem; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08);">
-            <!-- Se actualiza por código -->
           </div>
         </div>
 
@@ -1528,202 +1486,6 @@ const superadminModule = {
     `;
 
     await this.loadSupportTickets();
-    this.updateAnnouncementAdminUI();
-  },
-
-  publishGlobalAnnouncement() {
-    const msgEl = document.getElementById('sa-announcement-message');
-    const typeEl = document.getElementById('sa-announcement-type');
-    if (!msgEl) return;
-
-    const message = msgEl.value.trim();
-    if (!message) {
-      alert('Por favor ingresa un mensaje para el anuncio global.');
-      return;
-    }
-
-    const type = typeEl ? typeEl.value : 'info';
-    const announcement = {
-      id: Date.now(),
-      message: message,
-      type: type, // 'info' | 'warning' | 'success'
-      active: true,
-      created_at: new Date().toISOString()
-    };
-
-    try {
-      localStorage.setItem('bula_global_announcement', JSON.stringify(announcement));
-      alert('¡Aviso global publicado con éxito en BulaPay!');
-      this.updateAnnouncementAdminUI();
-
-      // Disparar eventos para refrescar el banner en las vistas activas
-      window.dispatchEvent(new CustomEvent('bula_announcement_updated'));
-      if (window.app && typeof window.app.checkGlobalAnnouncement === 'function') {
-        window.app.checkGlobalAnnouncement();
-      }
-    } catch(err) {
-      console.error("Error guardando anuncio global:", err);
-      alert("Fallo al guardar el anuncio global en el almacenamiento local.");
-    }
-  },
-
-  clearGlobalAnnouncement() {
-    if (!confirm('¿Estás seguro de desactivar el aviso global actual?')) return;
-
-    try {
-      const raw = localStorage.getItem('bula_global_announcement');
-      if (raw) {
-        const ann = JSON.parse(raw);
-        ann.active = false;
-        localStorage.setItem('bula_global_announcement', JSON.stringify(ann));
-      } else {
-        localStorage.removeItem('bula_global_announcement');
-      }
-
-      alert('El aviso global ha sido desactivado.');
-      this.updateAnnouncementAdminUI();
-      window.dispatchEvent(new CustomEvent('bula_announcement_updated'));
-      if (window.app && typeof window.app.checkGlobalAnnouncement === 'function') {
-        window.app.checkGlobalAnnouncement();
-      }
-    } catch(err) {
-      console.warn("Fallo desactivando anuncio:", err);
-    }
-  },
-
-  updateAnnouncementAdminUI() {
-    const box = document.getElementById('sa-announcement-status-box');
-    const msgEl = document.getElementById('sa-announcement-message');
-    const typeEl = document.getElementById('sa-announcement-type');
-    if (!box) return;
-
-    let ann = null;
-    try {
-      const raw = localStorage.getItem('bula_global_announcement');
-      if (raw) ann = JSON.parse(raw);
-    } catch(e) {}
-
-    if (ann && ann.active && ann.message) {
-      if (msgEl && !msgEl.value) msgEl.value = ann.message;
-      if (typeEl && ann.type) typeEl.value = ann.type;
-
-      const typeBadge = ann.type === 'warning'
-        ? '<span style="color: #fbbf24; font-weight: 800;">⚠️ Advertencia</span>'
-        : ann.type === 'success'
-        ? '<span style="color: #34d399; font-weight: 800;">📢 Éxito</span>'
-        : '<span style="color: #38bdf8; font-weight: 800;">ℹ️ Informativa</span>';
-
-      const dateStr = ann.created_at ? new Date(ann.created_at).toLocaleString('es-CO') : 'Reciente';
-
-      box.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
-          <div><strong style="color: #34d399;">🟢 Anuncio Activo Publicado</strong> &bull; Tipo: ${typeBadge}</div>
-          <div style="color: #94a3b8; font-size: 0.75rem;">📅 ${dateStr}</div>
-        </div>
-        <div style="color: #f8fafc; font-weight: 600; font-size: 0.85rem; line-height: 1.4; background: rgba(0,0,0,0.3); padding: 0.6rem; border-radius: 6px; border-left: 3px solid #a855f7;">
-          "${ann.message}"
-        </div>
-      `;
-    } else {
-      box.innerHTML = `
-        <div style="color: #94a3b8; font-style: italic; display: flex; align-items: center; gap: 0.4rem;">
-          <span>⚪</span> <span>No hay ningún aviso global activo en este momento.</span>
-        </div>
-      `;
-    }
-  },
-
-  openQuickAnnouncementModal() {
-    const existingModal = document.getElementById('sa-quick-announcement-modal');
-    if (existingModal) existingModal.remove();
-
-    let currentMsg = '';
-    let currentType = 'info';
-    try {
-      const currentAnn = JSON.parse(localStorage.getItem('bula_global_announcement') || '{}');
-      if (currentAnn && currentAnn.message) currentMsg = currentAnn.message;
-      if (currentAnn && currentAnn.type) currentType = currentAnn.type;
-    } catch(e) {}
-
-    const modal = document.createElement('div');
-    modal.id = 'sa-quick-announcement-modal';
-    modal.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85); z-index: 99999999;
-      display: flex; align-items: center; justify-content: center;
-      font-family: system-ui, -apple-system, sans-serif;
-    `;
-
-    modal.innerHTML = `
-      <div style="background: #1e293b; border: 1px solid rgba(168, 85, 247, 0.4); padding: 22px; border-radius: 12px; width: 90%; max-width: 440px; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h3 style="margin: 0; color: #c084fc; font-size: 1.1rem; display: flex; align-items: center; gap: 0.4rem;">
-            <span>📢</span> <span>Publicar Comunicado Global</span>
-          </h3>
-          <button id="btn-close-sa-ann-modal" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">✕</button>
-        </div>
-        <p style="font-size: 0.8rem; color: #94a3b8; margin: 0 0 14px 0;">Este mensaje se mostrará como banner flotante inmediato a todos los agentes y usuarios.</p>
-        
-        <form id="form-quick-announcement">
-          <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 700;">Mensaje del Anuncio / Comunicado:</label>
-          <textarea id="qa_message" placeholder="Escribe el mensaje de la alerta o comunicado..." style="width: 100%; height: 80px; padding: 9px; margin-bottom: 12px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; resize: vertical; font-size: 0.88rem;" required>${currentMsg}</textarea>
-          
-          <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 700;">Tipo de Alerta:</label>
-          <select id="qa_type" style="width: 100%; padding: 9px; margin-bottom: 16px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; font-size: 0.88rem; font-weight: 600;">
-            <option value="info" ${currentType === 'info' ? 'selected' : ''}>Informativa ℹ️</option>
-            <option value="warning" ${currentType === 'warning' ? 'selected' : ''}>Advertencia ⚠️</option>
-            <option value="success" ${currentType === 'success' ? 'selected' : ''}>Éxito 📢</option>
-          </select>
-          
-          <div style="display: flex; gap: 10px; justify-content: flex-end;">
-            <button type="button" id="btn-cancel-sa-ann-modal" style="background: #475569; color: #fff; border: none; padding: 9px 14px; border-radius: 6px; cursor: pointer; font-size: 0.83rem; font-weight: 700;">Cancelar</button>
-            <button type="submit" style="background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%); color: #fff; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-weight: 800; font-size: 0.83rem; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);">🚀 Publicar Global</button>
-          </div>
-        </form>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    const closeModal = () => modal.remove();
-    modal.querySelector('#btn-close-sa-ann-modal').onclick = closeModal;
-    modal.querySelector('#btn-cancel-sa-ann-modal').onclick = closeModal;
-
-    modal.querySelector('#form-quick-announcement').onsubmit = (e) => {
-      e.preventDefault();
-      const msg = modal.querySelector('#qa_message').value.trim();
-      const type = modal.querySelector('#qa_type').value;
-
-      if (!msg) {
-        alert('Por favor ingresa un mensaje.');
-        return;
-      }
-
-      const announcement = {
-        id: Date.now(),
-        message: msg,
-        type: type,
-        active: true,
-        created_at: new Date().toISOString()
-      };
-
-      try {
-        localStorage.setItem('bula_global_announcement', JSON.stringify(announcement));
-        alert('¡Comunicado global activado con éxito! Ahora es visible para todos los agentes.');
-        closeModal();
-
-        this.updateAnnouncementAdminUI();
-        window.dispatchEvent(new CustomEvent('bula_announcement_updated'));
-        if (window.checkGlobalAnnouncement) {
-          window.checkGlobalAnnouncement();
-        } else if (window.app && typeof window.app.checkGlobalAnnouncement === 'function') {
-          window.app.checkGlobalAnnouncement();
-        }
-      } catch(err) {
-        console.error("Error guardando aviso global:", err);
-        alert("Fallo al guardar en localStorage.");
-      }
-    };
   },
 
   async loadSupportTickets() {

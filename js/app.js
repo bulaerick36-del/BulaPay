@@ -197,150 +197,7 @@ const app = {
       
       // Scroll al inicio de la página
       window.scrollTo(0, 0);
-
-      // Verificar y desplegar anuncio global si aplica
-      app.checkGlobalAnnouncement();
     }
-  },
-
-  // Módulo de Anuncios y Alertas Globales (bula_global_announcement)
-  checkGlobalAnnouncement() {
-    let ann = null;
-    try {
-      const raw = localStorage.getItem('bula_global_announcement');
-      if (raw) ann = JSON.parse(raw);
-    } catch(e) {
-      console.warn("Fallo leyendo anuncio global:", e);
-    }
-
-    const existingBanner = document.getElementById('bula-global-announcement-banner');
-
-    // 1. Si no hay anuncio activo con mensaje, remover banner si existe
-    if (!ann || !ann.active || !ann.message) {
-      if (existingBanner) existingBanner.remove();
-      return;
-    }
-
-    // 2. Verificar si el usuario ya lo cerró en la sesión actual
-    const readKey = 'bula_announcement_read_' + ann.id;
-    if (sessionStorage.getItem(readKey) === 'true') {
-      if (existingBanner) existingBanner.remove();
-      return;
-    }
-
-    // 3. Si ya está desplegado en el DOM con el mismo ID, asegurar visibilidad
-    if (existingBanner) {
-      if (existingBanner.dataset.announcementId === ann.id) {
-        existingBanner.style.display = 'block';
-        return;
-      }
-      existingBanner.remove();
-    }
-
-    // 4. Configurar estilos y badges según el tipo de alerta (info, warning, success)
-    let typeConfig = {
-      bgColor: 'linear-gradient(135deg, #0b132b 0%, #1e293b 100%)',
-      borderColor: '#38bdf8',
-      shadowColor: 'rgba(56, 189, 248, 0.35)',
-      badgeBg: 'rgba(56, 189, 248, 0.2)',
-      badgeColor: '#38bdf8',
-      title: 'Información Importante',
-      icon: 'ℹ️'
-    };
-
-    if (ann.type === 'warning') {
-      typeConfig = {
-        bgColor: 'linear-gradient(135deg, #1c1917 0%, #292524 100%)',
-        borderColor: '#f59e0b',
-        shadowColor: 'rgba(245, 158, 11, 0.4)',
-        badgeBg: 'rgba(245, 158, 11, 0.2)',
-        badgeColor: '#fbbf24',
-        title: 'Advertencia / Alerta',
-        icon: '⚠️'
-      };
-    } else if (ann.type === 'success') {
-      typeConfig = {
-        bgColor: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)',
-        borderColor: '#10b981',
-        shadowColor: 'rgba(16, 185, 129, 0.4)',
-        badgeBg: 'rgba(16, 185, 129, 0.2)',
-        badgeColor: '#34d399',
-        title: 'Comunicado Oficial',
-        icon: '📢'
-      };
-    }
-
-    // 5. Generar banner flotante responsivo
-    const banner = document.createElement('div');
-    banner.id = 'bula-global-announcement-banner';
-    banner.dataset.announcementId = ann.id;
-    banner.style.cssText = `
-      position: fixed;
-      top: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 92%;
-      max-width: 580px;
-      z-index: 9999999;
-      background: ${typeConfig.bgColor};
-      border: 2px solid ${typeConfig.borderColor};
-      border-radius: 14px;
-      padding: 1rem 1.25rem;
-      color: #ffffff;
-      box-shadow: 0 12px 32px -4px ${typeConfig.shadowColor}, 0 4px 20px rgba(0, 0, 0, 0.6);
-      font-family: system-ui, -apple-system, sans-serif;
-      animation: bulaBannerSlideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-      box-sizing: border-box;
-    `;
-
-    banner.innerHTML = `
-      <style>
-        @keyframes bulaBannerSlideDown {
-          from { opacity: 0; transform: translate(-50%, -20px); }
-          to { opacity: 1; transform: translate(-50%, 0); }
-        }
-      </style>
-      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.85rem;">
-        <div style="display: flex; gap: 0.75rem; align-items: flex-start; flex: 1;">
-          <div style="font-size: 1.6rem; line-height: 1; flex-shrink: 0; margin-top: 2px;">${typeConfig.icon}</div>
-          <div style="flex: 1;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; flex-wrap: wrap;">
-              <span style="font-size: 0.7rem; font-weight: 800; background: ${typeConfig.badgeBg}; color: ${typeConfig.badgeColor}; border: 1px solid ${typeConfig.borderColor}; padding: 0.15rem 0.55rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em;">
-                ${typeConfig.title}
-              </span>
-              <span style="font-size: 0.72rem; color: #94a3b8;">${ann.created_at ? new Date(ann.created_at).toLocaleDateString('es-CO') : ''}</span>
-            </div>
-            <div style="font-size: 0.9rem; font-weight: 600; line-height: 1.45; color: #f8fafc; word-break: break-word;">
-              ${ann.message}
-            </div>
-          </div>
-        </div>
-        <button id="btn-close-bula-announcement-x" style="background: rgba(255,255,255,0.12); border: none; color: #cbd5e1; font-size: 1.1rem; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.2s;" title="Cerrar aviso">
-          ✕
-        </button>
-      </div>
-      <div style="display: flex; justify-content: flex-end; margin-top: 0.85rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
-        <button id="btn-close-bula-announcement-ok" style="background: ${typeConfig.borderColor}; color: #0f172a; font-weight: 900; border: none; padding: 0.45rem 1.25rem; border-radius: 8px; cursor: pointer; font-size: 0.83rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-          👍 Entendido
-        </button>
-      </div>
-    `;
-
-    document.body.appendChild(banner);
-
-    const closeHandler = () => {
-      sessionStorage.setItem('bula_announcement_read_' + ann.id, 'true');
-      banner.style.opacity = '0';
-      banner.style.transform = 'translate(-50%, -10px)';
-      banner.style.transition = 'all 0.3s ease-out';
-      setTimeout(() => banner.remove(), 300);
-    };
-
-    const btnOk = banner.querySelector('#btn-close-bula-announcement-ok');
-    const btnX = banner.querySelector('#btn-close-bula-announcement-x');
-
-    if (btnOk) btnOk.onclick = closeHandler;
-    if (btnX) btnX.onclick = closeHandler;
   },
 
   // Inicializar PWA e instalador
@@ -348,19 +205,15 @@ const app = {
     deferredPrompt: null,
 
     init() {
-      // Registrar Service Worker
+      // Auto-destrucción y re-registro forzoso de Service Worker
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js')
-            .then(reg => {
-              console.log('✔ Service Worker registrado con éxito. Scope:', reg.scope);
-              const pwaStatus = document.getElementById('pwa-status');
-              if (pwaStatus) pwaStatus.textContent = 'PWA Activa (Offline Listo)';
-            })
-            .catch(err => {
-              console.error('❌ Fallo al registrar Service Worker:', err);
-            });
-        });
+        if (document.readyState === 'complete') {
+          if (window.forcePurgeAndRegisterServiceWorker) window.forcePurgeAndRegisterServiceWorker();
+        } else {
+          window.addEventListener('load', () => {
+            if (window.forcePurgeAndRegisterServiceWorker) window.forcePurgeAndRegisterServiceWorker();
+          });
+        }
       }
 
       // Manejar prompt de instalación
@@ -412,10 +265,6 @@ const app = {
     
     // 4. Inicializar reloj del teléfono móvil simulado
     this.startPhoneClock();
-
-    // 5. Verificar anuncios globales y escuchar actualizaciones en tiempo real
-    this.checkGlobalAnnouncement();
-    window.addEventListener('bula_announcement_updated', () => this.checkGlobalAnnouncement());
   },
 
   // Capa de validación de GPS (No Bloqueante)
@@ -792,26 +641,68 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Exponer función global para verificar anuncios en cualquier momento, cambio de vista o inicio de sesión
-window.checkGlobalAnnouncement = function() {
-  if (window.app && typeof window.app.checkGlobalAnnouncement === 'function') {
-    window.app.checkGlobalAnnouncement();
+// Purga automática de Service Workers obsoletos y registro forzado (v300)
+window.forcePurgeAndRegisterServiceWorker = async function() {
+  if (!('serviceWorker' in navigator)) return;
+
+  try {
+    // 1. Desinscribir de inmediato cualquier Service Worker antiguo (v193, v204, v206, v207, v208, v209, etc.)
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    if (registrations && registrations.length > 0) {
+      for (const registration of registrations) {
+        const unregistered = await registration.unregister();
+        if (unregistered) {
+          console.log('🧹 [PWA Purga] SW antiguo desregistrado:', registration.scope);
+          if (window.bulaMobileDebugLog) {
+            window.bulaMobileDebugLog('SW Antiguo Desregistrado: ' + registration.scope, 'warning');
+          }
+        }
+      }
+    }
+
+    // 2. Limpiar todas las cachés locales antiguas almacenadas en el dispositivo móvil
+    if ('caches' in window) {
+      const cacheKeys = await caches.keys();
+      for (const key of cacheKeys) {
+        await caches.delete(key);
+        console.log('🧹 [PWA Purga] Caché eliminada:', key);
+        if (window.bulaMobileDebugLog) {
+          window.bulaMobileDebugLog('Caché obsoleta eliminada: ' + key, 'warning');
+        }
+      }
+    }
+
+    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico
+    const swUrl = './sw.js?v=300&t=' + Date.now();
+    const newReg = await navigator.serviceWorker.register(swUrl);
+    await newReg.update();
+    console.log('✔ Service Worker v300 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+
+    if (window.bulaMobileDebugLog) {
+      window.bulaMobileDebugLog('¡SW v300 Registrado y Purgado con Éxito!', 'success');
+    }
+
+    const pwaStatus = document.getElementById('pwa-status');
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v300 Actualizada)';
+  } catch (err) {
+    console.error('❌ Error durante la purga/registro del Service Worker:', err);
+    if (window.bulaMobileDebugLog) {
+      window.bulaMobileDebugLog('Error en purga/registro SW: ' + (err.message || err), 'error');
+    }
   }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (window.checkGlobalAnnouncement) window.checkGlobalAnnouncement();
-});
-
-// Registro de Service Worker PWA con actualización forzada (v167)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v300)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    if (window.checkGlobalAnnouncement) window.checkGlobalAnnouncement();
-    navigator.serviceWorker.register('./sw.js').then((reg) => {
-      reg.update();
-      console.log('[PWA] Service Worker registrado exitosamente');
-    }).catch((err) => console.warn('[PWA] Error al registrar SW:', err));
-  });
+  const triggerPurge = () => {
+    window.forcePurgeAndRegisterServiceWorker();
+  };
+
+  if (document.readyState === 'complete') {
+    triggerPurge();
+  } else {
+    window.addEventListener('load', triggerPurge);
+  }
 }
 
 // Fin de Controlador Principal BulaPay PWA

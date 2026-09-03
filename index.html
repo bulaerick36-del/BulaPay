@@ -2,6 +2,43 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <script>
+    // 1. Purga automática de caché de Opera/Chrome en el momento cero
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        keys.forEach(k => caches.delete(k));
+      });
+    }
+
+    // 2. Destrucción inmediata y reactiva en tiempo real con MutationObserver
+    (function() {
+      const targets = ["Probador DOM", "Exportar Contratos PDF", "Correo Soporte", "Comunicado"];
+
+      function purgarBotones() {
+        const elements = document.querySelectorAll('button, a, .btn');
+        elements.forEach(el => {
+          const txt = (el.innerText || el.textContent || '').trim();
+          if (targets.some(t => txt.includes(t))) {
+            console.log('🧹 [Destrucción Directa Opera DOM] Removiendo botón:', txt);
+            el.remove();
+          }
+        });
+      }
+
+      const obs = new MutationObserver(purgarBotones);
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+
+      purgarBotones();
+      document.addEventListener('DOMContentLoaded', purgarBotones);
+      window.addEventListener('load', purgarBotones);
+      setInterval(purgarBotones, 100);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>BulaPay - Gestión de Cartera y Rutas</title>
   
@@ -2438,6 +2475,28 @@
         initSupportModalEvents();
       }
     })();
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const eliminarBotonesSobrantes = () => {
+            const botones = document.querySelectorAll('button, a, div');
+            botones.forEach(el => {
+                const texto = el.textContent.trim();
+                if (
+                    texto.includes("Probador DOM") || 
+                    texto.includes("Exportar Contratos PDF") || 
+                    texto.includes("Correo Soporte") || 
+                    texto.includes("Comunicado")
+                ) {
+                    // Si es el botón completo o su contenedor inmediato de acción, elimínalo
+                    el.remove();
+                }
+            });
+        };
+
+        eliminarBotonesSobrantes();
+        setTimeout(eliminarBotonesSobrantes, 500);
+        setTimeout(eliminarBotonesSobrantes, 1500);
+    });
   </script>
 </body>
 </html>
