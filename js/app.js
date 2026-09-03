@@ -27,7 +27,13 @@ const app = {
     },
 
     async handleInitialLoad() {
-      // 0. Prioridad Master: Verificar sesión activa de Superadministrador Maestro
+      // 0. Prioridad Máxima: Restablecimiento de contraseña si la URL trae reset-password o token
+      if (window.location.hash.includes('reset-password') || window.location.search.includes('token=')) {
+        this.handleRouteFromHash();
+        return;
+      }
+
+      // 0.1 Prioridad Master: Verificar sesión activa de Superadministrador Maestro
       if (window.superadminModule && window.superadminModule.isLoggedIn()) {
         this.currentRoute = 'superadmin';
         window.location.hash = '#superadmin';
@@ -91,7 +97,7 @@ const app = {
 
     handleRouteFromHash() {
       const hash = window.location.hash.slice(1);
-      const parts = hash.split('/');
+      const parts = hash.split('?')[0].split('/');
       const route = parts[0];
       const param = parts[1] || null;
 
@@ -104,6 +110,36 @@ const app = {
     },
 
     async renderView(route, param) {
+      // Manejador Especial: Vista de restablecimiento de contraseña (#reset-password)
+      if (route.startsWith('reset-password')) {
+        let token = param;
+        if (!token) {
+          const searchParams = new URLSearchParams(window.location.search);
+          token = searchParams.get('token');
+        }
+        if (!token && window.location.hash.includes('token=')) {
+          const match = window.location.hash.match(/token=([^&]+)/);
+          if (match) token = match[1];
+        }
+
+        const sections = document.querySelectorAll('.view-section');
+        sections.forEach(s => {
+          s.classList.remove('active');
+          s.style.setProperty('display', 'none', 'important');
+        });
+
+        const resetSection = document.getElementById('view-reset-password');
+        if (resetSection) {
+          resetSection.classList.add('active');
+          resetSection.style.setProperty('display', 'flex', 'important');
+        }
+
+        if (typeof window.initResetPasswordView === 'function') {
+          window.initResetPasswordView(token);
+        }
+        return;
+      }
+
       if (route === 'superadmin' || (window.superadminModule && window.superadminModule.isLoggedIn() && window.location.hash === '#superadmin')) {
         const authView = document.getElementById('view-auth');
         if (authView) authView.style.setProperty('display', 'none', 'important');
@@ -641,12 +677,12 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers obsoletos y registro forzado (v303)
+// Purga automática de Service Workers obsoletos y registro forzado (v305)
 window.forcePurgeAndRegisterServiceWorker = async function() {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // 1. Desinscribir de inmediato cualquier Service Worker antiguo (v193, v204, v206, v207, v208, v209, v300, v301, v302, etc.)
+    // 1. Desinscribir de inmediato cualquier Service Worker antiguo (v193, v204, v206, v207, v208, v209, v300, v301, v302, v303, etc.)
     const registrations = await navigator.serviceWorker.getRegistrations();
     if (registrations && registrations.length > 0) {
       for (const registration of registrations) {
@@ -673,17 +709,17 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     }
 
     // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico
-    const swUrl = './sw.js?v=303&t=' + Date.now();
+    const swUrl = './sw.js?v=305&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker v303 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker v305 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW v303 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW v305 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v303 Actualizada)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v305 Actualizada)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -692,7 +728,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v303)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v305)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();

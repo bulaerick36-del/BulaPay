@@ -2328,6 +2328,146 @@
       }
     });
   </script>
+  <!-- 5. VISTA DE RESTABLECIMIENTO DE CONTRASEÑA SEGURO (#reset-password) -->
+  <section id="view-reset-password" class="view-section" style="display: none; min-height: 100vh; background: #0f172a; padding: 2rem 1rem; box-sizing: border-box; align-items: center; justify-content: center;">
+    <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif;" id="reset-password-container">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;">
+        <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña</h2>
+        <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
+      </div>
+
+      <div id="reset-password-status-area">
+        <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
+          <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">⏳</div>
+          <div>Verificando token de recuperación...</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    window.initResetPasswordView = async function(token) {
+      const container = document.getElementById('reset-password-status-area');
+      if (!container) return;
+
+      if (!token) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 1rem;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚠️</div>
+            <h3 style="color: #fbbf24; margin: 0 0 0.5rem 0; font-size: 1.1rem;">Enlace Incompleto</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4;">El enlace de restablecimiento de contraseña no contiene un token válido. Por favor solicita un nuevo enlace a Soporte BulaPay.</p>
+            <button onclick="window.abrirContactoMailto(event)" style="margin-top: 1rem; width: 100%; padding: 0.75rem; background: #38bdf8; color: #0f172a; border: none; border-radius: 8px; font-weight: 800; cursor: pointer;">💬 Contactar a Soporte</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
+          <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">🔍</div>
+          <div style="font-weight: 600; font-size: 0.9rem;">Verificando validez del enlace...</div>
+        </div>
+      `;
+
+      try {
+        const res = await window.BulaPayDB.verifyPasswordResetToken(token);
+        if (!res.valid) {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 1rem;">
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">❌</div>
+              <h3 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem;">Enlace Inválido o Expirado</h3>
+              <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4;">${res.reason || 'Este enlace no es válido o ha expirado (vigencia de 1 hora).'}</p>
+              <button onclick="window.abrirContactoMailto(event)" style="margin-top: 1.25rem; width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">💬 Solicitar Nuevo Enlace</button>
+            </div>
+          `;
+          return;
+        }
+
+        const tData = res.tokenData;
+        container.innerHTML = `
+          <form id="form-reset-password-submit" onsubmit="event.preventDefault(); window.handleResetPasswordSubmit('${token}');">
+            <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); padding: 0.75rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: 0.82rem; color: #cbd5e1;">
+              👤 Usuario: <strong style="color: #ffffff;">${tData.user_name || tData.user_id}</strong>
+              ${tData.document_number ? `<br>💳 Cédula: <strong style="color: #38bdf8;">${tData.document_number}</strong>` : ''}
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+              <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">NUEVA CONTRASEÑA:</label>
+              <input type="password" id="reset_new_pass" placeholder="Ingresa tu nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
+            </div>
+
+            <div style="margin-bottom: 1.5rem;">
+              <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">CONFIRMAR CONTRASEÑA:</label>
+              <input type="password" id="reset_confirm_pass" placeholder="Repite la nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
+            </div>
+
+            <button type="submit" id="btn-save-new-pass" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; font-size: 0.9rem; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">💾 Guardar Nueva Contraseña</button>
+          </form>
+        `;
+      } catch(err) {
+        console.error("Error verificando token:", err);
+        container.innerHTML = `
+          <div style="text-align: center; color: #ef4444; padding: 1rem;">
+            ⚠️ Ocurrió un error al verificar el enlace de restablecimiento.
+          </div>
+        `;
+      }
+    };
+
+    window.handleResetPasswordSubmit = async function(token) {
+      const p1 = document.getElementById('reset_new_pass');
+      const p2 = document.getElementById('reset_confirm_pass');
+      const btn = document.getElementById('btn-save-new-pass');
+      const container = document.getElementById('reset-password-status-area');
+
+      const pass1 = p1 ? p1.value.trim() : '';
+      const pass2 = p2 ? p2.value.trim() : '';
+
+      if (!pass1 || !pass2) {
+        alert('⚠️ Por favor completa ambos campos de contraseña.');
+        return;
+      }
+
+      if (pass1 !== pass2) {
+        alert('⚠️ Las contraseñas ingresadas no coinciden. Por favor verifícalas.');
+        return;
+      }
+
+      if (pass1.length < 4) {
+        alert('⚠️ La contraseña debe tener al menos 4 caracteres.');
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Guardando...';
+      }
+
+      try {
+        await window.BulaPayDB.resetPasswordWithToken(token, pass1);
+
+        if (container) {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 1rem;">
+              <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">✅</div>
+              <h3 style="color: #34d399; margin: 0 0 0.5rem 0; font-size: 1.2rem;">¡Contraseña Restablecida Exitosamente!</h3>
+              <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">Tu nueva contraseña ha sido actualizada en la base de datos de Supabase. Ya puedes acceder con tu clave actualizada.</p>
+              <button onclick="window.location.hash = '#auth'; window.location.reload();" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">🚀 Ir al Portal de Inicio de Sesión</button>
+            </div>
+          `;
+        }
+      } catch(err) {
+        console.error("Error al restablecer la contraseña:", err);
+        alert('❌ Error al actualizar la contraseña: ' + (err.message || err));
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '💾 Guardar Nueva Contraseña';
+        }
+      }
+    };
+  </script>
+
   <!-- MODAL DE SOPORTE Y MENSAJERÍA DIRECTA NATIVA -->
   <div id="modal-login-support" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; align-items: center; justify-content: center;">
     <div style="background: #1e293b; padding: 25px; border-radius: 14px; width: 90%; max-width: 440px; color: #fff; font-family: system-ui, -apple-system, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.6); position: relative; border: 1px solid rgba(56, 189, 248, 0.3);">

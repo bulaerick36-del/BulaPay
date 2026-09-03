@@ -3575,6 +3575,169 @@ const db = {
         localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
       }
     } catch(e) {}
+  },
+
+  // ==========================================
+  // TOKENS DE RESTABLECIMIENTO DE CONTRASEÑA
+  // ==========================================
+  async createPasswordResetToken(tokenData) {
+    const randomStr = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+    const token = 'rst_' + Date.now() + '_' + randomStr;
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hora de vigencia
+
+    const newTokenRecord = {
+      token: token,
+      user_id: tokenData.user_id || tokenData.document_number || tokenData.documentNumber || 'usuario',
+      user_name: tokenData.name || tokenData.user_name || 'Usuario',
+      document_number: tokenData.document_number || tokenData.documentNumber || '',
+      created_at: new Date().toISOString(),
+      expires_at: expiresAt,
+      used: false
+    };
+
+    // 1. Guardar en Supabase
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase.from('password_reset_tokens').insert([newTokenRecord]).select();
+        if (!error && data && data.length > 0) {
+          console.log("✅ Token de restablecimiento guardado en Supabase:", data[0]);
+          this._savePasswordResetTokenLocal(data[0]);
+          return data[0];
+        }
+      }
+    } catch(e) {
+      console.warn("Fallo guardando token en Supabase, guardando en fallback local:", e);
+    }
+
+    // 2. Fallback local
+    this._savePasswordResetTokenLocal(newTokenRecord);
+    return newTokenRecord;
+  },
+
+  _savePasswordResetTokenLocal(tokenRecord) {
+    try {
+      const raw = localStorage.getItem('bula_password_tokens');
+      const tokens = raw ? JSON.parse(raw) : [];
+      tokens.unshift(tokenRecord);
+      localStorage.setItem('bula_password_tokens', JSON.stringify(tokens));
+    } catch(e) {
+      console.warn("Error guardando token en localStorage:", e);
+    }
+  },
+
+  async verifyPasswordResetToken(tokenStr) {
+    if (!tokenStr) return { valid: false, reason: 'Token no proporcionado.' };
+
+    let tokenRecord = null;
+
+    // 1. Intentar validar en Supabase
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('password_reset_tokens')
+          .select('*')
+          .eq('token', tokenStr)
+          .maybeSingle();
+
+        if (!error && data) {
+          tokenRecord = data;
+        }
+      }
+    } catch(e) {
+      console.warn("Fallo consultando token en Supabase:", e);
+    }
+
+    // 2. Fallback local si no se encontró en Supabase
+    if (!tokenRecord) {
+      try {
+        const raw = localStorage.getItem('bula_password_tokens');
+        if (raw) {
+          const tokens = JSON.parse(raw);
+          tokenRecord = tokens.find(t => t.token === tokenStr);
+        }
+      } catch(e) {}
+    }
+
+    if (!tokenRecord) {
+      return { valid: false, reason: 'El token ingresado no existe en el sistema o es inválido.' };
+    }
+
+    if (tokenRecord.used) {
+      return { valid: false, reason: 'Este enlace de restablecimiento ya fue utilizado anteriormente.' };
+    }
+
+    const now = new Date();
+    const expiry = new Date(tokenRecord.expires_at);
+    if (now > expiry) {
+      return { valid: false, reason: 'Este enlace de restablecimiento ha expirado (válido por 1 hora).' };
+    }
+
+    return { valid: true, tokenData: tokenRecord };
+  },
+
+  async resetPasswordWithToken(tokenStr, newPassword) {
+    const verification = await this.verifyPasswordResetToken(tokenStr);
+    if (!verification.valid) {
+      throw new Error(verification.reason);
+    }
+
+    const tokenRecord = verification.tokenData;
+
+    // 1. Buscar y actualizar usuario en Supabase (tabla `users`)
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        let query = supabase.from('users').update({ password: newPassword });
+
+        if (tokenRecord.document_number) {
+          query = query.or(`documentNumber.eq.${tokenRecord.document_number},username.eq.${tokenRecord.user_id},documentNumber.eq.${tokenRecord.user_id}`);
+        } else {
+          query = query.eq('username', tokenRecord.user_id);
+        }
+
+        const { error: userErr } = await query;
+        if (userErr) {
+          console.warn("Advertencia al actualizar contraseña en Supabase users:", userErr);
+        } else {
+          console.log("✅ Contraseña actualizada exitosamente en Supabase para el usuario.");
+        }
+
+        // Marcar token como utilizado
+        await supabase.from('password_reset_tokens').update({ used: true }).eq('token', tokenStr);
+      }
+    } catch(e) {
+      console.warn("Fallo actualizando contraseña en Supabase:", e);
+    }
+
+    // 2. Actualizar fallback local en localStorage
+    try {
+      const rawUsers = localStorage.getItem('bula_users') || localStorage.getItem('users');
+      if (rawUsers) {
+        const users = JSON.parse(rawUsers);
+        const targetUser = users.find(u =>
+          u.username === tokenRecord.user_id ||
+          u.documentNumber === tokenRecord.document_number ||
+          u.documentNumber === tokenRecord.user_id
+        );
+        if (targetUser) {
+          targetUser.password = newPassword;
+          localStorage.setItem('bula_users', JSON.stringify(users));
+        }
+      }
+
+      // Marcar token local como usado
+      const rawTokens = localStorage.getItem('bula_password_tokens');
+      if (rawTokens) {
+        const tokens = JSON.parse(rawTokens);
+        const tObj = tokens.find(t => t.token === tokenStr);
+        if (tObj) tObj.used = true;
+        localStorage.setItem('bula_password_tokens', JSON.stringify(tokens));
+      }
+    } catch(e) {}
+
+    return { success: true };
   }
 };
 

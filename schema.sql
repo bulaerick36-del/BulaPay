@@ -229,5 +229,23 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en support_tickets" ON support_t
 CREATE POLICY "Permitir todo a anonimos en support_tickets" ON support_tickets FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE support_tickets TO anon, authenticated;
 
+-- 7. Tabla de Tokens de Restablecimiento de Contraseña
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "token" TEXT NOT NULL UNIQUE,
+  "user_id" TEXT NOT NULL,
+  "user_name" TEXT,
+  "document_number" TEXT,
+  "created_at" TIMESTAMPTZ DEFAULT NOW(),
+  "expires_at" TIMESTAMPTZ NOT NULL,
+  "used" BOOLEAN DEFAULT false
+);
+
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en password_reset_tokens" ON password_reset_tokens;
+CREATE POLICY "Permitir todo a anonimos en password_reset_tokens" ON password_reset_tokens FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE password_reset_tokens TO anon, authenticated;
+
+
 
 
