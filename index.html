@@ -2321,54 +2321,99 @@
       }
     });
   </script>
-  <!-- MODAL DE SOPORTE Y MENSAJERÍA DIRECTA (MARCADO ESTÁTICO) -->
+  <!-- MODAL DE SOPORTE Y MENSAJERÍA DIRECTA NATIVA -->
   <div id="modal-login-support" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; align-items: center; justify-content: center;">
-    <div style="background: #1e293b; padding: 25px; border-radius: 12px; width: 90%; max-width: 420px; color: #fff; font-family: system-ui, -apple-system, sans-serif; box-shadow: 0 10px 25px rgba(0,0,0,0.5); position: relative;">
-      <h3 style="margin-top: 0; color: #38bdf8; font-size: 18px;">💬 Soporte y Consultas BulaPay</h3>
-      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 15px;">Completa los datos de tu solicitud:</p>
+    <div style="background: #1e293b; padding: 25px; border-radius: 14px; width: 90%; max-width: 440px; color: #fff; font-family: system-ui, -apple-system, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.6); position: relative; border: 1px solid rgba(56, 189, 248, 0.3);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 style="margin: 0; color: #38bdf8; font-size: 18px; display: flex; align-items: center; gap: 0.4rem;">
+          <span>💬</span> Mensajería Interna de Soporte BulaPay
+        </h3>
+        <button id="btn-close-sop-modal" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">✕</button>
+      </div>
+      <p style="font-size: 13px; color: #94a3b8; margin: 0 0 15px 0;">Tu mensaje se registrará directamente en el panel de administración:</p>
       
       <form id="form-login-support" onsubmit="event.preventDefault();">
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Nombre Completo:</label>
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Nombre Completo:</label>
         <input id="sop_nombre" type="text" placeholder="Ej. Juan Pérez" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
         
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Número de Cédula:</label>
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Número de Cédula:</label>
         <input id="sop_cedula" type="text" placeholder="Ej. 1121338578" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
         
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Rol o Cargo:</label>
-        <select id="sop_rol" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;">
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Rol o Cargo:</label>
+        <select id="sop_rol" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; font-weight: 600;">
           <option value="Agente de Ruta">Agente de Ruta</option>
           <option value="Agente Independiente">Agente Independiente</option>
-          <option value="Comercio">Comercio</option>
+          <option value="Usuario Supervisor">Usuario Supervisor</option>
+          <option value="Comercio / Cliente">Comercio / Cliente</option>
           <option value="Otro">Otro</option>
         </select>
+
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Número de WhatsApp:</label>
+        <input id="sop_whatsapp" type="tel" placeholder="Ej. 3001234567" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
         
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Inquietud / Mensaje:</label>
-        <textarea id="sop_mensaje" placeholder="¿Qué problema presentas? (ej. Olvidé mi contraseña)" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; height: 70px; box-sizing: border-box;" required></textarea>
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Inquietud / Mensaje de Soporte:</label>
+        <textarea id="sop_mensaje" placeholder="Escribe aquí tu consulta o inconveniente..." style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; height: 75px; box-sizing: border-box; resize: vertical;" required></textarea>
         
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px;">Adjuntar Archivo:</label>
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Adjuntar Captura / Archivo (Opcional):</label>
         <input id="sop_archivo" type="file" style="width: 100%; margin-bottom: 15px; color: #94a3b8; font-size: 12px;">
         
         <div style="display: flex; justify-content: space-between; gap: 10px;">
           <button type="button" id="sop_cerrar" style="flex: 1; background: #475569; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cancelar</button>
-          <button type="button" id="sop_enviar" style="flex: 1; background: #22c55e; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Enviar Ticket</button>
+          <button type="button" id="sop_enviar" style="flex: 1; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 800; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">🚀 Enviar Mensaje</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- SCRIPT DE LÓGICA DE ENVÍO DE SOPORTE -->
+  <!-- SCRIPT DE LÓGICA DE ENVÍO DE SOPORTE DIRECTO A SUPABASE -->
   <script>
     (function() {
+      // Función global para abrir el modal de soporte e ingresar autorellenado de la sesión activa
+      window.abrirContactoMailto = function(e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        const modal = document.getElementById('modal-login-support');
+        if (!modal) return;
+
+        try {
+          let user = null;
+          if (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') {
+            user = window.BulaPayDB.getCurrentUser();
+          }
+          if (!user) {
+            const raw = localStorage.getItem('bulapay_user') || localStorage.getItem('bula_user');
+            if (raw) user = JSON.parse(raw);
+          }
+          if (user) {
+            const nomInp = document.getElementById('sop_nombre');
+            const cedInp = document.getElementById('sop_cedula');
+            const rolInp = document.getElementById('sop_rol');
+            const waInp = document.getElementById('sop_whatsapp');
+
+            if (nomInp && user.name && !nomInp.value) nomInp.value = user.name;
+            if (cedInp && (user.documentNumber || user.id) && !cedInp.value) cedInp.value = user.documentNumber || user.id;
+            if (rolInp && user.role) rolInp.value = user.role;
+            if (waInp && user.phone && !waInp.value) waInp.value = user.phone;
+          }
+        } catch(err) {
+          console.warn("Fallo autorrellenando formulario de soporte:", err);
+        }
+
+        modal.style.display = 'flex';
+      };
+      window.abrirSoporteGlobal = window.abrirContactoMailto;
+      window.abrirModalSoporteDirecto = window.abrirContactoMailto;
+      window.openSupportModal = window.abrirContactoMailto;
+
       function initSupportModalEvents() {
         const btnCerrar = document.getElementById('sop_cerrar');
+        const btnCloseIcon = document.getElementById('btn-close-sop-modal');
         const btnEnviar = document.getElementById('sop_enviar');
         const modal = document.getElementById('modal-login-support');
 
-        if (btnCerrar && modal) {
-          btnCerrar.onclick = function() {
-            modal.style.display = 'none';
-          };
-        }
+        const closeModal = () => { if (modal) modal.style.display = 'none'; };
+
+        if (btnCerrar) btnCerrar.onclick = closeModal;
+        if (btnCloseIcon) btnCloseIcon.onclick = closeModal;
 
         if (btnEnviar && modal) {
           btnEnviar.onclick = async function(e) {
@@ -2377,16 +2422,18 @@
             const nomInp = document.getElementById('sop_nombre');
             const cedInp = document.getElementById('sop_cedula');
             const rolInp = document.getElementById('sop_rol');
+            const waInp = document.getElementById('sop_whatsapp');
             const msgInp = document.getElementById('sop_mensaje');
             const fileInp = document.getElementById('sop_archivo');
 
             const nom = nomInp ? nomInp.value.trim() : '';
             const ced = cedInp ? cedInp.value.trim() : '';
             const rol = rolInp ? rolInp.value : 'Otro';
+            const wa = waInp ? waInp.value.trim() : '';
             const msg = msgInp ? msgInp.value.trim() : '';
 
-            if (!nom || !msg) {
-              alert('Por favor ingresa tu nombre completo y la inquietud / mensaje.');
+            if (!nom || !wa || !msg) {
+              alert('⚠️ Por favor completa tu Nombre, WhatsApp y la Inquietud / Mensaje de soporte.');
               return;
             }
 
@@ -2406,65 +2453,51 @@
               }
             }
 
-            const ticketObj = {
-              id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            const ticketPayload = {
               name: nom,
-              document_number: ced,
+              documentNumber: ced,
               role: rol,
+              whatsapp: wa,
               message: msg,
-              attachment: attachmentData,
-              status: 'Pendiente',
-              created_at: new Date().toISOString()
+              attachment: attachmentData
             };
 
-            // 1. Guardar obligatoriamente en localStorage bajo la clave 'bula_support_tickets' antes de disparar el enlace de correo
+            // 1. Guardar ticket directamente mediante BulaPayDB (Supabase insert + localStorage fallback)
             try {
-              const rawLocal = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets') || '[]';
-              let tickets = [];
-              try { tickets = JSON.parse(rawLocal); } catch(e) { tickets = []; }
-              if (!Array.isArray(tickets)) tickets = [];
-              tickets.unshift(ticketObj);
-              localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
-              localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
-              console.log("✅ Reporte de soporte guardado exitosamente en localStorage ('bula_support_tickets'):", ticketObj);
-
-              // 2. Si BulaPayDB está disponible, guardar también en la base de datos
               if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
-                window.BulaPayDB.createSupportTicket({
+                await window.BulaPayDB.createSupportTicket(ticketPayload);
+              } else {
+                const rawLocal = localStorage.getItem('bula_support_tickets') || '[]';
+                let tickets = [];
+                try { tickets = JSON.parse(rawLocal); } catch(e) {}
+                tickets.unshift({
+                  id: 'ticket_' + Date.now(),
                   name: nom,
-                  documentNumber: ced,
+                  document_number: ced,
                   role: rol,
-                  message: msg,
-                  attachment: attachmentData
-                }).catch(function(err) { console.warn("Error enviando a BulaPayDB:", err); });
+                  whatsapp: wa,
+                  message: `📱 WhatsApp: ${wa}\n💬 Mensaje: ${msg}`,
+                  status: 'Pendiente',
+                  created_at: new Date().toISOString()
+                });
+                localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
               }
             } catch(err) {
-              console.warn("Fallo guardando ticket en localStorage:", err);
+              console.warn("Error guardando ticket de soporte:", err);
             }
 
-            // 3. Notificar cambios en tiempo real a la interfaz del superadministrador
+            // 2. Notificar eventos en vivo para actualizar el panel de superadministrador al instante
             window.dispatchEvent(new CustomEvent('bula_support_updated'));
             if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
               window.superadminModule.loadSupportTickets();
             }
 
-            // 4. Construir y disparar cliente de correo con mailto
-            const supportEmail = localStorage.getItem('bula_support_email') || 'soporte.bulapay.oficial@gmail.com';
-            const subject = encodeURIComponent(`Soporte BulaPay - Reporte de ${nom} (${rol})`);
-            const body = encodeURIComponent(`Nombre: ${nom}\nCédula: ${ced}\nRol: ${rol}\nFecha/Hora: ${new Date().toLocaleString('es-CO')}\n\nInquietud / Mensaje:\n${msg}`);
-            const mailtoUrl = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
-
-            alert('¡Reporte de soporte registrado en el sistema! Se abrirá tu aplicación de correo para enviar el mensaje a Soporte BulaPay.');
-            modal.style.display = 'none';
+            alert('✅ ¡Mensaje de soporte enviado exitosamente! El equipo de administración revisará tu inquietud en la brevedad.');
+            closeModal();
 
             // Resetear campos del formulario
-            if (nomInp) nomInp.value = '';
-            if (cedInp) cedInp.value = '';
             if (msgInp) msgInp.value = '';
             if (fileInp) fileInp.value = '';
-
-            // Disparar navegación mailto para que el sistema operativo o navegador abra el cliente de correo
-            window.location.href = mailtoUrl;
           };
         }
       }

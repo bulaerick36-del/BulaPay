@@ -3452,12 +3452,15 @@ const db = {
   // MÓDULO DE SOPORTE Y MENSAJERÍA DIRECTA
   // ==========================================
   async createSupportTicket(ticketData) {
+    const wa = ticketData.whatsapp || ticketData.sop_whatsapp || ticketData.phone || '';
+    const rawMsg = ticketData.message || ticketData.sop_mensaje || '';
+
     const newTicket = {
       id: 'ticket_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       name: ticketData.name || ticketData.sop_nombre || 'Sin Nombre',
       role: ticketData.role || ticketData.sop_rol || 'Usuario',
       document_number: ticketData.documentNumber || ticketData.document_number || ticketData.sop_cedula || 'N/A',
-      message: ticketData.message || ticketData.sop_mensaje || '',
+      message: wa ? `📱 WhatsApp: ${wa}\n💬 Inquietud: ${rawMsg}` : rawMsg,
       attachment: ticketData.attachment || ticketData.sop_archivo || null,
       status: 'Pendiente',
       created_at: new Date().toISOString()

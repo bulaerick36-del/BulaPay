@@ -1392,42 +1392,23 @@ const superadminModule = {
   },
 
   // ==========================================
-  // PESTAÑA 5: SOPORTE Y MENSAJES DIRECTOS
+  // ==========================================
+  // PESTAÑA 5: SOPORTE Y MENSAJES DIRECTOS (MENSAGERÍA NATIVA SUPABASE)
   // ==========================================
   async renderSupportTab(container) {
-    const currentSupportEmail = this.getSupportEmail();
-
     container.innerHTML = `
       <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(168, 85, 247, 0.25) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
           <div>
             <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 0.3rem 0.8rem; font-weight: 800; font-size: 0.78rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.06em;">
-              💬 BUZÓN DE MENSAJES Y CONFIGURACIÓN DE SOPORTE
+              💬 MENSAJERÍA DIRECTA SUPABASE (SIN CORREO EXTERNO)
             </div>
-            <h3 style="font-size: 1.45rem; font-weight: 900; margin-top: 0.5rem; margin-bottom: 0.25rem; background: linear-gradient(135deg, #38bdf8 0%, #a855f7 50%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">💬 Centro de Soporte y Consultas Directas</h3>
-            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Gestión de correo oficial y recepción de inquietudes enviadas desde BulaPay.</p>
+            <h3 style="font-size: 1.45rem; font-weight: 900; margin-top: 0.5rem; margin-bottom: 0.25rem; background: linear-gradient(135deg, #38bdf8 0%, #a855f7 50%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">💬 Centro de Soporte e Inquietudes Nativas</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Recepción directa de solicitudes enviadas desde la aplicación en tiempo real.</p>
           </div>
           <div>
             <button onclick="superadminModule.loadSupportTickets()" style="padding: 0.6rem 1.1rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">
               🔄 Actualizar Mensajes
-            </button>
-          </div>
-        </div>
-
-        <!-- TARJETA DE CONFIGURACIÓN DEL CORREO DE SOPORTE -->
-        <div style="background: linear-gradient(180deg, #0b132b 0%, #1e293b 100%); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 8px 20px -5px rgba(0,0,0,0.5);">
-          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span style="font-size: 1.2rem;">📧</span>
-              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: #ffffff;">Correo Electrónico Oficial de Soporte</h4>
-            </div>
-            <span style="font-size: 0.7rem; background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700;">Enlace Mailto Dinámico</span>
-          </div>
-          <p style="color: #94a3b8; font-size: 0.8rem; margin: 0 0 1rem 0;">Los reportes enviados por el botón "Contáctanos" se dirigirán automáticamente a este correo configurado:</p>
-          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <input type="email" id="sa-support-email-input" value="${currentSupportEmail}" placeholder="soporte.bulapay.oficial@gmail.com" style="flex: 1; min-width: 260px; padding: 0.6rem 0.85rem; font-size: 0.88rem; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3); background: #0f172a; color: #ffffff; outline: none; font-weight: 600;">
-            <button onclick="superadminModule.saveSupportEmail()" style="padding: 0.6rem 1.25rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); display: flex; align-items: center; gap: 0.4rem;">
-              💾 Guardar y Actualizar Correo
             </button>
           </div>
         </div>
@@ -1460,15 +1441,16 @@ const superadminModule = {
         <!-- TABLA DE GESTIÓN DE TICKETS -->
         <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden;">
           <div style="padding: 1rem 1.25rem; background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 700; color: #f8fafc; font-size: 0.95rem;">
-            📋 Registros Directos de Soporte
+            📋 Registros de Mensajería Interna de Soporte
           </div>
           <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; min-width: 800px;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; min-width: 900px;">
               <thead>
                 <tr style="background: #1c2541; border-bottom: 1px solid rgba(255,255,255,0.1); color: #38bdf8; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">
                   <th style="padding: 0.9rem 1rem;">📅 Fecha / Hora</th>
                   <th style="padding: 0.9rem 1rem;">👤 Usuario / Cédula</th>
                   <th style="padding: 0.9rem 1rem;">🏷️ Rol / Cargo</th>
+                  <th style="padding: 0.9rem 1rem;">📱 WhatsApp</th>
                   <th style="padding: 0.9rem 1rem;">💬 Mensaje / Inquietud</th>
                   <th style="padding: 0.9rem 1rem;">📌 Estado</th>
                   <th style="padding: 0.9rem 1rem; text-align: center;">⚡ Acciones</th>
@@ -1476,7 +1458,7 @@ const superadminModule = {
               </thead>
               <tbody id="sa-support-table-body">
                 <tr>
-                  <td colspan="6" style="padding: 2rem; text-align: center; color: #94a3b8;">Cargando mensajes de soporte...</td>
+                  <td colspan="7" style="padding: 2rem; text-align: center; color: #94a3b8;">Cargando mensajes de soporte de Supabase...</td>
                 </tr>
               </tbody>
             </table>
@@ -1510,7 +1492,7 @@ const superadminModule = {
       localTickets = [];
     }
 
-    // Combinar tickets asegurando que los registros guardados localmente en 'bula_support_tickets' siempre se rendericen
+    // Combinar tickets asegurando que los registros guardados localmente siempre se rendericen
     const ticketsMap = new Map();
     (dbTickets || []).forEach(t => { if (t && t.id) ticketsMap.set(t.id, t); });
     (localTickets || []).forEach(t => { if (t && t.id && !ticketsMap.has(t.id)) ticketsMap.set(t.id, t); });
@@ -1532,7 +1514,7 @@ const superadminModule = {
     if (tickets.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" style="padding: 2.5rem; text-align: center; color: #94a3b8;">
+          <td colspan="7" style="padding: 2.5rem; text-align: center; color: #94a3b8;">
             <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
             <div style="font-weight: 700; color: #ffffff;">No hay mensajes de soporte recibidos.</div>
             <div style="font-size: 0.8rem; margin-top: 0.25rem;">Los mensajes enviados desde la interfaz de soporte aparecerán aquí al instante.</div>
@@ -1549,9 +1531,29 @@ const superadminModule = {
 
       const statusBadge = isPending
         ? `<span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.72rem; display: inline-block;">⏳ Pendiente</span>`
-        : `<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.72rem; display: inline-block;">✅ Resuelto</span>`;
+        : `<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.72rem; display: inline-block;">✅ Resuelto / Atendido</span>`;
 
       const roleBadge = `<span style="background: rgba(168, 85, 247, 0.18); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); padding: 0.2rem 0.55rem; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">${t.role || 'Usuario'}</span>`;
+
+      // Extraer número de WhatsApp
+      let wa = t.whatsapp || t.phone || '';
+      if (!wa && t.message && t.message.includes('WhatsApp:')) {
+        const match = t.message.match(/WhatsApp:\s*([0-9+\s-]+)/i);
+        if (match) wa = match[1].trim();
+      }
+
+      const cleanWa = wa ? wa.replace(/[^0-9]/g, '') : '';
+      const waLinkHtml = wa
+        ? `<a href="https://wa.me/${cleanWa.startsWith('57') ? cleanWa : '57' + cleanWa}" target="_blank" style="display: inline-flex; align-items: center; gap: 0.3rem; background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.35); padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.78rem; text-decoration: none; white-space: nowrap;">📱 ${wa}</a>`
+        : `<span style="color: #64748b; font-size: 0.78rem;">N/A</span>`;
+
+      // Limpiar mensaje desplegado
+      let cleanMessage = t.message || '';
+      if (cleanMessage.includes('💬 Inquietud:')) {
+        cleanMessage = cleanMessage.split('💬 Inquietud:')[1].trim();
+      } else if (cleanMessage.includes('💬 Mensaje:')) {
+        cleanMessage = cleanMessage.split('💬 Mensaje:')[1].trim();
+      }
 
       rowsHtml += `
         <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); background: ${isPending ? 'rgba(245, 158, 11, 0.02)' : 'transparent'};">
@@ -1565,9 +1567,12 @@ const superadminModule = {
           <td style="padding: 0.85rem 1rem; vertical-align: middle;">
             ${roleBadge}
           </td>
+          <td style="padding: 0.85rem 1rem; vertical-align: middle;">
+            ${waLinkHtml}
+          </td>
           <td style="padding: 0.85rem 1rem; color: #e2e8f0; line-height: 1.4; max-width: 320px;">
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.83rem;">
-              "${t.message || ''}"
+              "${cleanMessage}"
               ${t.attachment ? `
                 <div style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 0.75rem; color: #38bdf8;">
                   📎 Adjunto: <strong>${t.attachment.name || 'Archivo'}</strong>
@@ -1582,15 +1587,15 @@ const superadminModule = {
           <td style="padding: 0.85rem 1rem; vertical-align: middle; text-align: center;">
             <div style="display: flex; gap: 0.4rem; justify-content: center;">
               ${isPending ? `
-                <button onclick="superadminModule.toggleTicketStatus('${t.id}', 'Resuelto')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-weight: 700; border-radius: 6px; cursor: pointer;">
-                  ✅ Resolver
+                <button onclick="superadminModule.toggleTicketStatus('${t.id}', 'Resuelto')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-weight: 700; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+                  ✅ Resolver / Atendido
                 </button>
               ` : `
-                <button onclick="superadminModule.toggleTicketStatus('${t.id}', 'Pendiente')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; font-weight: 700; border-radius: 6px; cursor: pointer;">
-                  ↩️ Pendiente
+                <button onclick="superadminModule.toggleTicketStatus('${t.id}', 'Pendiente')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; font-weight: 700; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+                  ↩️ Marcar Pendiente
                 </button>
               `}
-              <button onclick="superadminModule.deleteTicket('${t.id}')" style="padding: 0.4rem 0.6rem; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; font-weight: 700; border-radius: 6px; cursor: pointer;" title="Eliminar Ticket">
+              <button onclick="superadminModule.deleteTicket('${t.id}')" style="padding: 0.4rem 0.6rem; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; font-weight: 700; border-radius: 6px; cursor: pointer;" title="Eliminar Mensaje">
                 🗑️
               </button>
             </div>
