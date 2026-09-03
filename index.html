@@ -1332,6 +1332,24 @@
       </div>
     </section>
 
+    <!-- 5. VISTA DE RESTABLECIMIENTO DE CONTRASEÑA SEGURO (#reset-password) -->
+    <section id="view-reset-password" class="view-section" style="display: none; min-height: 70vh; padding: 2rem 1rem; box-sizing: border-box; align-items: center; justify-content: center;">
+      <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif; margin: auto;" id="reset-password-container">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;">
+          <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña</h2>
+          <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
+        </div>
+
+        <div id="reset-password-status-area">
+          <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
+            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">⏳</div>
+            <div>Verificando token de recuperación...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- Modal Global de Búsqueda Rápida -->
@@ -2328,23 +2346,6 @@
       }
     });
   </script>
-  <!-- 5. VISTA DE RESTABLECIMIENTO DE CONTRASEÑA SEGURO (#reset-password) -->
-  <section id="view-reset-password" class="view-section" style="display: none; min-height: 100vh; background: #0f172a; padding: 2rem 1rem; box-sizing: border-box; align-items: center; justify-content: center;">
-    <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif;" id="reset-password-container">
-      <div style="text-align: center; margin-bottom: 1.5rem;">
-        <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;">
-        <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña</h2>
-        <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
-      </div>
-
-      <div id="reset-password-status-area">
-        <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
-          <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">⏳</div>
-          <div>Verificando token de recuperación...</div>
-        </div>
-      </div>
-    </div>
-  </section>
 
   <script>
     window.initResetPasswordView = async function(token) {
@@ -2681,16 +2682,15 @@
   <script>
     document.addEventListener("DOMContentLoaded", () => {
         const eliminarBotonesSobrantes = () => {
-            const botones = document.querySelectorAll('button, a, div');
+            const botones = document.querySelectorAll('button, a, .btn');
             botones.forEach(el => {
-                const texto = el.textContent.trim();
+                const texto = (el.innerText || el.textContent || '').trim();
                 if (
                     texto.includes("Probador DOM") || 
                     texto.includes("Exportar Contratos PDF") || 
                     texto.includes("Correo Soporte") || 
                     texto.includes("Comunicado")
                 ) {
-                    // Si es el botón completo o su contenedor inmediato de acción, elimínalo
                     el.remove();
                 }
             });

@@ -1,15 +1,14 @@
 document.addEventListener("DOMContentLoaded", () => {
     const eliminarBotonesSobrantes = () => {
-        const botones = document.querySelectorAll('button, a, div');
+        const botones = document.querySelectorAll('button, a, .btn');
         botones.forEach(el => {
-            const texto = el.textContent.trim();
+            const texto = (el.innerText || el.textContent || '').trim();
             if (
                 texto.includes("Probador DOM") || 
                 texto.includes("Exportar Contratos PDF") || 
                 texto.includes("Correo Soporte") || 
                 texto.includes("Comunicado")
             ) {
-                // Si es el botón completo o su contenedor inmediato de acción, elimínalo
                 el.remove();
             }
         });

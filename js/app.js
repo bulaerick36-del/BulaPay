@@ -118,9 +118,12 @@ const app = {
           token = searchParams.get('token');
         }
         if (!token && window.location.hash.includes('token=')) {
-          const match = window.location.hash.match(/token=([^&]+)/);
+          const match = window.location.hash.match(/token=([^&/?]+)/);
           if (match) token = match[1];
         }
+
+        const authWrapper = document.querySelector('.auth-wrapper');
+        if (authWrapper) authWrapper.style.display = 'none';
 
         const sections = document.querySelectorAll('.view-section');
         sections.forEach(s => {
@@ -132,11 +135,17 @@ const app = {
         if (resetSection) {
           resetSection.classList.add('active');
           resetSection.style.setProperty('display', 'flex', 'important');
+          resetSection.style.setProperty('visibility', 'visible', 'important');
+          resetSection.style.setProperty('opacity', '1', 'important');
         }
 
-        if (typeof window.initResetPasswordView === 'function') {
-          window.initResetPasswordView(token);
-        }
+        const runInit = () => {
+          if (typeof window.initResetPasswordView === 'function') {
+            window.initResetPasswordView(token);
+          }
+        };
+        runInit();
+        setTimeout(runInit, 100);
         return;
       }
 
@@ -709,17 +718,17 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     }
 
     // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico
-    const swUrl = './sw.js?v=305&t=' + Date.now();
+    const swUrl = './sw.js?v=306&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker v305 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker v306 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW v305 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW v306 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v305 Actualizada)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v306 Actualizada)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -728,7 +737,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v305)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v306)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();
