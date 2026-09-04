@@ -49,7 +49,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=316">
+  <link rel="stylesheet" href="css/style.css?v=317">
   <script>
     (function() {
       const href = window.location.href || '';
@@ -1493,7 +1493,7 @@
       <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif; margin: auto;" id="reset-password-container">
         <div style="text-align: center; margin-bottom: 1.5rem;">
           <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;" onerror="this.style.display='none';">
-          <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña</h2>
+          <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña BulaPay</h2>
           <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
         </div>
 
@@ -1852,14 +1852,14 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=316"></script>
-  <script src="js/auth.js?v=316"></script>
-  <script src="js/supervisor.js?v=316"></script>
-  <script src="js/agent_v6.js?v=316"></script>
-  <script src="js/customer.js?v=316"></script>
-  <script src="js/superadmin.js?v=316"></script>
+  <script src="js/db.js?v=317"></script>
+  <script src="js/auth.js?v=317"></script>
+  <script src="js/supervisor.js?v=317"></script>
+  <script src="js/agent_v6.js?v=317"></script>
+  <script src="js/customer.js?v=317"></script>
+  <script src="js/superadmin.js?v=317"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=316"></script>
+  <script src="js/app.js?v=317"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2614,15 +2614,15 @@
 
             <div style="margin-bottom: 1rem;">
               <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">NUEVA CONTRASEÑA:</label>
-              <input type="password" id="new-password" placeholder="Ingresa tu nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
+              <input type="password" id="new-password" placeholder="Nueva contraseña" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
             </div>
 
             <div style="margin-bottom: 1.5rem;">
               <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">CONFIRMAR CONTRASEÑA:</label>
-              <input type="password" id="confirm-password" placeholder="Repite la nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
+              <input type="password" id="confirm-password" placeholder="Confirmar nueva contraseña" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
             </div>
 
-            <button type="submit" id="btn-submit-reset" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; font-size: 0.9rem; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">💾 Guardar Nueva Contraseña</button>
+            <button type="submit" id="btn-update-password" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; font-size: 0.9rem; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">Actualizar Contraseña</button>
           </form>
         `;
       } catch(fatalErr) {
@@ -2644,7 +2644,7 @@
     window.handleResetPasswordSubmit = async function(token) {
       const p1 = document.getElementById('new-password') || document.getElementById('reset_new_pass');
       const p2 = document.getElementById('confirm-password') || document.getElementById('reset_confirm_pass');
-      const btn = document.getElementById('btn-submit-reset') || document.getElementById('btn-save-new-pass');
+      const btn = document.getElementById('btn-update-password') || document.getElementById('btn-submit-reset') || document.getElementById('btn-save-new-pass');
       const container = document.getElementById('reset-password-status-area');
 
       const pass1 = p1 ? p1.value.trim() : '';
@@ -2667,7 +2667,7 @@
 
       if (btn) {
         btn.disabled = true;
-        btn.textContent = '⏳ Guardando...';
+        btn.textContent = '⏳ Actualizando contraseña...';
       }
 
       try {
@@ -2677,18 +2677,25 @@
           container.innerHTML = `
             <div style="text-align: center; padding: 1rem;">
               <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">✅</div>
-              <h3 style="color: #34d399; margin: 0 0 0.5rem 0; font-size: 1.2rem;">¡Contraseña Restablecida Exitosamente!</h3>
-              <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">Tu nueva contraseña ha sido actualizada en la base de datos de Supabase. Ya puedes acceder con tu clave actualizada.</p>
+              <h3 style="color: #34d399; margin: 0 0 0.5rem 0; font-size: 1.2rem;">¡Contraseña Actualizada Exitosamente!</h3>
+              <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">Tu nueva contraseña ha sido actualizada. Serás redirigido al portal de inicio de sesión en un momento.</p>
               <button onclick="window.location.hash = '#auth'; window.location.reload();" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">🚀 Ir al Portal de Inicio de Sesión</button>
             </div>
           `;
         }
+
+        alert('✅ ¡Contraseña actualizada exitosamente! Redirigiendo al inicio de sesión...');
+        setTimeout(() => {
+          window.location.hash = '#auth';
+          window.location.reload();
+        }, 1500);
+
       } catch(err) {
         console.error("Error al restablecer la contraseña:", err);
         alert('❌ Error al actualizar la contraseña: ' + (err.message || err));
         if (btn) {
           btn.disabled = false;
-          btn.textContent = '💾 Guardar Nueva Contraseña';
+          btn.textContent = 'Actualizar Contraseña';
         }
       }
     };
