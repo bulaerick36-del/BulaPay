@@ -235,6 +235,10 @@ const superadminModule = {
               <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              <button id="sa-bell-btn" onclick="superadminModule.switchSuperadminTab('support', event)" style="position: relative; padding: 0.55rem 0.85rem; font-size: 1.1rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Notificaciones de Mensajes de Soporte">
+                🔔
+                <span id="sa-bell-badge" style="display: none; position: absolute; top: -6px; right: -6px; background: #ef4444; color: #ffffff; font-size: 0.72rem; font-weight: 900; padding: 0.15rem 0.45rem; border-radius: 9999px; border: 2px solid #1c2541; box-shadow: 0 0 10px rgba(239, 68, 68, 0.9);">0</span>
+              </button>
               <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
               <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
             </div>
@@ -246,7 +250,10 @@ const superadminModule = {
             <button id="sa-tab-contracts" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📜 2. Contratos y Términos</button>
             <button id="sa-tab-performance" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('resources', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📊 3. Recurso Movido &amp; Gráficas</button>
             <button id="sa-tab-advances" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('advances', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📈 4. Avances y Movimientos</button>
-            <button id="sa-tab-support" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('support', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">💬 5. Soporte y Mensajes</button>
+            <button id="sa-tab-support" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('support', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none; display: inline-flex; align-items: center; gap: 0.45rem;">
+              💬 5. Soporte y Mensajes
+              <span id="sa-tab-support-badge" style="display: none; background: #ef4444; color: #ffffff; font-size: 0.72rem; font-weight: 900; padding: 0.15rem 0.5rem; border-radius: 9999px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);">0</span>
+            </button>
           </div>
 
           <!-- Contenedores Independientes por Pestaña -->
@@ -273,6 +280,8 @@ const superadminModule = {
     try {
       await this.switchSuperadminTab('users');
     } catch(e) {}
+
+    this.startSupportNotificationPolling();
   },
 
   showSuperadminView() {
@@ -285,6 +294,7 @@ const superadminModule = {
 
   async init() {
     this.bindEvents();
+    this.startSupportNotificationPolling();
     if (!this.isLoggedIn()) {
       if (window.location.hash === '#superadmin') {
         window.location.hash = '#auth';
@@ -319,8 +329,9 @@ const superadminModule = {
           <span style="font-size: 0.65rem; background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">Sesión Activa</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-          <button type="button" id="btn-view-superadmin" class="drawer-menu-item master-item" style="width: 100%; text-align: left; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; align-items: center; gap: 0.5rem;" onclick="superadminModule.openSuperadminPanel();">
-            👑 Ver Panel Superadmin
+          <button type="button" id="btn-view-superadmin" class="drawer-menu-item master-item" style="width: 100%; text-align: left; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; align-items: center; gap: 0.5rem; justify-content: space-between;" onclick="superadminModule.openSuperadminPanel();">
+            <span>👑 Ver Panel Superadmin</span>
+            <span id="sa-drawer-support-badge" style="display: none; background: #ef4444; color: #ffffff; font-size: 0.7rem; font-weight: 900; padding: 0.1rem 0.45rem; border-radius: 9999px;">0</span>
           </button>
           <button class="btn btn-secondary" style="padding: 0.4rem; font-size: 0.75rem; border-color: #ef4444; color: #fca5a5; width: 100%; font-weight: 600;" onclick="superadminModule.logout()">
             🚪 Cerrar Sesión Master
@@ -1510,6 +1521,8 @@ const superadminModule = {
     if (countPendingEl) countPendingEl.textContent = pendingCount;
     if (countResolvedEl) countResolvedEl.textContent = resolvedCount;
 
+    this.checkPendingNotifications();
+
     if (tickets.length === 0) {
       tbody.innerHTML = `
         <tr>
@@ -1657,12 +1670,70 @@ const superadminModule = {
     }
 
     await this.loadSupportTickets();
+  },
+
+  async checkPendingNotifications() {
+    try {
+      let dbTickets = [];
+      if (window.BulaPayDB && typeof window.BulaPayDB.getSupportTickets === 'function') {
+        try {
+          dbTickets = await window.BulaPayDB.getSupportTickets();
+        } catch(e) {}
+      }
+
+      let localTickets = [];
+      try {
+        const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets') || '[]';
+        localTickets = JSON.parse(raw);
+        if (!Array.isArray(localTickets)) localTickets = [];
+      } catch(e) {}
+
+      const ticketsMap = new Map();
+      (dbTickets || []).forEach(t => { if (t && t.id) ticketsMap.set(t.id, t); });
+      (localTickets || []).forEach(t => { if (t && t.id && !ticketsMap.has(t.id)) ticketsMap.set(t.id, t); });
+
+      const tickets = Array.from(ticketsMap.values());
+      const pendingCount = tickets.filter(t => t.status === 'Pendiente' || !t.status).length;
+
+      const bellBadge = document.getElementById('sa-bell-badge');
+      const tabBadge = document.getElementById('sa-tab-support-badge');
+      const drawerBadge = document.getElementById('sa-drawer-support-badge');
+
+      [bellBadge, tabBadge, drawerBadge].forEach(badge => {
+        if (badge) {
+          if (pendingCount > 0) {
+            badge.textContent = pendingCount;
+            badge.style.display = 'inline-block';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+      });
+
+      return pendingCount;
+    } catch(e) {
+      console.warn("Fallo comprobando notificaciones de soporte:", e);
+      return 0;
+    }
+  },
+
+  startSupportNotificationPolling() {
+    if (this._pollingInterval) clearInterval(this._pollingInterval);
+    this.checkPendingNotifications();
+    this._pollingInterval = setInterval(() => {
+      this.checkPendingNotifications();
+    }, 4000);
   }
 };
 
 window.addEventListener('bula_support_updated', () => {
-  if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
-    window.superadminModule.loadSupportTickets();
+  if (window.superadminModule) {
+    if (typeof window.superadminModule.loadSupportTickets === 'function') {
+      window.superadminModule.loadSupportTickets();
+    }
+    if (typeof window.superadminModule.checkPendingNotifications === 'function') {
+      window.superadminModule.checkPendingNotifications();
+    }
   }
 });
 
