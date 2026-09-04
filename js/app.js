@@ -761,17 +761,17 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     }
 
     // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico
-    const swUrl = './sw.js?v=311&t=' + Date.now();
+    const swUrl = './sw.js?v=312&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker v311 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker v312 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW v311 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW v312 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v311 Actualizada)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v312 Actualizada)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -780,7 +780,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v311)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v312)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();
