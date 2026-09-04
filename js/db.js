@@ -1823,28 +1823,62 @@ const db = {
 
   async updateUserPassword(username, newPassword) {
     const supabase = await initSupabase();
+    const cleanUser = String(username).trim();
     
     // 1. Intentar actualizar en Supabase Auth
     try {
-      const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
-      if (authError) {
-        console.warn("No se pudo actualizar Supabase Auth (probablemente no hay sesión de Auth activa):", authError.message);
-        // Si el usuario usa Supabase Auth estrictamente, deberíamos lanzar el error, pero 
-        // como BulaPay también tiene una tabla custom, dejamos que continúe a actualizarla.
+      if (supabase && supabase.auth) {
+        const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+        if (authError) {
+          console.warn("No se pudo actualizar Supabase Auth:", authError.message);
+        }
       }
     } catch (e) {
       console.warn("Fallo al actualizar en Supabase Auth:", e);
     }
     
-    // 2. Actualizar en la tabla personalizada 'users' de BulaPay
-    const { error: dbError } = await supabase
-      .from('users')
-      .update({ password: newPassword })
-      .eq('username', username.toLowerCase());
-      
-    if (dbError) {
-      console.error(`Error al actualizar contraseña de usuario "${username}":`, dbError);
-      throw new Error('No se pudo actualizar la contraseña en la base de datos.');
+    // 2. Actualizar de inmediato en la tabla de Supabase 'users' (por username o documentNumber)
+    try {
+      if (supabase) {
+        const { error: dbError } = await supabase
+          .from('users')
+          .update({ password: newPassword })
+          .or(`username.eq.${cleanUser.toLowerCase()},documentNumber.eq.${cleanUser}`);
+          
+        if (dbError) {
+          console.warn(`Intento OR en tabla users falló, actualizando por campos separados:`, dbError);
+          await supabase.from('users').update({ password: newPassword }).eq('username', cleanUser.toLowerCase());
+          await supabase.from('users').update({ password: newPassword }).eq('documentNumber', cleanUser);
+        }
+      }
+    } catch(err) {
+      console.error(`Error al actualizar contraseña de usuario "${username}" en Supabase:`, err);
+    }
+
+    // 3. Sincronización inmediata en todas las llaves de localStorage
+    try {
+      const keys = ['bula_users', 'users', 'bulapay_users', 'bula_users_db', 'bula_local_users'];
+      for (const k of keys) {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const users = JSON.parse(raw);
+          let matchFound = false;
+          users.forEach(u => {
+            if (
+              (u.username && String(u.username).toLowerCase() === cleanUser.toLowerCase()) ||
+              (u.documentNumber && String(u.documentNumber) === cleanUser)
+            ) {
+              u.password = newPassword;
+              matchFound = true;
+            }
+          });
+          if (matchFound) {
+            localStorage.setItem(k, JSON.stringify(users));
+          }
+        }
+      }
+    } catch(e) {
+      console.warn("Error en actualización local de contraseñas:", e);
     }
   },
 

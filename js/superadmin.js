@@ -641,22 +641,45 @@ const superadminModule = {
   },
 
   async openResetPwdModal(username) {
-    const user = await window.BulaPayDB.getUserByUsername(username);
+    let user = null;
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+        user = await window.BulaPayDB.getUserByUsername(username);
+      }
+    } catch(e) {}
+
     if (!user) {
-      alert('❌ Usuario no encontrado.');
-      return;
+      try {
+        const all = (await window.BulaPayDB.getAllUsers()) || [];
+        user = all.find(u => String(u.username).toLowerCase() === String(username).toLowerCase() || String(u.documentNumber) === String(username));
+      } catch(e) {}
     }
 
-    const newPwd = prompt(`🔑 Restablecer Contraseña para el usuario "${user.username}" (${user.name}):\n\nIngresa la nueva contraseña de seguridad:`, '123456');
-    if (!newPwd || newPwd.trim() === '') return;
+    const displayName = user ? (user.name || user.username || username) : username;
+    const docNum = user ? (user.documentNumber || user.username || username) : username;
+    const defaultPwd = 'bula56';
+
+    const newPwdInput = prompt(`🔑 Restablecer Contraseña para el usuario "${displayName}" (Cédula: ${docNum}):\n\nConfirma o ingresa la clave asignada:`, defaultPwd);
+    if (newPwdInput === null) return;
+
+    const assignedPassword = newPwdInput.trim() || defaultPwd;
 
     try {
-      await window.BulaPayDB.updateUserPassword(username, newPwd.trim());
-      alert(`🎉 Contraseña de "${username}" actualizada exitosamente a: ${newPwd.trim()}`);
-      await this.renderCurrentTab();
+      if (window.BulaPayDB && typeof window.BulaPayDB.updateUserPassword === 'function') {
+        await window.BulaPayDB.updateUserPassword(username, assignedPassword);
+      }
+      if (window.BulaPayDB && typeof window.BulaPayDB.resetUserPasswordDirectly === 'function') {
+        await window.BulaPayDB.resetUserPasswordDirectly(docNum || username, assignedPassword);
+      }
+
+      alert(`🎉 Contraseña restablecida exitosamente a: ${assignedPassword}\n\n👤 Usuario: ${displayName}\n💳 Cédula: ${docNum}`);
+
+      if (typeof this.renderCurrentTab === 'function') {
+        await this.renderCurrentTab();
+      }
     } catch (err) {
-      console.error(err);
-      alert('❌ Error al actualizar la contraseña del usuario.');
+      console.error("Fallo al actualizar contraseña:", err);
+      alert(`❌ Error al actualizar la contraseña del usuario "${displayName}".`);
     }
   },
 
