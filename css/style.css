@@ -2375,6 +2375,10 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   pointer-events: auto !important;
   position: relative !important;
   z-index: 9999999 !important;
+  margin: 0 !important;
+  outline: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
 }
 
 .contact-card-icon-wrapper,
