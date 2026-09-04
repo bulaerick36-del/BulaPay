@@ -1625,26 +1625,9 @@ const superadminModule = {
     const waNumber = cleanWa.startsWith('57') ? cleanWa : '57' + cleanWa;
     const cleanName = name || 'Usuario';
 
-    try {
-      // 1. Generar token de recuperación único en Supabase
-      const tokenRecord = await window.BulaPayDB.createPasswordResetToken({
-        document_number: docNum,
-        name: cleanName,
-        ticket_id: ticketId
-      });
-
-      const resetToken = tokenRecord ? tokenRecord.token : ('rst_' + Date.now());
-      const resetUrl = `https://www.bulapay.online/#reset-password?token=${resetToken}`;
-
-      // 2. Mensaje formal prearmado exacto requerido por el usuario
-      const messageText = `Hola ${cleanName}, te saludamos de Soporte BulaPay. Verificamos tu solicitud de contraseña. Puedes restablecerla de forma segura en este enlace: ${resetUrl} (Válido por 1 hora).`;
-
-      const whatsappUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(messageText)}`;
-      window.open(whatsappUrl, '_blank');
-    } catch(err) {
-      console.error("Error al generar token de recuperación:", err);
-      alert('⚠️ Error al generar el enlace de recuperación: ' + (err.message || err));
-    }
+    const messageText = `Hola ${cleanName}, te saludamos de Soporte BulaPay. Tu solicitud de asistencia o contraseña ha sido gestionada de forma directa en el portal BulaPay.`;
+    const whatsappUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(messageText)}`;
+    window.open(whatsappUrl, '_blank');
   },
 
   async toggleTicketStatus(id, newStatus) {

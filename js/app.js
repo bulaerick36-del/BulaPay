@@ -29,16 +29,6 @@ const app = {
     },
 
     async handleInitialLoad() {
-      // 0. Prioridad Máxima Abierta: Restablecimiento de contraseña (#reset-password o token=)
-      const fullUrl = window.location.href || '';
-      const searchStr = window.location.search || '';
-      const hashStr = window.location.hash || '';
-
-      if (hashStr.includes('reset-password') || searchStr.includes('token=') || fullUrl.includes('token=')) {
-        this.handleRouteFromHash();
-        return;
-      }
-
       // 0.1 Prioridad Master: Verificar sesión activa de Superadministrador Maestro
       if (window.superadminModule && window.superadminModule.isLoggedIn()) {
         this.currentRoute = 'superadmin';
@@ -121,89 +111,6 @@ const app = {
     },
 
     async renderView(route, param) {
-      const fullUrl = window.location.href || '';
-      const searchStr = window.location.search || '';
-      const hashStr = window.location.hash || '';
-
-      const isResetRoute = (route && route.startsWith('reset-password')) || hashStr.includes('reset-password') || searchStr.includes('token=') || fullUrl.includes('token=');
-
-      if (!isResetRoute) {
-        const preloadStyle = document.getElementById('reset-password-preload-style');
-        if (preloadStyle) preloadStyle.remove();
-      }
-
-      // Manejador Especial Estricto: Vista de restablecimiento de contraseña (#reset-password)
-      if (isResetRoute) {
-        let token = param;
-        if (!token || token === 'undefined' || token === 'null') {
-          const match = fullUrl.match(/[?&/]token=([^&/#]+)/) || fullUrl.match(/token=([^&/#]+)/);
-          if (match && match[1]) {
-            token = match[1];
-          }
-        }
-        if (!token || token === 'undefined' || token === 'null') {
-          const searchParams = new URLSearchParams(window.location.search);
-          token = searchParams.get('token');
-        }
-
-        const authView = document.getElementById('view-auth');
-        if (authView) {
-          authView.classList.remove('active');
-          authView.style.setProperty('display', 'none', 'important');
-        }
-
-        const authWrapper = document.querySelector('.auth-wrapper');
-        if (authWrapper) {
-          authWrapper.style.setProperty('display', 'none', 'important');
-        }
-
-        const sections = document.querySelectorAll('.view-section');
-        sections.forEach(s => {
-          s.classList.remove('active');
-          s.style.setProperty('display', 'none', 'important');
-        });
-
-        let resetSection = document.getElementById('view-reset-password');
-        if (!resetSection) {
-          resetSection = document.createElement('section');
-          resetSection.id = 'view-reset-password';
-          resetSection.className = 'view-section active';
-          resetSection.innerHTML = `
-            <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif; margin: 2rem auto;" id="reset-password-container">
-              <div style="text-align: center; margin-bottom: 1.5rem;">
-                <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;" onerror="this.style.display='none';">
-                <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña BulaPay</h2>
-                <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
-              </div>
-              <div id="reset-password-status-area">
-                <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
-                  <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">⏳</div>
-                  <div style="font-weight: 600; font-size: 0.9rem;">Verificando token de recuperación...</div>
-                </div>
-              </div>
-            </div>
-          `;
-          const mainContent = document.getElementById('main-content') || document.body;
-          mainContent.appendChild(resetSection);
-        }
-
-        resetSection.classList.add('active');
-        resetSection.style.setProperty('display', 'flex', 'important');
-        resetSection.style.setProperty('visibility', 'visible', 'important');
-        resetSection.style.setProperty('opacity', '1', 'important');
-        resetSection.style.setProperty('min-height', '70vh', 'important');
-
-        const triggerInit = () => {
-          if (typeof window.initResetPasswordView === 'function') {
-            window.initResetPasswordView(token);
-          }
-        };
-        triggerInit();
-        setTimeout(triggerInit, 100);
-        setTimeout(triggerInit, 300);
-        return;
-      }
-
       if (route === 'superadmin' || (window.superadminModule && window.superadminModule.isLoggedIn() && window.location.hash === '#superadmin')) {
         const authView = document.getElementById('view-auth');
         if (authView) authView.style.setProperty('display', 'none', 'important');

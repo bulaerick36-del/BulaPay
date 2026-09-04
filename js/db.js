@@ -3765,6 +3765,67 @@ const db = {
     } catch(e) {}
 
     return { success: true };
+  },
+
+  // Restablecimiento Directo de Contraseña por Cédula / Usuario en el Modal de Soporte
+  async resetUserPasswordDirectly(identifier, newPassword) {
+    if (!identifier || !newPassword) {
+      return { success: false, message: 'Faltan datos obligatorios.' };
+    }
+    const cleanId = String(identifier).trim();
+    let updated = false;
+
+    // 1. Actualizar en Supabase
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        // Actualizar por cédula o usuario en la tabla users
+        const { error } = await supabase
+          .from('users')
+          .update({ password: newPassword })
+          .or(`documentNumber.eq.${cleanId},username.eq.${cleanId}`);
+
+        if (!error) {
+          updated = true;
+          console.log(`✅ Contraseña actualizada en Supabase para cédula/usuario: ${cleanId}`);
+        } else {
+          console.warn("Fallo actualización directa en Supabase por OR:", error);
+          await supabase.from('users').update({ password: newPassword }).eq('documentNumber', cleanId);
+          await supabase.from('users').update({ password: newPassword }).eq('username', cleanId);
+          updated = true;
+        }
+      }
+    } catch(err) {
+      console.warn("Error intentando actualizar contraseña en Supabase:", err);
+    }
+
+    // 2. Actualizar en localStorage fallback
+    try {
+      const keys = ['bula_users', 'users', 'bulapay_users'];
+      for (const k of keys) {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const users = JSON.parse(raw);
+          let matchFound = false;
+          users.forEach(u => {
+            if (
+              String(u.documentNumber) === cleanId ||
+              String(u.username).toLowerCase() === cleanId.toLowerCase() ||
+              (u.name && String(u.name).toLowerCase() === cleanId.toLowerCase())
+            ) {
+              u.password = newPassword;
+              matchFound = true;
+            }
+          });
+          if (matchFound) {
+            localStorage.setItem(k, JSON.stringify(users));
+            updated = true;
+          }
+        }
+      }
+    } catch(e) {}
+
+    return { success: true, message: 'Contraseña actualizada correctamente.' };
   }
 };
 

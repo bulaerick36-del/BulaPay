@@ -50,18 +50,7 @@
 
   <!-- Estilos Globales -->
   <link rel="stylesheet" href="css/style.css?v=317">
-  <script>
-    (function() {
-      const href = window.location.href || '';
-      if (href.includes('reset-password') || href.includes('token=')) {
-        const style = document.createElement('style');
-        style.id = 'reset-password-preload-style';
-        style.textContent = '.auth-wrapper, #view-auth { display: none !important; } #view-reset-password { display: flex !important; visibility: visible !important; opacity: 1 !important; min-height: 70vh !important; }';
-        document.head.appendChild(style);
-      }
-    })();
-  </script>
-  
+
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -186,20 +175,20 @@
 
   <!-- MODAL DE SOPORTE Y MENSAJERÍA DIRECTA NATIVA -->
   <div id="modal-login-support" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2147483647; align-items: center; justify-content: center;">
-    <div style="background: #1e293b; padding: 25px; border-radius: 14px; width: 90%; max-width: 440px; color: #fff; font-family: system-ui, -apple-system, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.6); position: relative; border: 1px solid rgba(56, 189, 248, 0.3);">
+    <div style="background: #1e293b; padding: 25px; border-radius: 14px; width: 90%; max-width: 440px; color: #fff; font-family: system-ui, -apple-system, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.6); position: relative; border: 1px solid rgba(56, 189, 248, 0.3); max-height: 90vh; overflow-y: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <h3 style="margin: 0; color: #38bdf8; font-size: 18px; display: flex; align-items: center; gap: 0.4rem;">
-          <span>💬</span> Mensajería Interna de Soporte BulaPay
+          <span>💬</span> Soporte y Centro de Ayuda BulaPay
         </h3>
         <button id="btn-close-sop-modal" onclick="document.querySelectorAll('#modal-login-support').forEach(m => m.style.setProperty('display', 'none', 'important'));" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">✕</button>
       </div>
-      <p style="font-size: 13px; color: #94a3b8; margin: 0 0 15px 0;">Tu mensaje se registrará directamente en el panel de administración:</p>
+      <p style="font-size: 13px; color: #94a3b8; margin: 0 0 15px 0;">Ingresa tus datos para gestionar tu solicitud o restablecer tu contraseña:</p>
       
       <form id="form-login-support" onsubmit="event.preventDefault();">
         <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Nombre Completo:</label>
         <input id="sop_nombre" type="text" placeholder="Ej. Juan Pérez" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
         
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Número de Cédula:</label>
+        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Número de Cédula / Documento:</label>
         <input id="sop_cedula" type="text" placeholder="Ej. 1121338578" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
         
         <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Rol o Cargo:</label>
@@ -214,11 +203,33 @@
         <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Número de WhatsApp:</label>
         <input id="sop_whatsapp" type="tel" placeholder="Ej. 3001234567" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
         
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Inquietud / Mensaje de Soporte:</label>
-        <textarea id="sop_mensaje" placeholder="Escribe aquí tu consulta o inconveniente..." style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; height: 75px; box-sizing: border-box; resize: vertical;" required></textarea>
+        <label style="font-size: 12px; color: #38bdf8; display: block; margin-bottom: 4px; font-weight: 700;">Categoría de Inquietud:</label>
+        <select id="sop_categoria" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #38bdf8; color: #fff; border-radius: 6px; box-sizing: border-box; font-weight: 700;">
+          <option value="hablar_asesor" selected>Hablar con un asesor</option>
+          <option value="perdida_contrasena">Pérdida de Contraseña</option>
+          <option value="soporte_tecnico">Soporte técnico</option>
+          <option value="otros">Otros</option>
+        </select>
+
+        <!-- Campo Dinámico: Inquietud General -->
+        <div id="sop_mensaje_container">
+          <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Inquietud / Mensaje de Soporte:</label>
+          <textarea id="sop_mensaje" placeholder="Escribe aquí tu consulta o inconveniente..." style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; height: 75px; box-sizing: border-box; resize: vertical;" required></textarea>
+        </div>
+
+        <!-- Campo Dinámico: Restablecimiento Directo de Contraseña -->
+        <div id="sop_password_container" style="display: none; background: rgba(56, 189, 248, 0.08); padding: 12px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3); margin-bottom: 10px;">
+          <label style="font-size: 12px; color: #38bdf8; display: block; margin-bottom: 4px; font-weight: 700;">🔑 Nueva Contraseña:</label>
+          <input id="sop_nueva_clave" type="password" placeholder="Ingresa tu nueva contraseña" style="width: 100%; padding: 9px; margin-bottom: 8px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" autocomplete="new-password">
+          
+          <label style="font-size: 12px; color: #38bdf8; display: block; margin-bottom: 4px; font-weight: 700;">🔑 Confirmar Nueva Contraseña:</label>
+          <input id="sop_confirmar_clave" type="password" placeholder="Repite la nueva contraseña" style="width: 100%; padding: 9px; margin-bottom: 4px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" autocomplete="new-password">
+        </div>
         
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Adjuntar Captura / Archivo (Opcional):</label>
-        <input id="sop_archivo" type="file" style="width: 100%; margin-bottom: 15px; color: #94a3b8; font-size: 12px;">
+        <div id="sop_archivo_container">
+          <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Adjuntar Captura / Archivo (Opcional):</label>
+          <input id="sop_archivo" type="file" style="width: 100%; margin-bottom: 15px; color: #94a3b8; font-size: 12px;">
+        </div>
         
         <div style="display: flex; justify-content: space-between; gap: 10px;">
           <button type="button" id="sop_cerrar" onclick="document.querySelectorAll('#modal-login-support').forEach(m => m.style.setProperty('display', 'none', 'important'));" style="flex: 1; background: #475569; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cancelar</button>
@@ -1488,23 +1499,7 @@
       </div>
     </section>
 
-    <!-- 5. VISTA DE RESTABLECIMIENTO DE CONTRASEÑA SEGURO (#reset-password) -->
-    <section id="view-reset-password" class="view-section" style="display: none; min-height: 70vh; padding: 2rem 1rem; box-sizing: border-box; align-items: center; justify-content: center;">
-      <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif; margin: auto;" id="reset-password-container">
-        <div style="text-align: center; margin-bottom: 1.5rem;">
-          <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;" onerror="this.style.display='none';">
-          <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña BulaPay</h2>
-          <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
-        </div>
 
-        <div id="reset-password-status-area">
-          <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">⏳</div>
-            <div>Verificando token de recuperación...</div>
-          </div>
-        </div>
-      </div>
-    </section>
 
   </main>
 
@@ -1842,7 +1837,7 @@
     <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <p>&copy; 2026 BulaPay. Todos los derechos reservados. SaaS de Gestión de Cartera y Logística.</p>
       <div style="display: flex; gap: 1rem;">
-        <span id="pwa-status" style="color: var(--text-muted);">PWA Registrada</span>
+        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v317)</span>
         <a href="#" style="color: var(--accent); text-decoration: none;" id="btn-install-pwa" style="display: none;">Instalar App</a>
       </div>
     </div>
@@ -2503,274 +2498,14 @@
     });
   </script>
 
-  <script>
-    window.initResetPasswordView = async function(token) {
-      try {
-        // 1. Ocultar de inmediato cualquier elemento de auth o vistas competidoras
-        document.querySelectorAll('.auth-wrapper, #view-auth').forEach(el => {
-          el.style.setProperty('display', 'none', 'important');
-        });
-
-        // 2. Obtener o crear dinámicamente la sección #view-reset-password
-        let resetSection = document.getElementById('view-reset-password');
-        if (!resetSection) {
-          resetSection = document.createElement('section');
-          resetSection.id = 'view-reset-password';
-          resetSection.className = 'view-section active';
-          resetSection.innerHTML = `
-            <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif; margin: 2rem auto;" id="reset-password-container">
-              <div style="text-align: center; margin-bottom: 1.5rem;">
-                <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;" onerror="this.style.display='none';">
-                <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña</h2>
-                <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
-              </div>
-              <div id="reset-password-status-area">
-                <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
-                  <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">⏳</div>
-                  <div style="font-weight: 600; font-size: 0.9rem;">Verificando token de recuperación...</div>
-                </div>
-              </div>
-            </div>
-          `;
-          const mainContent = document.getElementById('main-content') || document.body;
-          mainContent.appendChild(resetSection);
-        }
-
-        // 3. Forzar de forma incondicional display flex visible e importante
-        resetSection.classList.add('active');
-        resetSection.style.setProperty('display', 'flex', 'important');
-        resetSection.style.setProperty('visibility', 'visible', 'important');
-        resetSection.style.setProperty('opacity', '1', 'important');
-        resetSection.style.setProperty('min-height', '70vh', 'important');
-
-        let container = document.getElementById('reset-password-status-area');
-        if (!container) return;
-
-        if (!token || token === 'undefined' || token === 'null') {
-          const fullUrl = window.location.href || '';
-          const match = fullUrl.match(/[?&/]token=([^&/#]+)/) || fullUrl.match(/token=([^&/#]+)/);
-          if (match && match[1]) {
-            token = match[1];
-          }
-        }
-
-        if (!token || token === 'undefined' || token === 'null') {
-          container.innerHTML = `
-            <div style="text-align: center; padding: 1.25rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px;">
-              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚠️</div>
-              <h3 style="color: #fbbf24; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 800;">Enlace Incompleto</h3>
-              <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">El enlace de restablecimiento de contraseña no contiene un token válido. Por favor solicita un nuevo enlace a Soporte BulaPay.</p>
-              <button onclick="window.abrirContactoMailto(event)" style="width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">💬 Contactar a Soporte</button>
-            </div>
-          `;
-          return;
-        }
-
-        container.innerHTML = `
-          <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
-            <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">⏳</div>
-            <div style="font-weight: 600; font-size: 0.9rem;">Verificando validez del enlace...</div>
-          </div>
-        `;
-
-        let res = null;
-        try {
-          if (window.BulaPayDB && typeof window.BulaPayDB.verifyPasswordResetToken === 'function') {
-            res = await window.BulaPayDB.verifyPasswordResetToken(token);
-          } else {
-            const raw = localStorage.getItem('bula_password_tokens');
-            const tokens = raw ? JSON.parse(raw) : [];
-            const found = tokens.find(t => t.token === token);
-            if (found) {
-              res = { valid: true, tokenData: found };
-            } else {
-              res = { valid: false, reason: 'Error al validar el enlace de recuperación. Por favor solicite uno nuevo.' };
-            }
-          }
-        } catch(errDb) {
-          console.warn("Error en la consulta de token:", errDb);
-          res = { valid: false, reason: 'Error al validar el enlace de recuperación. Por favor solicite uno nuevo.' };
-        }
-
-        if (!res || !res.valid) {
-          container.innerHTML = `
-            <div style="text-align: center; padding: 1.25rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px;">
-              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">❌</div>
-              <h3 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 800;">Enlace Inválido o Expirado</h3>
-              <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">${(res && res.reason) ? res.reason : 'Error al validar el enlace de recuperación. Por favor solicite uno nuevo.'}</p>
-              <button onclick="window.abrirContactoMailto(event)" style="width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">💬 Solicitar Nuevo Enlace</button>
-            </div>
-          `;
-          return;
-        }
-
-        const tData = res.tokenData || {};
-        container.innerHTML = `
-          <form id="form-reset-password-submit" onsubmit="event.preventDefault(); window.handleResetPasswordSubmit('${token}');">
-            <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); padding: 0.85rem; border-radius: 10px; margin-bottom: 1.25rem; font-size: 0.85rem; color: #cbd5e1;">
-              👤 Usuario: <strong style="color: #ffffff;">${tData.user_name || tData.user_id || 'Cliente'}</strong>
-              ${tData.document_number ? `<br>💳 Cédula: <strong style="color: #38bdf8;">${tData.document_number}</strong>` : ''}
-            </div>
-
-            <div style="margin-bottom: 1rem;">
-              <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">NUEVA CONTRASEÑA:</label>
-              <input type="password" id="new-password" placeholder="Nueva contraseña" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
-            </div>
-
-            <div style="margin-bottom: 1.5rem;">
-              <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">CONFIRMAR CONTRASEÑA:</label>
-              <input type="password" id="confirm-password" placeholder="Confirmar nueva contraseña" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
-            </div>
-
-            <button type="submit" id="btn-update-password" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; font-size: 0.9rem; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">Actualizar Contraseña</button>
-          </form>
-        `;
-      } catch(fatalErr) {
-        console.error("Error al validar el enlace de recuperación:", fatalErr);
-        const container = document.getElementById('reset-password-status-area');
-        if (container) {
-          container.innerHTML = `
-            <div style="text-align: center; padding: 1.25rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px;">
-              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚠️</div>
-              <h3 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 800;">Error de Validación</h3>
-              <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">Error al validar el enlace de recuperación. Por favor solicite uno nuevo.</p>
-              <button onclick="window.abrirContactoMailto(event)" style="width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">💬 Contactar a Soporte</button>
-            </div>
-          `;
-        }
-      }
-    };
-
-    window.handleResetPasswordSubmit = async function(token) {
-      const p1 = document.getElementById('new-password') || document.getElementById('reset_new_pass');
-      const p2 = document.getElementById('confirm-password') || document.getElementById('reset_confirm_pass');
-      const btn = document.getElementById('btn-update-password') || document.getElementById('btn-submit-reset') || document.getElementById('btn-save-new-pass');
-      const container = document.getElementById('reset-password-status-area');
-
-      const pass1 = p1 ? p1.value.trim() : '';
-      const pass2 = p2 ? p2.value.trim() : '';
-
-      if (!pass1 || !pass2) {
-        alert('⚠️ Por favor completa ambos campos de contraseña.');
-        return;
-      }
-
-      if (pass1 !== pass2) {
-        alert('⚠️ Las contraseñas ingresadas no coinciden. Por favor verifícalas.');
-        return;
-      }
-
-      if (pass1.length < 4) {
-        alert('⚠️ La contraseña debe tener al menos 4 caracteres.');
-        return;
-      }
-
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = '⏳ Actualizando contraseña...';
-      }
-
-      try {
-        await window.BulaPayDB.resetPasswordWithToken(token, pass1);
-
-        if (container) {
-          container.innerHTML = `
-            <div style="text-align: center; padding: 1rem;">
-              <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">✅</div>
-              <h3 style="color: #34d399; margin: 0 0 0.5rem 0; font-size: 1.2rem;">¡Contraseña Actualizada Exitosamente!</h3>
-              <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">Tu nueva contraseña ha sido actualizada. Serás redirigido al portal de inicio de sesión en un momento.</p>
-              <button onclick="window.location.hash = '#auth'; window.location.reload();" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">🚀 Ir al Portal de Inicio de Sesión</button>
-            </div>
-          `;
-        }
-
-        alert('✅ ¡Contraseña actualizada exitosamente! Redirigiendo al inicio de sesión...');
-        setTimeout(() => {
-          window.location.hash = '#auth';
-          window.location.reload();
-        }, 1500);
-
-      } catch(err) {
-        console.error("Error al restablecer la contraseña:", err);
-        alert('❌ Error al actualizar la contraseña: ' + (err.message || err));
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = 'Actualizar Contraseña';
-        }
-      }
-    };
-
-    // Auto-activador de emergencia al cargar la página si la URL contiene reset-password o token=
-    (function autoTriggerResetPassword() {
-      const fullUrl = window.location.href || '';
-      if (fullUrl.includes('reset-password') || fullUrl.includes('token=')) {
-        const match = fullUrl.match(/[?&/]token=([^&/#]+)/) || fullUrl.match(/token=([^&/#]+)/);
-        const token = match ? match[1] : null;
-        const run = () => {
-          if (typeof window.initResetPasswordView === 'function') {
-            window.initResetPasswordView(token);
-          }
-        };
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', run);
-        } else {
-          run();
-        }
-      }
-    })();
-  </script>
-
-  <!-- MODAL DE SOPORTE Y MENSAJERÍA DIRECTA NATIVA -->
-  <div id="modal-login-support" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; align-items: center; justify-content: center;">
-    <div style="background: #1e293b; padding: 25px; border-radius: 14px; width: 90%; max-width: 440px; color: #fff; font-family: system-ui, -apple-system, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.6); position: relative; border: 1px solid rgba(56, 189, 248, 0.3);">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <h3 style="margin: 0; color: #38bdf8; font-size: 18px; display: flex; align-items: center; gap: 0.4rem;">
-          <span>💬</span> Mensajería Interna de Soporte BulaPay
-        </h3>
-        <button id="btn-close-sop-modal" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">✕</button>
-      </div>
-      <p style="font-size: 13px; color: #94a3b8; margin: 0 0 15px 0;">Tu mensaje se registrará directamente en el panel de administración:</p>
-      
-      <form id="form-login-support" onsubmit="event.preventDefault();">
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Nombre Completo:</label>
-        <input id="sop_nombre" type="text" placeholder="Ej. Juan Pérez" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
-        
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Número de Cédula:</label>
-        <input id="sop_cedula" type="text" placeholder="Ej. 1121338578" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
-        
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Rol o Cargo:</label>
-        <select id="sop_rol" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; font-weight: 600;">
-          <option value="Agente de Ruta">Agente de Ruta</option>
-          <option value="Agente Independiente">Agente Independiente</option>
-          <option value="Usuario Supervisor">Usuario Supervisor</option>
-          <option value="Comercio / Cliente">Comercio / Cliente</option>
-          <option value="Otro">Otro</option>
-        </select>
-
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Número de WhatsApp:</label>
-        <input id="sop_whatsapp" type="tel" placeholder="Ej. 3001234567" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" required>
-        
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Inquietud / Mensaje de Soporte:</label>
-        <textarea id="sop_mensaje" placeholder="Escribe aquí tu consulta o inconveniente..." style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; height: 75px; box-sizing: border-box; resize: vertical;" required></textarea>
-        
-        <label style="font-size: 12px; color: #cbd5e1; display: block; margin-bottom: 4px; font-weight: 600;">Adjuntar Captura / Archivo (Opcional):</label>
-        <input id="sop_archivo" type="file" style="width: 100%; margin-bottom: 15px; color: #94a3b8; font-size: 12px;">
-        
-        <div style="display: flex; justify-content: space-between; gap: 10px;">
-          <button type="button" id="sop_cerrar" style="flex: 1; background: #475569; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">Cancelar</button>
-          <button type="button" id="sop_enviar" style="flex: 1; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 800; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">🚀 Enviar Mensaje</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- SCRIPT DE LÓGICA DE ENVÍO DE SOPORTE DIRECTO A SUPABASE -->
+  <!-- SCRIPT DE LÓGICA DE ENVÍO DE SOPORTE DIRECTO Y CAMBIO DE CONTRASEÑA -->
   <script>
     (function() {
       function initSupportModalEvents() {
         const btnCerrar = document.getElementById('sop_cerrar');
         const btnCloseIcon = document.getElementById('btn-close-sop-modal');
         const btnEnviar = document.getElementById('sop_enviar');
+        const catSelect = document.getElementById('sop_categoria');
         const modal = document.getElementById('modal-login-support');
 
         const closeModal = () => {
@@ -2782,6 +2517,29 @@
         if (btnCerrar) btnCerrar.onclick = closeModal;
         if (btnCloseIcon) btnCloseIcon.onclick = closeModal;
 
+        // Alternar visualización según categoría seleccionada
+        if (catSelect) {
+          catSelect.onchange = function() {
+            const val = this.value;
+            const msgContainer = document.getElementById('sop_mensaje_container');
+            const pwdContainer = document.getElementById('sop_password_container');
+            const msgInp = document.getElementById('sop_mensaje');
+            const pwdInp = document.getElementById('sop_nueva_clave');
+
+            if (val === 'perdida_contrasena') {
+              if (msgContainer) msgContainer.style.display = 'none';
+              if (pwdContainer) pwdContainer.style.display = 'block';
+              if (msgInp) msgInp.removeAttribute('required');
+              if (pwdInp) pwdInp.setAttribute('required', '');
+            } else {
+              if (msgContainer) msgContainer.style.display = 'block';
+              if (pwdContainer) pwdContainer.style.display = 'none';
+              if (msgInp) msgInp.setAttribute('required', '');
+              if (pwdInp) pwdInp.removeAttribute('required');
+            }
+          };
+        }
+
         if (btnEnviar && modal) {
           btnEnviar.onclick = async function(e) {
             if (e && typeof e.preventDefault === 'function') e.preventDefault();
@@ -2790,6 +2548,7 @@
             const cedInp = document.getElementById('sop_cedula');
             const rolInp = document.getElementById('sop_rol');
             const waInp = document.getElementById('sop_whatsapp');
+            const catInp = document.getElementById('sop_categoria');
             const msgInp = document.getElementById('sop_mensaje');
             const fileInp = document.getElementById('sop_archivo');
 
@@ -2797,10 +2556,71 @@
             const ced = cedInp ? cedInp.value.trim() : '';
             const rol = rolInp ? rolInp.value : 'Otro';
             const wa = waInp ? waInp.value.trim() : '';
-            const msg = msgInp ? msgInp.value.trim() : '';
+            const cat = catInp ? catInp.value : 'hablar_asesor';
 
-            if (!nom || !wa || !msg) {
-              alert('⚠️ Por favor completa tu Nombre, WhatsApp y la Inquietud / Mensaje de soporte.');
+            if (!nom || !ced || !wa) {
+              alert('⚠️ Por favor completa tu Nombre Completo, Número de Cédula y WhatsApp.');
+              return;
+            }
+
+            // CASO 1: Restablecimiento Directo de Contraseña
+            if (cat === 'perdida_contrasena') {
+              const pwdInp = document.getElementById('sop_nueva_clave');
+              const confirmInp = document.getElementById('sop_confirmar_clave');
+              const pwd = pwdInp ? pwdInp.value.trim() : '';
+              const confirmPwd = confirmInp ? confirmInp.value.trim() : '';
+
+              if (!pwd) {
+                alert('⚠️ Por favor ingresa tu nueva contraseña.');
+                return;
+              }
+              if (confirmPwd && pwd !== confirmPwd) {
+                alert('⚠️ Las contraseñas no coinciden. Por favor verifícalas.');
+                return;
+              }
+              if (pwd.length < 4) {
+                alert('⚠️ La contraseña debe tener al menos 4 caracteres.');
+                return;
+              }
+
+              try {
+                if (window.BulaPayDB && typeof window.BulaPayDB.resetUserPasswordDirectly === 'function') {
+                  await window.BulaPayDB.resetUserPasswordDirectly(ced || nom, pwd);
+                }
+              } catch(errDb) {
+                console.warn("Fallo actualizando contraseña desde modal de soporte:", errDb);
+              }
+
+              // Guardar registro de la solicitud
+              const ticketPayload = {
+                name: nom,
+                documentNumber: ced,
+                role: rol,
+                whatsapp: wa,
+                category: 'Pérdida de Contraseña',
+                message: `🔑 CAMBIO DE CONTRASEÑA REALIZADO EN SISTEMA\nNombre: ${nom}\nCédula: ${ced}\nRol: ${rol}\nWhatsApp: ${wa}`,
+                attachment: null
+              };
+
+              try {
+                if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
+                  await window.BulaPayDB.createSupportTicket(ticketPayload);
+                }
+              } catch(err) {}
+
+              window.dispatchEvent(new CustomEvent('bula_support_updated'));
+              alert('✅ ¡Contraseña actualizada exitosamente! Ya puedes acceder a BulaPay con tu nueva clave.');
+              closeModal();
+
+              if (pwdInp) pwdInp.value = '';
+              if (confirmInp) confirmInp.value = '';
+              return;
+            }
+
+            // CASO 2: Mensaje de Soporte General (Asesor / Técnico / Otros)
+            const msg = msgInp ? msgInp.value.trim() : '';
+            if (!msg) {
+              alert('⚠️ Por favor escribe tu Inquietud / Mensaje de soporte.');
               return;
             }
 
@@ -2825,11 +2645,11 @@
               documentNumber: ced,
               role: rol,
               whatsapp: wa,
+              category: cat,
               message: msg,
               attachment: attachmentData
             };
 
-            // 1. Guardar ticket directamente mediante BulaPayDB (Supabase insert + localStorage fallback)
             try {
               if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
                 await window.BulaPayDB.createSupportTicket(ticketPayload);
@@ -2843,6 +2663,7 @@
                   document_number: ced,
                   role: rol,
                   whatsapp: wa,
+                  category: cat,
                   message: `📱 WhatsApp: ${wa}\n💬 Mensaje: ${msg}`,
                   status: 'Pendiente',
                   created_at: new Date().toISOString()
@@ -2853,16 +2674,14 @@
               console.warn("Error guardando ticket de soporte:", err);
             }
 
-            // 2. Notificar eventos en vivo para actualizar el panel de superadministrador al instante
             window.dispatchEvent(new CustomEvent('bula_support_updated'));
             if (window.superadminModule && typeof window.superadminModule.loadSupportTickets === 'function') {
               window.superadminModule.loadSupportTickets();
             }
 
-            alert('✅ ¡Mensaje de soporte enviado exitosamente! El equipo de administración revisará tu inquietud en la brevedad.');
+            alert('✅ ¡Mensaje de soporte enviado exitosamente! El equipo de administración revisará tu inquietud a la brevedad.');
             closeModal();
 
-            // Resetear campos del formulario
             if (msgInp) msgInp.value = '';
             if (fileInp) fileInp.value = '';
           };

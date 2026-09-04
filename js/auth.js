@@ -7,10 +7,9 @@ const authModule = {
   init() {
     const authWrapper = document.querySelector('.auth-wrapper');
     if (authWrapper) {
-      const isResetUrl = window.location.hash.includes('reset-password') || window.location.search.includes('token=') || window.location.href.includes('token=');
       const isSuperadminUrl = window.location.hash === '#superadmin' || (window.superadminModule && window.superadminModule.isLoggedIn() && window.location.hash === '#superadmin');
       
-      if (isResetUrl || isSuperadminUrl) {
+      if (isSuperadminUrl) {
         authWrapper.style.setProperty('display', 'none', 'important');
       } else {
         authWrapper.style.display = 'block';
