@@ -3674,8 +3674,15 @@ const db = {
     }
 
     if (!tokenRecord) {
-      if (supabaseError && (supabaseError.code === 'PGRST301' || supabaseError.message?.includes('404') || supabaseError.message?.includes('does not exist'))) {
-        return { valid: false, reason: 'La tabla password_reset_tokens aún no ha sido creada en Supabase. Por favor ejecuta el script SQL provisto.' };
+      if (supabaseError) {
+        const errMsg = supabaseError.message || '';
+        const errCode = supabaseError.code || '';
+        if (supabaseError.status === 401 || errCode === '42501' || errMsg.includes('401') || errMsg.includes('Unauthorized') || errMsg.includes('permission denied')) {
+          return { valid: false, reason: 'Error 401 de Permisos RLS en Supabase. Ejecuta en el SQL Editor: ALTER TABLE password_reset_tokens DISABLE ROW LEVEL SECURITY;' };
+        }
+        if (errCode === 'PGRST301' || errMsg.includes('404') || errMsg.includes('does not exist')) {
+          return { valid: false, reason: 'La tabla password_reset_tokens aún no ha sido creada en Supabase. Por favor ejecuta el script SQL provisto.' };
+        }
       }
       return { valid: false, reason: 'El token ingresado no existe en el sistema o es inválido.' };
     }
