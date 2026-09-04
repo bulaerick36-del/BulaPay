@@ -218,12 +218,23 @@
         </div>
 
         <!-- Campo Dinámico: Restablecimiento Directo de Contraseña -->
-        <div id="sop_password_container" style="display: none; background: rgba(56, 189, 248, 0.08); padding: 12px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3); margin-bottom: 10px;">
-          <label style="font-size: 12px; color: #38bdf8; display: block; margin-bottom: 4px; font-weight: 700;">🔑 Nueva Contraseña:</label>
-          <input id="sop_nueva_clave" type="password" placeholder="Ingresa tu nueva contraseña" style="width: 100%; padding: 9px; margin-bottom: 8px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" autocomplete="new-password">
+        <div id="sop_password_container" style="display: none; background: rgba(56, 189, 248, 0.08); padding: 14px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.35); margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-size: 12px; color: #38bdf8; font-weight: 800;">🔑 Nueva Contraseña (Texto Visible):</label>
+            <button type="button" id="btn-toggle-sop-pwd" onclick="
+              const p1 = document.getElementById('sop_nueva_clave');
+              const p2 = document.getElementById('sop_confirmar_clave');
+              const isTxt = p1 && p1.type === 'text';
+              if (p1) p1.type = isTxt ? 'password' : 'text';
+              if (p2) p2.type = isTxt ? 'password' : 'text';
+              this.textContent = isTxt ? '👁️ Mostrar Texto' : '🙈 Ocultar Texto';
+            " style="background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-weight: 700;">🙈 Ocultar Texto</button>
+          </div>
+          <input id="sop_nueva_clave" type="text" placeholder="Ingresa tu nueva contraseña" style="width: 100%; padding: 9px; margin-bottom: 10px; background: #0f172a; border: 1px solid #38bdf8; color: #38bdf8; font-weight: 800; font-size: 14px; border-radius: 6px; box-sizing: border-box;" autocomplete="off">
           
-          <label style="font-size: 12px; color: #38bdf8; display: block; margin-bottom: 4px; font-weight: 700;">🔑 Confirmar Nueva Contraseña:</label>
-          <input id="sop_confirmar_clave" type="password" placeholder="Repite la nueva contraseña" style="width: 100%; padding: 9px; margin-bottom: 4px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box;" autocomplete="new-password">
+          <label style="font-size: 12px; color: #38bdf8; display: block; margin-bottom: 6px; font-weight: 800;">🔑 Confirmar Nueva Contraseña:</label>
+          <input id="sop_confirmar_clave" type="text" placeholder="Repite exactamente la misma contraseña" style="width: 100%; padding: 9px; margin-bottom: 6px; background: #0f172a; border: 1px solid #38bdf8; color: #38bdf8; font-weight: 800; font-size: 14px; border-radius: 6px; box-sizing: border-box;" autocomplete="off">
+          <small style="font-size: 11px; color: #94a3b8; display: block; margin-top: 2px;">👁️ Los caracteres permanecen visibles para que confirmes exactamente tu clave antes de enviar.</small>
         </div>
         
         <div id="sop_archivo_container">
@@ -1837,7 +1848,7 @@
     <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <p>&copy; 2026 BulaPay. Todos los derechos reservados. SaaS de Gestión de Cartera y Logística.</p>
       <div style="display: flex; gap: 1rem;">
-        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v322)</span>
+        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v323)</span>
         <a href="#" style="color: var(--accent); text-decoration: none;" id="btn-install-pwa" style="display: none;">Instalar App</a>
       </div>
     </div>
@@ -2572,16 +2583,32 @@
 
               if (!pwd) {
                 alert('⚠️ Por favor ingresa tu nueva contraseña.');
+                if (pwdInp) pwdInp.focus();
                 return;
               }
-              if (confirmPwd && pwd !== confirmPwd) {
-                alert('⚠️ Las contraseñas no coinciden. Por favor verifícalas.');
+
+              if (!confirmPwd) {
+                alert('⚠️ Por favor confirma tu nueva contraseña.');
+                if (confirmInp) confirmInp.focus();
                 return;
               }
+
+              // Validación Estricta de Coincidencia
+              if (pwd !== confirmPwd) {
+                if (confirmInp) confirmInp.style.borderColor = '#ef4444';
+                if (pwdInp) pwdInp.style.borderColor = '#ef4444';
+                alert('❌ ¡Las contraseñas no coinciden, verifícalas!');
+                if (confirmInp) confirmInp.focus();
+                return;
+              }
+
               if (pwd.length < 4) {
                 alert('⚠️ La contraseña debe tener al menos 4 caracteres.');
                 return;
               }
+
+              if (confirmInp) confirmInp.style.borderColor = '#38bdf8';
+              if (pwdInp) pwdInp.style.borderColor = '#38bdf8';
 
               try {
                 if (window.BulaPayDB && typeof window.BulaPayDB.resetUserPasswordDirectly === 'function') {
@@ -2591,6 +2618,9 @@
                 console.warn("Fallo actualizando contraseña desde modal de soporte:", errDb);
               }
 
+              // Mensaje Personalizado de Confirmación con Formato Exacto
+              const customMessage = `Hola ${nom}, BulaPay te informa que ya hemos establecido tu nueva contraseña la que recientemente suministraste: ${pwd}`;
+
               // Guardar registro de la solicitud
               const ticketPayload = {
                 name: nom,
@@ -2598,7 +2628,7 @@
                 role: rol,
                 whatsapp: wa,
                 category: 'Pérdida de Contraseña',
-                message: `🔑 CAMBIO DE CONTRASEÑA REALIZADO EN SISTEMA\nNombre: ${nom}\nCédula: ${ced}\nRol: ${rol}\nWhatsApp: ${wa}`,
+                message: customMessage,
                 attachment: null
               };
 
@@ -2609,7 +2639,7 @@
               } catch(err) {}
 
               window.dispatchEvent(new CustomEvent('bula_support_updated'));
-              alert('✅ ¡Contraseña actualizada exitosamente! Ya puedes acceder a BulaPay con tu nueva clave.');
+              alert(`✅ ${customMessage}`);
               closeModal();
 
               if (pwdInp) pwdInp.value = '';
