@@ -1542,12 +1542,12 @@ const superadminModule = {
       }
 
       const cleanWa = wa ? wa.replace(/[^0-9]/g, '') : '';
-      const safeNameEsc = (t.name || 'Usuario').replace(/'/g, "\\'");
-      const safeWaEsc = wa.replace(/'/g, "\\'");
-      const safeDocEsc = (t.document_number || '').replace(/'/g, "\\'");
+      const waNumber = cleanWa ? (cleanWa.startsWith('57') ? cleanWa : '57' + cleanWa) : '';
+      const waMessage = `Hola ${t.name || 'Usuario'}, te saludamos de Soporte BulaPay.`;
+      const waLinkUrl = waNumber ? `https://wa.me/${waNumber}?text=${encodeURIComponent(waMessage)}` : '#';
 
       const waLinkHtml = wa
-        ? `<button onclick="superadminModule.sendPasswordResetLinkViaWhatsApp('${t.id}', '${safeNameEsc}', '${safeWaEsc}', '${safeDocEsc}')" style="display: inline-flex; align-items: center; gap: 0.3rem; background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.35); padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.78rem; text-decoration: none; white-space: nowrap; cursor: pointer;" title="Abrir WhatsApp y enviar enlace seguro de clave">📱 ${wa}</button>`
+        ? `<a href="${waLinkUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 0.3rem; background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.35); padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.78rem; text-decoration: none; white-space: nowrap;" title="Abrir chat en WhatsApp">📱 ${wa}</a>`
         : `<span style="color: #64748b; font-size: 0.78rem;">N/A</span>`;
 
       // Limpiar mensaje desplegado
@@ -1589,11 +1589,6 @@ const superadminModule = {
           </td>
           <td style="padding: 0.85rem 1rem; vertical-align: middle; text-align: center;">
             <div style="display: flex; gap: 0.4rem; justify-content: center; flex-wrap: wrap;">
-              ${wa ? `
-                <button onclick="superadminModule.sendPasswordResetLinkViaWhatsApp('${t.id}', '${safeNameEsc}', '${safeWaEsc}', '${safeDocEsc}')" style="padding: 0.4rem 0.65rem; font-size: 0.75rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;" title="Generar Token y Enviar Link de Clave por WhatsApp">
-                  🔑 Link Clave
-                </button>
-              ` : ''}
               ${isPending ? `
                 <button onclick="superadminModule.toggleTicketStatus('${t.id}', 'Resuelto')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-weight: 700; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
                   ✅ Resolver
@@ -1613,21 +1608,6 @@ const superadminModule = {
     });
 
     tbody.innerHTML = rowsHtml;
-  },
-
-  async sendPasswordResetLinkViaWhatsApp(ticketId, name, rawWa, docNum) {
-    if (!rawWa) {
-      alert('⚠️ No se encontró un número de WhatsApp asociado a esta solicitud.');
-      return;
-    }
-
-    const cleanWa = rawWa.replace(/[^0-9]/g, '');
-    const waNumber = cleanWa.startsWith('57') ? cleanWa : '57' + cleanWa;
-    const cleanName = name || 'Usuario';
-
-    const messageText = `Hola ${cleanName}, te saludamos de Soporte BulaPay. Tu solicitud de asistencia o contraseña ha sido gestionada de forma directa en el portal BulaPay.`;
-    const whatsappUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(messageText)}`;
-    window.open(whatsappUrl, '_blank');
   },
 
   async toggleTicketStatus(id, newStatus) {
