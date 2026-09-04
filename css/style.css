@@ -2386,7 +2386,8 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
 .contact-card-text,
 #btn-contactanos *,
 .btn-contact-card * {
-  pointer-events: none !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
   user-select: none !important;
 }
 

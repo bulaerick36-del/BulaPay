@@ -488,11 +488,11 @@ const authModule = {
   },
 
   closeSupportModal() {
-    const modal = document.getElementById('modal-login-support');
-    if (modal) {
+    const modals = document.querySelectorAll('#modal-login-support');
+    modals.forEach(modal => {
       modal.style.setProperty('display', 'none', 'important');
-      modal.classList.remove('active');
-    }
+      modal.classList.remove('active', 'show');
+    });
   },
 
   async handleSupportSubmit(e) {
