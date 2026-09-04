@@ -19,10 +19,12 @@ const app = {
     },
 
     navigate(route, param = null) {
-      if (param) {
-        window.location.hash = `${route}/${param}`;
+      const targetHash = param ? `${route}/${param}` : route;
+      const currentHash = window.location.hash.slice(1);
+      if (currentHash === targetHash) {
+        this.handleRouteFromHash();
       } else {
-        window.location.hash = route;
+        window.location.hash = targetHash;
       }
     },
 
@@ -64,15 +66,15 @@ const app = {
       }
 
       // 2. Si hay hash en la URL, navegar a él
-      if (window.location.hash) {
+      if (window.location.hash && window.location.hash.length > 1) {
         this.handleRouteFromHash();
         return;
       }
 
       // 3. Fallback: Evaluar sesión de usuario para redirigir
-      let user = window.BulaPayDB.getCurrentUser();
+      let user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
 
-      if (!user) {
+      if (!user && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
         try {
           user = await window.BulaPayDB.getUserByUsername('admin');
           if (user) {
@@ -88,11 +90,16 @@ const app = {
         }
       }
 
+      const supervisorRoles = ['Usuario Supervisor', 'Comercio Independiente', 'supervisor', 'Administrador de Rutas', 'Otros (Comercios, Compraventas, Mercados)'];
+      const agentRoles = ['Agente de Ruta', 'agent', 'Agente Independiente'];
+
       if (user) {
-        if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor' || user.role === 'Administrador de Rutas' || user.role === 'Otros (Comercios, Compraventas, Mercados)') {
+        if (supervisorRoles.includes(user.role)) {
           this.navigate('supervisor');
-        } else if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
+        } else if (agentRoles.includes(user.role)) {
           this.navigate('agent');
+        } else {
+          this.navigate('auth');
         }
       } else {
         this.navigate('auth');
@@ -101,8 +108,8 @@ const app = {
 
     handleRouteFromHash() {
       const hash = window.location.hash.slice(1);
-      const parts = hash.split('?')[0].split('/');
-      const route = parts[0];
+      const parts = hash ? hash.split('?')[0].split('/') : ['auth'];
+      const route = parts[0] || 'auth';
       const param = parts[1] || null;
 
       if (typeof window.applyDynamicTheme === 'function') {
@@ -119,6 +126,11 @@ const app = {
       const hashStr = window.location.hash || '';
 
       const isResetRoute = (route && route.startsWith('reset-password')) || hashStr.includes('reset-password') || searchStr.includes('token=') || fullUrl.includes('token=');
+
+      if (!isResetRoute) {
+        const preloadStyle = document.getElementById('reset-password-preload-style');
+        if (preloadStyle) preloadStyle.remove();
+      }
 
       // Manejador Especial Estricto: Vista de restablecimiento de contraseña (#reset-password)
       if (isResetRoute) {
@@ -206,83 +218,86 @@ const app = {
 
       // Sincronizar sesión y header en cada cambio de vista
       if (window.authModule && typeof window.authModule.init === 'function') {
-        window.authModule.init();
+        try { window.authModule.init(); } catch(e) { console.warn("Fallo no crítico en authModule.init:", e); }
       }
 
       const devLinks = document.getElementById('demo-quick-links');
       if (devLinks) {
-        const currentUser = window.BulaPayDB.getCurrentUser();
-        if (currentUser) {
-          devLinks.style.display = 'none';
-        } else {
-          devLinks.style.display = 'flex';
-        }
+        const currentUser = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
+        devLinks.style.display = currentUser ? 'none' : 'flex';
       }
 
-      const sections = document.querySelectorAll('.view-section');
-      sections.forEach(s => {
-        s.classList.remove('active');
-        s.style.display = '';
-      });
-
-      if (window.supervisorModule) {
-        window.supervisorModule.destroy();
-      }
-      if (window.agentModule && typeof window.agentModule.destroy === 'function') {
-        window.agentModule.destroy();
-      }
-
-      const targetSectionId = `view-${route}`;
-      const targetSection = document.getElementById(targetSectionId);
+      let targetSectionId = `view-${route}`;
+      let targetSection = document.getElementById(targetSectionId);
 
       if (!targetSection) {
         console.warn(`Ruta desconocida: ${route}. Redirigiendo a auth.`);
-        this.navigate('auth');
-        return;
+        targetSection = document.getElementById('view-auth');
+        route = 'auth';
       }
 
-      const user = window.BulaPayDB.getCurrentUser();
+      const user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
       const supervisorRoles = ['Usuario Supervisor', 'Comercio Independiente', 'supervisor', 'Administrador de Rutas', 'Otros (Comercios, Compraventas, Mercados)'];
       const agentRoles = ['Agente de Ruta', 'agent', 'Agente Independiente'];
 
-      if (route === 'supervisor') {
-        if (!user || !supervisorRoles.includes(user.role)) {
-          console.warn('Acceso denegado a panel de supervisor. Redirigiendo.');
-          this.navigate('auth');
-          return;
-        }
-        await window.supervisorModule.init();
+      if (route === 'supervisor' && (!user || !supervisorRoles.includes(user.role))) {
+        console.warn('Acceso denegado a panel de supervisor. Redirigiendo.');
+        this.renderView('auth');
+        window.location.hash = '#auth';
+        return;
       } 
       
-      else if (route === 'agent') {
-        if (!user || !agentRoles.includes(user.role)) {
-          console.warn('Acceso denegado a terminal de agente. Redirigiendo.');
-          this.navigate('agent-login');
-          return;
-        }
-        await window.agentModule.init();
+      if (route === 'agent' && (!user || !agentRoles.includes(user.role))) {
+        console.warn('Acceso denegado a terminal de agente. Redirigiendo.');
+        this.renderView('agent-login');
+        window.location.hash = '#agent-login';
+        return;
       } 
       
-      else if (route === 'agent-login') {
-        if (user && agentRoles.includes(user.role)) {
-          this.navigate('agent');
-          return;
-        }
-        await window.authModule.init();
-      }
-      
-      else if (route === 'customer') {
-        await window.customerModule.init(param);
-      } 
-      
-      else if (route === 'auth') {
-        await window.authModule.init();
+      if (route === 'agent-login' && user && agentRoles.includes(user.role)) {
+        this.renderView('agent');
+        window.location.hash = '#agent';
+        return;
       }
 
-      // Mostrar la sección correspondiente de forma visible
+      // ACTIVACIÓN INMEDIATA DEL ELEMENTO DE LA VISTA EN EL DOM (Evita pantalla en blanco al 100%)
+      const sections = document.querySelectorAll('.view-section');
+      sections.forEach(s => {
+        if (s !== targetSection) {
+          s.classList.remove('active');
+          s.style.display = 'none';
+        }
+      });
+
+      if (window.supervisorModule && typeof window.supervisorModule.destroy === 'function') {
+        try { window.supervisorModule.destroy(); } catch(e) {}
+      }
+      if (window.agentModule && typeof window.agentModule.destroy === 'function') {
+        try { window.agentModule.destroy(); } catch(e) {}
+      }
+
       targetSection.classList.add('active');
       targetSection.style.display = 'block';
-      
+      targetSection.style.visibility = 'visible';
+      targetSection.style.opacity = '1';
+
+      // Inicializar el módulo JS correspondiente en bloque try-catch seguro
+      try {
+        if (route === 'supervisor' && window.supervisorModule) {
+          await window.supervisorModule.init();
+        } else if (route === 'agent' && window.agentModule) {
+          await window.agentModule.init();
+        } else if (route === 'agent-login' && window.authModule) {
+          await window.authModule.init();
+        } else if (route === 'customer' && window.customerModule) {
+          await window.customerModule.init(param);
+        } else if (route === 'auth' && window.authModule) {
+          await window.authModule.init();
+        }
+      } catch (err) {
+        console.error(`Error no bloqueante al inicializar módulo para ruta [${route}]:`, err);
+      }
+
       // Scroll al inicio de la página
       window.scrollTo(0, 0);
     }
