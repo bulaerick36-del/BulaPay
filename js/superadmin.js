@@ -1594,6 +1594,34 @@ const superadminModule = {
         cleanMessage = cleanMessage.split('💬 Mensaje:')[1].trim();
       }
 
+      // Enmascarar la contraseña si está presente en el mensaje de soporte
+      let formattedMsg = cleanMessage;
+      const pwdRegex = /(suministraste:|contraseña:|clave:)\s*([^\s<"']+)/i;
+      const pwdMatch = cleanMessage.match(pwdRegex);
+      if (pwdMatch) {
+        const fullPrefixLabel = pwdMatch[1];
+        const rawPwd = pwdMatch[2].trim();
+        if (rawPwd) {
+          const parts = cleanMessage.split(pwdMatch[0]);
+          const textBefore = parts[0] + fullPrefixLabel + ' ';
+          const textAfter = parts.slice(1).join(pwdMatch[0]);
+          const masked = '•'.repeat(Math.max(6, rawPwd.length));
+          const uid = `sop-pwd-${t.id || Math.random().toString(36).substring(2, 8)}`;
+          const safePwdEsc = rawPwd.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+          formattedMsg = `
+            ${textBefore}<span id="${uid}" data-real="${safePwdEsc}" data-masked="${masked}" style="font-weight: 800; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 0.15rem 0.45rem; border-radius: 4px; font-family: monospace; letter-spacing: 1px;">${masked}</span>
+            <button onclick="
+              const el = document.getElementById('${uid}');
+              if (el) {
+                const isMasked = el.textContent === el.dataset.masked;
+                el.textContent = isMasked ? el.dataset.real : el.dataset.masked;
+                this.textContent = isMasked ? '🙈 Ocultar' : '👁️ Ver';
+              }
+            " style="background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.25); color: #fbbf24; font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 4px; cursor: pointer; margin-left: 0.35rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.2rem;" title="Ver o proteger contraseña">👁️ Ver</button>${textAfter}
+          `;
+        }
+      }
+
       rowsHtml += `
         <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); background: ${isPending ? 'rgba(245, 158, 11, 0.02)' : 'transparent'};">
           <td style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
@@ -1611,7 +1639,7 @@ const superadminModule = {
           </td>
           <td style="padding: 0.85rem 1rem; color: #e2e8f0; line-height: 1.4; max-width: 320px;">
             <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.83rem;">
-              "${cleanMessage}"
+              "${formattedMsg}"
               ${t.attachment ? `
                 <div style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 0.75rem; color: #38bdf8;">
                   📎 Adjunto: <strong>${t.attachment.name || 'Archivo'}</strong>
