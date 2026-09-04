@@ -3635,9 +3635,10 @@ const db = {
   },
 
   async verifyPasswordResetToken(tokenStr) {
-    if (!tokenStr) return { valid: false, reason: 'Token no proporcionado.' };
+    if (!tokenStr) return { valid: false, reason: 'Token de recuperación no proporcionado.' };
 
     let tokenRecord = null;
+    let supabaseError = null;
 
     // 1. Intentar validar en Supabase
     try {
@@ -3649,12 +3650,16 @@ const db = {
           .eq('token', tokenStr)
           .maybeSingle();
 
-        if (!error && data) {
+        if (error) {
+          supabaseError = error;
+          console.warn("Respuesta de Supabase al consultar password_reset_tokens:", error);
+        } else if (data) {
           tokenRecord = data;
         }
       }
     } catch(e) {
-      console.warn("Fallo consultando token en Supabase:", e);
+      console.warn("Excepción al consultar token en Supabase:", e);
+      supabaseError = e;
     }
 
     // 2. Fallback local si no se encontró en Supabase
@@ -3669,6 +3674,9 @@ const db = {
     }
 
     if (!tokenRecord) {
+      if (supabaseError && (supabaseError.code === 'PGRST301' || supabaseError.message?.includes('404') || supabaseError.message?.includes('does not exist'))) {
+        return { valid: false, reason: 'La tabla password_reset_tokens aún no ha sido creada en Supabase. Por favor ejecuta el script SQL provisto.' };
+      }
       return { valid: false, reason: 'El token ingresado no existe en el sistema o es inválido.' };
     }
 
@@ -3713,7 +3721,11 @@ const db = {
         }
 
         // Marcar token como utilizado
-        await supabase.from('password_reset_tokens').update({ used: true }).eq('token', tokenStr);
+        try {
+          await supabase.from('password_reset_tokens').update({ used: true }).eq('token', tokenStr);
+        } catch(tokErr) {
+          console.warn("No se pudo marcar el token como utilizado en Supabase:", tokErr);
+        }
       }
     } catch(e) {
       console.warn("Fallo actualizando contraseña en Supabase:", e);
