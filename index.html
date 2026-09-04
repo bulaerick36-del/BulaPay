@@ -49,7 +49,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=315">
+  <link rel="stylesheet" href="css/style.css?v=316">
   <script>
     (function() {
       const href = window.location.href || '';
@@ -1852,14 +1852,14 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=315"></script>
-  <script src="js/auth.js?v=315"></script>
-  <script src="js/supervisor.js?v=315"></script>
-  <script src="js/agent_v6.js?v=315"></script>
-  <script src="js/customer.js?v=315"></script>
-  <script src="js/superadmin.js?v=315"></script>
+  <script src="js/db.js?v=316"></script>
+  <script src="js/auth.js?v=316"></script>
+  <script src="js/supervisor.js?v=316"></script>
+  <script src="js/agent_v6.js?v=316"></script>
+  <script src="js/customer.js?v=316"></script>
+  <script src="js/superadmin.js?v=316"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=315"></script>
+  <script src="js/app.js?v=316"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2614,15 +2614,15 @@
 
             <div style="margin-bottom: 1rem;">
               <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">NUEVA CONTRASEÑA:</label>
-              <input type="password" id="reset_new_pass" placeholder="Ingresa tu nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
+              <input type="password" id="new-password" placeholder="Ingresa tu nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
             </div>
 
             <div style="margin-bottom: 1.5rem;">
               <label style="display: block; font-size: 0.78rem; color: #cbd5e1; font-weight: 700; margin-bottom: 0.35rem;">CONFIRMAR CONTRASEÑA:</label>
-              <input type="password" id="reset_confirm_pass" placeholder="Repite la nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
+              <input type="password" id="confirm-password" placeholder="Repite la nueva clave" required minlength="4" style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #ffffff; font-size: 0.9rem; outline: none; box-sizing: border-box;">
             </div>
 
-            <button type="submit" id="btn-save-new-pass" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; font-size: 0.9rem; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">💾 Guardar Nueva Contraseña</button>
+            <button type="submit" id="btn-submit-reset" style="width: 100%; padding: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; font-size: 0.9rem; cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">💾 Guardar Nueva Contraseña</button>
           </form>
         `;
       } catch(fatalErr) {
@@ -2642,9 +2642,9 @@
     };
 
     window.handleResetPasswordSubmit = async function(token) {
-      const p1 = document.getElementById('reset_new_pass');
-      const p2 = document.getElementById('reset_confirm_pass');
-      const btn = document.getElementById('btn-save-new-pass');
+      const p1 = document.getElementById('new-password') || document.getElementById('reset_new_pass');
+      const p2 = document.getElementById('confirm-password') || document.getElementById('reset_confirm_pass');
+      const btn = document.getElementById('btn-submit-reset') || document.getElementById('btn-save-new-pass');
       const container = document.getElementById('reset-password-status-area');
 
       const pass1 = p1 ? p1.value.trim() : '';
