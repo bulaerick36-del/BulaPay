@@ -2377,6 +2377,15 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   z-index: 9999999 !important;
 }
 
+.contact-card-icon-wrapper,
+.contact-card-icon,
+.contact-card-text,
+#btn-contactanos *,
+.btn-contact-card * {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
 .contact-card-icon-wrapper {
   display: inline-flex !important;
   align-items: center !important;
@@ -2397,6 +2406,14 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   font-weight: 700 !important;
   letter-spacing: 0.01em !important;
   line-height: 1 !important;
+}
+
+#modal-login-support.active,
+#modal-login-support.show {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 9999999 !important;
 }
 
 #btn-top-contactus:hover,
