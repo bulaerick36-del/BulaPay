@@ -12,23 +12,31 @@ let supabaseInstance = null;
 async function initSupabase() {
   if (supabaseInstance) return supabaseInstance;
 
-  // Intentar cargar la configuración dinámica desde el endpoint de Vercel/Local
-  try {
-    const res = await fetch('/api/config');
-    const config = await res.json();
-    if (config.supabaseUrl && config.supabaseAnonKey) {
-      supabaseInstance = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
-      return supabaseInstance;
+  // 1. Inicialización directa de Supabase en el frontend (evita 404 a /api/config en hosting estático)
+  if (window.supabase) {
+    try {
+      supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      if (supabaseInstance) return supabaseInstance;
+    } catch(err) {
+      console.warn("Error al inicializar cliente directo de Supabase:", err);
     }
-  } catch (e) {
-    console.warn("Fallo al obtener configuración dinámica de Supabase, usando fallbacks:", e);
   }
 
-  if (window.supabase) {
-    supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  } else {
-    console.error("La librería de Supabase no está cargada en el objeto window.");
+  // 2. Fallback opcional a /api/config sólo en entornos Node/Vercel
+  const host = window.location.hostname || '';
+  if (!host.includes('bulapay.online') && !host.includes('github.io')) {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const config = await res.json();
+        if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
+          supabaseInstance = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+          return supabaseInstance;
+        }
+      }
+    } catch (e) {}
   }
+
   return supabaseInstance;
 }
 
