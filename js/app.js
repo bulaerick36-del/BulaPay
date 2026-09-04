@@ -151,14 +151,35 @@ const app = {
           s.style.setProperty('display', 'none', 'important');
         });
 
-        const resetSection = document.getElementById('view-reset-password');
-        if (resetSection) {
-          resetSection.classList.add('active');
-          resetSection.style.setProperty('display', 'flex', 'important');
-          resetSection.style.setProperty('visibility', 'visible', 'important');
-          resetSection.style.setProperty('opacity', '1', 'important');
-          resetSection.style.setProperty('min-height', '70vh', 'important');
+        let resetSection = document.getElementById('view-reset-password');
+        if (!resetSection) {
+          resetSection = document.createElement('section');
+          resetSection.id = 'view-reset-password';
+          resetSection.className = 'view-section active';
+          resetSection.innerHTML = `
+            <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif; margin: 2rem auto;" id="reset-password-container">
+              <div style="text-align: center; margin-bottom: 1.5rem;">
+                <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;">
+                <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña</h2>
+                <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
+              </div>
+              <div id="reset-password-status-area">
+                <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
+                  <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">⏳</div>
+                  <div style="font-weight: 600; font-size: 0.9rem;">Verificando token de recuperación...</div>
+                </div>
+              </div>
+            </div>
+          `;
+          const mainContent = document.getElementById('main-content') || document.body;
+          mainContent.appendChild(resetSection);
         }
+
+        resetSection.classList.add('active');
+        resetSection.style.setProperty('display', 'flex', 'important');
+        resetSection.style.setProperty('visibility', 'visible', 'important');
+        resetSection.style.setProperty('opacity', '1', 'important');
+        resetSection.style.setProperty('min-height', '70vh', 'important');
 
         const triggerInit = () => {
           if (typeof window.initResetPasswordView === 'function') {
@@ -740,17 +761,17 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     }
 
     // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico
-    const swUrl = './sw.js?v=310&t=' + Date.now();
+    const swUrl = './sw.js?v=311&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker v310 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker v311 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW v310 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW v311 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v310 Actualizada)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v311 Actualizada)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -759,7 +780,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v310)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v311)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();

@@ -49,7 +49,18 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=310">
+  <link rel="stylesheet" href="css/style.css?v=311">
+  <script>
+    (function() {
+      const href = window.location.href || '';
+      if (href.includes('reset-password') || href.includes('token=')) {
+        const style = document.createElement('style');
+        style.id = 'reset-password-preload-style';
+        style.textContent = '.auth-wrapper, #view-auth { display: none !important; } #view-reset-password { display: flex !important; visibility: visible !important; opacity: 1 !important; }';
+        document.head.appendChild(style);
+      }
+    })();
+  </script>
   
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1841,14 +1852,14 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=308"></script>
-  <script src="js/auth.js?v=308"></script>
-  <script src="js/supervisor.js?v=308"></script>
-  <script src="js/agent_v6.js?v=308"></script>
-  <script src="js/customer.js?v=308"></script>
-  <script src="js/superadmin.js?v=308"></script>
+  <script src="js/db.js?v=311"></script>
+  <script src="js/auth.js?v=311"></script>
+  <script src="js/supervisor.js?v=311"></script>
+  <script src="js/agent_v6.js?v=311"></script>
+  <script src="js/customer.js?v=311"></script>
+  <script src="js/superadmin.js?v=311"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=308"></script>
+  <script src="js/app.js?v=311"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2494,7 +2505,42 @@
 
   <script>
     window.initResetPasswordView = async function(token) {
-      const container = document.getElementById('reset-password-status-area');
+      let container = document.getElementById('reset-password-status-area');
+      if (!container) {
+        let resetSection = document.getElementById('view-reset-password');
+        if (!resetSection) {
+          resetSection = document.createElement('section');
+          resetSection.id = 'view-reset-password';
+          resetSection.className = 'view-section active';
+          resetSection.style.setProperty('display', 'flex', 'important');
+          resetSection.style.setProperty('visibility', 'visible', 'important');
+          resetSection.style.setProperty('opacity', '1', 'important');
+          resetSection.style.setProperty('min-height', '70vh', 'important');
+          resetSection.innerHTML = `
+            <div style="background: #1e293b; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 440px; padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: #ffffff; font-family: system-ui, -apple-system, sans-serif; margin: 2rem auto;" id="reset-password-container">
+              <div style="text-align: center; margin-bottom: 1.5rem;">
+                <img src="assets/logo.png" alt="BulaPay Logo" style="height: 48px; margin-bottom: 0.75rem; object-fit: contain;">
+                <h2 style="font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 0 0 0.25rem 0;">Restablecer Contraseña</h2>
+                <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">Plataforma de Pagos y Logística BulaPay</p>
+              </div>
+              <div id="reset-password-status-area">
+                <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
+                  <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">⏳</div>
+                  <div style="font-weight: 600; font-size: 0.9rem;">Verificando token de recuperación...</div>
+                </div>
+              </div>
+            </div>
+          `;
+          const mainContent = document.getElementById('main-content') || document.body;
+          mainContent.appendChild(resetSection);
+        } else {
+          resetSection.classList.add('active');
+          resetSection.style.setProperty('display', 'flex', 'important');
+          resetSection.style.setProperty('visibility', 'visible', 'important');
+          resetSection.style.setProperty('opacity', '1', 'important');
+        }
+        container = document.getElementById('reset-password-status-area');
+      }
       if (!container) return;
 
       if (!token || token === 'undefined' || token === 'null') {
