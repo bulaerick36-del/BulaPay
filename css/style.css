@@ -2349,43 +2349,83 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   transform: translateY(-1px);
 }
 
-/* BOTÓN DE SOPORTE BARRA SUPERIOR (CONTÁCTANOS) */
+/* TARJETA MODERNA VERDE CORPORATIVO DE SOPORTE (CONTÁCTANOS) */
 #btn-top-contactus,
 #btn-open-support,
 #btn-contactanos,
 .btn-open-support,
-.btn-contactanos {
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+.btn-contactanos,
+.btn-contact-card {
+  background: #10B981 !important;
   color: #ffffff !important;
-  border: 1px solid rgba(56, 189, 248, 0.4) !important;
-  padding: 0.5rem 1.1rem !important;
-  font-size: 0.85rem !important;
-  font-weight: 800 !important;
-  border-radius: 9999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  padding: 0.55rem 1.15rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  font-family: var(--font-sans) !important;
+  border-radius: 12px !important;
   cursor: pointer !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 0.45rem !important;
-  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4) !important;
-  transition: all 0.25s ease-in-out !important;
+  justify-content: center !important;
+  gap: 0.55rem !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  text-decoration: none !important;
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 9999999 !important;
+}
+
+.contact-card-icon-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.contact-card-icon {
+  stroke: #ffffff !important;
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.25s ease !important;
+}
+
+.contact-card-text {
+  color: #ffffff !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+  line-height: 1 !important;
 }
 
 #btn-top-contactus:hover,
 #btn-open-support:hover,
 #btn-contactanos:hover,
 .btn-open-support:hover,
-.btn-contactanos:hover {
-  background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+.btn-contactanos:hover,
+.btn-contact-card:hover {
+  background: #059669 !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
   transform: translateY(-2px) scale(1.02) !important;
-  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.6) !important;
+  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.45) !important;
+}
+
+#btn-top-contactus:hover .contact-card-icon,
+#btn-contactanos:hover .contact-card-icon,
+.btn-contact-card:hover .contact-card-icon {
+  transform: scale(1.12) rotate(-4deg) !important;
 }
 
 #btn-top-contactus:active,
 #btn-open-support:active,
 #btn-contactanos:active,
 .btn-open-support:active,
-.btn-contactanos:active {
+.btn-contactanos:active,
+.btn-contact-card:active {
+  background: #047857 !important;
   transform: translateY(0) scale(0.98) !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
 }
 
 

@@ -686,7 +686,7 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers obsoletos y registro forzado (v305)
+// Purga automática de Service Workers obsoletos y registro forzado (v306)
 window.forcePurgeAndRegisterServiceWorker = async function() {
   if (!('serviceWorker' in navigator)) return;
 
