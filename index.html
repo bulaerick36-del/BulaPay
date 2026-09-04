@@ -49,7 +49,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=309">
+  <link rel="stylesheet" href="css/style.css?v=310">
   
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -2497,13 +2497,21 @@
       const container = document.getElementById('reset-password-status-area');
       if (!container) return;
 
-      if (!token) {
+      if (!token || token === 'undefined' || token === 'null') {
+        const fullUrl = window.location.href || '';
+        const match = fullUrl.match(/[?&/]token=([^&/#]+)/) || fullUrl.match(/token=([^&/#]+)/);
+        if (match && match[1]) {
+          token = match[1];
+        }
+      }
+
+      if (!token || token === 'undefined' || token === 'null') {
         container.innerHTML = `
-          <div style="text-align: center; padding: 1rem;">
+          <div style="text-align: center; padding: 1.25rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px;">
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚠️</div>
-            <h3 style="color: #fbbf24; margin: 0 0 0.5rem 0; font-size: 1.1rem;">Enlace Incompleto</h3>
-            <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4;">El enlace de restablecimiento de contraseña no contiene un token válido. Por favor solicita un nuevo enlace a Soporte BulaPay.</p>
-            <button onclick="window.abrirContactoMailto(event)" style="margin-top: 1rem; width: 100%; padding: 0.75rem; background: #38bdf8; color: #0f172a; border: none; border-radius: 8px; font-weight: 800; cursor: pointer;">💬 Contactar a Soporte</button>
+            <h3 style="color: #fbbf24; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 800;">Enlace Incompleto</h3>
+            <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">El enlace de restablecimiento de contraseña no contiene un token válido. Por favor solicita un nuevo enlace a Soporte BulaPay.</p>
+            <button onclick="window.abrirContactoMailto(event)" style="width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">💬 Contactar a Soporte</button>
           </div>
         `;
         return;
@@ -2511,8 +2519,8 @@
 
       container.innerHTML = `
         <div style="text-align: center; color: #38bdf8; padding: 1.5rem;">
-          <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">🔍</div>
-          <div style="font-weight: 600; font-size: 0.9rem;">Verificando validez del enlace...</div>
+          <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">⏳</div>
+          <div style="font-weight: 600; font-size: 0.9rem;">Verificando validez del enlace en Supabase...</div>
         </div>
       `;
 
@@ -2520,11 +2528,11 @@
         const res = await window.BulaPayDB.verifyPasswordResetToken(token);
         if (!res.valid) {
           container.innerHTML = `
-            <div style="text-align: center; padding: 1rem;">
+            <div style="text-align: center; padding: 1.25rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px;">
               <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">❌</div>
-              <h3 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem;">Enlace Inválido o Expirado</h3>
-              <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.4;">${res.reason || 'Este enlace no es válido o ha expirado (vigencia de 1 hora).'}</p>
-              <button onclick="window.abrirContactoMailto(event)" style="margin-top: 1.25rem; width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">💬 Solicitar Nuevo Enlace</button>
+              <h3 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 800;">Enlace Inválido o Expirado</h3>
+              <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">${res.reason || 'Este enlace no es válido, ya fue utilizado o ha expirado (vigencia de 1 hora).'}</p>
+              <button onclick="window.abrirContactoMailto(event)" style="width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%); color: #ffffff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);">💬 Solicitar Nuevo Enlace</button>
             </div>
           `;
           return;
@@ -2533,7 +2541,7 @@
         const tData = res.tokenData;
         container.innerHTML = `
           <form id="form-reset-password-submit" onsubmit="event.preventDefault(); window.handleResetPasswordSubmit('${token}');">
-            <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); padding: 0.75rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: 0.82rem; color: #cbd5e1;">
+            <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); padding: 0.85rem; border-radius: 10px; margin-bottom: 1.25rem; font-size: 0.85rem; color: #cbd5e1;">
               👤 Usuario: <strong style="color: #ffffff;">${tData.user_name || tData.user_id}</strong>
               ${tData.document_number ? `<br>💳 Cédula: <strong style="color: #38bdf8;">${tData.document_number}</strong>` : ''}
             </div>
@@ -2554,7 +2562,7 @@
       } catch(err) {
         console.error("Error verificando token:", err);
         container.innerHTML = `
-          <div style="text-align: center; color: #ef4444; padding: 1rem;">
+          <div style="text-align: center; color: #ef4444; padding: 1.25rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px;">
             ⚠️ Ocurrió un error al verificar el enlace de restablecimiento.
           </div>
         `;

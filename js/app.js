@@ -27,8 +27,12 @@ const app = {
     },
 
     async handleInitialLoad() {
-      // 0. Prioridad Máxima: Restablecimiento de contraseña si la URL trae reset-password o token
-      if (window.location.hash.includes('reset-password') || window.location.search.includes('token=')) {
+      // 0. Prioridad Máxima Abierta: Restablecimiento de contraseña (#reset-password o token=)
+      const fullUrl = window.location.href || '';
+      const searchStr = window.location.search || '';
+      const hashStr = window.location.hash || '';
+
+      if (hashStr.includes('reset-password') || searchStr.includes('token=') || fullUrl.includes('token=')) {
         this.handleRouteFromHash();
         return;
       }
@@ -110,20 +114,36 @@ const app = {
     },
 
     async renderView(route, param) {
-      // Manejador Especial: Vista de restablecimiento de contraseña (#reset-password)
-      if (route.startsWith('reset-password')) {
+      const fullUrl = window.location.href || '';
+      const searchStr = window.location.search || '';
+      const hashStr = window.location.hash || '';
+
+      const isResetRoute = (route && route.startsWith('reset-password')) || hashStr.includes('reset-password') || searchStr.includes('token=') || fullUrl.includes('token=');
+
+      // Manejador Especial Estricto: Vista de restablecimiento de contraseña (#reset-password)
+      if (isResetRoute) {
         let token = param;
-        if (!token) {
+        if (!token || token === 'undefined' || token === 'null') {
+          const match = fullUrl.match(/[?&/]token=([^&/#]+)/) || fullUrl.match(/token=([^&/#]+)/);
+          if (match && match[1]) {
+            token = match[1];
+          }
+        }
+        if (!token || token === 'undefined' || token === 'null') {
           const searchParams = new URLSearchParams(window.location.search);
           token = searchParams.get('token');
         }
-        if (!token && window.location.hash.includes('token=')) {
-          const match = window.location.hash.match(/token=([^&/?]+)/);
-          if (match) token = match[1];
+
+        const authView = document.getElementById('view-auth');
+        if (authView) {
+          authView.classList.remove('active');
+          authView.style.setProperty('display', 'none', 'important');
         }
 
         const authWrapper = document.querySelector('.auth-wrapper');
-        if (authWrapper) authWrapper.style.display = 'none';
+        if (authWrapper) {
+          authWrapper.style.setProperty('display', 'none', 'important');
+        }
 
         const sections = document.querySelectorAll('.view-section');
         sections.forEach(s => {
@@ -137,15 +157,17 @@ const app = {
           resetSection.style.setProperty('display', 'flex', 'important');
           resetSection.style.setProperty('visibility', 'visible', 'important');
           resetSection.style.setProperty('opacity', '1', 'important');
+          resetSection.style.setProperty('min-height', '70vh', 'important');
         }
 
-        const runInit = () => {
+        const triggerInit = () => {
           if (typeof window.initResetPasswordView === 'function') {
             window.initResetPasswordView(token);
           }
         };
-        runInit();
-        setTimeout(runInit, 100);
+        triggerInit();
+        setTimeout(triggerInit, 100);
+        setTimeout(triggerInit, 300);
         return;
       }
 
@@ -718,17 +740,17 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     }
 
     // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico
-    const swUrl = './sw.js?v=309&t=' + Date.now();
+    const swUrl = './sw.js?v=310&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker v309 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker v310 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW v309 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW v310 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v309 Actualizada)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (v310 Actualizada)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -737,7 +759,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v309)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (v310)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();
