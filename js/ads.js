@@ -239,6 +239,16 @@ const adsModule = {
       const mediaUrl = (ad && (ad.multimedia_url || ad.media_url)) || '';
       const isVideo = mediaUrl && typeof mediaUrl === 'string' && this.isVideoUrl(mediaUrl);
 
+      // ELIMINACIÓN TOTAL DE LA "X" EN ANUNCIOS DE VIDEO (REQUISITO CRÍTICO UI/UX MÓVIL)
+      const closeBtn = modal.querySelector('.pwa-ad-close-btn');
+      if (closeBtn) {
+        if (isVideo) {
+          closeBtn.style.setProperty('display', 'none', 'important');
+        } else {
+          closeBtn.style.setProperty('display', 'flex', 'important');
+        }
+      }
+
       // BLOQUEO INICIAL DEL BOTÓN CONTINUAR EN VIDEOS
       if (isVideo && continueBtn) {
         continueBtn.disabled = true;
