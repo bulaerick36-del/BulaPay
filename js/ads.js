@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v333)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v334)
 
 const adsModule = {
   isShowing: false,
@@ -88,7 +88,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v333] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v334] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       // Filtrar anuncios activos y que coincidan con el detonante
       const matchingAds = (allAds || []).filter((ad, idx) => {
@@ -182,7 +182,7 @@ const adsModule = {
         }));
       } catch(e) {}
 
-      console.log(`🎯 [BulaPay Anuncios bulapay-v333] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
+      console.log(`🎯 [BulaPay Anuncios bulapay-v334] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
@@ -209,7 +209,7 @@ const adsModule = {
         document.body.appendChild(modal);
       }
 
-      console.log("🚀 [BulaPay Anuncios bulapay-v333] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
+      console.log("🚀 [BulaPay Anuncios bulapay-v334] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
@@ -259,7 +259,7 @@ const adsModule = {
         if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'block';
           if (isVideo) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v333] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
+            console.log("🎬 [BulaPay Anuncios bulapay-v334] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -285,7 +285,7 @@ const adsModule = {
                     continueBtn.style.pointerEvents = 'auto';
                     continueBtn.style.cursor = 'pointer';
                     continueBtn.innerHTML = 'Continuar ➔';
-                    console.log("✅ [BulaPay Anuncios bulapay-v333] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
+                    console.log("✅ [BulaPay Anuncios bulapay-v334] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
                   }
                 };
 
@@ -310,7 +310,7 @@ const adsModule = {
             }, 100);
 
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v333] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [BulaPay Anuncios bulapay-v334] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
@@ -321,11 +321,15 @@ const adsModule = {
             `;
           }
 
-          // Si hay multimedia, ocultar texto genérico si no aporta información adicional
-          if (descEl && (descText.includes('Módulo de Anuncios BulaPay') || descText.includes('Aviso Publicitario'))) {
-            descEl.style.display = 'none';
-          } else if (descEl) {
-            descEl.style.display = 'block';
+          // REQUISITO: Ocultar la descripción por completo si es un VIDEO para pantalla limpia sin texto estorboso
+          if (descEl) {
+            if (isVideo) {
+              descEl.style.display = 'none';
+            } else if (!descText || descText.includes('Módulo de Anuncios BulaPay') || descText.includes('Aviso Publicitario')) {
+              descEl.style.display = 'none';
+            } else {
+              descEl.style.display = 'block';
+            }
           }
         } else {
           mediaContainer.style.display = 'none';
@@ -338,7 +342,7 @@ const adsModule = {
       modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
-      console.log("✅ [BulaPay Anuncios bulapay-v333] Modal publicitario visible en pantalla.");
+      console.log("✅ [BulaPay Anuncios bulapay-v334] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);

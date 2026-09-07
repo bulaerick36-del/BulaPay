@@ -2450,7 +2450,7 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
 }
 
-/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v333) */
+/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v334) */
 .pwa-ad-modal-overlay {
   position: fixed;
   inset: 0;
@@ -2500,18 +2500,18 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 30;
-  padding: 14px 16px;
+  z-index: 60;
+  padding: 18px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: none;
   background: linear-gradient(to bottom, rgba(15, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0) 100%);
-  pointer-events: auto;
+  pointer-events: none; /* Permite interacción directa con el video debajo salvo en botones */
 }
 
 .pwa-ad-badge {
-  padding: 0.3rem 0.85rem;
+  padding: 0.35rem 0.9rem;
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 800;
@@ -2522,30 +2522,35 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  pointer-events: auto;
 }
 
+/* Botón de Cierre "X" Reposicionado con margen holgado para evitar clics accidentales en controles de video */
 .pwa-ad-close-btn {
-  background: rgba(15, 23, 42, 0.65) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  background: rgba(15, 23, 42, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
   color: #ffffff !important;
-  width: 36px !important;
-  height: 36px !important;
+  width: 40px !important;
+  height: 40px !important;
   border-radius: 50% !important;
   cursor: pointer !important;
-  font-size: 1.1rem !important;
+  font-size: 1.2rem !important;
   font-weight: 700 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6) !important;
   transition: transform 0.2s ease, background-color 0.2s ease !important;
+  pointer-events: auto !important;
+  margin-top: 4px;
+  margin-right: 4px;
 }
 
 .pwa-ad-close-btn:active {
   transform: scale(0.9);
-  background: rgba(255, 255, 255, 0.25) !important;
+  background: rgba(255, 255, 255, 0.35) !important;
 }
 
 .pwa-ad-modal-body {
