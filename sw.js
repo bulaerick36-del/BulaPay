@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v340';
+const CACHE_NAME = 'bulapay-v341';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=340',
-  './js/db.js?v=340',
-  './js/ads.js?v=340',
-  './js/auth.js?v=340',
-  './js/supervisor.js?v=340',
-  './js/agent_v6.js?v=340',
-  './js/customer.js?v=340',
-  './js/superadmin.js?v=340',
-  './js/app.js?v=340',
+  './css/style.css?v=341',
+  './js/db.js?v=341',
+  './js/ads.js?v=341',
+  './js/auth.js?v=341',
+  './js/supervisor.js?v=341',
+  './js/agent_v6.js?v=341',
+  './js/customer.js?v=341',
+  './js/superadmin.js?v=341',
+  './js/app.js?v=341',
   './assets/logo.svg'
 ];
 
@@ -20,26 +20,26 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v340');
+      console.log('[Service Worker] Caching app shell bulapay-v341');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340, etc.)
+// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340, v341, etc.)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v340] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v341] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v340] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v341] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );

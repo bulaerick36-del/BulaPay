@@ -488,9 +488,24 @@ const adsModule = {
     if (content) {
       content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales...</p>';
       try {
-        const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
-          ? await window.BulaPayDB.getNotificaciones()
-          : [];
+        let notifs = [];
+        if (window.BulaPayDB && typeof window.BulaPayDB.initSupabase === 'function') {
+          const supabase = await window.BulaPayDB.initSupabase();
+          if (supabase) {
+            const { data, error } = await supabase
+              .from('bulapay_notificaciones')
+              .select('*')
+              .order('created_at', { ascending: false });
+
+            if (!error && Array.isArray(data)) {
+              notifs = data;
+            }
+          }
+        }
+
+        if ((!notifs || notifs.length === 0) && window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function') {
+          notifs = await window.BulaPayDB.getNotificaciones();
+        }
 
         // Marcar notificaciones como leídas al abrir la bandeja
         if (Array.isArray(notifs) && notifs.length > 0) {
@@ -511,7 +526,7 @@ const adsModule = {
           content.innerHTML = `
             <div style="text-align: center; padding: 2rem; color: #94a3b8;">
               <span style="font-size: 2rem;">📭</span>
-              <p style="margin-top: 0.5rem; font-weight: 600;">No hay comunicados oficiales registrados.</p>
+              <p style="margin-top: 0.5rem; font-weight: 600;">No hay comunicados disponibles</p>
             </div>
           `;
           return;
@@ -520,10 +535,10 @@ const adsModule = {
         let html = '<div style="display: flex; flex-direction: column; gap: 0.85rem;">';
         notifs.forEach(n => {
           const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-          const cat = n.categoria || 'Institucional';
+          const cat = n.categoria || n.category || 'Institucional';
           let badgeColor = 'rgba(59, 130, 246, 0.2)';
           let textColor = '#60a5fa';
-          if (cat.includes('Gerencial') || cat.includes('Aviso')) {
+          if (cat.includes('Gerencial') || cat.includes('Aviso') || cat.includes('Urgente')) {
             badgeColor = 'rgba(245, 158, 11, 0.2)';
             textColor = '#fbbf24';
           } else if (cat.includes('Institucional')) {
@@ -543,7 +558,7 @@ const adsModule = {
                 ${n.titulo || n.title || 'Comunicado Oficial'}
               </h4>
               <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.45; margin: 0; white-space: pre-line;">
-                ${n.mensaje || n.message || ''}
+                ${n.mensaje || n.message || n.content || ''}
               </p>
             </div>
           `;

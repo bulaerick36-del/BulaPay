@@ -654,7 +654,7 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers y anuncios/notificaciones demo obsoletos (bulapay-v340)
+// Purga automática de Service Workers y anuncios/notificaciones demo obsoletos (bulapay-v341)
 window.forcePurgeAndRegisterServiceWorker = async function() {
   // Purga inmediata de anuncios y notificaciones demo obsoletos de localStorage en dispositivos móviles
   try {
@@ -689,12 +689,12 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // 1. Desinscribir de inmediato cualquier Service Worker antiguo que no contenga v340
+    // 1. Desinscribir de inmediato cualquier Service Worker antiguo que no contenga v341
     const registrations = await navigator.serviceWorker.getRegistrations();
     if (registrations && registrations.length > 0) {
       for (const registration of registrations) {
         const scriptUrl = (registration.active || registration.installing || registration.waiting)?.scriptURL || '';
-        if (!scriptUrl.includes('v=340')) {
+        if (!scriptUrl.includes('v=341')) {
           const unregistered = await registration.unregister();
           if (unregistered) {
             console.log('🧹 [PWA Purga] SW antiguo desregistrado:', registration.scope);
@@ -710,7 +710,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     if ('caches' in window) {
       const cacheKeys = await caches.keys();
       for (const key of cacheKeys) {
-        if (key !== 'bulapay-v340') {
+        if (key !== 'bulapay-v341') {
           await caches.delete(key);
           console.log('🧹 [PWA Purga] Caché obsoleta eliminada:', key);
           if (window.bulaMobileDebugLog) {
@@ -720,18 +720,18 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
       }
     }
 
-    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico (v340)
-    const swUrl = './sw.js?v=340&t=' + Date.now();
+    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico (v341)
+    const swUrl = './sw.js?v=341&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker bulapay-v340 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker bulapay-v341 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW bulapay-v340 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW bulapay-v341 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (bulapay-v340)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (bulapay-v341)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -740,7 +740,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (bulapay-v340)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (bulapay-v341)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();

@@ -4033,19 +4033,6 @@ const db = {
       return timeB - timeA;
     });
 
-    if (!finalNotifs || finalNotifs.length === 0) {
-      finalNotifs = [
-        {
-          id: 'notif_welcome_clean',
-          titulo: '📢 Comunicado Oficial BulaPay',
-          mensaje: 'Bienvenido al sistema oficial de comunicados e informes gerenciales de BulaPay. Aquí recibirás avisos institucionales y actualizaciones importantes en tiempo real.',
-          categoria: 'Institucional',
-          prioridad: 'Normal',
-          created_at: new Date().toISOString()
-        }
-      ];
-    }
-
     console.log(`🔔 [BulaPay Notificaciones] Comunicados leídos de la base de datos (${finalNotifs.length}):`, finalNotifs);
     return finalNotifs;
   },
