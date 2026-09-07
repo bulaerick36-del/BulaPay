@@ -3966,6 +3966,9 @@ const db = {
       }
     } catch(e) {}
 
+    // Limpiar notificaciones de prueba u obsoletas que contengan marcadores de versión en el título
+    localList = localList.filter(n => n && n.id && n.id !== 'notif_welcome' && !String(n.titulo || '').includes('v33') && !String(n.titulo || '').includes('v32'));
+
     let supabaseList = [];
     const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
 
@@ -3988,8 +3991,8 @@ const db = {
             }
 
             if (!error && Array.isArray(data) && data.length > 0) {
-              supabaseList = data;
-              break;
+              supabaseList = data.filter(n => n && n.id && n.id !== 'notif_welcome' && !String(n.titulo || '').includes('v33') && !String(n.titulo || '').includes('v32'));
+              if (supabaseList.length > 0) break;
             }
           }
         }
@@ -4018,9 +4021,9 @@ const db = {
     if (!finalNotifs || finalNotifs.length === 0) {
       finalNotifs = [
         {
-          id: 'notif_welcome',
-          titulo: '📢 Comunicado Oficial BulaPay v338',
-          mensaje: 'Módulo oficial de comunicados gerenciales y avisos institucionales en tiempo real.',
+          id: 'notif_welcome_clean',
+          titulo: '📢 Comunicado Oficial BulaPay',
+          mensaje: 'Bienvenido al sistema oficial de comunicados e informes gerenciales de BulaPay. Aquí recibirás avisos institucionales y actualizaciones importantes en tiempo real.',
           categoria: 'Institucional',
           prioridad: 'Normal',
           created_at: new Date().toISOString()
@@ -4045,7 +4048,9 @@ const db = {
 
     try {
       const raw = localStorage.getItem('bula_notificaciones');
-      const list = raw ? JSON.parse(raw) : [];
+      let list = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) list = [];
+      list = list.filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !String(n.titulo || '').includes('v33'));
       list.unshift(payload);
       localStorage.setItem('bula_notificaciones', JSON.stringify(list));
     } catch(e) {}
