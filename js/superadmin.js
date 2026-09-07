@@ -1783,7 +1783,7 @@ const superadminModule = {
     }, 4000);
   },
 
-  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v337)
+  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v338)
   async renderAdsTab(container) {
     if (!container) return;
 

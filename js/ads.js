@@ -615,3 +615,14 @@ window.diagnoseAds = async function() {
 };
 
 window.adsModule = adsModule;
+
+// Auto-ejecución inicial para lectura y actualización dinámica del badge de comunicados (bulapay-v338)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    adsModule.updateComunicadosBadge();
+  });
+} else {
+  setTimeout(() => {
+    adsModule.updateComunicadosBadge();
+  }, 200);
+}

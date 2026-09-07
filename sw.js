@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v337';
+const CACHE_NAME = 'bulapay-v338';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=337',
-  './js/db.js?v=337',
-  './js/ads.js?v=337',
-  './js/auth.js?v=337',
-  './js/supervisor.js?v=337',
-  './js/agent_v6.js?v=337',
-  './js/customer.js?v=337',
-  './js/superadmin.js?v=337',
-  './js/app.js?v=337',
+  './css/style.css?v=338',
+  './js/db.js?v=338',
+  './js/ads.js?v=338',
+  './js/auth.js?v=338',
+  './js/supervisor.js?v=338',
+  './js/agent_v6.js?v=338',
+  './js/customer.js?v=338',
+  './js/superadmin.js?v=338',
+  './js/app.js?v=338',
   './assets/logo.svg'
 ];
 
@@ -20,26 +20,26 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v337');
+      console.log('[Service Worker] Caching app shell bulapay-v338');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, etc.)
+// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, v338, etc.)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v337] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v338] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v337] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v338] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );
