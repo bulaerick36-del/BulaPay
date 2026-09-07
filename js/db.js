@@ -3982,7 +3982,7 @@ const db = {
       list = [
         {
           id: 'notif_welcome',
-          titulo: '📢 Comunicado Oficial BulaPay v336',
+          titulo: '📢 Comunicado Oficial BulaPay v337',
           mensaje: 'Módulo oficial de comunicados gerenciales y avisos institucionales en tiempo real.',
           categoria: 'Institucional',
           prioridad: 'Normal',

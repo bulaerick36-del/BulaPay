@@ -1783,7 +1783,7 @@ const superadminModule = {
     }, 4000);
   },
 
-  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v336)
+  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v337)
   async renderAdsTab(container) {
     if (!container) return;
 
@@ -2127,6 +2127,9 @@ const superadminModule = {
       const form = document.getElementById('form-create-notif');
       if (form) form.reset();
       await this.loadNotificacionesList();
+      if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
+        window.adsModule.updateComunicadosBadge();
+      }
     } catch(e) {
       console.error("Error al enviar comunicado:", e);
       alert('❌ Hubo un error al enviar el comunicado.');
@@ -2203,6 +2206,9 @@ const superadminModule = {
         await window.BulaPayDB.deleteNotificacion(notifId);
       }
       await this.loadNotificacionesList();
+      if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
+        window.adsModule.updateComunicadosBadge();
+      }
     } catch(e) {
       console.error("Error eliminando comunicado:", e);
     }

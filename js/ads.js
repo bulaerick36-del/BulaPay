@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v336)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v337)
 
 const adsModule = {
   isShowing: false,
@@ -112,7 +112,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v336] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v337] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       const now = new Date();
       const currentHours = String(now.getHours()).padStart(2, '0');
@@ -212,7 +212,7 @@ const adsModule = {
         }));
       } catch(e) {}
 
-      console.log(`🎯 [BulaPay Anuncios bulapay-v336] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
+      console.log(`🎯 [BulaPay Anuncios bulapay-v337] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
@@ -245,7 +245,7 @@ const adsModule = {
         document.body.appendChild(modal);
       }
 
-      console.log("🚀 [BulaPay Anuncios bulapay-v336] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
+      console.log("🚀 [BulaPay Anuncios bulapay-v337] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
@@ -305,7 +305,7 @@ const adsModule = {
         if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'block';
           if (isVideo) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v336] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
+            console.log("🎬 [BulaPay Anuncios bulapay-v337] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -331,7 +331,7 @@ const adsModule = {
                     continueBtn.style.pointerEvents = 'auto';
                     continueBtn.style.cursor = 'pointer';
                     continueBtn.innerHTML = 'Continuar ➔';
-                    console.log("✅ [BulaPay Anuncios bulapay-v336] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
+                    console.log("✅ [BulaPay Anuncios bulapay-v337] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
                   }
                 };
 
@@ -356,7 +356,7 @@ const adsModule = {
             }, 100);
 
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v336] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [BulaPay Anuncios bulapay-v337] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
@@ -388,7 +388,7 @@ const adsModule = {
       modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
-      console.log("✅ [BulaPay Anuncios bulapay-v336] Modal publicitario visible en pantalla.");
+      console.log("✅ [BulaPay Anuncios bulapay-v337] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);
@@ -432,6 +432,43 @@ const adsModule = {
     }
   },
 
+  async updateComunicadosBadge() {
+    const btn = document.getElementById('btn-pwa-comunicados');
+    const badgeEl = document.getElementById('pwa-comunicados-count');
+    if (!btn && !badgeEl) return;
+
+    try {
+      const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
+        ? await window.BulaPayDB.getNotificaciones()
+        : [];
+
+      let readIds = new Set();
+      try {
+        const rawRead = localStorage.getItem('bula_read_notif_ids');
+        if (rawRead) readIds = new Set(JSON.parse(rawRead));
+      } catch(e) {}
+
+      const unreadList = (notifs || []).filter(n => n && n.id && !readIds.has(String(n.id)));
+      const count = unreadList.length;
+
+      if (count > 0) {
+        if (btn) btn.classList.add('has-unread');
+        if (badgeEl) {
+          badgeEl.textContent = count > 99 ? '99+' : String(count);
+          badgeEl.style.display = 'inline-flex';
+        }
+      } else {
+        if (btn) btn.classList.remove('has-unread');
+        if (badgeEl) {
+          badgeEl.textContent = '0';
+          badgeEl.style.display = 'none';
+        }
+      }
+    } catch(e) {
+      console.warn("Error actualizando badge de comunicados:", e);
+    }
+  },
+
   async openComunicadosModal() {
     const modal = document.getElementById('modal-pwa-comunicados');
     const content = document.getElementById('modal-pwa-comunicados-content');
@@ -450,6 +487,21 @@ const adsModule = {
         const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
           ? await window.BulaPayDB.getNotificaciones()
           : [];
+
+        // Marcar notificaciones como leídas
+        if (Array.isArray(notifs) && notifs.length > 0) {
+          try {
+            let readIds = new Set();
+            try {
+              const rawRead = localStorage.getItem('bula_read_notif_ids');
+              if (rawRead) readIds = new Set(JSON.parse(rawRead));
+            } catch(e) {}
+            notifs.forEach(n => { if (n && n.id) readIds.add(String(n.id)); });
+            localStorage.setItem('bula_read_notif_ids', JSON.stringify(Array.from(readIds)));
+          } catch(e) {}
+        }
+
+        await this.updateComunicadosBadge();
 
         if (!notifs || notifs.length === 0) {
           content.innerHTML = `
@@ -495,9 +547,6 @@ const adsModule = {
         html += '</div>';
         content.innerHTML = html;
 
-        const badgeEl = document.getElementById('pwa-comunicados-count');
-        if (badgeEl) badgeEl.style.display = 'none';
-
       } catch(e) {
         console.error("Error al renderizar comunicados:", e);
         content.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 1rem;">Error al cargar los comunicados.</p>';
@@ -511,6 +560,7 @@ const adsModule = {
       modal.style.setProperty('display', 'none', 'important');
       modal.classList.remove('active');
     }
+    this.updateComunicadosBadge();
   }
 };
 

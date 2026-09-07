@@ -49,7 +49,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=336">
+  <link rel="stylesheet" href="css/style.css?v=337">
 
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -266,16 +266,10 @@
       </div>
 
       <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-        <!-- Módulo de Notificaciones / Comunicados (Al lado de la Campanita) -->
-        <button type="button" id="btn-pwa-comunicados" class="btn-comunicados-nav" onclick="if(window.adsModule) window.adsModule.openComunicadosModal();" title="Ver Comunicados e Informes Gerenciales">
-          <div style="position: relative; display: flex; align-items: center; justify-content: center;">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-            <span id="pwa-comunicados-count" class="comunicados-badge" style="display: inline-flex;">1</span>
-          </div>
-          <span class="comunicados-text">Comunicados</span>
+        <!-- Botón Circular Minimalista de Comunicados / Notificaciones PWA (bulapay-v337) -->
+        <button type="button" id="btn-pwa-comunicados" class="btn-comunicados-nav" onclick="if(window.adsModule) window.adsModule.openComunicadosModal();" title="Ver Comunicados e Informes Gerenciales" aria-label="Ver Comunicados e Informes Gerenciales">
+          <span class="btn-comunicados-bell-icon">🔔</span>
+          <span id="pwa-comunicados-count" class="comunicados-badge" style="display: none;">0</span>
         </button>
 
         <button type="button" id="btn-contactanos" class="btn-contactanos btn-contact-card" onclick="window.abrirContactoMailto(event);" aria-label="Contáctanos a Soporte">
@@ -1863,7 +1857,7 @@
     <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <p>&copy; 2026 BulaPay. Todos los derechos reservados. SaaS de Gestión de Cartera y Logística.</p>
       <div style="display: flex; gap: 1rem;">
-        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v336)</span>
+        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v337)</span>
         <a href="#" style="color: var(--accent); text-decoration: none;" id="btn-install-pwa" style="display: none;">Instalar App</a>
       </div>
     </div>
@@ -1873,15 +1867,15 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=336"></script>
-  <script src="js/ads.js?v=336"></script>
-  <script src="js/auth.js?v=336"></script>
-  <script src="js/supervisor.js?v=336"></script>
-  <script src="js/agent_v6.js?v=336"></script>
-  <script src="js/customer.js?v=336"></script>
-  <script src="js/superadmin.js?v=336"></script>
+  <script src="js/db.js?v=337"></script>
+  <script src="js/ads.js?v=337"></script>
+  <script src="js/auth.js?v=337"></script>
+  <script src="js/supervisor.js?v=337"></script>
+  <script src="js/agent_v6.js?v=337"></script>
+  <script src="js/customer.js?v=337"></script>
+  <script src="js/superadmin.js?v=337"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=336"></script>
+  <script src="js/app.js?v=337"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2741,7 +2735,7 @@
       }
     })();
   </script>
-  <!-- MODAL FLOTANTE INTERCEPTOR DE ANUNCIOS Y PUBLICIDAD (bulapay-v336) -->
+  <!-- MODAL FLOTANTE INTERCEPTOR DE ANUNCIOS Y PUBLICIDAD (bulapay-v337) -->
   <div id="pwa-ad-modal" class="pwa-ad-modal-overlay">
     <div class="pwa-ad-modal-card pwa-ad-modal-content">
       <div class="pwa-ad-modal-header">

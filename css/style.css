@@ -2450,48 +2450,97 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
 }
 
-/* Botón Campanita y Comunicados en Header Top-Bar */
+/* Botón Circular Minimalista de Campanita en Header Top-Bar (bulapay-v337) */
 .btn-comunicados-nav {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 0.85rem;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 50px;
-  color: #fbbf24;
-  font-size: 0.82rem;
-  font-weight: 700;
+  justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   outline: none;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
+}
+
+.btn-comunicados-bell-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.btn-comunicados-nav:hover .btn-comunicados-bell-icon {
+  transform: scale(1.12) rotate(8deg);
 }
 
 .btn-comunicados-nav:hover,
 .btn-comunicados-nav:active {
-  background: rgba(245, 158, 11, 0.25);
-  border-color: rgba(245, 158, 11, 0.6);
+  background: rgba(16, 185, 129, 0.28);
+  border-color: rgba(16, 185, 129, 0.7);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+/* Dinámica de Alerta (Verde por defecto vs Rojo intenso cuando hay pendientes no leídos) */
+.btn-comunicados-nav.has-unread {
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: rgba(239, 68, 68, 0.65) !important;
+  color: #ef4444 !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.55) !important;
+  animation: pulseRedAlert 2s infinite ease-in-out;
+}
+
+.btn-comunicados-nav.has-unread:hover,
+.btn-comunicados-nav.has-unread:active {
+  background: rgba(239, 68, 68, 0.38) !important;
+  border-color: rgba(239, 68, 68, 0.85) !important;
+}
+
+@keyframes pulseRedAlert {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
 }
 
 .comunicados-badge {
   position: absolute;
-  top: -6px;
-  right: -8px;
+  top: -5px;
+  right: -5px;
   background: #ef4444;
   color: #ffffff;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 900;
   border-radius: 9999px;
-  padding: 0.1rem 0.35rem;
+  padding: 0.12rem 0.4rem;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
-  border: 1.5px solid #0f172a;
+  border: 2px solid #0b132b;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v336) */
+/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v337) */
 .pwa-ad-modal-overlay {
   position: fixed;
   inset: 0;
