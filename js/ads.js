@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v331)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v334)
 
 const adsModule = {
   isShowing: false,
@@ -70,7 +70,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v331] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v334] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       // Filtrar anuncios activos y que coincidan con el detonante
       const matchingAds = (allAds || []).filter((ad, idx) => {
@@ -122,7 +122,7 @@ const adsModule = {
 
       // Seleccionar SIEMPRE el anuncio más reciente (el primero del arreglo ordenado)
       const selectedAd = matchingAds[0];
-      console.log(`🎯 [BulaPay Anuncios bulapay-v331] ¡Anuncio más reciente seleccionado para desplegar en pantalla!`, selectedAd);
+      console.log(`🎯 [BulaPay Anuncios bulapay-v334] ¡Anuncio más reciente seleccionado para desplegar en pantalla!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
