@@ -56,15 +56,21 @@ const customerModule = {
     if (this.searchForm) {
       this.searchForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const docNumber = this.inputDocNumber.value.trim();
+        const docNumber = this.inputDocNumber ? this.inputDocNumber.value.trim() : '';
         if (docNumber) {
-          if (window.adsModule && typeof window.adsModule.checkAndShowAd === 'function') {
-            await window.adsModule.checkAndShowAd('client_search', async () => {
-              await this.loadClientStatement(docNumber);
-            });
-          } else {
-            await this.loadClientStatement(docNumber);
+          // 1. Cargar la consulta de cuenta de forma prioritaria e inmediata
+          const loadPromise = this.loadClientStatement(docNumber);
+
+          // 2. Verificar y mostrar anuncio de forma independiente sin congelar la búsqueda
+          try {
+            if (window.adsModule && typeof window.adsModule.checkAndShowAd === 'function') {
+              window.adsModule.checkAndShowAd('client_search');
+            }
+          } catch(errAds) {
+            console.warn("Anuncio omitido de forma segura:", errAds);
           }
+
+          await loadPromise;
         }
       });
     }
