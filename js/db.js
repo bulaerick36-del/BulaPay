@@ -3682,7 +3682,7 @@ const db = {
     return { success: true, message: 'Contraseña actualizada correctamente.' };
   },
 
-  // Módulo de Anuncios y Publicidad (bulapay-v327 - Almacenamiento Local y Sincronización Segura)
+  // Módulo de Anuncios y Publicidad (bulapay-v331 - Almacenamiento Local y Sincronización Segura)
   async saveAnnouncement(adData) {
     if (!adData.id) {
       adData.id = 'ad_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -3782,13 +3782,30 @@ const db = {
     let supabaseAds = [];
 
     // Solo consultar Supabase si ya hay una tabla verificada existente en la BD remota
-    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table');
-    if (verifiedTable && !window._supabase_ads_disabled) {
+    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table') || 'bulapay_anuncios';
+    if (!window._supabase_ads_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const { data, error } = await supabase.from(verifiedTable).select('*');
+          let { data, error } = await supabase
+            .from(verifiedTable)
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (error) {
+            const fallbackRes = await supabase
+              .from(verifiedTable)
+              .select('*')
+              .order('id', { ascending: false });
+            if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
+              data = fallbackRes.data;
+              error = null;
+            }
+          }
+
           if (!error && Array.isArray(data)) {
+            window._active_ads_table = verifiedTable;
+            try { localStorage.setItem('bula_active_ads_table', verifiedTable); } catch(e) {}
             supabaseAds = data.map(item => ({
               id: String(item.id),
               category: item.categoria || item.category || 'Comercial',
@@ -3809,7 +3826,9 @@ const db = {
               created_at: item.created_at || new Date().toISOString()
             }));
           } else if (error) {
-            window._supabase_ads_disabled = true;
+            if (error.status === 404 || error.code === '42P01' || (error.message && error.message.includes('not exist'))) {
+              window._supabase_ads_disabled = true;
+            }
           }
         }
       } catch(e) {
@@ -3839,8 +3858,8 @@ const db = {
         trigger_navigation: true,
         detonante_cliente: true,
         trigger_client_search: true,
-        descripcion: '📢 Módulo de Anuncios BulaPay v327: Publicidad y comunicados institucionales activos.',
-        title_description: '📢 Módulo de Anuncios BulaPay v327: Publicidad y comunicados institucionales activos.',
+        descripcion: '📢 Módulo de Anuncios BulaPay v331: Publicidad y comunicados institucionales activos.',
+        title_description: '📢 Módulo de Anuncios BulaPay v331: Publicidad y comunicados institucionales activos.',
         multimedia_url: '',
         media_url: '',
         active: true,

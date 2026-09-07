@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v332)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v331)
 
 const adsModule = {
   isShowing: false,
@@ -70,7 +70,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios v332] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v331] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       // Filtrar anuncios activos y que coincidan con el detonante
       const matchingAds = (allAds || []).filter((ad, idx) => {
@@ -112,8 +112,17 @@ const adsModule = {
         return;
       }
 
-      const selectedAd = matchingAds[Math.floor(Math.random() * matchingAds.length)];
-      console.log(`🎯 [BulaPay Anuncios] ¡Anuncio seleccionado con éxito para desplegar en pantalla!`, selectedAd);
+      // Ordenar anuncios por fecha de creación descendente (el más reciente primero)
+      matchingAds.sort((a, b) => {
+        const timeA = new Date(a.created_at || a.fecha_inicio || a.start_date || 0).getTime();
+        const timeB = new Date(b.created_at || b.fecha_inicio || b.start_date || 0).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return String(b.id || '').localeCompare(String(a.id || ''));
+      });
+
+      // Seleccionar SIEMPRE el anuncio más reciente (el primero del arreglo ordenado)
+      const selectedAd = matchingAds[0];
+      console.log(`🎯 [BulaPay Anuncios bulapay-v331] ¡Anuncio más reciente seleccionado para desplegar en pantalla!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 

@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v332';
+const CACHE_NAME = 'bulapay-v331';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css',
-  './js/db.js',
-  './js/ads.js',
-  './js/auth.js',
-  './js/supervisor.js',
-  './js/agent_v6.js',
-  './js/customer.js',
-  './js/superadmin.js',
-  './js/app.js',
+  './css/style.css?v=331',
+  './js/db.js?v=331',
+  './js/ads.js?v=331',
+  './js/auth.js?v=331',
+  './js/supervisor.js?v=331',
+  './js/agent_v6.js?v=331',
+  './js/customer.js?v=331',
+  './js/superadmin.js?v=331',
+  './js/app.js?v=331',
   './assets/logo.svg'
 ];
 
@@ -20,32 +20,32 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell v332');
+      console.log('[Service Worker] Caching app shell bulapay-v331');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v198, etc.)
+// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v330, v332, etc.)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker] Purgando caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v331] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v331] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );
 });
 
-// 3. Estrategia Network-First estricta para navegación y archivos HTML
+// 3. Estrategia Network-First estricta para navegación, HTML y recursos estáticos
 self.addEventListener('fetch', (e) => {
   const url = e.request ? e.request.url : '';
 
@@ -86,9 +86,9 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Estrategia Network-First para activos estáticos (JS, CSS, Imágenes)
+  // Estrategia Network-First para activos estáticos (JS, CSS, Imágenes) con bypass de caché del navegador
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
