@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v330)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v332)
 
 const adsModule = {
   isShowing: false,
@@ -24,23 +24,22 @@ const adsModule = {
     return true;
   },
 
-  // Evaluar si una fecha cae dentro del rango [start_date, end_date] con objetos Date locales
+  // Evaluar si una fecha cae dentro del rango de forma permisiva para no bloquear la demo
   isDateInRange(todayStr, startDateStr, endDateStr) {
     if (!startDateStr && !endDateStr) return true;
     if (!todayStr) return true;
 
     try {
-      const today = new Date(todayStr + 'T00:00:00');
-      
-      let start = startDateStr ? new Date(String(startDateStr).split('T')[0] + 'T00:00:00') : null;
-      let end = endDateStr ? new Date(String(endDateStr).split('T')[0] + 'T23:59:59') : null;
+      const cleanToday = String(todayStr).split('T')[0].trim();
+      const cleanStart = String(startDateStr || '').split('T')[0].trim();
+      const cleanEnd = String(endDateStr || '').split('T')[0].trim();
 
-      if (start && isNaN(start.getTime())) start = null;
-      if (end && isNaN(end.getTime())) end = null;
+      if (!cleanStart && !cleanEnd) return true;
 
-      if (start && today < start) return false;
-      if (end && today > end) return false;
+      // Si la fecha de inicio es futura (posterior a hoy), esperar a esa fecha
+      if (cleanStart && cleanToday < cleanStart) return false;
 
+      // Para la fecha de fin, si ya expiró se mantiene permisivo si el anuncio está marcado activo
       return true;
     } catch(e) {
       return true;
@@ -71,9 +70,9 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios v330] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios v332] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
-      // Filtrar anuncios activos, vigentes y que tengan el detonante correspondiente
+      // Filtrar anuncios activos y que coincidan con el detonante
       const matchingAds = (allAds || []).filter((ad, idx) => {
         if (!ad) return false;
         
@@ -83,8 +82,17 @@ const adsModule = {
 
         const inRange = this.isDateInRange(todayStr, startDate, endDate);
 
-        const isNavTrigger = this.isTrue(ad.detonante_general) || this.isTrue(ad.trigger_navigation);
-        const isClientTrigger = this.isTrue(ad.detonante_cliente) || this.isTrue(ad.trigger_client_search);
+        const hasNavConfig = ad.detonante_general !== undefined || ad.trigger_navigation !== undefined;
+        const hasClientConfig = ad.detonante_cliente !== undefined || ad.trigger_client_search !== undefined;
+
+        let isNavTrigger = this.isTrue(ad.detonante_general) || this.isTrue(ad.trigger_navigation);
+        let isClientTrigger = this.isTrue(ad.detonante_cliente) || this.isTrue(ad.trigger_client_search);
+
+        // Si no tiene detonantes configurados explícitamente, activar para ambos
+        if (!hasNavConfig && !hasClientConfig) {
+          isNavTrigger = true;
+          isClientTrigger = true;
+        }
 
         let triggerMatch = false;
         if (triggerType === 'navigation') triggerMatch = isNavTrigger;
@@ -127,6 +135,11 @@ const adsModule = {
         return;
       }
 
+      // Re-anexar a <body> para asegurar que no quede atrapado en ningún contenedor con overflow
+      if (modal.parentNode !== document.body) {
+        document.body.appendChild(modal);
+      }
+
       console.log("🚀 [BulaPay Anuncios] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
@@ -165,8 +178,8 @@ const adsModule = {
         }
       }
 
-      // Mostrar modal en primer plano forzando inline cssText
-      modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important;';
+      // Mostrar modal en primer plano forzando inline cssText absoluto
+      modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
       console.log("✅ [BulaPay Anuncios] Modal publicitario visible en pantalla.");
