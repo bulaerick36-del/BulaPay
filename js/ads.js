@@ -433,9 +433,8 @@ const adsModule = {
   },
 
   async updateComunicadosBadge() {
-    const btn = document.getElementById('btn-pwa-comunicados');
-    const badgeEl = document.getElementById('pwa-comunicados-count');
-    if (!btn && !badgeEl) return;
+    const btnList = document.querySelectorAll('.btn-comunicados-nav, #btn-pwa-comunicados');
+    const badgeList = document.querySelectorAll('.comunicados-badge, #pwa-comunicados-count');
 
     try {
       const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
@@ -448,22 +447,27 @@ const adsModule = {
         if (rawRead) readIds = new Set(JSON.parse(rawRead));
       } catch(e) {}
 
-      const unreadList = (notifs || []).filter(n => n && n.id && !readIds.has(String(n.id)));
+      // Excluir el de bienvenida limpio para no marcar badge falso si no hay notificaciones reales
+      const unreadList = (notifs || []).filter(n => n && n.id && n.id !== 'notif_welcome_clean' && !readIds.has(String(n.id)));
       const count = unreadList.length;
 
-      if (count > 0) {
-        if (btn) btn.classList.add('has-unread');
-        if (badgeEl) {
+      btnList.forEach(btn => {
+        if (count > 0) {
+          btn.classList.add('has-unread');
+        } else {
+          btn.classList.remove('has-unread');
+        }
+      });
+
+      badgeList.forEach(badgeEl => {
+        if (count > 0) {
           badgeEl.textContent = count > 99 ? '99+' : String(count);
           badgeEl.style.display = 'inline-flex';
-        }
-      } else {
-        if (btn) btn.classList.remove('has-unread');
-        if (badgeEl) {
+        } else {
           badgeEl.textContent = '0';
           badgeEl.style.display = 'none';
         }
-      }
+      });
     } catch(e) {
       console.warn("Error actualizando badge de comunicados:", e);
     }
@@ -488,7 +492,7 @@ const adsModule = {
           ? await window.BulaPayDB.getNotificaciones()
           : [];
 
-        // Marcar notificaciones como leídas
+        // Marcar notificaciones como leídas al abrir la bandeja
         if (Array.isArray(notifs) && notifs.length > 0) {
           try {
             let readIds = new Set();
@@ -579,24 +583,22 @@ window.diagnoseAds = async function() {
   try {
     if (window.BulaPayDB && typeof window.BulaPayDB.getAnnouncements === 'function') {
       dbAds = await window.BulaPayDB.getAnnouncements();
-      console.log("3️⃣ Anuncios devueltos por BulaPayDB.getAnnouncements():", dbAds.length, dbAds);
-    } else {
-      console.error("3️⃣ BulaPayDB.getAnnouncements NO está disponible.");
+      console.log("3️⃣ Anuncios leídos desde Supabase/DB (BulaPayDB.getAnnouncements):", dbAds.length, dbAds);
     }
   } catch(e) {
-    console.error("3️⃣ Error consultando BulaPayDB.getAnnouncements():", e);
+    console.error("❌ Error consultando BulaPayDB.getAnnouncements:", e);
   }
 
-  const todayStr = adsModule.getTodayString();
-  console.log("4️⃣ Fecha actual detectada (Local):", todayStr);
+  const allAds = (dbAds && dbAds.length > 0) ? dbAds : localList;
+  console.log("4️⃣ Anuncios combinados activos a evaluar:", allAds.length);
 
-  console.log("5️⃣ Evaluación individual de detonantes:");
-  (dbAds || []).forEach((ad, i) => {
-    const isActive = ad.active !== false && ad.active !== 'false';
-    const startDate = String(ad.fecha_inicio || ad.start_date || '').split('T')[0].trim();
-    const endDate = String(ad.fecha_fin || ad.end_date || '').split('T')[0].trim();
+  const todayStr = new Date().toISOString().split('T')[0];
+  allAds.forEach((ad, i) => {
+    const isActive = adsModule.isTrue(ad.activo) || adsModule.isTrue(ad.active) || adsModule.isTrue(ad.estado);
+    const startDate = ad.fecha_inicio || ad.start_date || '';
+    const endDate = ad.fecha_fin || ad.end_date || '';
     const inRange = adsModule.isDateInRange(todayStr, startDate, endDate);
-    const navTrig = adsModule.isTrue(ad.detonante_general) || adsModule.isTrue(ad.trigger_navigation);
+    const navTrig = adsModule.isTrue(ad.detonante_navegacion) || adsModule.isTrue(ad.trigger_navigation);
     const clientTrig = adsModule.isTrue(ad.detonante_cliente) || adsModule.isTrue(ad.trigger_client_search);
 
     console.log(`   📌 Anuncio #${i + 1} [ID: ${ad.id}]`);
@@ -616,13 +618,37 @@ window.diagnoseAds = async function() {
 
 window.adsModule = adsModule;
 
-// Auto-ejecución inicial para lectura y actualización dinámica del badge de comunicados (bulapay-v338)
+// Auto-ejecución inicial para lectura y actualización dinámica del badge de comunicados (bulapay-v339)
+const triggerBadgeUpdate = () => {
+  if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
+    window.adsModule.updateComunicadosBadge();
+  }
+};
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    adsModule.updateComunicadosBadge();
-  });
+  document.addEventListener('DOMContentLoaded', triggerBadgeUpdate);
 } else {
-  setTimeout(() => {
-    adsModule.updateComunicadosBadge();
-  }, 200);
+  setTimeout(triggerBadgeUpdate, 150);
+}
+
+// Escuchas de reactivación al cambiar foco de pantalla en teléfono móvil
+window.addEventListener('focus', triggerBadgeUpdate);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') triggerBadgeUpdate();
+});
+
+// Suscripción Real-Time en Supabase para bulapay_notificaciones
+if (window.BulaPayDB && typeof window.BulaPayDB.initSupabase === 'function') {
+  window.BulaPayDB.initSupabase().then(supabase => {
+    if (supabase && typeof supabase.channel === 'function') {
+      try {
+        supabase.channel('public:bulapay_notificaciones')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'bulapay_notificaciones' }, () => {
+            console.log("🔔 [Realtime Supabase] Cambio detectado en bulapay_notificaciones. Refrescando campanita...");
+            triggerBadgeUpdate();
+          })
+          .subscribe();
+      } catch(e) {}
+    }
+  }).catch(() => {});
 }

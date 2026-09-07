@@ -3966,8 +3966,21 @@ const db = {
       }
     } catch(e) {}
 
-    // Limpiar notificaciones de prueba u obsoletas que contengan marcadores de versión en el título
-    localList = localList.filter(n => n && n.id && n.id !== 'notif_welcome' && !String(n.titulo || '').includes('v33') && !String(n.titulo || '').includes('v32'));
+    const normalize = (n) => {
+      if (!n) return null;
+      return {
+        id: String(n.id || ('notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6))),
+        titulo: String(n.titulo || n.title || n.subject || 'Comunicado Oficial'),
+        mensaje: String(n.mensaje || n.message || n.content || n.descripcion || ''),
+        categoria: String(n.categoria || n.category || 'Institucional'),
+        prioridad: String(n.prioridad || n.priority || 'Alta'),
+        created_at: n.created_at || n.createdAt || new Date().toISOString()
+      };
+    };
+
+    localList = localList
+      .map(normalize)
+      .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean');
 
     let supabaseList = [];
     const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
@@ -3991,7 +4004,9 @@ const db = {
             }
 
             if (!error && Array.isArray(data) && data.length > 0) {
-              supabaseList = data.filter(n => n && n.id && n.id !== 'notif_welcome' && !String(n.titulo || '').includes('v33') && !String(n.titulo || '').includes('v32'));
+              supabaseList = data
+                .map(normalize)
+                .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean');
               if (supabaseList.length > 0) break;
             }
           }
@@ -4001,7 +4016,7 @@ const db = {
       }
     }
 
-    // Unificar lista manteniendo los objetos únicos por ID (priorizando Supabase si existe)
+    // Unificar lista manteniendo objetos únicos por ID (priorizando Supabase)
     const notifMap = new Map();
     supabaseList.forEach(n => { if (n && n.id) notifMap.set(String(n.id), n); });
     localList.forEach(n => {
@@ -4032,7 +4047,6 @@ const db = {
     }
 
     console.log(`🔔 [BulaPay Notificaciones] Comunicados leídos de la base de datos (${finalNotifs.length}):`, finalNotifs);
-
     return finalNotifs;
   },
 
@@ -4046,24 +4060,47 @@ const db = {
       created_at: new Date().toISOString()
     };
 
+    // Guardado preventivo en localStorage
     try {
       const raw = localStorage.getItem('bula_notificaciones');
       let list = raw ? JSON.parse(raw) : [];
       if (!Array.isArray(list)) list = [];
-      list = list.filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !String(n.titulo || '').includes('v33'));
+      list = list.filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean');
       list.unshift(payload);
       localStorage.setItem('bula_notificaciones', JSON.stringify(list));
     } catch(e) {}
 
+    // Inserción resiliente en Supabase (Multietapa de esquemas)
     if (!window._supabase_notif_disabled) {
       const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
       try {
         const supabase = await initSupabase();
         if (supabase) {
           for (const table of candidateTables) {
-            const { error } = await supabase.from(table).insert([payload]);
+            // Etapa 1: Inserción Completa (con prioridad)
+            let { error } = await supabase.from(table).insert([payload]);
+            if (error) {
+              // Etapa 2: Inserción sin columna 'prioridad'
+              const p2 = { ...payload };
+              delete p2.prioridad;
+              const res2 = await supabase.from(table).insert([p2]);
+              error = res2.error;
+            }
+            if (error) {
+              // Etapa 3: Nombres de columna en Inglés (title, message, category)
+              const p3 = {
+                id: payload.id,
+                title: payload.titulo,
+                message: payload.mensaje,
+                category: payload.categoria,
+                created_at: payload.created_at
+              };
+              const res3 = await supabase.from(table).insert([p3]);
+              error = res3.error;
+            }
+
             if (!error) {
-              console.log(`✅ [BulaPay Notificaciones] Comunicado guardado en Supabase ("${table}"):`, payload);
+              console.log(`✅ [BulaPay Notificaciones] Comunicado guardado exitosamente en Supabase ("${table}"):`, payload);
               break;
             }
           }
