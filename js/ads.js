@@ -17,20 +17,26 @@ const adsModule = {
     }
   },
 
-  // Evaluar si una fecha cae dentro del rango [start_date, end_date] con normalización de cadenas
+  // Helper para evaluación booleana estricta y segura
+  isTrue(val) {
+    return val === true || val === 'true' || val === 1 || val === '1';
+  },
+
+  // Evaluar si una fecha cae dentro del rango [start_date, end_date] con normalización YYYY-MM-DD
   isDateInRange(todayStr, startDateStr, endDateStr) {
     if (!startDateStr || !endDateStr) return true;
     if (!todayStr) return true;
     
-    // Normalizar a YYYY-MM-DD
     const cleanStart = String(startDateStr).split('T')[0].trim();
     const cleanEnd = String(endDateStr).split('T')[0].trim();
     const cleanToday = String(todayStr).split('T')[0].trim();
 
+    if (!cleanStart || !cleanEnd) return true;
+
     return cleanToday >= cleanStart && cleanToday <= cleanEnd;
   },
 
-  // Método principal para evaluar e interceptar navegación o acciones del usuario de forma NO BLOQUEANTE
+  // Método principal para evaluar e interceptar navegación o acciones del usuario
   async checkAndShowAd(triggerType, onCompleteCallback) {
     let callbackExecuted = false;
     const safeCallback = () => {
@@ -54,7 +60,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios v330] Verificando anuncios para evento: "${triggerType}". Fecha actual: "${todayStr}". Total anuncios encontrados:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios v330] Evaluando evento: "${triggerType}". Fecha actual: "${todayStr}". Total anuncios encontrados en sistema:`, (allAds || []).length);
 
       // Filtrar anuncios activos, vigentes y que tengan el detonante correspondiente
       const matchingAds = (allAds || []).filter((ad, idx) => {
@@ -66,17 +72,19 @@ const adsModule = {
 
         const inRange = this.isDateInRange(todayStr, startDate, endDate);
 
-        const isNavTrigger = Boolean(ad.detonante_general || ad.trigger_navigation);
-        const isClientTrigger = Boolean(ad.detonante_cliente || ad.trigger_client_search);
+        const isNavTrigger = this.isTrue(ad.detonante_general) || this.isTrue(ad.trigger_navigation);
+        const isClientTrigger = this.isTrue(ad.detonante_cliente) || this.isTrue(ad.trigger_client_search);
 
         let triggerMatch = false;
         if (triggerType === 'navigation') triggerMatch = isNavTrigger;
         if (triggerType === 'client_search') triggerMatch = isClientTrigger;
 
-        console.log(`🔎 [Anuncio #${idx + 1} - ID: ${ad.id}] Categoría: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate} a ${endDate}], En Rango: ${inRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger: ${triggerMatch}`);
+        const passes = isActive && inRange && triggerMatch;
+
+        console.log(`🔎 [Anuncio #${idx + 1} - ${ad.id}] Categoria: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate || 'N/A'} a ${endDate || 'N/A'}], En Rango: ${inRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger "${triggerType}": ${triggerMatch} ==> RESULTADO: ${passes ? '✅ ACEPTADO' : '❌ DESCARTADO'}`);
         console.log(`   Objeto Anuncio completo:`, ad);
 
-        return isActive && inRange && triggerMatch;
+        return passes;
       });
 
       if (!matchingAds || matchingAds.length === 0) {
@@ -85,9 +93,8 @@ const adsModule = {
         return;
       }
 
-      // Seleccionar un anuncio coincidente aleatorio entre los vigentes
       const selectedAd = matchingAds[Math.floor(Math.random() * matchingAds.length)];
-      console.log(`🎯 [BulaPay Anuncios] ¡Anuncio seleccionado con éxito!`, selectedAd);
+      console.log(`🎯 [BulaPay Anuncios] ¡Anuncio seleccionado con éxito para desplegar en pantalla!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
@@ -109,7 +116,7 @@ const adsModule = {
         return;
       }
 
-      console.log("🚀 [BulaPay Anuncios] Desplegando modal publicitario en pantalla para el anuncio:", ad);
+      console.log("🚀 [BulaPay Anuncios] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
@@ -151,8 +158,12 @@ const adsModule = {
       if (modal.style) {
         modal.style.setProperty('display', 'flex', 'important');
         modal.style.setProperty('z-index', '1000000', 'important');
+        modal.style.setProperty('opacity', '1', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
       }
       modal.classList.add('active');
+
+      console.log("✅ [BulaPay Anuncios] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);
