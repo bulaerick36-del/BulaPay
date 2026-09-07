@@ -3680,6 +3680,125 @@ const db = {
     } catch(e) {}
 
     return { success: true, message: 'Contraseña actualizada correctamente.' };
+  },
+
+  // Módulo de Anuncios y Publicidad (bulapay-v326)
+  async saveAnnouncement(adData) {
+    if (!adData.id) {
+      adData.id = 'ad_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    }
+    if (!adData.created_at) {
+      adData.created_at = new Date().toISOString();
+    }
+    
+    // 1. Persistir en Supabase
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase.from('announcements').insert([adData]).select();
+        if (!error && data && data.length > 0) {
+          console.log("✅ Anuncio guardado en Supabase:", data[0]);
+          this._saveAnnouncementLocal(data[0]);
+          return data[0];
+        }
+      }
+    } catch(e) {
+      console.warn("Fallo guardando anuncio en Supabase, usando almacenamiento local:", e);
+    }
+
+    // 2. Fallback seguro local
+    this._saveAnnouncementLocal(adData);
+    return adData;
+  },
+
+  _saveAnnouncementLocal(ad) {
+    try {
+      const raw = localStorage.getItem('bula_announcements');
+      const list = raw ? JSON.parse(raw) : [];
+      const index = list.findIndex(a => a.id === ad.id);
+      if (index >= 0) {
+        list[index] = ad;
+      } else {
+        list.unshift(ad);
+      }
+      localStorage.setItem('bula_announcements', JSON.stringify(list));
+    } catch(e) {
+      console.warn("Error guardando anuncio localmente:", e);
+    }
+  },
+
+  async getAnnouncements() {
+    let supabaseAds = [];
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+          supabaseAds = data;
+        }
+      }
+    } catch(e) {
+      console.warn("Fallo leyendo anuncios de Supabase:", e);
+    }
+
+    let localAds = [];
+    try {
+      const raw = localStorage.getItem('bula_announcements');
+      if (raw) localAds = JSON.parse(raw);
+    } catch(e) {}
+
+    const adsMap = new Map();
+    supabaseAds.forEach(a => adsMap.set(a.id, a));
+    localAds.forEach(a => {
+      if (!adsMap.has(a.id)) adsMap.set(a.id, a);
+    });
+
+    const allAds = Array.from(adsMap.values());
+    allAds.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    return allAds;
+  },
+
+  async toggleAnnouncementStatus(adId, active) {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('announcements').update({ active: active }).eq('id', adId);
+      }
+    } catch(e) {
+      console.warn("Fallo actualizando estado de anuncio en Supabase:", e);
+    }
+
+    try {
+      const raw = localStorage.getItem('bula_announcements');
+      if (raw) {
+        const ads = JSON.parse(raw);
+        const target = ads.find(a => a.id === adId);
+        if (target) {
+          target.active = active;
+          localStorage.setItem('bula_announcements', JSON.stringify(ads));
+        }
+      }
+    } catch(e) {}
+  },
+
+  async deleteAnnouncement(adId) {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('announcements').delete().eq('id', adId);
+      }
+    } catch(e) {
+      console.warn("Fallo eliminando anuncio en Supabase:", e);
+    }
+
+    try {
+      const raw = localStorage.getItem('bula_announcements');
+      if (raw) {
+        let ads = JSON.parse(raw);
+        ads = ads.filter(a => a.id !== adId);
+        localStorage.setItem('bula_announcements', JSON.stringify(ads));
+      }
+    } catch(e) {}
   }
 };
 

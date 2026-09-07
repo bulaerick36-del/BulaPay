@@ -246,6 +246,26 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en password_reset_tokens" ON pas
 CREATE POLICY "Permitir todo a anonimos en password_reset_tokens" ON password_reset_tokens FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE password_reset_tokens TO anon, authenticated;
 
+-- 8. Tabla de Anuncios y Publicidad (Módulo bulapay-v326)
+CREATE TABLE IF NOT EXISTS announcements (
+  "id" TEXT PRIMARY KEY,
+  "category" TEXT NOT NULL,
+  "title_description" TEXT NOT NULL,
+  "start_date" DATE NOT NULL,
+  "end_date" DATE NOT NULL,
+  "trigger_navigation" BOOLEAN DEFAULT false,
+  "trigger_client_search" BOOLEAN DEFAULT false,
+  "media_url" TEXT,
+  "active" BOOLEAN DEFAULT true,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en announcements" ON announcements;
+CREATE POLICY "Permitir todo a anonimos en announcements" ON announcements FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE announcements TO anon, authenticated;
+
+
 
 
 

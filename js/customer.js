@@ -58,7 +58,13 @@ const customerModule = {
         e.preventDefault();
         const docNumber = this.inputDocNumber.value.trim();
         if (docNumber) {
-          await this.loadClientStatement(docNumber);
+          if (window.adsModule && typeof window.adsModule.checkAndShowAd === 'function') {
+            await window.adsModule.checkAndShowAd('client_search', async () => {
+              await this.loadClientStatement(docNumber);
+            });
+          } else {
+            await this.loadClientStatement(docNumber);
+          }
         }
       });
     }

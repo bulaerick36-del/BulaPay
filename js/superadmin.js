@@ -6,8 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (
                 texto.includes("Probador DOM") || 
                 texto.includes("Exportar Contratos PDF") || 
-                texto.includes("Correo Soporte") || 
-                texto.includes("Comunicado")
+                texto.includes("Correo Soporte")
             ) {
                 el.remove();
             }
@@ -254,6 +253,7 @@ const superadminModule = {
               💬 5. Soporte y Mensajes
               <span id="sa-tab-support-badge" style="display: none; background: #ef4444; color: #ffffff; font-size: 0.72rem; font-weight: 900; padding: 0.15rem 0.5rem; border-radius: 9999px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);">0</span>
             </button>
+            <button id="sa-tab-ads" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('ads', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📢 6. Anuncios y Publicidad</button>
           </div>
 
           <!-- Contenedores Independientes por Pestaña -->
@@ -263,6 +263,7 @@ const superadminModule = {
             <div id="tab-content-resources" class="sa-tab-pane" style="display: none;"></div>
             <div id="tab-content-advances" class="sa-tab-pane" style="display: none;"></div>
             <div id="tab-content-support" class="sa-tab-pane" style="display: none;"></div>
+            <div id="tab-content-ads" class="sa-tab-pane" style="display: none;"></div>
           </div>
         </div>
       `;
@@ -380,6 +381,7 @@ const superadminModule = {
     else if (target === 3 || target === '3' || target === 'resources' || target === 'performance') key = 'resources';
     else if (target === 4 || target === '4' || target === 'advances') key = 'advances';
     else if (target === 5 || target === '5' || target === 'support') key = 'support';
+    else if (target === 6 || target === '6' || target === 'ads') key = 'ads';
 
     this.activeTab = key === 'resources' ? 'performance' : key;
 
@@ -389,7 +391,8 @@ const superadminModule = {
       { id: 'tab-content-contracts', key: 'contracts' },
       { id: 'tab-content-resources', key: 'resources' },
       { id: 'tab-content-advances', key: 'advances' },
-      { id: 'tab-content-support', key: 'support' }
+      { id: 'tab-content-support', key: 'support' },
+      { id: 'tab-content-ads', key: 'ads' }
     ];
 
     panes.forEach(pane => {
@@ -409,7 +412,8 @@ const superadminModule = {
       contracts: 'sa-tab-contracts',
       resources: 'sa-tab-performance',
       advances: 'sa-tab-advances',
-      support: 'sa-tab-support'
+      support: 'sa-tab-support',
+      ads: 'sa-tab-ads'
     };
 
     Object.keys(btnMap).forEach(k => {
@@ -444,6 +448,9 @@ const superadminModule = {
           await this.renderSupportTab(c);
           await this.loadSupportTickets();
         }
+      } else if (key === 'ads') {
+        const c = document.getElementById('tab-content-ads');
+        if (c) await this.renderAdsTab(c);
       }
     } catch(err) {
       console.warn("Fallo al renderizar pestaña activa:", err);
@@ -1774,6 +1781,295 @@ const superadminModule = {
     this._pollingInterval = setInterval(() => {
       this.checkPendingNotifications();
     }, 4000);
+  },
+
+  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v326)
+  async renderAdsTab(container) {
+    if (!container) return;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    container.innerHTML = `
+      <div class="superadmin-card" style="padding: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h3 style="color: #fbbf24; margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📢</span> Gestión de Anuncios y Publicidad
+            </h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0.25rem 0 0 0;">
+              Crea comunicados y banners publicitarios con detonantes específicos por fecha y eventos en la PWA.
+            </p>
+          </div>
+        </div>
+
+        <!-- Formulario de Creación de Anuncios -->
+        <div class="ad-form-card">
+          <h4 style="color: #34d399; margin-top: 0; margin-bottom: 1rem; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+            <span>➕</span> Crear Nuevo Anuncio Publicitario
+          </h4>
+          <form id="form-create-ad" onsubmit="superadminModule.handleCreateAd(event)">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+              
+              <!-- Categoría -->
+              <div>
+                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                  🏷️ Categoría:
+                </label>
+                <select id="ad-category" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 600; outline: none;" required>
+                  <option value="Comercial">🛍️ Comercial</option>
+                  <option value="Institucional">🏛️ Institucional</option>
+                  <option value="Promoción">🔥 Promoción</option>
+                </select>
+              </div>
+
+              <!-- Duración de la Campaña: Inicio -->
+              <div>
+                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                  📅 Fecha Inicio:
+                </label>
+                <input type="date" id="ad-start-date" value="${today}" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none;" required>
+              </div>
+
+              <!-- Duración de la Campaña: Fin -->
+              <div>
+                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                  🏁 Fecha Fin:
+                </label>
+                <input type="date" id="ad-end-date" value="${today}" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none;" required>
+              </div>
+            </div>
+
+            <!-- Detonantes (Casillas de Selección Múltiple) -->
+            <div style="margin-bottom: 1rem; background: rgba(15, 23, 42, 0.6); padding: 1rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+              <label style="display: block; font-size: 0.82rem; font-weight: 700; color: #fbbf24; margin-bottom: 0.5rem;">
+                ⚡ Detonantes de Visualización (Selección Múltiple - Se pueden marcar ambas):
+              </label>
+              <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+                <label style="display: flex; align-items: center; gap: 0.6rem; color: #f8fafc; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="ad-trigger-nav" style="width: 18px; height: 18px; accent-color: #34d399;" checked>
+                  <span><strong>1. Anuncio General (Navegación):</strong> Se activa al hacer clic en botones de navegación interna entre roles (ej: pasar de Supervisor a Agente Independiente).</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.6rem; color: #f8fafc; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" id="ad-trigger-client" style="width: 18px; height: 18px; accent-color: #38bdf8;" checked>
+                  <span><strong>2. Anuncio de Clientes:</strong> Se activa únicamente cuando un cliente ingresa su número de cédula en su portal de consulta.</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Descripción -->
+            <div style="margin-bottom: 1rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                📝 Descripción del Mensaje Publicitario:
+              </label>
+              <textarea id="ad-description" rows="3" placeholder="Escribe el contenido o mensaje publicitario que se mostrará al usuario..." style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-family: inherit; font-size: 0.88rem; outline: none; resize: vertical;" required></textarea>
+            </div>
+
+            <!-- Carga Multimedia -->
+            <div style="margin-bottom: 1.25rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                🖼️ Carga Multimedia (Gráfico o Banner del Anuncio):
+              </label>
+              <input type="file" id="ad-media-file" accept="image/*" onchange="superadminModule.handleAdImageSelect(event)" style="width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #94a3b8; font-size: 0.85rem;">
+              <input type="hidden" id="ad-media-url-base64">
+              
+              <div id="ad-image-preview-container" class="ad-dropzone-preview" style="display: none;">
+                <p style="margin: 0 0 0.5rem 0; font-size: 0.78rem; color: #fbbf24; font-weight: 700;">Vista Previa del Gráfico Adjunto:</p>
+                <img id="ad-image-preview" src="" alt="Previsualización" style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;">
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.5rem; font-weight: 700; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; cursor: pointer; border-radius: 8px; font-size: 0.9rem;">
+              💾 Publicar Anuncio
+            </button>
+          </form>
+        </div>
+
+        <!-- Lista de Anuncios Creados -->
+        <div>
+          <h4 style="color: #f8fafc; margin-bottom: 1rem; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+            <span>📋</span> Anuncios Registrados
+          </h4>
+          <div id="sa-ads-list-container">
+            <p style="color: #94a3b8; font-size: 0.85rem;">Cargando anuncios...</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    await this.loadAdsList();
+  },
+
+  handleAdImageSelect(event) {
+    const file = event.target.files[0];
+    const previewContainer = document.getElementById('ad-image-preview-container');
+    const previewImg = document.getElementById('ad-image-preview');
+    const base64Input = document.getElementById('ad-media-url-base64');
+
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        if (base64Input) base64Input.value = e.target.result;
+        if (previewImg) previewImg.src = e.target.result;
+        if (previewContainer) previewContainer.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    } else {
+      if (base64Input) base64Input.value = '';
+      if (previewContainer) previewContainer.style.display = 'none';
+    }
+  },
+
+  async handleCreateAd(event) {
+    if (event) event.preventDefault();
+
+    const category = document.getElementById('ad-category').value;
+    const startDate = document.getElementById('ad-start-date').value;
+    const endDate = document.getElementById('ad-end-date').value;
+    const triggerNav = document.getElementById('ad-trigger-nav').checked;
+    const triggerClient = document.getElementById('ad-trigger-client').checked;
+    const description = document.getElementById('ad-description').value.trim();
+    const mediaUrl = document.getElementById('ad-media-url-base64').value;
+
+    if (!startDate || !endDate) {
+      alert('⚠️ Por favor indica la fecha de inicio y fecha de fin de la campaña.');
+      return;
+    }
+
+    if (startDate > endDate) {
+      alert('⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.');
+      return;
+    }
+
+    if (!triggerNav && !triggerClient) {
+      alert('⚠️ Debes marcar al menos un detonante para la visualización del anuncio.');
+      return;
+    }
+
+    if (!description) {
+      alert('⚠️ Por favor ingresa la descripción o mensaje del anuncio.');
+      return;
+    }
+
+    const newAd = {
+      category: category,
+      start_date: startDate,
+      end_date: endDate,
+      trigger_navigation: triggerNav,
+      trigger_client_search: triggerClient,
+      title_description: description,
+      media_url: mediaUrl,
+      active: true
+    };
+
+    try {
+      await window.BulaPayDB.saveAnnouncement(newAd);
+      alert('✅ ¡Anuncio publicado correctamente!');
+      await this.renderAdsTab(document.getElementById('tab-content-ads'));
+    } catch(err) {
+      console.error("Error al guardar el anuncio:", err);
+      alert('❌ Hubo un error guardando el anuncio.');
+    }
+  },
+
+  async loadAdsList() {
+    const listContainer = document.getElementById('sa-ads-list-container');
+    if (!listContainer) return;
+
+    try {
+      const ads = await window.BulaPayDB.getAnnouncements();
+
+      if (!ads || ads.length === 0) {
+        listContainer.innerHTML = `
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(255,255,255,0.15); border-radius: 12px; padding: 2rem; text-align: center; color: #94a3b8;">
+            <span style="font-size: 2rem;">📭</span>
+            <p style="margin-top: 0.5rem; font-weight: 600;">No hay anuncios registrados actualmente.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
+      
+      ads.forEach(ad => {
+        const isActive = ad.active !== false && ad.active !== 'false';
+        const cat = ad.category || 'Comercial';
+        
+        let catBadgeStyle = 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);';
+        if (cat === 'Institucional') catBadgeStyle = 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);';
+        if (cat === 'Promoción') catBadgeStyle = 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4);';
+
+        const triggersText = [
+          (ad.trigger_navigation ? '🌐 Navegación' : null),
+          (ad.trigger_client_search ? '💳 Consulta Cédula' : null)
+        ].filter(Boolean).join(' | ') || 'Ninguno';
+
+        html += `
+          <div style="background: #0f172a; border: 1px solid ${isActive ? 'rgba(52, 211, 153, 0.3)' : 'rgba(255,255,255,0.1)'}; border-radius: 12px; padding: 1.25rem; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center;">
+            <div style="flex: 1; min-width: 260px;">
+              <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                <span style="padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; ${catBadgeStyle}">
+                  ${cat}
+                </span>
+                <span style="font-size: 0.78rem; color: #94a3b8;">
+                  📅 ${ad.start_date || 'N/A'} al ${ad.end_date || 'N/A'}
+                </span>
+                <span style="padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: ${isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${isActive ? '#34d399' : '#fca5a5'};">
+                  ${isActive ? '● Activo' : '○ Inactivo'}
+                </span>
+              </div>
+
+              <p style="color: #f8fafc; font-size: 0.9rem; margin: 0 0 0.5rem 0; white-space: pre-line;">
+                ${ad.title_description || ad.description}
+              </p>
+
+              <div style="font-size: 0.76rem; color: #fbbf24; font-weight: 600;">
+                ⚡ Detonantes: ${triggersText}
+              </div>
+            </div>
+
+            ${ad.media_url ? `
+              <div style="width: 100px; height: 75px; background: #0b132b; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1);">
+                <img src="${ad.media_url}" style="width: 100%; height: 100%; object-fit: contain;">
+              </div>
+            ` : ''}
+
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button onclick="superadminModule.toggleAdStatus('${ad.id}', ${!isActive})" style="padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: ${isActive ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color: ${isActive ? '#fca5a5' : '#34d399'}; border: 1px solid ${isActive ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)'};">
+                ${isActive ? '⏸️ Desactivar' : '▶️ Activar'}
+              </button>
+              <button onclick="superadminModule.deleteAd('${ad.id}')" style="padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; cursor: pointer;">
+                🗑️ Eliminar
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      html += '</div>';
+      listContainer.innerHTML = html;
+    } catch(err) {
+      console.error("Error al cargar la lista de anuncios:", err);
+      listContainer.innerHTML = `<p style="color: #ef4444; font-size: 0.85rem;">Error al cargar anuncios.</p>`;
+    }
+  },
+
+  async toggleAdStatus(adId, active) {
+    try {
+      await window.BulaPayDB.toggleAnnouncementStatus(adId, active);
+      await this.loadAdsList();
+    } catch(e) {
+      console.error("Error cambiando estado del anuncio:", e);
+    }
+  },
+
+  async deleteAd(adId) {
+    if (!confirm('¿Estás seguro de eliminar este anuncio publicitario?')) return;
+    try {
+      await window.BulaPayDB.deleteAnnouncement(adId);
+      await this.loadAdsList();
+    } catch(e) {
+      console.error("Error eliminando anuncio:", e);
+    }
   }
 };
 

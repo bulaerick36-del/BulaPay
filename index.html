@@ -299,11 +299,11 @@
       <!-- Secciones de Portales -->
       <div class="drawer-menu-list">
         <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Navegación de Portales</div>
-        <a href="#auth" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'supervisor'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">👔 Portal Supervisor</a>
-        <a href="#auth" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'independent'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">💼 Agente Independiente</a>
-        <a href="#agent-login" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'route'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">📱 Portal de Agentes de Ruta</a>
-        <a href="#customer" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'client'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">💳 Portal Cliente</a>
-        <a href="#auth" class="drawer-menu-item" onclick="localStorage.setItem('bulaRole', 'commerce'); document.getElementById('drawer-main-menu').classList.remove('active'); window.dispatchEvent(new HashChangeEvent('hashchange'));">🏪 Otro Comercio o Tienda</a>
+        <a href="#auth" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'supervisor', '#auth')">👔 Portal Supervisor</a>
+        <a href="#auth" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'independent', '#auth')">💼 Agente Independiente</a>
+        <a href="#agent-login" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'route', '#agent-login')">📱 Portal de Agentes de Ruta</a>
+        <a href="#customer" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'client', '#customer')">💳 Portal Cliente</a>
+        <a href="#auth" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'commerce', '#auth')">🏪 Otro Comercio o Tienda</a>
       </div>
 
       <!-- Sección Exclusiva: Administración Master (Incrustada en el Drawer) -->
@@ -1501,6 +1501,7 @@
           <button class="superadmin-tab active" data-tab="users" onclick="superadminModule.switchTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--color-verde); font-weight: 600; cursor: pointer; border-bottom: 3px solid var(--color-verde);">👥 1. Usuarios y Clientes</button>
           <button class="superadmin-tab" data-tab="contracts" onclick="superadminModule.switchTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📜 2. Contratos y Términos</button>
           <button class="superadmin-tab" data-tab="performance" onclick="superadminModule.switchTab('performance', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📊 3. Recurso Movido &amp; Gráficas</button>
+          <button class="superadmin-tab" data-tab="ads" onclick="superadminModule.switchTab('ads', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: var(--text-secondary); font-weight: 600; cursor: pointer;">📢 6. Anuncios y Publicidad</button>
         </div>
 
         <!-- Contenido Dinámico de la Pestaña Activa -->
@@ -1848,7 +1849,7 @@
     <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <p>&copy; 2026 BulaPay. Todos los derechos reservados. SaaS de Gestión de Cartera y Logística.</p>
       <div style="display: flex; gap: 1rem;">
-        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v325)</span>
+        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v326)</span>
         <a href="#" style="color: var(--accent); text-decoration: none;" id="btn-install-pwa" style="display: none;">Instalar App</a>
       </div>
     </div>
@@ -1858,14 +1859,15 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=317"></script>
-  <script src="js/auth.js?v=317"></script>
-  <script src="js/supervisor.js?v=317"></script>
-  <script src="js/agent_v6.js?v=317"></script>
-  <script src="js/customer.js?v=317"></script>
-  <script src="js/superadmin.js?v=317"></script>
+  <script src="js/db.js?v=326"></script>
+  <script src="js/ads.js?v=326"></script>
+  <script src="js/auth.js?v=326"></script>
+  <script src="js/supervisor.js?v=326"></script>
+  <script src="js/agent_v6.js?v=326"></script>
+  <script src="js/customer.js?v=326"></script>
+  <script src="js/superadmin.js?v=326"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=317"></script>
+  <script src="js/app.js?v=326"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2725,7 +2727,49 @@
       }
     })();
   </script>
+  <!-- MODAL FLOTANTE INTERCEPTOR DE ANUNCIOS Y PUBLICIDAD (bulapay-v326) -->
+  <div id="pwa-ad-modal" class="pwa-ad-modal-overlay">
+    <div class="pwa-ad-modal-card">
+      <div class="pwa-ad-modal-header">
+        <span id="pwa-ad-badge" class="pwa-ad-badge">📢 <span id="pwa-ad-category">Comercial</span></span>
+        <button type="button" onclick="adsModule.closeAdModal()" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+      <div class="pwa-ad-modal-body">
+        <div id="pwa-ad-media-container" class="pwa-ad-media-box" style="display: none;">
+          <img id="pwa-ad-image" src="" alt="Anuncio Publicitario">
+        </div>
+        <p id="pwa-ad-desc" class="pwa-ad-description">Anuncio Publicitario BulaPay</p>
+      </div>
+      <div class="pwa-ad-modal-footer">
+        <button type="button" class="btn btn-primary" onclick="adsModule.closeAdModal()" style="padding: 0.65rem 1.5rem; font-weight: 700; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; border-radius: 10px; cursor: pointer;">
+          Continuar ➔
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    // Manejador global de navegación entre portales/roles interceptada por anuncios
+    window.handleRoleNavigation = function(event, role, hashTarget) {
+      if (event) event.preventDefault();
+      const drawer = document.getElementById('drawer-main-menu');
+      if (drawer) drawer.classList.remove('active');
+
+      const doNavigate = () => {
+        localStorage.setItem('bulaRole', role);
+        if (hashTarget) {
+          window.location.hash = hashTarget;
+        }
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      };
+
+      if (window.adsModule && typeof window.adsModule.checkAndShowAd === 'function') {
+        window.adsModule.checkAndShowAd('navigation', doNavigate);
+      } else {
+        doNavigate();
+      }
+    };
+
     document.addEventListener("DOMContentLoaded", () => {
         const eliminarBotonesSobrantes = () => {
             const botones = document.querySelectorAll('button, a, .btn');
@@ -2734,8 +2778,7 @@
                 if (
                     texto.includes("Probador DOM") || 
                     texto.includes("Exportar Contratos PDF") || 
-                    texto.includes("Correo Soporte") || 
-                    texto.includes("Comunicado")
+                    texto.includes("Correo Soporte")
                 ) {
                     el.remove();
                 }
