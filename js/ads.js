@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v335)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v336)
 
 const adsModule = {
   isShowing: false,
@@ -112,7 +112,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v335] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v336] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       const now = new Date();
       const currentHours = String(now.getHours()).padStart(2, '0');
@@ -212,7 +212,7 @@ const adsModule = {
         }));
       } catch(e) {}
 
-      console.log(`🎯 [BulaPay Anuncios bulapay-v335] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
+      console.log(`🎯 [BulaPay Anuncios bulapay-v336] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
@@ -245,7 +245,7 @@ const adsModule = {
         document.body.appendChild(modal);
       }
 
-      console.log("🚀 [BulaPay Anuncios bulapay-v335] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
+      console.log("🚀 [BulaPay Anuncios bulapay-v336] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
@@ -305,7 +305,7 @@ const adsModule = {
         if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'block';
           if (isVideo) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v335] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
+            console.log("🎬 [BulaPay Anuncios bulapay-v336] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -331,7 +331,7 @@ const adsModule = {
                     continueBtn.style.pointerEvents = 'auto';
                     continueBtn.style.cursor = 'pointer';
                     continueBtn.innerHTML = 'Continuar ➔';
-                    console.log("✅ [BulaPay Anuncios bulapay-v335] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
+                    console.log("✅ [BulaPay Anuncios bulapay-v336] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
                   }
                 };
 
@@ -356,7 +356,7 @@ const adsModule = {
             }, 100);
 
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v335] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [BulaPay Anuncios bulapay-v336] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
@@ -388,7 +388,7 @@ const adsModule = {
       modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
-      console.log("✅ [BulaPay Anuncios bulapay-v335] Modal publicitario visible en pantalla.");
+      console.log("✅ [BulaPay Anuncios bulapay-v336] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);

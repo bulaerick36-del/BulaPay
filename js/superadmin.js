@@ -1783,7 +1783,7 @@ const superadminModule = {
     }, 4000);
   },
 
-  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v326)
+  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v336)
   async renderAdsTab(container) {
     if (!container) return;
 
@@ -1794,18 +1794,66 @@ const superadminModule = {
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h3 style="color: #fbbf24; margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 0.5rem;">
-              <span>📢</span> Gestión de Anuncios y Publicidad
+              <span>📢</span> Gestión de Anuncios, Comunicados y Publicidad
             </h3>
             <p style="color: #94a3b8; font-size: 0.85rem; margin: 0.25rem 0 0 0;">
-              Crea comunicados y banners publicitarios con detonantes específicos por fecha y eventos en la PWA.
+              Crea comunicados gerenciales para la campanita de notificaciones PWA y publica banners/videos de anuncios.
             </p>
           </div>
         </div>
 
+        <!-- REQUISITO 2: SECCIÓN Y ESPACIO PROPIO PARA CREAR Y GESTIONAR COMUNICADOS GERENCIALES -->
+        <div class="ad-form-card" style="margin-bottom: 2rem; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px; padding: 1.25rem;">
+          <h4 style="color: #38bdf8; margin-top: 0; margin-bottom: 1rem; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+            <span>📣</span> Crear Comunicado Gerencial (Sistema de Notificaciones / Campanita PWA)
+          </h4>
+          <form id="form-create-notif" onsubmit="superadminModule.handleCreateNotificacion(event)">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+              <div>
+                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                  📌 Título del Comunicado:
+                </label>
+                <input type="text" id="notif-title" placeholder="Ej: Aviso Importante de Mantenimiento..." style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none;" required>
+              </div>
+              <div>
+                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                  🏷️ Categoría:
+                </label>
+                <select id="notif-category" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 600; outline: none;">
+                  <option value="Institucional">🏛️ Institucional</option>
+                  <option value="Aviso Gerencial">📣 Aviso Gerencial</option>
+                  <option value="Urgente">🚨 Urgente</option>
+                  <option value="Informativo">💡 Informativo</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                📝 Contenido del Mensaje o Alerta Gerencial:
+              </label>
+              <textarea id="notif-message" rows="3" placeholder="Escribe la notificación o aviso gerencial que recibirán los usuarios en la campanita de la PWA..." style="width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-family: inherit; font-size: 0.88rem; outline: none; resize: vertical;" required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.3rem; font-weight: 700; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; color: #ffffff; cursor: pointer; border-radius: 8px; font-size: 0.88rem;">
+              📢 Publicar Comunicado Gerencial
+            </button>
+          </form>
+
+          <div style="margin-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+            <h5 style="color: #93c5fd; margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; font-weight: 700;">
+              📜 Comunicados Gerenciales Emitidos
+            </h5>
+            <div id="sa-notifs-list-container">
+              <p style="color: #94a3b8; font-size: 0.85rem;">Cargando comunicados...</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Formulario de Creación de Anuncios -->
-        <div class="ad-form-card">
+        <div class="ad-form-card" style="margin-bottom: 2rem;">
           <h4 style="color: #34d399; margin-top: 0; margin-bottom: 1rem; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
-            <span>➕</span> Crear Nuevo Anuncio Publicitario
+            <span>➕</span> Crear Nuevo Anuncio Publicitario (Banner / Video)
           </h4>
           <form id="form-create-ad" onsubmit="superadminModule.handleCreateAd(event)">
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
@@ -1914,6 +1962,7 @@ const superadminModule = {
       </div>
     `;
 
+    await this.loadNotificacionesList();
     await this.loadAdsList();
   },
 
@@ -2077,9 +2126,85 @@ const superadminModule = {
       alert('✅ ¡Comunicado gerencial enviado y publicado exitosamente en Supabase!');
       const form = document.getElementById('form-create-notif');
       if (form) form.reset();
+      await this.loadNotificacionesList();
     } catch(e) {
       console.error("Error al enviar comunicado:", e);
       alert('❌ Hubo un error al enviar el comunicado.');
+    }
+  },
+
+  async loadNotificacionesList() {
+    const container = document.getElementById('sa-notifs-list-container');
+    if (!container) return;
+
+    try {
+      const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
+        ? await window.BulaPayDB.getNotificaciones()
+        : [];
+
+      if (!notifs || notifs.length === 0) {
+        container.innerHTML = `
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(255,255,255,0.15); border-radius: 12px; padding: 1.5rem; text-align: center; color: #94a3b8;">
+            <span style="font-size: 1.8rem;">📭</span>
+            <p style="margin-top: 0.5rem; font-weight: 600; font-size: 0.85rem;">No hay comunicados gerenciales registrados.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+      notifs.forEach(n => {
+        const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const cat = n.categoria || 'Institucional';
+        let badgeColor = 'rgba(59, 130, 246, 0.2)';
+        let textColor = '#60a5fa';
+        if (cat.includes('Urgente') || cat.includes('Gerencial')) {
+          badgeColor = 'rgba(245, 158, 11, 0.2)';
+          textColor = '#fbbf24';
+        } else if (cat.includes('Institucional')) {
+          badgeColor = 'rgba(16, 185, 129, 0.2)';
+          textColor = '#34d399';
+        }
+
+        html += `
+          <div style="background: #0f172a; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 240px;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
+                <span style="background: ${badgeColor}; color: ${textColor}; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 6px; text-transform: uppercase;">
+                  ${cat}
+                </span>
+                <span style="font-size: 0.75rem; color: #94a3b8;">${dateStr}</span>
+              </div>
+              <h5 style="color: #ffffff; margin: 0 0 0.3rem 0; font-size: 0.92rem; font-weight: 700;">
+                ${n.titulo || n.title || 'Comunicado Gerencial'}
+              </h5>
+              <p style="color: #cbd5e1; font-size: 0.83rem; line-height: 1.4; margin: 0; white-space: pre-line;">
+                ${n.mensaje || n.message || ''}
+              </p>
+            </div>
+            <button onclick="superadminModule.deleteNotificacion('${n.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; cursor: pointer; white-space: nowrap;">
+              🗑️ Eliminar
+            </button>
+          </div>
+        `;
+      });
+      html += '</div>';
+      container.innerHTML = html;
+    } catch(e) {
+      console.warn("Error cargando lista de comunicados:", e);
+      container.innerHTML = `<p style="color: #94a3b8; font-size: 0.85rem;">No fue posible cargar los comunicados.</p>`;
+    }
+  },
+
+  async deleteNotificacion(notifId) {
+    if (!confirm('¿Estás seguro de eliminar este comunicado gerencial?')) return;
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.deleteNotificacion === 'function') {
+        await window.BulaPayDB.deleteNotificacion(notifId);
+      }
+      await this.loadNotificacionesList();
+    } catch(e) {
+      console.error("Error eliminando comunicado:", e);
     }
   },
 
@@ -2088,7 +2213,13 @@ const superadminModule = {
     if (!listContainer) return;
 
     try {
-      const ads = await window.BulaPayDB.getAnnouncements();
+      let ads = [];
+      try {
+        ads = await window.BulaPayDB.getAnnouncements();
+      } catch(errAds) {
+        console.warn("Excepción silenciosa al cargar anuncios en superadmin:", errAds);
+        ads = [];
+      }
 
       if (!ads || ads.length === 0) {
         listContainer.innerHTML = `
@@ -2187,8 +2318,13 @@ const superadminModule = {
       html += '</div>';
       listContainer.innerHTML = html;
     } catch(err) {
-      console.error("Error al cargar la lista de anuncios:", err);
-      listContainer.innerHTML = `<p style="color: #ef4444; font-size: 0.85rem;">Error al cargar anuncios.</p>`;
+      console.warn("Error al cargar la lista de anuncios (fallback silencioso):", err);
+      listContainer.innerHTML = `
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(255,255,255,0.15); border-radius: 12px; padding: 2rem; text-align: center; color: #94a3b8;">
+          <span style="font-size: 2rem;">📭</span>
+          <p style="margin-top: 0.5rem; font-weight: 600;">No hay anuncios registrados actualmente.</p>
+        </div>
+      `;
     }
   },
 
