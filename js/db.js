@@ -3682,37 +3682,7 @@ const db = {
     return { success: true, message: 'Contraseña actualizada correctamente.' };
   },
 
-  // Módulo de Anuncios y Publicidad (bulapay-v327 - Tabla unificada bulapay_anuncios / anuncios)
-  async _getWorkingAdsTable(supabase) {
-    if (window._active_ads_table) return window._active_ads_table;
-    if (window._supabase_ads_disabled) return null;
-    
-    try {
-      // 1. Probar 'bulapay_anuncios' (Tabla principal BulaPay v327)
-      let res1 = await supabase.from('bulapay_anuncios').select('id').limit(1);
-      if (!res1.error) {
-        window._active_ads_table = 'bulapay_anuncios';
-        return 'bulapay_anuncios';
-      }
-
-      // 2. Si falló por falta de tabla (404 / 42P01), probar 'anuncios'
-      if (res1.error && (res1.error.status === 404 || res1.error.code === '42P01' || (res1.error.message && res1.error.message.includes('not exist')))) {
-        let res2 = await supabase.from('anuncios').select('id').limit(1);
-        if (!res2.error) {
-          window._active_ads_table = 'anuncios';
-          return 'anuncios';
-        }
-      }
-
-      // Si ninguna tabla remota responde, desactivar peticiones remotas para evitar errores 404 en consola
-      window._supabase_ads_disabled = true;
-      return null;
-    } catch(e) {
-      window._supabase_ads_disabled = true;
-      return null;
-    }
-  },
-
+  // Módulo de Anuncios y Publicidad (bulapay-v327 - Almacenamiento Local y Sincronización Segura)
   async saveAnnouncement(adData) {
     if (!adData.id) {
       adData.id = 'ad_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -3734,18 +3704,25 @@ const db = {
       created_at: adData.created_at
     };
 
+    // Guardar inmediatamente en localStorage
+    this._saveAnnouncementLocal(adData);
+
+    // Intentar sincronización con Supabase solo si no está deshabilitado
     if (!window._supabase_ads_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const tableName = await this._getWorkingAdsTable(supabase);
-          if (tableName) {
-            const { data, error } = await supabase.from(tableName).insert([payload]).select();
-            if (!error && data && data.length > 0) {
-              console.log(`✅ Anuncio guardado en Supabase (${tableName}):`, data[0]);
-              this._saveAnnouncementLocal(adData);
-              return data[0];
-            } else if (error) {
+          const targetTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table') || 'bulapay_anuncios';
+          const { data, error } = await supabase.from(targetTable).insert([payload]).select();
+          
+          if (!error && data && data.length > 0) {
+            window._active_ads_table = targetTable;
+            try { localStorage.setItem('bula_active_ads_table', targetTable); } catch(e) {}
+            console.log(`✅ Anuncio guardado en Supabase (${targetTable}):`, data[0]);
+            return data[0];
+          } else if (error) {
+            // Si la tabla no existe o da error 404/42P01, silenciar intentos remotos futuros
+            if (error.status === 404 || error.code === '42P01' || (error.message && error.message.includes('not exist'))) {
               window._supabase_ads_disabled = true;
             }
           }
@@ -3755,7 +3732,6 @@ const db = {
       }
     }
 
-    this._saveAnnouncementLocal(adData);
     return adData;
   },
 
@@ -3797,50 +3773,49 @@ const db = {
   },
 
   async getAnnouncements() {
+    let localAds = [];
+    try {
+      const raw = localStorage.getItem('bula_announcements');
+      if (raw) localAds = JSON.parse(raw);
+    } catch(e) {}
+
     let supabaseAds = [];
 
-    if (!window._supabase_ads_disabled) {
+    // Solo consultar Supabase si ya hay una tabla verificada existente en la BD remota
+    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table');
+    if (verifiedTable && !window._supabase_ads_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const tableName = await this._getWorkingAdsTable(supabase);
-          if (tableName) {
-            const { data, error } = await supabase.from(tableName).select('*');
-            if (!error && Array.isArray(data)) {
-              supabaseAds = data.map(item => ({
-                id: String(item.id),
-                category: item.categoria || item.category || 'Comercial',
-                categoria: item.categoria || item.category || 'Comercial',
-                start_date: item.fecha_inicio || item.start_date || '',
-                fecha_inicio: item.fecha_inicio || item.start_date || '',
-                end_date: item.fecha_fin || item.end_date || '',
-                fecha_fin: item.fecha_fin || item.end_date || '',
-                trigger_navigation: item.detonante_general ?? item.trigger_navigation ?? false,
-                detonante_general: item.detonante_general ?? item.trigger_navigation ?? false,
-                trigger_client_search: item.detonante_cliente ?? item.trigger_client_search ?? false,
-                detonante_cliente: item.detonante_cliente ?? item.trigger_client_search ?? false,
-                title_description: item.descripcion || item.title_description || '',
-                descripcion: item.descripcion || item.title_description || '',
-                media_url: item.multimedia_url || item.media_url || '',
-                multimedia_url: item.multimedia_url || item.media_url || '',
-                active: item.active !== false && item.active !== 'false',
-                created_at: item.created_at || new Date().toISOString()
-              }));
-            } else if (error) {
-              window._supabase_ads_disabled = true;
-            }
+          const { data, error } = await supabase.from(verifiedTable).select('*');
+          if (!error && Array.isArray(data)) {
+            supabaseAds = data.map(item => ({
+              id: String(item.id),
+              category: item.categoria || item.category || 'Comercial',
+              categoria: item.categoria || item.category || 'Comercial',
+              start_date: item.fecha_inicio || item.start_date || '',
+              fecha_inicio: item.fecha_inicio || item.start_date || '',
+              end_date: item.fecha_fin || item.end_date || '',
+              fecha_fin: item.fecha_fin || item.end_date || '',
+              trigger_navigation: item.detonante_general ?? item.trigger_navigation ?? false,
+              detonante_general: item.detonante_general ?? item.trigger_navigation ?? false,
+              trigger_client_search: item.detonante_cliente ?? item.trigger_client_search ?? false,
+              detonante_cliente: item.detonante_cliente ?? item.trigger_client_search ?? false,
+              title_description: item.descripcion || item.title_description || '',
+              descripcion: item.descripcion || item.title_description || '',
+              media_url: item.multimedia_url || item.media_url || '',
+              multimedia_url: item.multimedia_url || item.media_url || '',
+              active: item.active !== false && item.active !== 'false',
+              created_at: item.created_at || new Date().toISOString()
+            }));
+          } else if (error) {
+            window._supabase_ads_disabled = true;
           }
         }
       } catch(e) {
         window._supabase_ads_disabled = true;
       }
     }
-
-    let localAds = [];
-    try {
-      const raw = localStorage.getItem('bula_announcements');
-      if (raw) localAds = JSON.parse(raw);
-    } catch(e) {}
 
     const adsMap = new Map();
     supabaseAds.forEach(a => { if (a && a.id) adsMap.set(a.id, a); });
@@ -3872,6 +3847,7 @@ const db = {
         created_at: new Date().toISOString()
       };
       allAds = [sampleAd];
+      this._saveAnnouncementLocal(sampleAd);
     }
 
     allAds.sort((a, b) => {
@@ -3885,14 +3861,12 @@ const db = {
   },
 
   async toggleAnnouncementStatus(adId, active) {
-    if (!window._supabase_ads_disabled) {
+    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table');
+    if (verifiedTable && !window._supabase_ads_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const tableName = await this._getWorkingAdsTable(supabase);
-          if (tableName) {
-            await supabase.from(tableName).update({ active: active }).eq('id', adId);
-          }
+          await supabase.from(verifiedTable).update({ active: active }).eq('id', adId);
         }
       } catch(e) {}
     }
@@ -3911,14 +3885,12 @@ const db = {
   },
 
   async deleteAnnouncement(adId) {
-    if (!window._supabase_ads_disabled) {
+    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table');
+    if (verifiedTable && !window._supabase_ads_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const tableName = await this._getWorkingAdsTable(supabase);
-          if (tableName) {
-            await supabase.from(tableName).delete().eq('id', adId);
-          }
+          await supabase.from(verifiedTable).delete().eq('id', adId);
         }
       } catch(e) {}
     }
