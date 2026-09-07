@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v332)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v333)
 
 const adsModule = {
   isShowing: false,
@@ -46,6 +46,24 @@ const adsModule = {
     }
   },
 
+  // Helper para detectar si la URL o base64 corresponde a un video
+  isVideoUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    const cleanUrl = url.trim().toLowerCase();
+    
+    // 1. Data URI de video
+    if (cleanUrl.startsWith('data:video/')) return true;
+
+    // 2. Extensiones de archivo de video conocidas
+    const videoExtensions = ['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg', '.3gp', '.mkv'];
+    if (videoExtensions.some(ext => cleanUrl.includes(ext))) return true;
+
+    // 3. Tipos MIME o parametros URL
+    if (cleanUrl.includes('video/') || cleanUrl.includes('type=video') || cleanUrl.includes('format=mp4')) return true;
+
+    return false;
+  },
+
   // Método principal para evaluar e interceptar navegación o acciones del usuario
   async checkAndShowAd(triggerType, onCompleteCallback) {
     let callbackExecuted = false;
@@ -70,7 +88,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v332] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v333] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       // Filtrar anuncios activos y que coincidan con el detonante
       const matchingAds = (allAds || []).filter((ad, idx) => {
@@ -112,7 +130,7 @@ const adsModule = {
         return;
       }
 
-      // Ordenar anuncios por fecha de creación descendente (el más reciente primero)
+      // Ordenar anuncios por fecha de creación descendente
       matchingAds.sort((a, b) => {
         const timeA = new Date(a.created_at || a.fecha_inicio || a.start_date || 0).getTime();
         const timeB = new Date(b.created_at || b.fecha_inicio || b.start_date || 0).getTime();
@@ -120,9 +138,51 @@ const adsModule = {
         return String(b.id || '').localeCompare(String(a.id || ''));
       });
 
-      // Seleccionar SIEMPRE el anuncio más reciente (el primero del arreglo ordenado)
-      const selectedAd = matchingAds[0];
-      console.log(`🎯 [BulaPay Anuncios bulapay-v332] ¡Anuncio más reciente seleccionado para desplegar en pantalla!`, selectedAd);
+      // LÓGICA DE ROTACIÓN SECUENCIAL Y ALTERNANCIA (IMAGEN / VIDEO) SIN REPETICIÓN
+      const videoAds = matchingAds.filter(a => this.isVideoUrl(a.multimedia_url || a.media_url));
+      const imageAds = matchingAds.filter(a => !this.isVideoUrl(a.multimedia_url || a.media_url));
+
+      let lastInfo = {};
+      try {
+        const rawLast = localStorage.getItem('bula_last_ad_info');
+        if (rawLast) lastInfo = JSON.parse(rawLast);
+      } catch(e) {}
+
+      const lastType = lastInfo.type; // 'video' | 'image'
+      const lastId = lastInfo.id;
+      const lastIndex = parseInt(lastInfo.index ?? -1, 10);
+
+      let selectedAd = null;
+
+      // Alternancia estricta: si el último fue imagen, busca video; si fue video, busca imagen
+      if (lastType === 'image' && videoAds.length > 0) {
+        selectedAd = videoAds.find(a => a.id !== lastId) || videoAds[0];
+      } else if (lastType === 'video' && imageAds.length > 0) {
+        selectedAd = imageAds.find(a => a.id !== lastId) || imageAds[0];
+      }
+
+      // Si no fue posible alternar de tipo, rotar por cola secuencial evitando repetición consecutiva de ID
+      if (!selectedAd) {
+        let nextIndex = (lastIndex + 1) % matchingAds.length;
+        if (matchingAds.length > 1 && matchingAds[nextIndex].id === lastId) {
+          nextIndex = (nextIndex + 1) % matchingAds.length;
+        }
+        selectedAd = matchingAds[nextIndex];
+      }
+
+      // Guardar el anuncio seleccionado para la próxima rotación
+      const isSelectedVid = this.isVideoUrl(selectedAd.multimedia_url || selectedAd.media_url);
+      const newIndex = matchingAds.findIndex(a => a.id === selectedAd.id);
+      try {
+        localStorage.setItem('bula_last_ad_info', JSON.stringify({
+          id: selectedAd.id,
+          type: isSelectedVid ? 'video' : 'image',
+          index: newIndex >= 0 ? newIndex : 0,
+          timestamp: Date.now()
+        }));
+      } catch(e) {}
+
+      console.log(`🎯 [BulaPay Anuncios bulapay-v333] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
@@ -130,24 +190,6 @@ const adsModule = {
       console.error("❌ Excepción en verificación de anuncios:", e);
       safeCallback();
     }
-  },
-
-  // Helper para detectar si la URL o base64 corresponde a un video
-  isVideoUrl(url) {
-    if (!url || typeof url !== 'string') return false;
-    const cleanUrl = url.trim().toLowerCase();
-    
-    // 1. Data URI de video
-    if (cleanUrl.startsWith('data:video/')) return true;
-
-    // 2. Extensiones de archivo de video conocidas
-    const videoExtensions = ['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg', '.3gp', '.mkv'];
-    if (videoExtensions.some(ext => cleanUrl.includes(ext))) return true;
-
-    // 3. Tipos MIME o parametros URL
-    if (cleanUrl.includes('video/') || cleanUrl.includes('type=video') || cleanUrl.includes('format=mp4')) return true;
-
-    return false;
   },
 
   displayAdModal(ad, callback) {
@@ -167,12 +209,13 @@ const adsModule = {
         document.body.appendChild(modal);
       }
 
-      console.log("🚀 [BulaPay Anuncios bulapay-v332] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
+      console.log("🚀 [BulaPay Anuncios bulapay-v333] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
       const descEl = document.getElementById('pwa-ad-desc');
       const mediaContainer = document.getElementById('pwa-ad-media-container');
+      const continueBtn = document.getElementById('pwa-ad-btn-continue');
 
       // Categoría badge
       const cat = (ad && (ad.categoria || ad.category)) || 'Comercial';
@@ -194,12 +237,29 @@ const adsModule = {
 
       // Multimedia: renderizado dinámico de <video> o <img>
       const mediaUrl = (ad && (ad.multimedia_url || ad.media_url)) || '';
+      const isVideo = mediaUrl && typeof mediaUrl === 'string' && this.isVideoUrl(mediaUrl);
+
+      // BLOQUEO INICIAL DEL BOTÓN CONTINUAR EN VIDEOS
+      if (isVideo && continueBtn) {
+        continueBtn.disabled = true;
+        continueBtn.style.opacity = '0.5';
+        continueBtn.style.pointerEvents = 'none';
+        continueBtn.style.cursor = 'not-allowed';
+        continueBtn.innerHTML = '⏳ Viendo Video... ➔';
+      } else if (continueBtn) {
+        continueBtn.disabled = false;
+        continueBtn.style.opacity = '1';
+        continueBtn.style.pointerEvents = 'auto';
+        continueBtn.style.cursor = 'pointer';
+        continueBtn.innerHTML = 'Continuar ➔';
+      }
+
       if (mediaContainer) {
         const cleanMediaUrl = typeof mediaUrl === 'string' ? mediaUrl.trim() : '';
         if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'block';
-          if (this.isVideoUrl(cleanMediaUrl)) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v332] Detectado archivo de video. Renderizando <video>:", cleanMediaUrl.substring(0, 60));
+          if (isVideo) {
+            console.log("🎬 [BulaPay Anuncios bulapay-v333] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -207,15 +267,50 @@ const adsModule = {
                 controls 
                 autoplay 
                 muted 
-                loop 
                 playsinline 
                 style="width: 100%; height: 100%; max-height: 80vh; object-fit: contain; border: none; background: transparent; display: block;">
                 <source src="${cleanMediaUrl}">
                 Tu navegador no soporta la reproducción de video.
               </video>
             `;
+
+            // Escuchar finalización del video (100% de reproducción) para desbloquear botón "Continuar"
+            setTimeout(() => {
+              const videoEl = document.getElementById('pwa-ad-video');
+              if (videoEl) {
+                const unlockContinueBtn = () => {
+                  if (continueBtn) {
+                    continueBtn.disabled = false;
+                    continueBtn.style.opacity = '1';
+                    continueBtn.style.pointerEvents = 'auto';
+                    continueBtn.style.cursor = 'pointer';
+                    continueBtn.innerHTML = 'Continuar ➔';
+                    console.log("✅ [BulaPay Anuncios bulapay-v333] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
+                  }
+                };
+
+                // 1. Evento ended al llegar al 100%
+                videoEl.addEventListener('ended', unlockContinueBtn);
+
+                // 2. Evento timeupdate para restringir máximo a 60 segundos
+                videoEl.addEventListener('timeupdate', () => {
+                  if (videoEl.currentTime >= 60) {
+                    videoEl.pause();
+                    unlockContinueBtn();
+                  }
+                });
+
+                // Fallback de seguridad en 60s
+                setTimeout(() => {
+                  if (continueBtn && continueBtn.disabled) {
+                    unlockContinueBtn();
+                  }
+                }, 60000);
+              }
+            }, 100);
+
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v332] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [BulaPay Anuncios bulapay-v333] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
@@ -243,7 +338,7 @@ const adsModule = {
       modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
-      console.log("✅ [BulaPay Anuncios bulapay-v332] Modal publicitario visible en pantalla.");
+      console.log("✅ [BulaPay Anuncios bulapay-v333] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);

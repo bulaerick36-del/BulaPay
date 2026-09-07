@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v332';
+const CACHE_NAME = 'bulapay-v333';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=332',
-  './js/db.js?v=332',
-  './js/ads.js?v=332',
-  './js/auth.js?v=332',
-  './js/supervisor.js?v=332',
-  './js/agent_v6.js?v=332',
-  './js/customer.js?v=332',
-  './js/superadmin.js?v=332',
-  './js/app.js?v=332',
+  './css/style.css?v=333',
+  './js/db.js?v=333',
+  './js/ads.js?v=333',
+  './js/auth.js?v=333',
+  './js/supervisor.js?v=333',
+  './js/agent_v6.js?v=333',
+  './js/customer.js?v=333',
+  './js/superadmin.js?v=333',
+  './js/app.js?v=333',
   './assets/logo.svg'
 ];
 
@@ -20,26 +20,26 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v332');
+      console.log('[Service Worker] Caching app shell bulapay-v333');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, etc.)
+// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, etc.)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v332] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v333] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v332] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v333] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );

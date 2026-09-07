@@ -1903,29 +1903,73 @@ const superadminModule = {
 
   handleAdImageSelect(event) {
     const file = event.target.files[0];
+    const fileInput = event.target;
     const previewContainer = document.getElementById('ad-image-preview-container');
     const previewMediaBox = document.getElementById('ad-preview-media-box');
     const base64Input = document.getElementById('ad-media-url-base64');
 
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        if (base64Input) base64Input.value = e.target.result;
-        if (previewMediaBox) {
-          const res = e.target.result || '';
-          const isVideo = file.type.startsWith('video/') || res.startsWith('data:video/') || ['.mp4', '.webm', '.mov'].some(ext => file.name.toLowerCase().endsWith(ext));
-          if (isVideo) {
-            previewMediaBox.innerHTML = `<video src="${res}" controls muted style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;"></video>`;
-          } else {
-            previewMediaBox.innerHTML = `<img id="ad-image-preview" src="${res}" style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;">`;
-          }
-        }
-        if (previewContainer) previewContainer.style.display = 'block';
-      };
-      reader.readAsDataURL(file);
-    } else {
+    const resetSelection = () => {
+      if (fileInput) fileInput.value = '';
       if (base64Input) base64Input.value = '';
       if (previewContainer) previewContainer.style.display = 'none';
+      if (previewMediaBox) previewMediaBox.innerHTML = '';
+    };
+
+    if (file) {
+      const isVideo = file.type.startsWith('video/') || ['.mp4', '.webm', '.mov', '.m4v', '.ogv'].some(ext => file.name.toLowerCase().endsWith(ext));
+
+      if (isVideo) {
+        // Validar duración máxima de 60 segundos (1 minuto)
+        const tempVideo = document.createElement('video');
+        tempVideo.preload = 'metadata';
+        tempVideo.src = URL.createObjectURL(file);
+
+        tempVideo.onloadedmetadata = function() {
+          URL.revokeObjectURL(tempVideo.src);
+          const durationSecs = tempVideo.duration;
+
+          if (durationSecs && durationSecs > 60) {
+            alert(`⚠️ El video seleccionado dura ${Math.round(durationSecs)} segundos. La duración máxima permitida para anuncios de video es de 60 segundos (1 minuto). Por favor selecciona un video más corto.`);
+            resetSelection();
+            return;
+          }
+
+          // Si es <= 60s, procesar FileReader
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            if (base64Input) base64Input.value = e.target.result;
+            if (previewMediaBox) {
+              previewMediaBox.innerHTML = `<video src="${e.target.result}" controls muted style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;"></video>`;
+            }
+            if (previewContainer) previewContainer.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        };
+
+        tempVideo.onerror = function() {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            if (base64Input) base64Input.value = e.target.result;
+            if (previewMediaBox) {
+              previewMediaBox.innerHTML = `<video src="${e.target.result}" controls muted style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;"></video>`;
+            }
+            if (previewContainer) previewContainer.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        };
+      } else {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          if (base64Input) base64Input.value = e.target.result;
+          if (previewMediaBox) {
+            previewMediaBox.innerHTML = `<img id="ad-image-preview" src="${e.target.result}" style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;">`;
+          }
+          if (previewContainer) previewContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    } else {
+      resetSelection();
     }
   },
 

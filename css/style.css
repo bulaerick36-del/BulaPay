@@ -2450,7 +2450,7 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
 }
 
-/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v332) */
+/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v333) */
 .pwa-ad-modal-overlay {
   position: fixed;
   inset: 0;
