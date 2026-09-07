@@ -651,9 +651,9 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers y anuncios demo obsoletos v327 (bulapay-v334)
+// Purga automática de Service Workers y anuncios demo obsoletos (bulapay-v332)
 window.forcePurgeAndRegisterServiceWorker = async function() {
-  // Purga inmediata de anuncios demo v327 de localStorage en dispositivos móviles
+  // Purga inmediata de anuncios demo obsoletos de localStorage en dispositivos móviles
   try {
     const rawAds = localStorage.getItem('bula_announcements');
     if (rawAds) {
@@ -661,7 +661,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
       if (Array.isArray(parsedAds)) {
         const cleanedAds = parsedAds.filter(a => a && a.id !== 'ad_demo_initial' && !String(a.descripcion || '').includes('v327'));
         if (cleanedAds.length !== parsedAds.length) {
-          console.log('🧹 [PWA Purga] Anuncio demo v327 purgado de localStorage en móvil');
+          console.log('🧹 [PWA Purga] Anuncio demo obsoleto purgado de localStorage en móvil');
           if (cleanedAds.length > 0) {
             localStorage.setItem('bula_announcements', JSON.stringify(cleanedAds));
           } else {
@@ -675,12 +675,12 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // 1. Desinscribir de inmediato cualquier Service Worker antiguo que no contenga v334
+    // 1. Desinscribir de inmediato cualquier Service Worker antiguo que no contenga v332
     const registrations = await navigator.serviceWorker.getRegistrations();
     if (registrations && registrations.length > 0) {
       for (const registration of registrations) {
         const scriptUrl = (registration.active || registration.installing || registration.waiting)?.scriptURL || '';
-        if (!scriptUrl.includes('v=334')) {
+        if (!scriptUrl.includes('v=332')) {
           const unregistered = await registration.unregister();
           if (unregistered) {
             console.log('🧹 [PWA Purga] SW antiguo desregistrado:', registration.scope);
@@ -696,7 +696,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     if ('caches' in window) {
       const cacheKeys = await caches.keys();
       for (const key of cacheKeys) {
-        if (key !== 'bulapay-v334') {
+        if (key !== 'bulapay-v332') {
           await caches.delete(key);
           console.log('🧹 [PWA Purga] Caché obsoleta eliminada:', key);
           if (window.bulaMobileDebugLog) {
@@ -706,18 +706,18 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
       }
     }
 
-    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico (v334)
-    const swUrl = './sw.js?v=334&t=' + Date.now();
+    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico (v332)
+    const swUrl = './sw.js?v=332&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker bulapay-v334 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker bulapay-v332 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW bulapay-v334 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW bulapay-v332 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (bulapay-v334)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (bulapay-v332)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -726,7 +726,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (bulapay-v331)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (bulapay-v332)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();

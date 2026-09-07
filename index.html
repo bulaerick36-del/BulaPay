@@ -49,7 +49,7 @@
   <link rel="apple-touch-icon" href="assets/logo.svg">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=334">
+  <link rel="stylesheet" href="css/style.css?v=332">
 
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1849,7 +1849,7 @@
     <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <p>&copy; 2026 BulaPay. Todos los derechos reservados. SaaS de Gestión de Cartera y Logística.</p>
       <div style="display: flex; gap: 1rem;">
-        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v334)</span>
+        <span id="pwa-status" style="color: var(--text-muted);">PWA Activa (bulapay-v332)</span>
         <a href="#" style="color: var(--accent); text-decoration: none;" id="btn-install-pwa" style="display: none;">Instalar App</a>
       </div>
     </div>
@@ -1859,15 +1859,15 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=334"></script>
-  <script src="js/ads.js?v=334"></script>
-  <script src="js/auth.js?v=334"></script>
-  <script src="js/supervisor.js?v=334"></script>
-  <script src="js/agent_v6.js?v=334"></script>
-  <script src="js/customer.js?v=334"></script>
-  <script src="js/superadmin.js?v=334"></script>
+  <script src="js/db.js?v=332"></script>
+  <script src="js/ads.js?v=332"></script>
+  <script src="js/auth.js?v=332"></script>
+  <script src="js/supervisor.js?v=332"></script>
+  <script src="js/agent_v6.js?v=332"></script>
+  <script src="js/customer.js?v=332"></script>
+  <script src="js/superadmin.js?v=332"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=334"></script>
+  <script src="js/app.js?v=332"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2727,24 +2727,22 @@
       }
     })();
   </script>
-  <!-- MODAL FLOTANTE INTERCEPTOR DE ANUNCIOS Y PUBLICIDAD (bulapay-v326) -->
+  <!-- MODAL FLOTANTE INTERCEPTOR DE ANUNCIOS Y PUBLICIDAD (bulapay-v332) -->
   <div id="pwa-ad-modal" class="pwa-ad-modal-overlay">
-    <div class="pwa-ad-modal-card">
+    <div class="pwa-ad-modal-card pwa-ad-modal-content">
       <div class="pwa-ad-modal-header">
         <span id="pwa-ad-badge" class="pwa-ad-badge">📢 <span id="pwa-ad-category">Comercial</span></span>
-        <button type="button" onclick="adsModule.closeAdModal()" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center;">✕</button>
+        <button type="button" class="pwa-ad-close-btn" onclick="adsModule.closeAdModal()" aria-label="Cerrar anuncio">✕</button>
       </div>
       <div class="pwa-ad-modal-body">
         <div id="pwa-ad-media-container" class="pwa-ad-media-box" style="display: none;">
-          <img id="pwa-ad-image" src="" alt="Anuncio Publicitario">
+          <img id="pwa-ad-image" class="pwa-ad-modal-image" src="" alt="Anuncio Publicitario">
         </div>
         <p id="pwa-ad-desc" class="pwa-ad-description">Anuncio Publicitario BulaPay</p>
       </div>
-      <div class="pwa-ad-modal-footer">
-        <button type="button" class="btn btn-primary" onclick="adsModule.closeAdModal()" style="padding: 0.65rem 1.5rem; font-weight: 700; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; border-radius: 10px; cursor: pointer;">
-          Continuar ➔
-        </button>
-      </div>
+      <button type="button" id="pwa-ad-btn-continue" class="btn pwa-ad-btn-continue" onclick="adsModule.closeAdModal()">
+        Continuar ➔
+      </button>
     </div>
   </div>
 
