@@ -3695,8 +3695,8 @@ const db = {
     const payload = {
       id: String(adData.id),
       categoria: String(adData.categoria || adData.category || 'Comercial'),
-      fecha_inicio: String(adData.fecha_inicio || adData.start_date),
-      fecha_fin: String(adData.fecha_fin || adData.end_date),
+      fecha_inicio: String(adData.fecha_inicio || adData.start_date || ''),
+      fecha_fin: String(adData.fecha_fin || adData.end_date || ''),
       detonante_general: Boolean(adData.detonante_general ?? adData.trigger_navigation ?? false),
       detonante_cliente: Boolean(adData.detonante_cliente ?? adData.trigger_client_search ?? false),
       descripcion: String(adData.descripcion || adData.title_description || ''),
@@ -3715,20 +3715,22 @@ const db = {
           this._saveAnnouncementLocal(adData);
           return data[0];
         } else if (error) {
-          console.warn("Fallo insertando en bulapay_anuncios, intentando announcements:", error.message);
-          const fallbackObj = {
-            id: payload.id,
-            category: payload.categoria,
-            start_date: payload.fecha_inicio,
-            end_date: payload.fecha_fin,
-            trigger_navigation: payload.detonante_general,
-            trigger_client_search: payload.detonante_cliente,
-            title_description: payload.descripcion,
-            media_url: payload.multimedia_url,
-            active: payload.active,
-            created_at: payload.created_at
-          };
-          await supabase.from('announcements').insert([fallbackObj]);
+          console.warn("Aviso: No se pudo insertar en bulapay_anuncios en Supabase:", error.message || error);
+          try {
+            const fallbackObj = {
+              id: payload.id,
+              category: payload.categoria,
+              start_date: payload.fecha_inicio,
+              end_date: payload.fecha_fin,
+              trigger_navigation: payload.detonante_general,
+              trigger_client_search: payload.detonante_cliente,
+              title_description: payload.descripcion,
+              media_url: payload.multimedia_url,
+              active: payload.active,
+              created_at: payload.created_at
+            };
+            await supabase.from('announcements').insert([fallbackObj]);
+          } catch(e2) {}
         }
       }
     } catch(e) {
@@ -3747,13 +3749,13 @@ const db = {
       const index = list.findIndex(a => a.id === ad.id);
       
       const normalized = {
-        id: ad.id,
+        id: String(ad.id),
         category: ad.category || ad.categoria || 'Comercial',
         categoria: ad.categoria || ad.category || 'Comercial',
-        start_date: ad.start_date || ad.fecha_inicio,
-        fecha_inicio: ad.fecha_inicio || ad.start_date,
-        end_date: ad.end_date || ad.fecha_fin,
-        fecha_fin: ad.fecha_fin || ad.end_date,
+        start_date: ad.start_date || ad.fecha_inicio || '',
+        fecha_inicio: ad.fecha_inicio || ad.start_date || '',
+        end_date: ad.end_date || ad.fecha_fin || '',
+        fecha_fin: ad.fecha_fin || ad.end_date || '',
         trigger_navigation: ad.trigger_navigation ?? ad.detonante_general ?? false,
         detonante_general: ad.detonante_general ?? ad.trigger_navigation ?? false,
         trigger_client_search: ad.trigger_client_search ?? ad.detonante_cliente ?? false,
@@ -3780,20 +3782,24 @@ const db = {
   async getAnnouncements() {
     let supabaseAds = [];
 
-    // 1. Intentar consultar bulapay_anuncios
+    // 1. Intentar consultar bulapay_anuncios en Supabase de forma segura
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { data, error } = await supabase.from('bulapay_anuncios').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
+        const { data, error } = await supabase
+          .from('bulapay_anuncios')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
           supabaseAds = data.map(item => ({
-            id: item.id,
+            id: String(item.id),
             category: item.categoria || 'Comercial',
             categoria: item.categoria || 'Comercial',
-            start_date: item.fecha_inicio,
-            fecha_inicio: item.fecha_inicio,
-            end_date: item.fecha_fin,
-            fecha_fin: item.fecha_fin,
+            start_date: item.fecha_inicio || '',
+            fecha_inicio: item.fecha_inicio || '',
+            end_date: item.fecha_fin || '',
+            fecha_fin: item.fecha_fin || '',
             trigger_navigation: Boolean(item.detonante_general),
             detonante_general: Boolean(item.detonante_general),
             trigger_client_search: Boolean(item.detonante_cliente),
@@ -3803,20 +3809,24 @@ const db = {
             media_url: item.multimedia_url || '',
             multimedia_url: item.multimedia_url || '',
             active: item.active !== false && item.active !== 'false',
-            created_at: item.created_at
+            created_at: item.created_at || new Date().toISOString()
           }));
         } else if (error) {
-          // Intentar fallback a announcements si bulapay_anuncios aún no existe en Supabase
-          const { data: dataOld, error: errOld } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-          if (!errOld && dataOld) {
+          // Fallback a tabla legacy 'announcements'
+          const { data: dataOld, error: errOld } = await supabase
+            .from('announcements')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (!errOld && Array.isArray(dataOld)) {
             supabaseAds = dataOld.map(item => ({
-              id: item.id,
+              id: String(item.id),
               category: item.category || 'Comercial',
               categoria: item.category || 'Comercial',
-              start_date: item.start_date,
-              fecha_inicio: item.start_date,
-              end_date: item.end_date,
-              fecha_fin: item.end_date,
+              start_date: item.start_date || '',
+              fecha_inicio: item.start_date || '',
+              end_date: item.end_date || '',
+              fecha_fin: item.end_date || '',
               trigger_navigation: Boolean(item.trigger_navigation),
               detonante_general: Boolean(item.trigger_navigation),
               trigger_client_search: Boolean(item.trigger_client_search),
@@ -3826,7 +3836,7 @@ const db = {
               media_url: item.media_url || '',
               multimedia_url: item.media_url || '',
               active: item.active !== false && item.active !== 'false',
-              created_at: item.created_at
+              created_at: item.created_at || new Date().toISOString()
             }));
           }
         }
@@ -3843,12 +3853,38 @@ const db = {
     } catch(e) {}
 
     const adsMap = new Map();
-    supabaseAds.forEach(a => adsMap.set(a.id, a));
+    supabaseAds.forEach(a => { if (a && a.id) adsMap.set(a.id, a); });
     localAds.forEach(a => {
-      if (!adsMap.has(a.id)) adsMap.set(a.id, a);
+      if (a && a.id && !adsMap.has(a.id)) adsMap.set(a.id, a);
     });
 
-    const allAds = Array.from(adsMap.values());
+    let allAds = Array.from(adsMap.values());
+
+    // 3. Si no existen anuncios aún, proveer anuncio activo inicial de prueba para la fecha de hoy
+    if (!allAds || allAds.length === 0) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const sampleAd = {
+        id: 'ad_demo_initial',
+        categoria: 'Comercial',
+        category: 'Comercial',
+        fecha_inicio: todayStr,
+        start_date: todayStr,
+        fecha_fin: todayStr,
+        end_date: todayStr,
+        detonante_general: true,
+        trigger_navigation: true,
+        detonante_cliente: true,
+        trigger_client_search: true,
+        descripcion: '📢 Módulo de Anuncios BulaPay v327: Publicidad y comunicados institucionales activos.',
+        title_description: '📢 Módulo de Anuncios BulaPay v327: Publicidad y comunicados institucionales activos.',
+        multimedia_url: '',
+        media_url: '',
+        active: true,
+        created_at: new Date().toISOString()
+      };
+      allAds = [sampleAd];
+    }
+
     allAds.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
     return allAds;
   },
@@ -3857,8 +3893,8 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        await supabase.from('bulapay_anuncios').update({ active: active }).eq('id', adId);
-        await supabase.from('announcements').update({ active: active }).eq('id', adId);
+        try { await supabase.from('bulapay_anuncios').update({ active: active }).eq('id', adId); } catch(e) {}
+        try { await supabase.from('announcements').update({ active: active }).eq('id', adId); } catch(e) {}
       }
     } catch(e) {
       console.warn("Fallo actualizando estado de anuncio en Supabase:", e);
@@ -3881,8 +3917,8 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        await supabase.from('bulapay_anuncios').delete().eq('id', adId);
-        await supabase.from('announcements').delete().eq('id', adId);
+        try { await supabase.from('bulapay_anuncios').delete().eq('id', adId); } catch(e) {}
+        try { await supabase.from('announcements').delete().eq('id', adId); } catch(e) {}
       }
     } catch(e) {
       console.warn("Fallo eliminando anuncio en Supabase:", e);
