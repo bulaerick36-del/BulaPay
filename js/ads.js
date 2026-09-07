@@ -132,6 +132,24 @@ const adsModule = {
     }
   },
 
+  // Helper para detectar si la URL o base64 corresponde a un video
+  isVideoUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    const cleanUrl = url.trim().toLowerCase();
+    
+    // 1. Data URI de video
+    if (cleanUrl.startsWith('data:video/')) return true;
+
+    // 2. Extensiones de archivo de video conocidas
+    const videoExtensions = ['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg', '.3gp', '.mkv'];
+    if (videoExtensions.some(ext => cleanUrl.includes(ext))) return true;
+
+    // 3. Tipos MIME o parametros URL
+    if (cleanUrl.includes('video/') || cleanUrl.includes('type=video') || cleanUrl.includes('format=mp4')) return true;
+
+    return false;
+  },
+
   displayAdModal(ad, callback) {
     try {
       this.pendingCallback = callback;
@@ -149,13 +167,12 @@ const adsModule = {
         document.body.appendChild(modal);
       }
 
-      console.log("🚀 [BulaPay Anuncios] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
+      console.log("🚀 [BulaPay Anuncios bulapay-v332] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
       const descEl = document.getElementById('pwa-ad-desc');
       const mediaContainer = document.getElementById('pwa-ad-media-container');
-      const mediaImg = document.getElementById('pwa-ad-image');
 
       // Categoría badge
       const cat = (ad && (ad.categoria || ad.category)) || 'Comercial';
@@ -170,20 +187,55 @@ const adsModule = {
       }
 
       // Descripción o mensaje del anuncio
-      const descText = (ad && (ad.descripcion || ad.title_description || ad.description)) || 'Aviso Publicitario Importante';
+      const descText = (ad && (ad.descripcion || ad.title_description || ad.description)) || '';
       if (descEl) {
         descEl.textContent = descText;
       }
 
-      // Imagen o gráfico multimedia
+      // Multimedia: renderizado dinámico de <video> o <img>
       const mediaUrl = (ad && (ad.multimedia_url || ad.media_url)) || '';
-      if (mediaContainer && mediaImg) {
-        if (mediaUrl && typeof mediaUrl === 'string' && mediaUrl.trim() !== '') {
-          mediaImg.src = mediaUrl.trim();
+      if (mediaContainer) {
+        const cleanMediaUrl = typeof mediaUrl === 'string' ? mediaUrl.trim() : '';
+        if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'block';
+          if (this.isVideoUrl(cleanMediaUrl)) {
+            console.log("🎬 [BulaPay Anuncios bulapay-v332] Detectado archivo de video. Renderizando <video>:", cleanMediaUrl.substring(0, 60));
+            mediaContainer.innerHTML = `
+              <video 
+                id="pwa-ad-video" 
+                class="pwa-ad-modal-video" 
+                controls 
+                autoplay 
+                muted 
+                loop 
+                playsinline 
+                style="width: 100%; height: 100%; max-height: 80vh; object-fit: contain; border: none; background: transparent; display: block;">
+                <source src="${cleanMediaUrl}">
+                Tu navegador no soporta la reproducción de video.
+              </video>
+            `;
+          } else {
+            console.log("🖼️ [BulaPay Anuncios bulapay-v332] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
+            mediaContainer.innerHTML = `
+              <img 
+                id="pwa-ad-image" 
+                class="pwa-ad-modal-image" 
+                src="${cleanMediaUrl}" 
+                alt="Anuncio Publicitario" 
+                style="width: 100%; height: 100%; max-height: 80vh; object-fit: contain; border: none; background: transparent; display: block;">
+            `;
+          }
+
+          // Si hay multimedia, ocultar texto genérico si no aporta información adicional
+          if (descEl && (descText.includes('Módulo de Anuncios BulaPay') || descText.includes('Aviso Publicitario'))) {
+            descEl.style.display = 'none';
+          } else if (descEl) {
+            descEl.style.display = 'block';
+          }
         } else {
           mediaContainer.style.display = 'none';
-          mediaImg.src = '';
+          mediaContainer.innerHTML = '';
+          if (descEl) descEl.style.display = 'block';
         }
       }
 
@@ -191,7 +243,7 @@ const adsModule = {
       modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
-      console.log("✅ [BulaPay Anuncios] Modal publicitario visible en pantalla.");
+      console.log("✅ [BulaPay Anuncios bulapay-v332] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);
@@ -206,6 +258,16 @@ const adsModule = {
         modal.classList.remove('active');
         if (modal.style) {
           modal.style.setProperty('display', 'none', 'important');
+        }
+
+        // Pausar y liberar recursos de cualquier video reproduciéndose en el modal
+        const videoEl = modal.querySelector('video');
+        if (videoEl) {
+          try {
+            if (typeof videoEl.pause === 'function') videoEl.pause();
+            videoEl.src = '';
+            videoEl.load();
+          } catch(eVid) {}
         }
       }
     } catch(e) {

@@ -1867,14 +1867,16 @@ const superadminModule = {
             <!-- Carga Multimedia -->
             <div style="margin-bottom: 1.25rem;">
               <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
-                🖼️ Carga Multimedia (Gráfico o Banner del Anuncio):
+                🖼️🎬 Carga Multimedia (Gráfico, Imagen o Video del Anuncio):
               </label>
-              <input type="file" id="ad-media-file" accept="image/*" onchange="superadminModule.handleAdImageSelect(event)" style="width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #94a3b8; font-size: 0.85rem;">
+              <input type="file" id="ad-media-file" accept="image/*,video/*" onchange="superadminModule.handleAdImageSelect(event)" style="width: 100%; padding: 0.5rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #94a3b8; font-size: 0.85rem;">
               <input type="hidden" id="ad-media-url-base64">
               
               <div id="ad-image-preview-container" class="ad-dropzone-preview" style="display: none;">
-                <p style="margin: 0 0 0.5rem 0; font-size: 0.78rem; color: #fbbf24; font-weight: 700;">Vista Previa del Gráfico Adjunto:</p>
-                <img id="ad-image-preview" src="" alt="Previsualización" style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;">
+                <p style="margin: 0 0 0.5rem 0; font-size: 0.78rem; color: #fbbf24; font-weight: 700;">Vista Previa Adjunta:</p>
+                <div id="ad-preview-media-box" style="max-height: 180px; max-width: 100%; display: flex; justify-content: center;">
+                  <img id="ad-image-preview" src="" alt="Previsualización" style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;">
+                </div>
               </div>
             </div>
 
@@ -1902,14 +1904,22 @@ const superadminModule = {
   handleAdImageSelect(event) {
     const file = event.target.files[0];
     const previewContainer = document.getElementById('ad-image-preview-container');
-    const previewImg = document.getElementById('ad-image-preview');
+    const previewMediaBox = document.getElementById('ad-preview-media-box');
     const base64Input = document.getElementById('ad-media-url-base64');
 
     if (file) {
       const reader = new FileReader();
       reader.onload = function(e) {
         if (base64Input) base64Input.value = e.target.result;
-        if (previewImg) previewImg.src = e.target.result;
+        if (previewMediaBox) {
+          const res = e.target.result || '';
+          const isVideo = file.type.startsWith('video/') || res.startsWith('data:video/') || ['.mp4', '.webm', '.mov'].some(ext => file.name.toLowerCase().endsWith(ext));
+          if (isVideo) {
+            previewMediaBox.innerHTML = `<video src="${res}" controls muted style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;"></video>`;
+          } else {
+            previewMediaBox.innerHTML = `<img id="ad-image-preview" src="${res}" style="max-height: 180px; max-width: 100%; border-radius: 8px; object-fit: contain;">`;
+          }
+        }
         if (previewContainer) previewContainer.style.display = 'block';
       };
       reader.readAsDataURL(file);
@@ -2042,7 +2052,11 @@ const superadminModule = {
 
             ${imgUrl ? `
               <div style="width: 100px; height: 75px; background: #0b132b; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1);">
-                <img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: contain;">
+                ${(window.adsModule && typeof window.adsModule.isVideoUrl === 'function' && window.adsModule.isVideoUrl(imgUrl)) ? `
+                  <video src="${imgUrl}" muted style="width: 100%; height: 100%; object-fit: contain;"></video>
+                ` : `
+                  <img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: contain;">
+                `}
               </div>
             ` : ''}
 
