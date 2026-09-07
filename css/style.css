@@ -2450,7 +2450,48 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
 }
 
-/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v334) */
+/* Botón Campanita y Comunicados en Header Top-Bar */
+.btn-comunicados-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 50px;
+  color: #fbbf24;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  outline: none;
+}
+
+.btn-comunicados-nav:hover,
+.btn-comunicados-nav:active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25);
+}
+
+.comunicados-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 900;
+  border-radius: 9999px;
+  padding: 0.1rem 0.35rem;
+  line-height: 1;
+  border: 1.5px solid #0f172a;
+}
+
+/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v335) */
 .pwa-ad-modal-overlay {
   position: fixed;
   inset: 0;

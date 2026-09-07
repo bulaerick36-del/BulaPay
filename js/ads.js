@@ -1,8 +1,9 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v334)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v335)
 
 const adsModule = {
   isShowing: false,
   pendingCallback: null,
+  currentAd: null,
 
   // Obtener fecha actual local en formato ISO YYYY-MM-DD
   getTodayString() {
@@ -41,6 +42,29 @@ const adsModule = {
 
       // Para la fecha de fin, si ya expiró se mantiene permisivo si el anuncio está marcado activo
       return true;
+    } catch(e) {
+      return true;
+    }
+  },
+
+  // Helper para evaluación de franja horaria HH:MM
+  isTimeInRange(currentTimeStr, startTimeStr, endTimeStr) {
+    if (!startTimeStr || !endTimeStr) return true;
+    try {
+      const toMinutes = (tStr) => {
+        if (!tStr || typeof tStr !== 'string') return 0;
+        const parts = tStr.trim().split(':').map(Number);
+        return (parts[0] || 0) * 60 + (parts[1] || 0);
+      };
+      const cur = toMinutes(currentTimeStr);
+      const start = toMinutes(startTimeStr);
+      const end = toMinutes(endTimeStr);
+
+      if (start <= end) {
+        return cur >= start && cur <= end;
+      } else {
+        return cur >= start || cur <= end;
+      }
     } catch(e) {
       return true;
     }
@@ -88,17 +112,25 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v334] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v335] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
-      // Filtrar anuncios activos y que coincidan con el detonante
+      const now = new Date();
+      const currentHours = String(now.getHours()).padStart(2, '0');
+      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+
+      // Filtrar anuncios activos y que coincidan con la fecha, franja horaria y detonante
       const matchingAds = (allAds || []).filter((ad, idx) => {
         if (!ad) return false;
         
         const isActive = ad.active !== false && ad.active !== 'false';
         const startDate = String(ad.fecha_inicio || ad.start_date || '').split('T')[0].trim();
         const endDate = String(ad.fecha_fin || ad.end_date || '').split('T')[0].trim();
+        const startTime = String(ad.hora_inicio || ad.start_time || '00:00').trim();
+        const endTime = String(ad.hora_fin || ad.end_time || '23:59').trim();
 
         const inRange = this.isDateInRange(todayStr, startDate, endDate);
+        const inTimeRange = this.isTimeInRange(currentTimeStr, startTime, endTime);
 
         const hasNavConfig = ad.detonante_general !== undefined || ad.trigger_navigation !== undefined;
         const hasClientConfig = ad.detonante_cliente !== undefined || ad.trigger_client_search !== undefined;
@@ -106,7 +138,6 @@ const adsModule = {
         let isNavTrigger = this.isTrue(ad.detonante_general) || this.isTrue(ad.trigger_navigation);
         let isClientTrigger = this.isTrue(ad.detonante_cliente) || this.isTrue(ad.trigger_client_search);
 
-        // Si no tiene detonantes configurados explícitamente, activar para ambos
         if (!hasNavConfig && !hasClientConfig) {
           isNavTrigger = true;
           isClientTrigger = true;
@@ -116,10 +147,9 @@ const adsModule = {
         if (triggerType === 'navigation') triggerMatch = isNavTrigger;
         if (triggerType === 'client_search') triggerMatch = isClientTrigger;
 
-        const passes = isActive && inRange && triggerMatch;
+        const passes = isActive && inRange && inTimeRange && triggerMatch;
 
-        console.log(`🔎 [Anuncio #${idx + 1} - ${ad.id}] Categoría: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate || 'Sin inicio'} a ${endDate || 'Sin fin'}], En Rango: ${inRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger "${triggerType}": ${triggerMatch} ==> RESULTADO: ${passes ? '✅ ACEPTADO' : '❌ DESCARTADO'}`);
-        console.log(`   Objeto Anuncio completo:`, ad);
+        console.log(`🔎 [Anuncio #${idx + 1} - ${ad.id}] Categoría: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate} a ${endDate}], Hora [${startTime} a ${endTime}], En Franja: ${inTimeRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger "${triggerType}": ${triggerMatch} ==> RESULTADO: ${passes ? '✅ ACEPTADO' : '❌ DESCARTADO'}`);
 
         return passes;
       });
@@ -182,7 +212,7 @@ const adsModule = {
         }));
       } catch(e) {}
 
-      console.log(`🎯 [BulaPay Anuncios bulapay-v334] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
+      console.log(`🎯 [BulaPay Anuncios bulapay-v335] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
@@ -196,6 +226,12 @@ const adsModule = {
     try {
       this.pendingCallback = callback;
       this.isShowing = true;
+      this.currentAd = ad;
+
+      // Incrementar impresiones dinámicamente en Supabase/Local DB
+      if (ad && ad.id && window.BulaPayDB && typeof window.BulaPayDB.incrementAdImpression === 'function') {
+        window.BulaPayDB.incrementAdImpression(ad.id);
+      }
 
       const modal = document.getElementById('pwa-ad-modal');
       if (!modal) {
@@ -209,7 +245,7 @@ const adsModule = {
         document.body.appendChild(modal);
       }
 
-      console.log("🚀 [BulaPay Anuncios bulapay-v334] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
+      console.log("🚀 [BulaPay Anuncios bulapay-v335] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
@@ -269,7 +305,7 @@ const adsModule = {
         if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'block';
           if (isVideo) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v334] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
+            console.log("🎬 [BulaPay Anuncios bulapay-v335] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -295,7 +331,7 @@ const adsModule = {
                     continueBtn.style.pointerEvents = 'auto';
                     continueBtn.style.cursor = 'pointer';
                     continueBtn.innerHTML = 'Continuar ➔';
-                    console.log("✅ [BulaPay Anuncios bulapay-v334] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
+                    console.log("✅ [BulaPay Anuncios bulapay-v335] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
                   }
                 };
 
@@ -320,7 +356,7 @@ const adsModule = {
             }, 100);
 
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v334] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [BulaPay Anuncios bulapay-v335] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
@@ -352,7 +388,7 @@ const adsModule = {
       modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
-      console.log("✅ [BulaPay Anuncios bulapay-v334] Modal publicitario visible en pantalla.");
+      console.log("✅ [BulaPay Anuncios bulapay-v335] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);
@@ -362,6 +398,11 @@ const adsModule = {
 
   closeAdModal() {
     try {
+      // Incrementar clics / interacciones al cerrar o continuar
+      if (this.currentAd && this.currentAd.id && window.BulaPayDB && typeof window.BulaPayDB.incrementAdClick === 'function') {
+        window.BulaPayDB.incrementAdClick(this.currentAd.id);
+      }
+
       const modal = document.getElementById('pwa-ad-modal');
       if (modal) {
         modal.classList.remove('active');
@@ -369,7 +410,6 @@ const adsModule = {
           modal.style.setProperty('display', 'none', 'important');
         }
 
-        // Pausar y liberar recursos de cualquier video reproduciéndose en el modal
         const videoEl = modal.querySelector('video');
         if (videoEl) {
           try {
@@ -384,10 +424,92 @@ const adsModule = {
     }
 
     this.isShowing = false;
+    this.currentAd = null;
     if (typeof this.pendingCallback === 'function') {
       const cb = this.pendingCallback;
       this.pendingCallback = null;
       try { cb(); } catch(e) {}
+    }
+  },
+
+  async openComunicadosModal() {
+    const modal = document.getElementById('modal-pwa-comunicados');
+    const content = document.getElementById('modal-pwa-comunicados-content');
+    if (!modal) return;
+
+    if (modal.parentNode !== document.body) {
+      document.body.appendChild(modal);
+    }
+
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.classList.add('active');
+
+    if (content) {
+      content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales...</p>';
+      try {
+        const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
+          ? await window.BulaPayDB.getNotificaciones()
+          : [];
+
+        if (!notifs || notifs.length === 0) {
+          content.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: #94a3b8;">
+              <span style="font-size: 2rem;">📭</span>
+              <p style="margin-top: 0.5rem; font-weight: 600;">No hay comunicados oficiales registrados.</p>
+            </div>
+          `;
+          return;
+        }
+
+        let html = '<div style="display: flex; flex-direction: column; gap: 0.85rem;">';
+        notifs.forEach(n => {
+          const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          const cat = n.categoria || 'Institucional';
+          let badgeColor = 'rgba(59, 130, 246, 0.2)';
+          let textColor = '#60a5fa';
+          if (cat.includes('Gerencial') || cat.includes('Aviso')) {
+            badgeColor = 'rgba(245, 158, 11, 0.2)';
+            textColor = '#fbbf24';
+          } else if (cat.includes('Institucional')) {
+            badgeColor = 'rgba(16, 185, 129, 0.2)';
+            textColor = '#34d399';
+          }
+
+          html += `
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px; padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
+                <span style="background: ${badgeColor}; color: ${textColor}; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 6px; text-transform: uppercase;">
+                  ${cat}
+                </span>
+                <span style="font-size: 0.72rem; color: #94a3b8;">${dateStr}</span>
+              </div>
+              <h4 style="color: #ffffff; margin: 0 0 0.4rem 0; font-size: 0.95rem; font-weight: 700;">
+                ${n.titulo || n.title || 'Comunicado Oficial'}
+              </h4>
+              <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.45; margin: 0; white-space: pre-line;">
+                ${n.mensaje || n.message || ''}
+              </p>
+            </div>
+          `;
+        });
+        html += '</div>';
+        content.innerHTML = html;
+
+        const badgeEl = document.getElementById('pwa-comunicados-count');
+        if (badgeEl) badgeEl.style.display = 'none';
+
+      } catch(e) {
+        console.error("Error al renderizar comunicados:", e);
+        content.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 1rem;">Error al cargar los comunicados.</p>';
+      }
+    }
+  },
+
+  closeComunicadosModal() {
+    const modal = document.getElementById('modal-pwa-comunicados');
+    if (modal) {
+      modal.style.setProperty('display', 'none', 'important');
+      modal.classList.remove('active');
     }
   }
 };

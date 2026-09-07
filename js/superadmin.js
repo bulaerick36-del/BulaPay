@@ -1808,7 +1808,7 @@ const superadminModule = {
             <span>➕</span> Crear Nuevo Anuncio Publicitario
           </h4>
           <form id="form-create-ad" onsubmit="superadminModule.handleCreateAd(event)">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
               
               <!-- Categoría -->
               <div>
@@ -1822,7 +1822,7 @@ const superadminModule = {
                 </select>
               </div>
 
-              <!-- Duración de la Campaña: Inicio -->
+              <!-- Duración de la Campaña: Fecha Inicio -->
               <div>
                 <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
                   📅 Fecha Inicio:
@@ -1830,12 +1830,28 @@ const superadminModule = {
                 <input type="date" id="ad-start-date" value="${today}" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none;" required>
               </div>
 
-              <!-- Duración de la Campaña: Fin -->
+              <!-- Hora Inicio -->
+              <div>
+                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                  ⏰ Hora Inicio:
+                </label>
+                <input type="time" id="ad-start-time" value="00:00" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none;" required>
+              </div>
+
+              <!-- Duración de la Campaña: Fecha Fin -->
               <div>
                 <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
                   🏁 Fecha Fin:
                 </label>
                 <input type="date" id="ad-end-date" value="${today}" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none;" required>
+              </div>
+
+              <!-- Hora Fin -->
+              <div>
+                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.35rem;">
+                  ⏰ Hora Fin:
+                </label>
+                <input type="time" id="ad-end-time" value="23:59" style="width: 100%; padding: 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none;" required>
               </div>
             </div>
 
@@ -1979,6 +1995,8 @@ const superadminModule = {
     const category = document.getElementById('ad-category').value;
     const startDate = document.getElementById('ad-start-date').value;
     const endDate = document.getElementById('ad-end-date').value;
+    const startTime = document.getElementById('ad-start-time').value || '00:00';
+    const endTime = document.getElementById('ad-end-time').value || '23:59';
     const triggerNav = document.getElementById('ad-trigger-nav').checked;
     const triggerClient = document.getElementById('ad-trigger-client').checked;
     const description = document.getElementById('ad-description').value.trim();
@@ -2011,6 +2029,10 @@ const superadminModule = {
       start_date: startDate,
       fecha_fin: endDate,
       end_date: endDate,
+      hora_inicio: startTime,
+      start_time: startTime,
+      hora_fin: endTime,
+      end_time: endTime,
       detonante_general: triggerNav,
       trigger_navigation: triggerNav,
       detonante_cliente: triggerClient,
@@ -2019,6 +2041,8 @@ const superadminModule = {
       title_description: description,
       multimedia_url: mediaUrl,
       media_url: mediaUrl,
+      impresiones: 0,
+      clics: 0,
       active: true
     };
 
@@ -2029,6 +2053,33 @@ const superadminModule = {
     } catch(err) {
       console.error("Error al guardar el anuncio:", err);
       alert('❌ Hubo un error guardando el anuncio.');
+    }
+  },
+
+  async handleCreateNotificacion(event) {
+    if (event) event.preventDefault();
+
+    const title = document.getElementById('notif-title')?.value.trim() || '';
+    const category = document.getElementById('notif-category')?.value || 'Institucional';
+    const message = document.getElementById('notif-message')?.value.trim() || '';
+
+    if (!title || !message) {
+      alert('⚠️ Por favor ingresa el título y el contenido del comunicado.');
+      return;
+    }
+
+    try {
+      await window.BulaPayDB.saveNotificacion({
+        titulo: title,
+        categoria: category,
+        mensaje: message
+      });
+      alert('✅ ¡Comunicado gerencial enviado y publicado exitosamente en Supabase!');
+      const form = document.getElementById('form-create-notif');
+      if (form) form.reset();
+    } catch(e) {
+      console.error("Error al enviar comunicado:", e);
+      alert('❌ Hubo un error al enviar el comunicado.');
     }
   },
 
@@ -2056,6 +2107,10 @@ const superadminModule = {
         const cat = ad.categoria || ad.category || 'Comercial';
         const startDate = ad.fecha_inicio || ad.start_date || 'N/A';
         const endDate = ad.fecha_fin || ad.end_date || 'N/A';
+        const startTime = ad.hora_inicio || ad.start_time || '00:00';
+        const endTime = ad.hora_fin || ad.end_time || '23:59';
+        const impresiones = ad.impresiones || ad.impressions || ad.views || 0;
+        const clics = ad.clics || ad.clicks || 0;
         const isNav = ad.detonante_general || ad.trigger_navigation;
         const isClient = ad.detonante_cliente || ad.trigger_client_search;
         const desc = ad.descripcion || ad.title_description || ad.description || '';
@@ -2071,46 +2126,59 @@ const superadminModule = {
         ].filter(Boolean).join(' | ') || 'Ninguno';
 
         html += `
-          <div style="background: #0f172a; border: 1px solid ${isActive ? 'rgba(52, 211, 153, 0.3)' : 'rgba(255,255,255,0.1)'}; border-radius: 12px; padding: 1.25rem; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center;">
-            <div style="flex: 1; min-width: 260px;">
-              <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
-                <span style="padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; ${catBadgeStyle}">
-                  ${cat}
-                </span>
-                <span style="font-size: 0.78rem; color: #94a3b8;">
-                  📅 ${startDate} al ${endDate}
-                </span>
-                <span style="padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: ${isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${isActive ? '#34d399' : '#fca5a5'};">
-                  ${isActive ? '● Activo' : '○ Inactivo'}
-                </span>
+          <div style="background: #0f172a; border: 1px solid ${isActive ? 'rgba(52, 211, 153, 0.3)' : 'rgba(255,255,255,0.1)'}; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+            
+            <!-- REQUISITO: Métricas e Impresiones en la Zona Superior de cada Tarjeta -->
+            <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 0.85rem; font-size: 0.85rem; font-weight: 700; color: #34d399;">
+                <span>👁️ Impresiones: <strong style="color: #ffffff; font-size: 0.95rem;">${impresiones}</strong></span>
+                <span style="color: rgba(255,255,255,0.25);">|</span>
+                <span>🖱️ Clics: <strong style="color: #ffffff; font-size: 0.95rem;">${clics}</strong></span>
               </div>
-
-              <p style="color: #f8fafc; font-size: 0.9rem; margin: 0 0 0.5rem 0; white-space: pre-line;">
-                ${desc}
-              </p>
-
-              <div style="font-size: 0.76rem; color: #fbbf24; font-weight: 600;">
-                ⚡ Detonantes: ${triggersText}
-              </div>
+              <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600;">📊 Métricas en Tiempo Real (Supabase)</span>
             </div>
 
-            ${imgUrl ? `
-              <div style="width: 100px; height: 75px; background: #0b132b; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1);">
-                ${(window.adsModule && typeof window.adsModule.isVideoUrl === 'function' && window.adsModule.isVideoUrl(imgUrl)) ? `
-                  <video src="${imgUrl}" muted style="width: 100%; height: 100%; object-fit: contain;"></video>
-                ` : `
-                  <img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: contain;">
-                `}
-              </div>
-            ` : ''}
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="flex: 1; min-width: 260px;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                  <span style="padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; ${catBadgeStyle}">
+                    ${cat}
+                  </span>
+                  <span style="font-size: 0.78rem; color: #94a3b8;">
+                    📅 ${startDate} al ${endDate} (⏰ ${startTime} - ${endTime})
+                  </span>
+                  <span style="padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: ${isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${isActive ? '#34d399' : '#fca5a5'};">
+                    ${isActive ? '● Activo' : '○ Inactivo'}
+                  </span>
+                </div>
 
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button onclick="superadminModule.toggleAdStatus('${ad.id}', ${!isActive})" style="padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: ${isActive ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color: ${isActive ? '#fca5a5' : '#34d399'}; border: 1px solid ${isActive ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)'};">
-                ${isActive ? '⏸️ Desactivar' : '▶️ Activar'}
-              </button>
-              <button onclick="superadminModule.deleteAd('${ad.id}')" style="padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; cursor: pointer;">
-                🗑️ Eliminar
-              </button>
+                <p style="color: #f8fafc; font-size: 0.9rem; margin: 0 0 0.5rem 0; white-space: pre-line;">
+                  ${desc}
+                </p>
+
+                <div style="font-size: 0.76rem; color: #fbbf24; font-weight: 600;">
+                  ⚡ Detonantes: ${triggersText}
+                </div>
+              </div>
+
+              ${imgUrl ? `
+                <div style="width: 100px; height: 75px; background: #0b132b; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1);">
+                  ${(window.adsModule && typeof window.adsModule.isVideoUrl === 'function' && window.adsModule.isVideoUrl(imgUrl)) ? `
+                    <video src="${imgUrl}" muted style="width: 100%; height: 100%; object-fit: contain;"></video>
+                  ` : `
+                    <img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: contain;">
+                  `}
+                </div>
+              ` : ''}
+
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button onclick="superadminModule.toggleAdStatus('${ad.id}', ${!isActive})" style="padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; background: ${isActive ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color: ${isActive ? '#fca5a5' : '#34d399'}; border: 1px solid ${isActive ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)'};">
+                  ${isActive ? '⏸️ Desactivar' : '▶️ Activar'}
+                </button>
+                <button onclick="superadminModule.deleteAd('${ad.id}')" style="padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; cursor: pointer;">
+                  🗑️ Eliminar
+                </button>
+              </div>
             </div>
           </div>
         `;

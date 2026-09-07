@@ -3725,23 +3725,7 @@ const db = {
             if (error.status === 404 || error.code === '42P01' || (error.message && error.message.includes('not exist'))) {
               window._supabase_ads_disabled = true;
             }
-          }
-        }
-      } catch(e) {
-        window._supabase_ads_disabled = true;
-      }
-    }
-
-    return adData;
-  },
-
-  _saveAnnouncementLocal(ad) {
-    try {
-      const raw = localStorage.getItem('bula_announcements');
-      const list = raw ? JSON.parse(raw) : [];
-      const index = list.findIndex(a => a.id === ad.id);
-      
-      const normalized = {
+              const normalized = {
         id: String(ad.id),
         category: ad.category || ad.categoria || 'Comercial',
         categoria: ad.categoria || ad.category || 'Comercial',
@@ -3749,6 +3733,10 @@ const db = {
         fecha_inicio: ad.fecha_inicio || ad.start_date || '',
         end_date: ad.end_date || ad.fecha_fin || '',
         fecha_fin: ad.fecha_fin || ad.end_date || '',
+        start_time: ad.start_time || ad.hora_inicio || '00:00',
+        hora_inicio: ad.hora_inicio || ad.start_time || '00:00',
+        end_time: ad.end_time || ad.hora_fin || '23:59',
+        hora_fin: ad.hora_fin || ad.end_time || '23:59',
         trigger_navigation: ad.trigger_navigation ?? ad.detonante_general ?? false,
         detonante_general: ad.detonante_general ?? ad.trigger_navigation ?? false,
         trigger_client_search: ad.trigger_client_search ?? ad.detonante_cliente ?? false,
@@ -3757,6 +3745,10 @@ const db = {
         descripcion: ad.descripcion || ad.title_description || '',
         media_url: ad.media_url || ad.multimedia_url || '',
         multimedia_url: ad.multimedia_url || ad.media_url || '',
+        impresiones: parseInt(ad.impresiones || ad.impressions || ad.views || 0, 10) || 0,
+        impressions: parseInt(ad.impressions || ad.impresiones || ad.views || 0, 10) || 0,
+        clics: parseInt(ad.clics || ad.clicks || 0, 10) || 0,
+        clicks: parseInt(ad.clicks || ad.clics || 0, 10) || 0,
         active: ad.active !== false && ad.active !== 'false',
         created_at: ad.created_at || new Date().toISOString()
       };
@@ -3770,6 +3762,16 @@ const db = {
     } catch(e) {
       console.warn("Error guardando anuncio localmente:", e);
     }
+
+    if (!window._supabase_ads_disabled) {
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          const verifiedTable = window._active_ads_table || 'bulapay_anuncios';
+          await supabase.from(verifiedTable).upsert([normalized]);
+        }
+      } catch(e) {}
+    }
   },
 
   async getAnnouncements() {
@@ -3778,7 +3780,6 @@ const db = {
       const raw = localStorage.getItem('bula_announcements');
       if (raw) {
         localAds = JSON.parse(raw);
-        // Filtrar anuncios demo obsoletos v327
         if (Array.isArray(localAds)) {
           localAds = localAds.filter(a => a && a.id !== 'ad_demo_initial' && !String(a.descripcion || '').includes('v327'));
         }
@@ -3787,7 +3788,6 @@ const db = {
 
     let supabaseAds = [];
 
-    // Consultar Supabase probando tablas candidatas si aún no se ha verificado una
     const candidateTables = window._active_ads_table 
       ? [window._active_ads_table, 'bulapay_anuncios', 'anuncios', 'ads', 'announcements']
       : ['bulapay_anuncios', 'anuncios', 'ads', 'announcements'];
@@ -3829,6 +3829,10 @@ const db = {
                 fecha_inicio: item.fecha_inicio || item.start_date || '',
                 end_date: item.fecha_fin || item.end_date || '',
                 fecha_fin: item.fecha_fin || item.end_date || '',
+                start_time: item.hora_inicio || item.start_time || '00:00',
+                hora_inicio: item.hora_inicio || item.start_time || '00:00',
+                end_time: item.hora_fin || item.end_time || '23:59',
+                hora_fin: item.hora_fin || item.end_time || '23:59',
                 trigger_navigation: item.detonante_general ?? item.trigger_navigation ?? false,
                 detonante_general: item.detonante_general ?? item.trigger_navigation ?? false,
                 trigger_client_search: item.detonante_cliente ?? item.trigger_client_search ?? false,
@@ -3837,10 +3841,14 @@ const db = {
                 descripcion: item.descripcion || item.title_description || '',
                 media_url: item.multimedia_url || item.media_url || '',
                 multimedia_url: item.multimedia_url || item.media_url || '',
+                impresiones: parseInt(item.impresiones || item.impressions || item.views || 0, 10) || 0,
+                impressions: parseInt(item.impressions || item.impresiones || item.views || 0, 10) || 0,
+                clics: parseInt(item.clics || item.clicks || 0, 10) || 0,
+                clicks: parseInt(item.clicks || item.clics || 0, 10) || 0,
                 active: item.active !== false && item.active !== 'false',
                 created_at: item.created_at || new Date().toISOString()
               }));
-              break; // Romper en el primer intento exitoso con datos
+              break;
             }
           }
         }
@@ -3859,7 +3867,6 @@ const db = {
 
     let allAds = Array.from(adsMap.values());
 
-    // Si existen anuncios reales creados por el usuario, eliminar definitivamente la demo inicial
     const realAds = allAds.filter(a => a && a.id !== 'ad_demo_initial' && !String(a.descripcion || '').includes('v327'));
     if (realAds.length > 0) {
       allAds = realAds;
@@ -3876,14 +3883,22 @@ const db = {
         start_date: todayStr,
         fecha_fin: '2099-12-31',
         end_date: '2099-12-31',
+        hora_inicio: '00:00',
+        start_time: '00:00',
+        hora_fin: '23:59',
+        end_time: '23:59',
         detonante_general: true,
         trigger_navigation: true,
         detonante_cliente: true,
         trigger_client_search: true,
-        descripcion: '📢 Módulo de Anuncios BulaPay v334: Publicidad y comunicados institucionales activos.',
-        title_description: '📢 Módulo de Anuncios BulaPay v334: Publicidad y comunicados institucionales activos.',
+        descripcion: '📢 Módulo de Anuncios BulaPay v335: Publicidad y comunicados institucionales activos.',
+        title_description: '📢 Módulo de Anuncios BulaPay v335: Publicidad y comunicados institucionales activos.',
         multimedia_url: '',
         media_url: '',
+        impresiones: 0,
+        impressions: 0,
+        clics: 0,
+        clicks: 0,
         active: true,
         created_at: '2020-01-01T00:00:00.000Z'
       };
@@ -3898,6 +3913,128 @@ const db = {
     });
 
     return allAds;
+  },
+
+  async incrementAdImpression(adId) {
+    if (!adId) return;
+    try {
+      const raw = localStorage.getItem('bula_announcements');
+      if (raw) {
+        const ads = JSON.parse(raw);
+        const target = ads.find(a => a && String(a.id) === String(adId));
+        if (target) {
+          target.impresiones = (parseInt(target.impresiones || 0, 10) || 0) + 1;
+          target.impressions = target.impresiones;
+          localStorage.setItem('bula_announcements', JSON.stringify(ads));
+        }
+      }
+    } catch(e) {}
+
+    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table') || 'bulapay_anuncios';
+    if (verifiedTable && !window._supabase_ads_disabled) {
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          const { data } = await supabase.from(verifiedTable).select('impresiones, impressions').eq('id', adId).maybeSingle();
+          const current = (data && (data.impresiones || data.impressions)) || 0;
+          await supabase.from(verifiedTable).update({ impresiones: current + 1, impressions: current + 1 }).eq('id', adId);
+        }
+      } catch(e) {}
+    }
+  },
+
+  async incrementAdClick(adId) {
+    if (!adId) return;
+    try {
+      const raw = localStorage.getItem('bula_announcements');
+      if (raw) {
+        const ads = JSON.parse(raw);
+        const target = ads.find(a => a && String(a.id) === String(adId));
+        if (target) {
+          target.clics = (parseInt(target.clics || 0, 10) || 0) + 1;
+          target.clicks = target.clics;
+          localStorage.setItem('bula_announcements', JSON.stringify(ads));
+        }
+      }
+    } catch(e) {}
+
+    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table') || 'bulapay_anuncios';
+    if (verifiedTable && !window._supabase_ads_disabled) {
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          const { data } = await supabase.from(verifiedTable).select('clics, clicks').eq('id', adId).maybeSingle();
+          const current = (data && (data.clics || data.clicks)) || 0;
+          await supabase.from(verifiedTable).update({ clics: current + 1, clicks: current + 1 }).eq('id', adId);
+        }
+      } catch(e) {}
+    }
+  },
+
+  async getNotificaciones() {
+    let list = [];
+    try {
+      const raw = localStorage.getItem('bula_notificaciones');
+      if (raw) list = JSON.parse(raw);
+    } catch(e) {}
+
+    if (!window._supabase_notif_disabled) {
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('bulapay_notificaciones')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!error && Array.isArray(data) && data.length > 0) {
+            list = data;
+          }
+        }
+      } catch(e) {}
+    }
+
+    if (!list || list.length === 0) {
+      list = [
+        {
+          id: 'notif_welcome',
+          titulo: '📢 Comunicado Oficial BulaPay v335',
+          mensaje: 'Módulo oficial de comunicados gerenciales y avisos institucionales en tiempo real.',
+          categoria: 'Institucional',
+          prioridad: 'Normal',
+          created_at: new Date().toISOString()
+        }
+      ];
+    }
+    return list;
+  },
+
+  async saveNotificacion(notifData) {
+    const payload = {
+      id: 'notif_' + Date.now(),
+      titulo: notifData.titulo || notifData.title || 'Comunicado Oficial',
+      mensaje: notifData.mensaje || notifData.message || '',
+      categoria: notifData.categoria || notifData.category || 'Institucional',
+      prioridad: notifData.prioridad || 'Alta',
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      const raw = localStorage.getItem('bula_notificaciones');
+      const list = raw ? JSON.parse(raw) : [];
+      list.unshift(payload);
+      localStorage.setItem('bula_notificaciones', JSON.stringify(list));
+    } catch(e) {}
+
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('bulapay_notificaciones').insert([payload]);
+      }
+    } catch(e) {
+      console.warn("Fallo guardando notificación en Supabase:", e);
+    }
+
+    return payload;
   },
 
   async toggleAnnouncementStatus(adId, active) {
