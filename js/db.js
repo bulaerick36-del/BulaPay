@@ -3682,7 +3682,7 @@ const db = {
     return { success: true, message: 'Contraseña actualizada correctamente.' };
   },
 
-  // Módulo de Anuncios y Publicidad (bulapay-v326)
+  // Módulo de Anuncios y Publicidad (bulapay-v327 - Tabla bulapay_anuncios)
   async saveAnnouncement(adData) {
     if (!adData.id) {
       adData.id = 'ad_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -3691,15 +3691,44 @@ const db = {
       adData.created_at = new Date().toISOString();
     }
     
-    // 1. Persistir en Supabase
+    // Objeto con esquema exacto para la tabla bulapay_anuncios en Supabase
+    const payload = {
+      id: String(adData.id),
+      categoria: String(adData.categoria || adData.category || 'Comercial'),
+      fecha_inicio: String(adData.fecha_inicio || adData.start_date),
+      fecha_fin: String(adData.fecha_fin || adData.end_date),
+      detonante_general: Boolean(adData.detonante_general ?? adData.trigger_navigation ?? false),
+      detonante_cliente: Boolean(adData.detonante_cliente ?? adData.trigger_client_search ?? false),
+      descripcion: String(adData.descripcion || adData.title_description || ''),
+      multimedia_url: String(adData.multimedia_url || adData.media_url || ''),
+      active: adData.active !== false && adData.active !== 'false',
+      created_at: adData.created_at
+    };
+
+    // 1. Intentar persistir en Supabase en tabla bulapay_anuncios
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { data, error } = await supabase.from('announcements').insert([adData]).select();
+        const { data, error } = await supabase.from('bulapay_anuncios').insert([payload]).select();
         if (!error && data && data.length > 0) {
-          console.log("✅ Anuncio guardado en Supabase:", data[0]);
-          this._saveAnnouncementLocal(data[0]);
+          console.log("✅ Anuncio guardado en Supabase (bulapay_anuncios):", data[0]);
+          this._saveAnnouncementLocal(adData);
           return data[0];
+        } else if (error) {
+          console.warn("Fallo insertando en bulapay_anuncios, intentando announcements:", error.message);
+          const fallbackObj = {
+            id: payload.id,
+            category: payload.categoria,
+            start_date: payload.fecha_inicio,
+            end_date: payload.fecha_fin,
+            trigger_navigation: payload.detonante_general,
+            trigger_client_search: payload.detonante_cliente,
+            title_description: payload.descripcion,
+            media_url: payload.multimedia_url,
+            active: payload.active,
+            created_at: payload.created_at
+          };
+          await supabase.from('announcements').insert([fallbackObj]);
         }
       }
     } catch(e) {
@@ -3716,10 +3745,31 @@ const db = {
       const raw = localStorage.getItem('bula_announcements');
       const list = raw ? JSON.parse(raw) : [];
       const index = list.findIndex(a => a.id === ad.id);
+      
+      const normalized = {
+        id: ad.id,
+        category: ad.category || ad.categoria || 'Comercial',
+        categoria: ad.categoria || ad.category || 'Comercial',
+        start_date: ad.start_date || ad.fecha_inicio,
+        fecha_inicio: ad.fecha_inicio || ad.start_date,
+        end_date: ad.end_date || ad.fecha_fin,
+        fecha_fin: ad.fecha_fin || ad.end_date,
+        trigger_navigation: ad.trigger_navigation ?? ad.detonante_general ?? false,
+        detonante_general: ad.detonante_general ?? ad.trigger_navigation ?? false,
+        trigger_client_search: ad.trigger_client_search ?? ad.detonante_cliente ?? false,
+        detonante_cliente: ad.detonante_cliente ?? ad.trigger_client_search ?? false,
+        title_description: ad.title_description || ad.descripcion || '',
+        descripcion: ad.descripcion || ad.title_description || '',
+        media_url: ad.media_url || ad.multimedia_url || '',
+        multimedia_url: ad.multimedia_url || ad.media_url || '',
+        active: ad.active !== false && ad.active !== 'false',
+        created_at: ad.created_at || new Date().toISOString()
+      };
+
       if (index >= 0) {
-        list[index] = ad;
+        list[index] = normalized;
       } else {
-        list.unshift(ad);
+        list.unshift(normalized);
       }
       localStorage.setItem('bula_announcements', JSON.stringify(list));
     } catch(e) {
@@ -3729,18 +3779,63 @@ const db = {
 
   async getAnnouncements() {
     let supabaseAds = [];
+
+    // 1. Intentar consultar bulapay_anuncios
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('bulapay_anuncios').select('*').order('created_at', { ascending: false });
         if (!error && data) {
-          supabaseAds = data;
+          supabaseAds = data.map(item => ({
+            id: item.id,
+            category: item.categoria || 'Comercial',
+            categoria: item.categoria || 'Comercial',
+            start_date: item.fecha_inicio,
+            fecha_inicio: item.fecha_inicio,
+            end_date: item.fecha_fin,
+            fecha_fin: item.fecha_fin,
+            trigger_navigation: Boolean(item.detonante_general),
+            detonante_general: Boolean(item.detonante_general),
+            trigger_client_search: Boolean(item.detonante_cliente),
+            detonante_cliente: Boolean(item.detonante_cliente),
+            title_description: item.descripcion || '',
+            descripcion: item.descripcion || '',
+            media_url: item.multimedia_url || '',
+            multimedia_url: item.multimedia_url || '',
+            active: item.active !== false && item.active !== 'false',
+            created_at: item.created_at
+          }));
+        } else if (error) {
+          // Intentar fallback a announcements si bulapay_anuncios aún no existe en Supabase
+          const { data: dataOld, error: errOld } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+          if (!errOld && dataOld) {
+            supabaseAds = dataOld.map(item => ({
+              id: item.id,
+              category: item.category || 'Comercial',
+              categoria: item.category || 'Comercial',
+              start_date: item.start_date,
+              fecha_inicio: item.start_date,
+              end_date: item.end_date,
+              fecha_fin: item.end_date,
+              trigger_navigation: Boolean(item.trigger_navigation),
+              detonante_general: Boolean(item.trigger_navigation),
+              trigger_client_search: Boolean(item.trigger_client_search),
+              detonante_cliente: Boolean(item.trigger_client_search),
+              title_description: item.title_description || '',
+              descripcion: item.title_description || '',
+              media_url: item.media_url || '',
+              multimedia_url: item.media_url || '',
+              active: item.active !== false && item.active !== 'false',
+              created_at: item.created_at
+            }));
+          }
         }
       }
     } catch(e) {
-      console.warn("Fallo leyendo anuncios de Supabase:", e);
+      console.warn("Fallo leyendo anuncios de Supabase, usando almacenamiento local:", e);
     }
 
+    // 2. Fallback de localStorage
     let localAds = [];
     try {
       const raw = localStorage.getItem('bula_announcements');
@@ -3762,6 +3857,7 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
+        await supabase.from('bulapay_anuncios').update({ active: active }).eq('id', adId);
         await supabase.from('announcements').update({ active: active }).eq('id', adId);
       }
     } catch(e) {
@@ -3785,6 +3881,7 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
+        await supabase.from('bulapay_anuncios').delete().eq('id', adId);
         await supabase.from('announcements').delete().eq('id', adId);
       }
     } catch(e) {

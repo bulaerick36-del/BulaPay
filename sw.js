@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bulapay-v326';
+const CACHE_NAME = 'bulapay-v327';
 const ASSETS = [
   './',
   './index.html',
@@ -20,7 +20,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell v326');
+      console.log('[Service Worker] Caching app shell v327');
       return cache.addAll(ASSETS);
     })
   );

@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v326)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v327)
 
 const adsModule = {
   isShowing: false,
@@ -31,17 +31,23 @@ const adsModule = {
       const todayStr = this.getTodayString();
 
       // Filtrar anuncios activos, vigentes y que tengan el detonante correspondiente
-      const matchingAds = allAds.filter(ad => {
+      const matchingAds = (allAds || []).filter(ad => {
         if (ad.active === false || ad.active === 'false') return false;
         
+        const startDate = ad.fecha_inicio || ad.start_date;
+        const endDate = ad.fecha_fin || ad.end_date;
+
         // Validar rango de fechas
-        if (!this.isDateInRange(todayStr, ad.start_date, ad.end_date)) return false;
+        if (!this.isDateInRange(todayStr, startDate, endDate)) return false;
+
+        const isNavTrigger = ad.detonante_general === true || ad.detonante_general === 'true' || ad.trigger_navigation === true || ad.trigger_navigation === 'true';
+        const isClientTrigger = ad.detonante_cliente === true || ad.detonante_cliente === 'true' || ad.trigger_client_search === true || ad.trigger_client_search === 'true';
 
         // Validar detonante
         if (triggerType === 'navigation') {
-          return ad.trigger_navigation === true || ad.trigger_navigation === 'true';
+          return isNavTrigger;
         } else if (triggerType === 'client_search') {
-          return ad.trigger_client_search === true || ad.trigger_client_search === 'true';
+          return isClientTrigger;
         }
         return false;
       });
@@ -51,7 +57,7 @@ const adsModule = {
         return;
       }
 
-      // Seleccionar el primer anuncio coincidente (o aleatorio entre vigentes)
+      // Seleccionar un anuncio coincidente aleatorio entre los vigentes
       const selectedAd = matchingAds[Math.floor(Math.random() * matchingAds.length)];
       this.displayAdModal(selectedAd, onCompleteCallback);
 
@@ -78,7 +84,7 @@ const adsModule = {
     const mediaImg = document.getElementById('pwa-ad-image');
 
     // Categoría badge
-    const cat = ad.category || 'Comercial';
+    const cat = ad.categoria || ad.category || 'Comercial';
     if (categoryEl) categoryEl.textContent = cat;
 
     let badgeColor = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
@@ -91,13 +97,14 @@ const adsModule = {
 
     // Descripción
     if (descEl) {
-      descEl.textContent = ad.title_description || ad.description || 'Aviso Publicitario Importante';
+      descEl.textContent = ad.descripcion || ad.title_description || ad.description || 'Aviso Publicitario Importante';
     }
 
     // Imagen o gráfico
+    const mediaUrl = ad.multimedia_url || ad.media_url || '';
     if (mediaContainer && mediaImg) {
-      if (ad.media_url && ad.media_url.trim() !== '') {
-        mediaImg.src = ad.media_url;
+      if (mediaUrl && mediaUrl.trim() !== '') {
+        mediaImg.src = mediaUrl;
         mediaContainer.style.display = 'block';
       } else {
         mediaContainer.style.display = 'none';

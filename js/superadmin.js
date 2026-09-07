@@ -1951,12 +1951,19 @@ const superadminModule = {
     }
 
     const newAd = {
+      categoria: category,
       category: category,
+      fecha_inicio: startDate,
       start_date: startDate,
+      fecha_fin: endDate,
       end_date: endDate,
+      detonante_general: triggerNav,
       trigger_navigation: triggerNav,
+      detonante_cliente: triggerClient,
       trigger_client_search: triggerClient,
+      descripcion: description,
       title_description: description,
+      multimedia_url: mediaUrl,
       media_url: mediaUrl,
       active: true
     };
@@ -1992,15 +1999,21 @@ const superadminModule = {
       
       ads.forEach(ad => {
         const isActive = ad.active !== false && ad.active !== 'false';
-        const cat = ad.category || 'Comercial';
+        const cat = ad.categoria || ad.category || 'Comercial';
+        const startDate = ad.fecha_inicio || ad.start_date || 'N/A';
+        const endDate = ad.fecha_fin || ad.end_date || 'N/A';
+        const isNav = ad.detonante_general || ad.trigger_navigation;
+        const isClient = ad.detonante_cliente || ad.trigger_client_search;
+        const desc = ad.descripcion || ad.title_description || ad.description || '';
+        const imgUrl = ad.multimedia_url || ad.media_url || '';
         
         let catBadgeStyle = 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);';
         if (cat === 'Institucional') catBadgeStyle = 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);';
         if (cat === 'Promoción') catBadgeStyle = 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4);';
 
         const triggersText = [
-          (ad.trigger_navigation ? '🌐 Navegación' : null),
-          (ad.trigger_client_search ? '💳 Consulta Cédula' : null)
+          (isNav ? '🌐 Navegación' : null),
+          (isClient ? '💳 Consulta Cédula' : null)
         ].filter(Boolean).join(' | ') || 'Ninguno';
 
         html += `
@@ -2011,7 +2024,7 @@ const superadminModule = {
                   ${cat}
                 </span>
                 <span style="font-size: 0.78rem; color: #94a3b8;">
-                  📅 ${ad.start_date || 'N/A'} al ${ad.end_date || 'N/A'}
+                  📅 ${startDate} al ${endDate}
                 </span>
                 <span style="padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: ${isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${isActive ? '#34d399' : '#fca5a5'};">
                   ${isActive ? '● Activo' : '○ Inactivo'}
@@ -2019,7 +2032,7 @@ const superadminModule = {
               </div>
 
               <p style="color: #f8fafc; font-size: 0.9rem; margin: 0 0 0.5rem 0; white-space: pre-line;">
-                ${ad.title_description || ad.description}
+                ${desc}
               </p>
 
               <div style="font-size: 0.76rem; color: #fbbf24; font-weight: 600;">
@@ -2027,9 +2040,9 @@ const superadminModule = {
               </div>
             </div>
 
-            ${ad.media_url ? `
+            ${imgUrl ? `
               <div style="width: 100px; height: 75px; background: #0b132b; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1);">
-                <img src="${ad.media_url}" style="width: 100%; height: 100%; object-fit: contain;">
+                <img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: contain;">
               </div>
             ` : ''}
 
