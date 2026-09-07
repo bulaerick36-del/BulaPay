@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v328)
+// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v330)
 
 const adsModule = {
   isShowing: false,
@@ -17,11 +17,17 @@ const adsModule = {
     }
   },
 
-  // Evaluar si una fecha cae dentro del rango [start_date, end_date]
+  // Evaluar si una fecha cae dentro del rango [start_date, end_date] con normalización de cadenas
   isDateInRange(todayStr, startDateStr, endDateStr) {
     if (!startDateStr || !endDateStr) return true;
     if (!todayStr) return true;
-    return todayStr >= startDateStr && todayStr <= endDateStr;
+    
+    // Normalizar a YYYY-MM-DD
+    const cleanStart = String(startDateStr).split('T')[0].trim();
+    const cleanEnd = String(endDateStr).split('T')[0].trim();
+    const cleanToday = String(todayStr).split('T')[0].trim();
+
+    return cleanToday >= cleanStart && cleanToday <= cleanEnd;
   },
 
   // Método principal para evaluar e interceptar navegación o acciones del usuario de forma NO BLOQUEANTE
@@ -38,56 +44,55 @@ const adsModule = {
       }
     };
 
-    // Timeout de seguridad: Si los anuncios tardan más de 800ms o se congelan, continuar el flujo inmediatamente
-    const safetyTimer = setTimeout(() => {
-      safeCallback();
-    }, 800);
-
     try {
       if (typeof window.BulaPayDB === 'undefined' || typeof window.BulaPayDB.getAnnouncements !== 'function') {
-        clearTimeout(safetyTimer);
+        console.warn("⚠️ [BulaPay Anuncios] BulaPayDB.getAnnouncements no está disponible.");
         safeCallback();
         return;
       }
 
-      // Consulta protegida con timeout para no congelar promesas
-      const adsPromise = window.BulaPayDB.getAnnouncements();
-      const timeoutPromise = new Promise(resolve => setTimeout(() => resolve([]), 600));
-      const allAds = await Promise.race([adsPromise, timeoutPromise]);
-
+      const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
+      console.log(`📢 [BulaPay Anuncios v330] Verificando anuncios para evento: "${triggerType}". Fecha actual: "${todayStr}". Total anuncios encontrados:`, (allAds || []).length);
+
       // Filtrar anuncios activos, vigentes y que tengan el detonante correspondiente
-      const matchingAds = (allAds || []).filter(ad => {
-        if (!ad || ad.active === false || ad.active === 'false') return false;
+      const matchingAds = (allAds || []).filter((ad, idx) => {
+        if (!ad) return false;
         
-        const startDate = ad.fecha_inicio || ad.start_date;
-        const endDate = ad.fecha_fin || ad.end_date;
+        const isActive = ad.active !== false && ad.active !== 'false';
+        const startDate = String(ad.fecha_inicio || ad.start_date || '').split('T')[0].trim();
+        const endDate = String(ad.fecha_fin || ad.end_date || '').split('T')[0].trim();
 
-        if (!this.isDateInRange(todayStr, startDate, endDate)) return false;
+        const inRange = this.isDateInRange(todayStr, startDate, endDate);
 
-        const isNavTrigger = ad.detonante_general === true || ad.detonante_general === 'true' || ad.trigger_navigation === true || ad.trigger_navigation === 'true';
-        const isClientTrigger = ad.detonante_cliente === true || ad.detonante_cliente === 'true' || ad.trigger_client_search === true || ad.trigger_client_search === 'true';
+        const isNavTrigger = Boolean(ad.detonante_general || ad.trigger_navigation);
+        const isClientTrigger = Boolean(ad.detonante_cliente || ad.trigger_client_search);
 
-        if (triggerType === 'navigation') return isNavTrigger;
-        if (triggerType === 'client_search') return isClientTrigger;
-        return false;
+        let triggerMatch = false;
+        if (triggerType === 'navigation') triggerMatch = isNavTrigger;
+        if (triggerType === 'client_search') triggerMatch = isClientTrigger;
+
+        console.log(`🔎 [Anuncio #${idx + 1} - ID: ${ad.id}] Categoría: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate} a ${endDate}], En Rango: ${inRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger: ${triggerMatch}`);
+        console.log(`   Objeto Anuncio completo:`, ad);
+
+        return isActive && inRange && triggerMatch;
       });
 
       if (!matchingAds || matchingAds.length === 0) {
-        clearTimeout(safetyTimer);
+        console.log(`ℹ️ [BulaPay Anuncios] No hay anuncios activos coincidentes para el evento "${triggerType}".`);
         safeCallback();
         return;
       }
 
       // Seleccionar un anuncio coincidente aleatorio entre los vigentes
       const selectedAd = matchingAds[Math.floor(Math.random() * matchingAds.length)];
-      clearTimeout(safetyTimer);
+      console.log(`🎯 [BulaPay Anuncios] ¡Anuncio seleccionado con éxito!`, selectedAd);
+
       this.displayAdModal(selectedAd, safeCallback);
 
     } catch (e) {
-      console.warn("Excepción silenciosa en verificación de anuncios:", e);
-      clearTimeout(safetyTimer);
+      console.error("❌ Excepción en verificación de anuncios:", e);
       safeCallback();
     }
   },
@@ -99,9 +104,12 @@ const adsModule = {
 
       const modal = document.getElementById('pwa-ad-modal');
       if (!modal) {
+        console.warn("⚠️ [BulaPay Anuncios] Elemento #pwa-ad-modal no existe en el DOM.");
         if (typeof callback === 'function') callback();
         return;
       }
+
+      console.log("🚀 [BulaPay Anuncios] Desplegando modal publicitario en pantalla para el anuncio:", ad);
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
@@ -121,16 +129,17 @@ const adsModule = {
         badgeEl.style.background = badgeColor;
       }
 
-      // Descripción
+      // Descripción o mensaje del anuncio
+      const descText = (ad && (ad.descripcion || ad.title_description || ad.description)) || 'Aviso Publicitario Importante';
       if (descEl) {
-        descEl.textContent = (ad && (ad.descripcion || ad.title_description || ad.description)) || 'Aviso Publicitario Importante';
+        descEl.textContent = descText;
       }
 
-      // Imagen o gráfico
+      // Imagen o gráfico multimedia
       const mediaUrl = (ad && (ad.multimedia_url || ad.media_url)) || '';
       if (mediaContainer && mediaImg) {
         if (mediaUrl && typeof mediaUrl === 'string' && mediaUrl.trim() !== '') {
-          mediaImg.src = mediaUrl;
+          mediaImg.src = mediaUrl.trim();
           mediaContainer.style.display = 'block';
         } else {
           mediaContainer.style.display = 'none';
@@ -138,14 +147,15 @@ const adsModule = {
         }
       }
 
-      // Mostrar modal con animación de entrada
+      // Mostrar modal en primer plano con máxima prioridad
       if (modal.style) {
         modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('z-index', '1000000', 'important');
       }
       modal.classList.add('active');
 
     } catch (e) {
-      console.warn("Error mostrando modal de anuncio:", e);
+      console.error("❌ Error mostrando modal de anuncio:", e);
       if (typeof callback === 'function') callback();
     }
   },
