@@ -19,21 +19,32 @@ const adsModule = {
 
   // Helper para evaluación booleana estricta y segura
   isTrue(val) {
-    return val === true || val === 'true' || val === 1 || val === '1';
+    if (val === undefined || val === null) return false;
+    if (val === false || val === 'false' || val === 0 || val === '0') return false;
+    return true;
   },
 
-  // Evaluar si una fecha cae dentro del rango [start_date, end_date] con normalización YYYY-MM-DD
+  // Evaluar si una fecha cae dentro del rango [start_date, end_date] con objetos Date locales
   isDateInRange(todayStr, startDateStr, endDateStr) {
-    if (!startDateStr || !endDateStr) return true;
+    if (!startDateStr && !endDateStr) return true;
     if (!todayStr) return true;
-    
-    const cleanStart = String(startDateStr).split('T')[0].trim();
-    const cleanEnd = String(endDateStr).split('T')[0].trim();
-    const cleanToday = String(todayStr).split('T')[0].trim();
 
-    if (!cleanStart || !cleanEnd) return true;
+    try {
+      const today = new Date(todayStr + 'T00:00:00');
+      
+      let start = startDateStr ? new Date(String(startDateStr).split('T')[0] + 'T00:00:00') : null;
+      let end = endDateStr ? new Date(String(endDateStr).split('T')[0] + 'T23:59:59') : null;
 
-    return cleanToday >= cleanStart && cleanToday <= cleanEnd;
+      if (start && isNaN(start.getTime())) start = null;
+      if (end && isNaN(end.getTime())) end = null;
+
+      if (start && today < start) return false;
+      if (end && today > end) return false;
+
+      return true;
+    } catch(e) {
+      return true;
+    }
   },
 
   // Método principal para evaluar e interceptar navegación o acciones del usuario
@@ -60,7 +71,7 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios v330] Evaluando evento: "${triggerType}". Fecha actual: "${todayStr}". Total anuncios encontrados en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios v330] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       // Filtrar anuncios activos, vigentes y que tengan el detonante correspondiente
       const matchingAds = (allAds || []).filter((ad, idx) => {
@@ -81,7 +92,7 @@ const adsModule = {
 
         const passes = isActive && inRange && triggerMatch;
 
-        console.log(`🔎 [Anuncio #${idx + 1} - ${ad.id}] Categoria: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate || 'N/A'} a ${endDate || 'N/A'}], En Rango: ${inRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger "${triggerType}": ${triggerMatch} ==> RESULTADO: ${passes ? '✅ ACEPTADO' : '❌ DESCARTADO'}`);
+        console.log(`🔎 [Anuncio #${idx + 1} - ${ad.id}] Categoría: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate || 'Sin inicio'} a ${endDate || 'Sin fin'}], En Rango: ${inRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger "${triggerType}": ${triggerMatch} ==> RESULTADO: ${passes ? '✅ ACEPTADO' : '❌ DESCARTADO'}`);
         console.log(`   Objeto Anuncio completo:`, ad);
 
         return passes;
@@ -154,13 +165,8 @@ const adsModule = {
         }
       }
 
-      // Mostrar modal en primer plano con máxima prioridad
-      if (modal.style) {
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.setProperty('z-index', '1000000', 'important');
-        modal.style.setProperty('opacity', '1', 'important');
-        modal.style.setProperty('visibility', 'visible', 'important');
-      }
+      // Mostrar modal en primer plano forzando inline cssText
+      modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important;';
       modal.classList.add('active');
 
       console.log("✅ [BulaPay Anuncios] Modal publicitario visible en pantalla.");
@@ -191,6 +197,56 @@ const adsModule = {
       try { cb(); } catch(e) {}
     }
   }
+};
+
+// Función global de diagnóstico del sistema de anuncios
+window.diagnoseAds = async function() {
+  console.group("🔍 === DIAGNÓSTICO COMPLETO DEL MÓDULO DE ANUNCIOS BULAPAY ===");
+  
+  const modal = document.getElementById('pwa-ad-modal');
+  console.log("1️⃣ Elemento #pwa-ad-modal en DOM:", modal ? "✅ ENCONTRADO EN DOM" : "❌ NO EXISTE EN DOM");
+
+  const rawLocal = localStorage.getItem('bula_announcements');
+  const localList = rawLocal ? JSON.parse(rawLocal) : [];
+  console.log("2️⃣ Anuncios guardados en localStorage ('bula_announcements'):", localList.length, localList);
+
+  let dbAds = [];
+  try {
+    if (window.BulaPayDB && typeof window.BulaPayDB.getAnnouncements === 'function') {
+      dbAds = await window.BulaPayDB.getAnnouncements();
+      console.log("3️⃣ Anuncios devueltos por BulaPayDB.getAnnouncements():", dbAds.length, dbAds);
+    } else {
+      console.error("3️⃣ BulaPayDB.getAnnouncements NO está disponible.");
+    }
+  } catch(e) {
+    console.error("3️⃣ Error consultando BulaPayDB.getAnnouncements():", e);
+  }
+
+  const todayStr = adsModule.getTodayString();
+  console.log("4️⃣ Fecha actual detectada (Local):", todayStr);
+
+  console.log("5️⃣ Evaluación individual de detonantes:");
+  (dbAds || []).forEach((ad, i) => {
+    const isActive = ad.active !== false && ad.active !== 'false';
+    const startDate = String(ad.fecha_inicio || ad.start_date || '').split('T')[0].trim();
+    const endDate = String(ad.fecha_fin || ad.end_date || '').split('T')[0].trim();
+    const inRange = adsModule.isDateInRange(todayStr, startDate, endDate);
+    const navTrig = adsModule.isTrue(ad.detonante_general) || adsModule.isTrue(ad.trigger_navigation);
+    const clientTrig = adsModule.isTrue(ad.detonante_cliente) || adsModule.isTrue(ad.trigger_client_search);
+
+    console.log(`   📌 Anuncio #${i + 1} [ID: ${ad.id}]`);
+    console.log(`      • Mensaje: "${ad.descripcion || ad.title_description}"`);
+    console.log(`      • Categoría: ${ad.categoria || ad.category}`);
+    console.log(`      • Activo: ${isActive}`);
+    console.log(`      • Rango Fechas: ${startDate || 'Sin inicio'} a ${endDate || 'Sin fin'} (En rango: ${inRange})`);
+    console.log(`      • Detonante Navegación: ${navTrig}`);
+    console.log(`      • Detonante Cliente: ${clientTrig}`);
+    console.log(`      • Apto para Buscar Cédula: ${isActive && inRange && clientTrig ? '✅ SÍ' : '❌ NO'}`);
+    console.log(`      • Apto para Navegación: ${isActive && inRange && navTrig ? '✅ SÍ' : '❌ NO'}`);
+  });
+
+  console.groupEnd();
+  return "Diagnóstico finalizado. Revisa los detalles arriba.";
 };
 
 window.adsModule = adsModule;

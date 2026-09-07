@@ -78,6 +78,15 @@ const customerModule = {
 
   async loadClientStatement(cedula) {
     try {
+      // Disparar la verificación de anuncio publicitario para clientes
+      try {
+        if (window.adsModule && typeof window.adsModule.checkAndShowAd === 'function') {
+          window.adsModule.checkAndShowAd('client_search');
+        }
+      } catch(adErr) {
+        console.warn("Fallo al verificar anuncio en loadClientStatement:", adErr);
+      }
+
       const client = await window.BulaPayDB.getGlobalClientByCedula(cedula);
       if (!client) {
         alert('❌ Cliente no registrado en el sistema BulaPay.');
