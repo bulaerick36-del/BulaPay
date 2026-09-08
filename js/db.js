@@ -3960,14 +3960,26 @@ const db = {
               }
 
               if (!error && Array.isArray(data) && data.length > 0) {
+                const seenIds = new Set();
                 supabaseList = data
                   .map(normalize)
-                  .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
+                  .filter(n => {
+                    if (!n || !n.id || n.id === 'notif_welcome' || n.id === 'notif_welcome_clean' || String(n.id).includes('actualizacion')) return false;
+                    if (seenIds.has(String(n.id))) return false;
+                    seenIds.add(String(n.id));
+                    return true;
+                  });
+
+                // Orden descendente estricto por fecha (más reciente primero)
+                supabaseList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
                 if (supabaseList.length > 0) {
                   try {
                     localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(supabaseList));
+                    // Purga automática de llaves viejas/duplicadas en el dispositivo
+                    ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
                   } catch(eStore) {}
-                  console.log(`🔔 [BulaPay Comunicados Cloud Supabase bulapay-v350] Obtención exitosa de "${table}" (${supabaseList.length}):`, supabaseList);
+                  console.log(`🔔 [BulaPay Comunicados Cloud Supabase bulapay-v351] Obtención exitosa de "${table}" (${supabaseList.length}):`, supabaseList);
                   return supabaseList;
                 }
               }
@@ -3982,22 +3994,28 @@ const db = {
     // 2. Fallback a almacenamiento local si Supabase está offline o sin registros
     let localNotifs = [];
     try {
+      // Purgar llaves obsoletas
+      ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
       let raw = localStorage.getItem('bulapay_comunicados_oficiales');
-      if (!raw) {
-        raw = localStorage.getItem('bulapay_comunicados_local') || localStorage.getItem('bula_notificaciones');
-      }
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) localNotifs = parsed;
       }
     } catch(e) {}
 
+    const localSeen = new Set();
     localNotifs = localNotifs
       .map(normalize)
-      .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
+      .filter(n => {
+        if (!n || !n.id || n.id === 'notif_welcome' || n.id !== 'notif_welcome_clean' && String(n.id).includes('actualizacion')) return false;
+        if (localSeen.has(String(n.id))) return false;
+        localSeen.add(String(n.id));
+        return true;
+      });
 
+    // Orden descendente estricto por fecha (más reciente primero)
     localNotifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    console.log(`🔔 [BulaPay Comunicados Local Fallback bulapay-v350] (${localNotifs.length}):`, localNotifs);
+    console.log(`🔔 [BulaPay Comunicados Local Fallback bulapay-v351] (${localNotifs.length}):`, localNotifs);
     return localNotifs;
   },
 

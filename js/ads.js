@@ -488,9 +488,17 @@ const adsModule = {
     if (content) {
       content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales en tiempo real...</p>';
       try {
+        // Limpieza de llaves obsoletas en local storage
+        ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
+
         let notifs = [];
         if (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function') {
           notifs = await window.BulaPayDB.getNotificaciones();
+        }
+
+        if (Array.isArray(notifs)) {
+          // Orden descendente estricto por fecha
+          notifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
         }
 
         // Marcar notificaciones como leídas al abrir la bandeja
