@@ -2124,13 +2124,7 @@ const superadminModule = {
         mensaje: message
       });
 
-      // Purga preventiva de llaves locales
-      try {
-        localStorage.removeItem('bulapay_comunicados_local');
-        localStorage.removeItem('bula_notificaciones');
-      } catch(eLocal) {}
-
-      alert('✅ ¡Comunicado gerencial publicado exitosamente en Supabase!');
+      alert('✅ ¡Comunicado gerencial publicado exitosamente!');
       const form = document.getElementById('form-create-notif');
       if (form) form.reset();
       await this.loadNotificacionesList();
@@ -2212,10 +2206,6 @@ const superadminModule = {
       if (window.BulaPayDB && typeof window.BulaPayDB.deleteNotificacion === 'function') {
         await window.BulaPayDB.deleteNotificacion(notifId);
       }
-      try {
-        localStorage.removeItem('bulapay_comunicados_local');
-        localStorage.removeItem('bula_notificaciones');
-      } catch(eLocal) {}
       await this.loadNotificacionesList();
       if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
         window.adsModule.updateComunicadosBadge();

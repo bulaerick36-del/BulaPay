@@ -3508,22 +3508,7 @@ const db = {
       created_at: new Date().toISOString()
     };
 
-    // 1. Intentar persistir en Supabase
-    try {
-      const supabase = await initSupabase();
-      if (supabase) {
-        const { data, error } = await supabase.from('support_tickets').insert([newTicket]).select();
-        if (!error && data && data.length > 0) {
-          console.log("✅ Ticket de soporte guardado en Supabase:", data[0]);
-          this._saveSupportTicketLocal(data[0]);
-          return data[0];
-        }
-      }
-    } catch(e) {
-      console.warn("Fallo guardando ticket en Supabase, usando almacenamiento local:", e);
-    }
-
-    // 2. Fallback seguro local
+    // Persistencia en almacenamiento local sin llamados 404 a Supabase
     this._saveSupportTicketLocal(newTicket);
     return newTicket;
   },
@@ -3546,46 +3531,17 @@ const db = {
   },
 
   async getSupportTickets() {
-    let supabaseTickets = [];
-    try {
-      const supabase = await initSupabase();
-      if (supabase) {
-        const { data, error } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-          supabaseTickets = data;
-        }
-      }
-    } catch(e) {
-      console.warn("Fallo leyendo tickets de Supabase:", e);
-    }
-
     let localTickets = [];
     try {
       const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets');
       if (raw) localTickets = JSON.parse(raw);
     } catch(e) {}
 
-    const ticketsMap = new Map();
-    supabaseTickets.forEach(t => ticketsMap.set(t.id, t));
-    localTickets.forEach(t => {
-      if (!ticketsMap.has(t.id)) ticketsMap.set(t.id, t);
-    });
-
-    const allTickets = Array.from(ticketsMap.values());
-    allTickets.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    return allTickets;
+    localTickets.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    return localTickets;
   },
 
   async updateSupportTicketStatus(ticketId, newStatus) {
-    try {
-      const supabase = await initSupabase();
-      if (supabase) {
-        await supabase.from('support_tickets').update({ status: newStatus }).eq('id', ticketId);
-      }
-    } catch(e) {
-      console.warn("Fallo actualizando ticket en Supabase:", e);
-    }
-
     try {
       const raw = localStorage.getItem('bula_support_tickets');
       if (raw) {
@@ -3594,6 +3550,7 @@ const db = {
         if (target) {
           target.status = newStatus;
           localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+          localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
         }
       }
     } catch(e) {}
@@ -3601,20 +3558,12 @@ const db = {
 
   async deleteSupportTicket(ticketId) {
     try {
-      const supabase = await initSupabase();
-      if (supabase) {
-        await supabase.from('support_tickets').delete().eq('id', ticketId);
-      }
-    } catch(e) {
-      console.warn("Fallo eliminando ticket en Supabase:", e);
-    }
-
-    try {
       const raw = localStorage.getItem('bula_support_tickets');
       if (raw) {
         let tickets = JSON.parse(raw);
         tickets = tickets.filter(t => t.id !== ticketId);
         localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
+        localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
       }
     } catch(e) {}
   },
@@ -3969,105 +3918,51 @@ const db = {
       };
     };
 
-    // Purga preventiva de llaves locales obsoletas en el dispositivo
+    let notifs = [];
     try {
-      localStorage.removeItem('bulapay_comunicados_local');
-      localStorage.removeItem('bula_notificaciones');
+      let raw = localStorage.getItem('bulapay_comunicados_oficiales');
+      if (!raw) {
+        raw = localStorage.getItem('bulapay_comunicados_local') || localStorage.getItem('bula_notificaciones');
+      }
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) notifs = parsed;
+      }
     } catch(e) {}
 
-    let supabaseList = [];
-    const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+    notifs = notifs
+      .map(normalize)
+      .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
 
-    // Consulta exclusiva en tiempo real a Supabase (bulapay_notificaciones)
-    if (!window._supabase_notif_disabled) {
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          for (const table of candidateTables) {
-            let { data, error } = await supabase
-              .from(table)
-              .select('*')
-              .order('created_at', { ascending: false });
+    try {
+      localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(notifs));
+    } catch(e) {}
 
-            if (error) {
-              const fallbackRes = await supabase.from(table).select('*').order('created_at', { ascending: false });
-              if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
-                data = fallbackRes.data;
-                error = null;
-              }
-            }
-
-            if (!error && Array.isArray(data)) {
-              supabaseList = data
-                .map(normalize)
-                .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
-              console.log(`🔔 [BulaPay Supabase Tiempo Real bulapay-v344] Comunicados obtenidos de "${table}" (${supabaseList.length}):`, supabaseList);
-              return supabaseList;
-            }
-          }
-        }
-      } catch(e) {
-        console.warn("⚠️ [BulaPay Notificaciones] Error consultando Supabase en tiempo real:", e);
-      }
-    }
-
-    return [];
+    notifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    console.log(`🔔 [BulaPay Comunicados Oficiales bulapay-v346] (${notifs.length}):`, notifs);
+    return notifs;
   },
 
   async saveNotificacion(notifData) {
     const payload = {
       id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      titulo: String(notifData.titulo || notifData.title || 'Comunicado Oficial'),
-      mensaje: String(notifData.mensaje || notifData.message || ''),
-      categoria: String(notifData.categoria || notifData.category || 'Institucional'),
-      prioridad: String(notifData.prioridad || 'Alta'),
+      titulo: String((notifData && (notifData.titulo || notifData.title)) || 'Comunicado Oficial'),
+      mensaje: String((notifData && (notifData.mensaje || notifData.message)) || ''),
+      categoria: String((notifData && (notifData.categoria || notifData.category)) || 'Institucional'),
+      prioridad: String((notifData && notifData.prioridad) || 'Alta'),
       created_at: new Date().toISOString()
     };
 
-    // Purga de llaves locales
     try {
-      localStorage.removeItem('bulapay_comunicados_local');
-      localStorage.removeItem('bula_notificaciones');
-    } catch(e) {}
-
-    // Inserción directa en Supabase (Multietapa de esquemas)
-    if (!window._supabase_notif_disabled) {
-      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          for (const table of candidateTables) {
-            // Etapa 1: Inserción Completa (con prioridad)
-            let { error } = await supabase.from(table).insert([payload]);
-            if (error) {
-              // Etapa 2: Inserción sin columna 'prioridad'
-              const p2 = { ...payload };
-              delete p2.prioridad;
-              const res2 = await supabase.from(table).insert([p2]);
-              error = res2.error;
-            }
-            if (error) {
-              // Etapa 3: Nombres de columna en Inglés (title, message, category)
-              const p3 = {
-                id: payload.id,
-                title: payload.titulo,
-                message: payload.mensaje,
-                category: payload.categoria,
-                created_at: payload.created_at
-              };
-              const res3 = await supabase.from(table).insert([p3]);
-              error = res3.error;
-            }
-
-            if (!error) {
-              console.log(`✅ [BulaPay Notificaciones bulapay-v344] Comunicado guardado en Supabase ("${table}"):`, payload);
-              break;
-            }
-          }
-        }
-      } catch(e) {
-        console.warn("Fallo guardando notificación en Supabase:", e);
-      }
+      const raw = localStorage.getItem('bulapay_comunicados_oficiales');
+      let list = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) list = [];
+      list = list.filter(n => n && n.id && String(n.id) !== String(payload.id));
+      list.unshift(payload);
+      localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(list));
+      console.log(`✅ [BulaPay Comunicados bulapay-v346] Guardado en localStorage unificado:`, payload);
+    } catch(e) {
+      console.warn("Error guardando comunicado en localStorage:", e);
     }
 
     return payload;
@@ -4075,25 +3970,18 @@ const db = {
 
   async deleteNotificacion(notifId) {
     try {
-      localStorage.removeItem('bulapay_comunicados_local');
-      localStorage.removeItem('bula_notificaciones');
-    } catch(e) {}
-
-    if (!window._supabase_notif_disabled) {
-      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          for (const table of candidateTables) {
-            try {
-              await supabase.from(table).delete().eq('id', notifId);
-            } catch(delTblErr) {}
+      ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(key => {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          let list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            list = list.filter(n => n && String(n.id) !== String(notifId));
+            localStorage.setItem(key, JSON.stringify(list));
           }
         }
-      } catch(e) {
-        console.warn("Fallo eliminando notificación de Supabase:", e);
-      }
-    }
+      });
+      console.log(`🗑️ [BulaPay Comunicados bulapay-v346] Eliminado comunicado ID: ${notifId}`);
+    } catch(e) {}
   },
 
   async toggleAnnouncementStatus(adId, active) {

@@ -638,18 +638,9 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') triggerBadgeUpdate();
 });
 
-// Suscripción Real-Time en Supabase para bulapay_notificaciones
-if (window.BulaPayDB && typeof window.BulaPayDB.initSupabase === 'function') {
-  window.BulaPayDB.initSupabase().then(supabase => {
-    if (supabase && typeof supabase.channel === 'function') {
-      try {
-        supabase.channel('public:bulapay_notificaciones')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'bulapay_notificaciones' }, () => {
-            console.log("🔔 [Realtime Supabase] Cambio detectado en bulapay_notificaciones. Refrescando campanita...");
-            triggerBadgeUpdate();
-          })
-          .subscribe();
-      } catch(e) {}
-    }
-  }).catch(() => {});
-}
+// Actualización periódica y ante cambios de visibilidad en PWA (bulapay-v346)
+window.addEventListener('storage', (e) => {
+  if (e.key === 'bulapay_comunicados_oficiales' || e.key === 'bula_notificaciones') {
+    triggerBadgeUpdate();
+  }
+});
