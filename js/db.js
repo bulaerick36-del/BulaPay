@@ -3908,10 +3908,28 @@ const db = {
   async getNotificaciones() {
     const normalize = (n) => {
       if (!n) return null;
+      let rawTitle = n.titulo || n.title || n.subject || '';
+      let rawMsg = n.mensaje || n.message || n.content || '';
+
+      if (!rawTitle && !rawMsg && (n.descripcion || n.title_description)) {
+        const desc = String(n.descripcion || n.title_description || '').trim();
+        if (desc.includes(':')) {
+          const parts = desc.split(':');
+          rawTitle = parts[0].trim();
+          rawMsg = parts.slice(1).join(':').trim();
+        } else {
+          rawTitle = 'Comunicado Oficial';
+          rawMsg = desc;
+        }
+      }
+
+      if (!rawTitle) rawTitle = n.title_description || 'Comunicado Oficial';
+      if (!rawMsg) rawMsg = n.descripcion || '';
+
       return {
         id: String(n.id || ('notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6))),
-        titulo: String(n.titulo || n.title || n.subject || 'Comunicado Oficial'),
-        mensaje: String(n.mensaje || n.message || n.content || n.descripcion || ''),
+        titulo: String(rawTitle).trim(),
+        mensaje: String(rawMsg).trim(),
         categoria: String(n.categoria || n.category || 'Institucional'),
         prioridad: String(n.prioridad || n.priority || 'Alta'),
         created_at: n.created_at || n.createdAt || new Date().toISOString()
@@ -3919,7 +3937,7 @@ const db = {
     };
 
     let supabaseList = [];
-    const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+    const candidateTables = ['bulapay_anuncios', 'anuncios', 'announcements', 'bulapay_notificaciones', 'notificaciones'];
 
     // 1. Consulta prioritaria en tiempo real a Supabase (Sincronización Cloud Laptop <-> Teléfono)
     if (!window._supabase_notif_disabled) {
@@ -3949,7 +3967,7 @@ const db = {
                   try {
                     localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(supabaseList));
                   } catch(eStore) {}
-                  console.log(`🔔 [BulaPay Comunicados Cloud Supabase bulapay-v347] Obtención exitosa de "${table}" (${supabaseList.length}):`, supabaseList);
+                  console.log(`🔔 [BulaPay Comunicados Cloud Supabase bulapay-v350] Obtención exitosa de "${table}" (${supabaseList.length}):`, supabaseList);
                   return supabaseList;
                 }
               }
@@ -3979,7 +3997,7 @@ const db = {
       .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
 
     localNotifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    console.log(`🔔 [BulaPay Comunicados Local Fallback bulapay-v347] (${localNotifs.length}):`, localNotifs);
+    console.log(`🔔 [BulaPay Comunicados Local Fallback bulapay-v350] (${localNotifs.length}):`, localNotifs);
     return localNotifs;
   },
 
@@ -4008,25 +4026,38 @@ const db = {
 
     // 2. Publicar en Supabase Nube para que esté disponible en celulares y otros dispositivos
     if (!window._supabase_notif_disabled) {
-      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+      const candidateTables = ['bulapay_anuncios', 'anuncios', 'announcements', 'bulapay_notificaciones', 'notificaciones'];
       try {
         const supabase = await initSupabase();
         if (supabase) {
           for (const table of candidateTables) {
             try {
+              // Intento 1: Campos directos de notificación
               let { error } = await supabase.from(table).insert([payload]);
+              
+              // Intento 2: Compatibilidad con tabla de anuncios/comunicados (descripcion/title_description)
               if (error) {
-                const p2 = { ...payload };
-                delete p2.prioridad;
+                const p2 = {
+                  id: payload.id,
+                  categoria: payload.categoria,
+                  category: payload.categoria,
+                  descripcion: payload.titulo + ': ' + payload.mensaje,
+                  title_description: payload.titulo,
+                  detonante_general: false,
+                  detonante_cliente: false,
+                  active: true,
+                  created_at: payload.created_at
+                };
                 const res2 = await supabase.from(table).insert([p2]);
                 error = res2.error;
               }
+
+              // Intento 3: Esquema básico minimalista
               if (error) {
                 const p3 = {
                   id: payload.id,
-                  title: payload.titulo,
-                  message: payload.mensaje,
-                  category: payload.categoria,
+                  descripcion: payload.titulo + ': ' + payload.mensaje,
+                  active: true,
                   created_at: payload.created_at
                 };
                 const res3 = await supabase.from(table).insert([p3]);
@@ -4034,7 +4065,7 @@ const db = {
               }
 
               if (!error) {
-                console.log(`✅ [BulaPay Comunicados Cloud bulapay-v347] Publicado exitosamente en Supabase Nube ("${table}"):`, payload);
+                console.log(`✅ [BulaPay Comunicados Cloud bulapay-v350] Publicado exitosamente en Supabase Nube ("${table}"):`, payload);
                 break;
               }
             } catch(insErr) {}
@@ -4066,7 +4097,7 @@ const db = {
 
     // 2. Eliminar en Supabase Nube
     if (!window._supabase_notif_disabled) {
-      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+      const candidateTables = ['bulapay_anuncios', 'anuncios', 'announcements', 'bulapay_notificaciones', 'notificaciones'];
       try {
         const supabase = await initSupabase();
         if (supabase) {
