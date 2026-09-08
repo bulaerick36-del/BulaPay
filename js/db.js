@@ -3918,7 +3918,51 @@ const db = {
       };
     };
 
-    let notifs = [];
+    let supabaseList = [];
+    const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+
+    // 1. Consulta prioritaria en tiempo real a Supabase (Sincronización Cloud Laptop <-> Teléfono)
+    if (!window._supabase_notif_disabled) {
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          for (const table of candidateTables) {
+            try {
+              let { data, error } = await supabase
+                .from(table)
+                .select('*')
+                .order('created_at', { ascending: false });
+
+              if (error) {
+                const fallbackRes = await supabase.from(table).select('*').order('created_at', { ascending: false });
+                if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
+                  data = fallbackRes.data;
+                  error = null;
+                }
+              }
+
+              if (!error && Array.isArray(data) && data.length > 0) {
+                supabaseList = data
+                  .map(normalize)
+                  .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
+                if (supabaseList.length > 0) {
+                  try {
+                    localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(supabaseList));
+                  } catch(eStore) {}
+                  console.log(`🔔 [BulaPay Comunicados Cloud Supabase bulapay-v347] Obtención exitosa de "${table}" (${supabaseList.length}):`, supabaseList);
+                  return supabaseList;
+                }
+              }
+            } catch(tblErr) {}
+          }
+        }
+      } catch(e) {
+        console.warn("⚠️ Error consultando Supabase comunicados:", e);
+      }
+    }
+
+    // 2. Fallback a almacenamiento local si Supabase está offline o sin registros
+    let localNotifs = [];
     try {
       let raw = localStorage.getItem('bulapay_comunicados_oficiales');
       if (!raw) {
@@ -3926,21 +3970,17 @@ const db = {
       }
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) notifs = parsed;
+        if (Array.isArray(parsed)) localNotifs = parsed;
       }
     } catch(e) {}
 
-    notifs = notifs
+    localNotifs = localNotifs
       .map(normalize)
       .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
 
-    try {
-      localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(notifs));
-    } catch(e) {}
-
-    notifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    console.log(`🔔 [BulaPay Comunicados Oficiales bulapay-v346] (${notifs.length}):`, notifs);
-    return notifs;
+    localNotifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    console.log(`🔔 [BulaPay Comunicados Local Fallback bulapay-v347] (${localNotifs.length}):`, localNotifs);
+    return localNotifs;
   },
 
   async saveNotificacion(notifData) {
@@ -3953,6 +3993,7 @@ const db = {
       created_at: new Date().toISOString()
     };
 
+    // 1. Guardar de inmediato en almacenamiento local para respuesta instantánea
     try {
       const raw = localStorage.getItem('bulapay_comunicados_oficiales');
       let list = raw ? JSON.parse(raw) : [];
@@ -3960,15 +4001,55 @@ const db = {
       list = list.filter(n => n && n.id && String(n.id) !== String(payload.id));
       list.unshift(payload);
       localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(list));
-      console.log(`✅ [BulaPay Comunicados bulapay-v346] Guardado en localStorage unificado:`, payload);
+      console.log(`✅ [BulaPay Comunicados] Guardado en localStorage:`, payload);
     } catch(e) {
-      console.warn("Error guardando comunicado en localStorage:", e);
+      console.warn("Error guardando en localStorage:", e);
+    }
+
+    // 2. Publicar en Supabase Nube para que esté disponible en celulares y otros dispositivos
+    if (!window._supabase_notif_disabled) {
+      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          for (const table of candidateTables) {
+            try {
+              let { error } = await supabase.from(table).insert([payload]);
+              if (error) {
+                const p2 = { ...payload };
+                delete p2.prioridad;
+                const res2 = await supabase.from(table).insert([p2]);
+                error = res2.error;
+              }
+              if (error) {
+                const p3 = {
+                  id: payload.id,
+                  title: payload.titulo,
+                  message: payload.mensaje,
+                  category: payload.categoria,
+                  created_at: payload.created_at
+                };
+                const res3 = await supabase.from(table).insert([p3]);
+                error = res3.error;
+              }
+
+              if (!error) {
+                console.log(`✅ [BulaPay Comunicados Cloud bulapay-v347] Publicado exitosamente en Supabase Nube ("${table}"):`, payload);
+                break;
+              }
+            } catch(insErr) {}
+          }
+        }
+      } catch(e) {
+        console.warn("Fallo publicando en Supabase Nube:", e);
+      }
     }
 
     return payload;
   },
 
   async deleteNotificacion(notifId) {
+    // 1. Eliminar de almacenamiento local
     try {
       ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(key => {
         const raw = localStorage.getItem(key);
@@ -3980,8 +4061,25 @@ const db = {
           }
         }
       });
-      console.log(`🗑️ [BulaPay Comunicados bulapay-v346] Eliminado comunicado ID: ${notifId}`);
+      console.log(`🗑️ [BulaPay Comunicados] Eliminado en local ID: ${notifId}`);
     } catch(e) {}
+
+    // 2. Eliminar en Supabase Nube
+    if (!window._supabase_notif_disabled) {
+      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          for (const table of candidateTables) {
+            try {
+              await supabase.from(table).delete().eq('id', notifId);
+            } catch(delErr) {}
+          }
+        }
+      } catch(e) {
+        console.warn("Fallo eliminando de Supabase Nube:", e);
+      }
+    }
   },
 
   async toggleAnnouncementStatus(adId, active) {

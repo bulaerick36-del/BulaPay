@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v346';
+const CACHE_NAME = 'bulapay-v347';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=346',
-  './js/db.js?v=346',
-  './js/ads.js?v=346',
-  './js/auth.js?v=346',
-  './js/supervisor.js?v=346',
-  './js/agent_v6.js?v=346',
-  './js/customer.js?v=346',
-  './js/superadmin.js?v=346',
-  './js/app.js?v=346',
+  './css/style.css?v=347',
+  './js/db.js?v=347',
+  './js/ads.js?v=347',
+  './js/auth.js?v=347',
+  './js/supervisor.js?v=347',
+  './js/agent_v6.js?v=347',
+  './js/customer.js?v=347',
+  './js/superadmin.js?v=347',
+  './js/app.js?v=347',
   './assets/logo.svg'
 ];
 
@@ -20,26 +20,26 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v346');
+      console.log('[Service Worker] Caching app shell bulapay-v347');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340, v341, v342, v344, v345, etc.)
+// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340, v341, v342, v344, v345, v346, etc.)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v346] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v347] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v346] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v347] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );
