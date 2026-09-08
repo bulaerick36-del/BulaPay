@@ -486,27 +486,11 @@ const adsModule = {
     modal.classList.add('active');
 
     if (content) {
-      content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales...</p>';
+      content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales en tiempo real...</p>';
       try {
         let notifs = [];
         if (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function') {
           notifs = await window.BulaPayDB.getNotificaciones();
-        } else {
-          try {
-            const rawLocal = localStorage.getItem('bulapay_comunicados_local') || localStorage.getItem('bula_notificaciones');
-            if (rawLocal) notifs = JSON.parse(rawLocal);
-          } catch(e) {}
-        }
-
-        if (!notifs || !Array.isArray(notifs) || notifs.length === 0) {
-          notifs = [{
-            id: 'notif_actualizacion_v342',
-            titulo: 'Actualización BulaPay PWA',
-            mensaje: 'Actualización del sistema BulaPay PWA activa. Comunicados y servicios de billetera sincronizados.',
-            categoria: 'Institucional',
-            prioridad: 'Alta',
-            created_at: new Date().toISOString()
-          }];
         }
 
         // Marcar notificaciones como leídas al abrir la bandeja
@@ -524,7 +508,7 @@ const adsModule = {
 
         await this.updateComunicadosBadge();
 
-        if (!notifs || notifs.length === 0) {
+        if (!notifs || !Array.isArray(notifs) || notifs.length === 0) {
           content.innerHTML = `
             <div style="text-align: center; padding: 2rem; color: #94a3b8;">
               <span style="font-size: 2rem;">📭</span>

@@ -654,17 +654,20 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers y anuncios/notificaciones demo obsoletos (bulapay-v342)
+// Purga automática de Service Workers y comunicados obsoletos en caché local (bulapay-v344)
 window.forcePurgeAndRegisterServiceWorker = async function() {
-  // Purga inmediata de anuncios y notificaciones demo obsoletos de localStorage en dispositivos móviles
+  // Purga absoluta de comunicados locales obsoletos en dispositivos móviles
   try {
+    localStorage.removeItem('bulapay_comunicados_local');
+    localStorage.removeItem('bula_notificaciones');
+    console.log('🧹 [PWA Purga bulapay-v344] Llaves de comunicados locales eliminadas para forzar tiempo real Supabase.');
+
     const rawAds = localStorage.getItem('bula_announcements');
     if (rawAds) {
       const parsedAds = JSON.parse(rawAds);
       if (Array.isArray(parsedAds)) {
         const cleanedAds = parsedAds.filter(a => a && a.id !== 'ad_demo_initial');
         if (cleanedAds.length !== parsedAds.length) {
-          console.log('🧹 [PWA Purga] Anuncio demo obsoleto purgado de localStorage en móvil');
           if (cleanedAds.length > 0) {
             localStorage.setItem('bula_announcements', JSON.stringify(cleanedAds));
           } else {
@@ -673,28 +676,17 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
         }
       }
     }
-    const rawNotifs = localStorage.getItem('bula_notificaciones');
-    if (rawNotifs) {
-      const parsedNotifs = JSON.parse(rawNotifs);
-      if (Array.isArray(parsedNotifs)) {
-        const cleanedNotifs = parsedNotifs.filter(n => n && n.id && n.id !== 'notif_welcome');
-        if (cleanedNotifs.length !== parsedNotifs.length) {
-          console.log('🧹 [PWA Purga] Notificación demo obsoleta purgada de localStorage en móvil');
-          localStorage.setItem('bula_notificaciones', JSON.stringify(cleanedNotifs));
-        }
-      }
-    }
   } catch(e) {}
 
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // 1. Desinscribir de inmediato cualquier Service Worker antiguo que no contenga v342
+    // 1. Desinscribir de inmediato cualquier Service Worker antiguo que no contenga v344
     const registrations = await navigator.serviceWorker.getRegistrations();
     if (registrations && registrations.length > 0) {
       for (const registration of registrations) {
         const scriptUrl = (registration.active || registration.installing || registration.waiting)?.scriptURL || '';
-        if (!scriptUrl.includes('v=342')) {
+        if (!scriptUrl.includes('v=344')) {
           const unregistered = await registration.unregister();
           if (unregistered) {
             console.log('🧹 [PWA Purga] SW antiguo desregistrado:', registration.scope);
@@ -710,7 +702,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     if ('caches' in window) {
       const cacheKeys = await caches.keys();
       for (const key of cacheKeys) {
-        if (key !== 'bulapay-v342') {
+        if (key !== 'bulapay-v344') {
           await caches.delete(key);
           console.log('🧹 [PWA Purga] Caché obsoleta eliminada:', key);
           if (window.bulaMobileDebugLog) {
@@ -720,18 +712,18 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
       }
     }
 
-    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico (v342)
-    const swUrl = './sw.js?v=342&t=' + Date.now();
+    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico (v344)
+    const swUrl = './sw.js?v=344&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker bulapay-v342 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker bulapay-v344 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
     if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW bulapay-v342 Registrado y Purgado con Éxito!', 'success');
+      window.bulaMobileDebugLog('¡SW bulapay-v344 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (bulapay-v342)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (bulapay-v344)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
     if (window.bulaMobileDebugLog) {
@@ -740,7 +732,7 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (bulapay-v342)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (bulapay-v344)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();

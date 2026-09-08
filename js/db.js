@@ -3969,10 +3969,16 @@ const db = {
       };
     };
 
+    // Purga preventiva de llaves locales obsoletas en el dispositivo
+    try {
+      localStorage.removeItem('bulapay_comunicados_local');
+      localStorage.removeItem('bula_notificaciones');
+    } catch(e) {}
+
     let supabaseList = [];
     const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
 
-    // 1. Lectura prioritaria desde Supabase
+    // Consulta exclusiva en tiempo real a Supabase (bulapay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
@@ -3984,73 +3990,28 @@ const db = {
               .order('created_at', { ascending: false });
 
             if (error) {
-              const fallbackRes = await supabase.from(table).select('*');
+              const fallbackRes = await supabase.from(table).select('*').order('created_at', { ascending: false });
               if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
                 data = fallbackRes.data;
                 error = null;
               }
             }
 
-            if (!error && Array.isArray(data) && data.length > 0) {
+            if (!error && Array.isArray(data)) {
               supabaseList = data
                 .map(normalize)
-                .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean');
-              if (supabaseList.length > 0) break;
+                .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && !n.id.includes('actualizacion'));
+              console.log(`🔔 [BulaPay Supabase Tiempo Real bulapay-v344] Comunicados obtenidos de "${table}" (${supabaseList.length}):`, supabaseList);
+              return supabaseList;
             }
           }
         }
       } catch(e) {
-        console.warn("⚠️ [BulaPay Notificaciones] Error consultando Supabase:", e);
+        console.warn("⚠️ [BulaPay Notificaciones] Error consultando Supabase en tiempo real:", e);
       }
     }
 
-    // 2. Si Supabase responde exitosamente con comunicados, actualizar bulapay_comunicados_local
-    if (Array.isArray(supabaseList) && supabaseList.length > 0) {
-      try {
-        localStorage.setItem('bulapay_comunicados_local', JSON.stringify(supabaseList));
-        localStorage.setItem('bula_notificaciones', JSON.stringify(supabaseList));
-      } catch(e) {}
-      console.log(`🔔 [BulaPay Notificaciones bulapay-v342] Comunicados leídos de Supabase (${supabaseList.length}):`, supabaseList);
-      return supabaseList;
-    }
-
-    // 3. Estrategia Fallback Híbrida: Si Supabase está vacío o da error, leer de localStorage ('bulapay_comunicados_local' y 'bula_notificaciones')
-    let localList = [];
-    try {
-      const rawLocal = localStorage.getItem('bulapay_comunicados_local') || localStorage.getItem('bula_notificaciones');
-      if (rawLocal) {
-        localList = JSON.parse(rawLocal);
-        if (!Array.isArray(localList)) localList = [];
-      }
-    } catch(e) {}
-
-    localList = localList
-      .map(normalize)
-      .filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean');
-
-    if (localList.length > 0) {
-      localList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      console.log(`🔔 [BulaPay Notificaciones bulapay-v342] Comunicados leídos de Fallback LocalStorage (${localList.length}):`, localList);
-      return localList;
-    }
-
-    // 4. Garantía absoluta: Si localStorage también está vacío, inyectar el comunicado predeterminado "Actualización"
-    const defaultActualizacion = [{
-      id: 'notif_actualizacion_v342',
-      titulo: 'Actualización BulaPay PWA',
-      mensaje: 'Actualización del sistema BulaPay PWA activa. Comunicados y servicios de billetera sincronizados.',
-      categoria: 'Institucional',
-      prioridad: 'Alta',
-      created_at: new Date().toISOString()
-    }];
-
-    try {
-      localStorage.setItem('bulapay_comunicados_local', JSON.stringify(defaultActualizacion));
-      localStorage.setItem('bula_notificaciones', JSON.stringify(defaultActualizacion));
-    } catch(e) {}
-
-    console.log(`🔔 [BulaPay Notificaciones bulapay-v342] Comunicado de respaldo "Actualización" cargado en teléfono.`);
-    return defaultActualizacion;
+    return [];
   },
 
   async saveNotificacion(notifData) {
@@ -4063,18 +4024,13 @@ const db = {
       created_at: new Date().toISOString()
     };
 
-    // Guardado preventivo en localStorage ('bulapay_comunicados_local' y 'bula_notificaciones')
+    // Purga de llaves locales
     try {
-      const raw = localStorage.getItem('bulapay_comunicados_local') || localStorage.getItem('bula_notificaciones');
-      let list = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(list)) list = [];
-      list = list.filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean' && String(n.id) !== String(payload.id));
-      list.unshift(payload);
-      localStorage.setItem('bulapay_comunicados_local', JSON.stringify(list));
-      localStorage.setItem('bula_notificaciones', JSON.stringify(list));
+      localStorage.removeItem('bulapay_comunicados_local');
+      localStorage.removeItem('bula_notificaciones');
     } catch(e) {}
 
-    // Inserción resiliente en Supabase (Multietapa de esquemas)
+    // Inserción directa en Supabase (Multietapa de esquemas)
     if (!window._supabase_notif_disabled) {
       const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
       try {
@@ -4104,7 +4060,7 @@ const db = {
             }
 
             if (!error) {
-              console.log(`✅ [BulaPay Notificaciones] Comunicado guardado exitosamente en Supabase ("${table}"):`, payload);
+              console.log(`✅ [BulaPay Notificaciones bulapay-v344] Comunicado guardado en Supabase ("${table}"):`, payload);
               break;
             }
           }
@@ -4119,17 +4075,24 @@ const db = {
 
   async deleteNotificacion(notifId) {
     try {
-      ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(key => {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          let list = JSON.parse(raw);
-          if (Array.isArray(list)) {
-            list = list.filter(n => n && String(n.id) !== String(notifId));
-            localStorage.setItem(key, JSON.stringify(list));
+      localStorage.removeItem('bulapay_comunicados_local');
+      localStorage.removeItem('bula_notificaciones');
+    } catch(e) {}
+
+    if (!window._supabase_notif_disabled) {
+      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          for (const table of candidateTables) {
+            await supabase.from(table).delete().eq('id', notifId);
           }
         }
-      });
-    } catch(e) {}
+      } catch(e) {
+        console.warn("Fallo eliminando notificación de Supabase:", e);
+      }
+    }
+  },
 
     if (!window._supabase_notif_disabled) {
       const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
