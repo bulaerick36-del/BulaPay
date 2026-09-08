@@ -301,6 +301,40 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en announcements" ON announcemen
 CREATE POLICY "Permitir todo a anonimos en announcements" ON announcements FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE announcements TO anon, authenticated;
 
+-- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo bulapay-v342)
+CREATE TABLE IF NOT EXISTS bulapay_notificaciones (
+  "id" TEXT PRIMARY KEY,
+  "titulo" TEXT NOT NULL,
+  "mensaje" TEXT NOT NULL,
+  "categoria" TEXT DEFAULT 'Institucional',
+  "prioridad" TEXT DEFAULT 'Alta',
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE bulapay_notificaciones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura publica en bulapay_notificaciones" ON bulapay_notificaciones;
+CREATE POLICY "Permitir lectura publica en bulapay_notificaciones" ON bulapay_notificaciones FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_notificaciones" ON bulapay_notificaciones;
+CREATE POLICY "Permitir todo a anonimos en bulapay_notificaciones" ON bulapay_notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_notificaciones TO anon, authenticated;
+
+CREATE TABLE IF NOT EXISTS notificaciones (
+  "id" TEXT PRIMARY KEY,
+  "titulo" TEXT NOT NULL,
+  "mensaje" TEXT NOT NULL,
+  "categoria" TEXT DEFAULT 'Institucional',
+  "prioridad" TEXT DEFAULT 'Alta',
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE notificaciones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura publica en notificaciones" ON notificaciones;
+CREATE POLICY "Permitir lectura publica en notificaciones" ON notificaciones FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Permitir todo a anonimos en notificaciones" ON notificaciones;
+CREATE POLICY "Permitir todo a anonimos en notificaciones" ON notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE notificaciones TO anon, authenticated;
+
+
 
 
 

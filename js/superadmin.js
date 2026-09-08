@@ -2118,12 +2118,35 @@ const superadminModule = {
     }
 
     try {
-      await window.BulaPayDB.saveNotificacion({
+      const savedNotif = await window.BulaPayDB.saveNotificacion({
         titulo: title,
         categoria: category,
         mensaje: message
       });
-      alert('✅ ¡Comunicado gerencial enviado y publicado exitosamente en Supabase!');
+
+      // Guardado de respaldo obligatorio en localStorage ('bulapay_comunicados_local')
+      try {
+        const rawLocal = localStorage.getItem('bulapay_comunicados_local');
+        let localArr = rawLocal ? JSON.parse(rawLocal) : [];
+        if (!Array.isArray(localArr)) localArr = [];
+        localArr = localArr.filter(n => n && n.id && n.id !== 'notif_welcome' && n.id !== 'notif_welcome_clean');
+        const itemToSave = savedNotif || {
+          id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+          titulo: title,
+          categoria: category,
+          mensaje: message,
+          prioridad: 'Alta',
+          created_at: new Date().toISOString()
+        };
+        // Evitar duplicados por id
+        localArr = localArr.filter(n => String(n.id) !== String(itemToSave.id));
+        localArr.unshift(itemToSave);
+        localStorage.setItem('bulapay_comunicados_local', JSON.stringify(localArr));
+      } catch(eLocal) {
+        console.warn("⚠️ Error guardando copia en bulapay_comunicados_local:", eLocal);
+      }
+
+      alert('✅ ¡Comunicado gerencial publicado exitosamente en Supabase y respaldo local!');
       const form = document.getElementById('form-create-notif');
       if (form) form.reset();
       await this.loadNotificacionesList();
@@ -2205,6 +2228,16 @@ const superadminModule = {
       if (window.BulaPayDB && typeof window.BulaPayDB.deleteNotificacion === 'function') {
         await window.BulaPayDB.deleteNotificacion(notifId);
       }
+      try {
+        const rawLocal = localStorage.getItem('bulapay_comunicados_local');
+        if (rawLocal) {
+          let list = JSON.parse(rawLocal);
+          if (Array.isArray(list)) {
+            list = list.filter(n => n && String(n.id) !== String(notifId));
+            localStorage.setItem('bulapay_comunicados_local', JSON.stringify(list));
+          }
+        }
+      } catch(eLocal) {}
       await this.loadNotificacionesList();
       if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
         window.adsModule.updateComunicadosBadge();

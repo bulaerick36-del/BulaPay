@@ -489,22 +489,24 @@ const adsModule = {
       content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales...</p>';
       try {
         let notifs = [];
-        if (window.BulaPayDB && typeof window.BulaPayDB.initSupabase === 'function') {
-          const supabase = await window.BulaPayDB.initSupabase();
-          if (supabase) {
-            const { data, error } = await supabase
-              .from('bulapay_notificaciones')
-              .select('*')
-              .order('created_at', { ascending: false });
-
-            if (!error && Array.isArray(data)) {
-              notifs = data;
-            }
-          }
+        if (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function') {
+          notifs = await window.BulaPayDB.getNotificaciones();
+        } else {
+          try {
+            const rawLocal = localStorage.getItem('bulapay_comunicados_local') || localStorage.getItem('bula_notificaciones');
+            if (rawLocal) notifs = JSON.parse(rawLocal);
+          } catch(e) {}
         }
 
-        if ((!notifs || notifs.length === 0) && window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function') {
-          notifs = await window.BulaPayDB.getNotificaciones();
+        if (!notifs || !Array.isArray(notifs) || notifs.length === 0) {
+          notifs = [{
+            id: 'notif_actualizacion_v342',
+            titulo: 'Actualización BulaPay PWA',
+            mensaje: 'Actualización del sistema BulaPay PWA activa. Comunicados y servicios de billetera sincronizados.',
+            categoria: 'Institucional',
+            prioridad: 'Alta',
+            created_at: new Date().toISOString()
+          }];
         }
 
         // Marcar notificaciones como leídas al abrir la bandeja

@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v341';
+const CACHE_NAME = 'bulapay-v342';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=341',
-  './js/db.js?v=341',
-  './js/ads.js?v=341',
-  './js/auth.js?v=341',
-  './js/supervisor.js?v=341',
-  './js/agent_v6.js?v=341',
-  './js/customer.js?v=341',
-  './js/superadmin.js?v=341',
-  './js/app.js?v=341',
+  './css/style.css?v=342',
+  './js/db.js?v=342',
+  './js/ads.js?v=342',
+  './js/auth.js?v=342',
+  './js/supervisor.js?v=342',
+  './js/agent_v6.js?v=342',
+  './js/customer.js?v=342',
+  './js/superadmin.js?v=342',
+  './js/app.js?v=342',
   './assets/logo.svg'
 ];
 
@@ -20,7 +20,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v341');
+      console.log('[Service Worker] Caching app shell bulapay-v342');
       return cache.addAll(ASSETS);
     })
   );
@@ -33,13 +33,13 @@ self.addEventListener('activate', (e) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v341] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v342] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v341] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v342] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );
