@@ -4085,22 +4085,9 @@ const db = {
         const supabase = await initSupabase();
         if (supabase) {
           for (const table of candidateTables) {
-            await supabase.from(table).delete().eq('id', notifId);
-          }
-        }
-      } catch(e) {
-        console.warn("Fallo eliminando notificación de Supabase:", e);
-      }
-    }
-  },
-
-    if (!window._supabase_notif_disabled) {
-      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          for (const table of candidateTables) {
-            await supabase.from(table).delete().eq('id', notifId);
+            try {
+              await supabase.from(table).delete().eq('id', notifId);
+            } catch(delTblErr) {}
           }
         }
       } catch(e) {

@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v344';
+const CACHE_NAME = 'bulapay-v345';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=344',
-  './js/db.js?v=344',
-  './js/ads.js?v=344',
-  './js/auth.js?v=344',
-  './js/supervisor.js?v=344',
-  './js/agent_v6.js?v=344',
-  './js/customer.js?v=344',
-  './js/superadmin.js?v=344',
-  './js/app.js?v=344',
+  './css/style.css?v=345',
+  './js/db.js?v=345',
+  './js/ads.js?v=345',
+  './js/auth.js?v=345',
+  './js/supervisor.js?v=345',
+  './js/agent_v6.js?v=345',
+  './js/customer.js?v=345',
+  './js/superadmin.js?v=345',
+  './js/app.js?v=345',
   './assets/logo.svg'
 ];
 
@@ -20,26 +20,26 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v344');
+      console.log('[Service Worker] Caching app shell bulapay-v345');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340, v341, v342, etc.)
+// 2. Activar y purgar de inmediato cualquier versión de caché antigua (v193, v197, v327, v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340, v341, v342, v344, etc.)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v344] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v345] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v344] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v345] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );
