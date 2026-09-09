@@ -1952,9 +1952,14 @@ const superadminModule = {
 
         <!-- Lista de Anuncios Creados -->
         <div>
-          <h4 style="color: #f8fafc; margin-bottom: 1rem; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
-            <span>📋</span> Anuncios Registrados
-          </h4>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+            <h4 style="color: #f8fafc; margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📋</span> Anuncios Registrados
+            </h4>
+            <button type="button" onclick="superadminModule.openAdsAnalyticsModal()" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; border: none; padding: 0.55rem 1.1rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35); transition: transform 0.15s ease;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+              📊 Reporte Detallado de Anuncios
+            </button>
+          </div>
           <div id="sa-ads-list-container">
             <p style="color: #94a3b8; font-size: 0.85rem;">Cargando anuncios...</p>
           </div>
@@ -2352,6 +2357,202 @@ const superadminModule = {
     } catch(e) {
       console.error("Error eliminando anuncio:", e);
     }
+  },
+
+  // -------------------------------------------------------------
+  // MÓDULO ANALÍTICO DE ANUNCIOS ACTIVOS / EN LÍNEA (bulapay-v353)
+  // -------------------------------------------------------------
+  async openAdsAnalyticsModal() {
+    const modal = document.getElementById('modal-ads-analytics');
+    if (modal) {
+      modal.style.display = 'flex';
+      await this.loadActiveAdsAnalytics();
+    }
+  },
+
+  closeAdsAnalyticsModal() {
+    const modal = document.getElementById('modal-ads-analytics');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  },
+
+  async loadActiveAdsAnalytics() {
+    const selectEl = document.getElementById('select-analytics-active-ad');
+    const cardEl = document.getElementById('analytics-ad-detail-card');
+    if (!selectEl || !cardEl) return;
+
+    selectEl.innerHTML = '<option value="">⏳ Consultando anuncios activos en Supabase Cloud...</option>';
+    cardEl.innerHTML = '<p style="color: #94a3b8; font-size: 0.85rem; text-align: center;">Cargando ficha analítica...</p>';
+
+    try {
+      let ads = [];
+      try {
+        ads = await window.BulaPayDB.getAnnouncements();
+      } catch(err) {
+        console.warn("Error consultando anuncios para analíticas:", err);
+        ads = [];
+      }
+
+      this._cachedAnnouncements = ads || [];
+      const activeAds = (ads || []).filter(ad => ad.active !== false && ad.active !== 'false');
+
+      if (!activeAds || activeAds.length === 0) {
+        selectEl.innerHTML = '<option value="">⚠️ No hay anuncios activos / en línea</option>';
+        cardEl.innerHTML = `
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px dashed rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 2rem; text-align: center; color: #94a3b8;">
+            <span style="font-size: 2.5rem;">📭</span>
+            <h4 style="color: #f8fafc; margin: 0.75rem 0 0.25rem 0; font-size: 1.05rem;">Sin Anuncios Activos en Línea</h4>
+            <p style="font-size: 0.83rem; margin: 0; color: #94a3b8;">Todos los anuncios en Supabase se encuentran desactivados o no hay anuncios registrados. Activa un anuncio en la lista para ver su reporte analítico.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let optionsHtml = '';
+      activeAds.forEach(ad => {
+        const cat = ad.categoria || ad.category || 'Comercial';
+        const snippet = ad.descripcion ? (ad.descripcion.length > 50 ? ad.descripcion.substring(0, 50) + '...' : ad.descripcion) : `Anuncio ID: ${ad.id}`;
+        optionsHtml += `<option value="${ad.id}">🟢 [${cat}] ${snippet}</option>`;
+      });
+
+      selectEl.innerHTML = optionsHtml;
+      this.renderSelectedAdAnalytics(activeAds[0].id);
+    } catch(err) {
+      console.error("Error al cargar analíticas de anuncios:", err);
+      selectEl.innerHTML = '<option value="">❌ Error de conexión con Supabase</option>';
+    }
+  },
+
+  renderSelectedAdAnalytics(adId) {
+    const cardEl = document.getElementById('analytics-ad-detail-card');
+    if (!cardEl) return;
+
+    if (!adId || !this._cachedAnnouncements) {
+      cardEl.innerHTML = '<p style="color: #94a3b8;">Selecciona un anuncio válido de la lista.</p>';
+      return;
+    }
+
+    const ad = this._cachedAnnouncements.find(a => String(a.id) === String(adId));
+    if (!ad) {
+      cardEl.innerHTML = '<p style="color: #f87171;">El anuncio seleccionado no fue encontrado en Supabase.</p>';
+      return;
+    }
+
+    const isActive = ad.active !== false && ad.active !== 'false';
+    const cat = ad.categoria || ad.category || 'Comercial';
+    const startDate = ad.fecha_inicio || ad.start_date || 'N/A';
+    const endDate = ad.fecha_fin || ad.end_date || 'N/A';
+    const startTime = ad.hora_inicio || ad.start_time || '00:00';
+    const endTime = ad.hora_fin || ad.end_time || '23:59';
+    const impresiones = Number(ad.impresiones || ad.impressions || ad.views || 0);
+    const clics = Number(ad.clics || ad.clicks || 0);
+    const ctr = impresiones > 0 ? ((clics / impresiones) * 100).toFixed(1) : '0.0';
+    const isNav = Boolean(ad.detonante_general || ad.trigger_navigation);
+    const isClient = Boolean(ad.detonante_cliente || ad.trigger_client_search);
+    const desc = ad.descripcion || ad.title_description || ad.description || 'Sin contenido de mensaje.';
+    const imgUrl = ad.multimedia_url || ad.media_url || '';
+
+    let catBadgeStyle = 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);';
+    if (cat === 'Institucional') catBadgeStyle = 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);';
+    if (cat === 'Promoción') catBadgeStyle = 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4);';
+
+    const isVideo = (window.adsModule && typeof window.adsModule.isVideoUrl === 'function' && window.adsModule.isVideoUrl(imgUrl));
+
+    cardEl.innerHTML = `
+      <!-- Tarjeta Principal de Información Profunda -->
+      <div style="background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 14px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem;">
+        
+        <!-- Fila Superior: Badge Categoria + Vigencia -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.85rem;">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <span style="padding: 0.25rem 0.75rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; ${catBadgeStyle}">
+              ${cat}
+            </span>
+            <span style="padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">
+              ● ${isActive ? 'Activo / En Línea' : 'Inactivo'}
+            </span>
+          </div>
+          <div style="font-size: 0.8rem; color: #94a3b8; font-weight: 600; display: flex; align-items: center; gap: 0.3rem;">
+            <span>📅 Vigencia:</span>
+            <strong style="color: #f8fafc;">${startDate} al ${endDate} (${startTime} - ${endTime})</strong>
+          </div>
+        </div>
+
+        <!-- Fila de Métricas KPIs (3 Cajas de Impacto) -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.85rem;">
+          <!-- KPI: Impresiones -->
+          <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 1rem; text-align: center;">
+            <span style="font-size: 0.75rem; color: #34d399; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; display: block; margin-bottom: 0.25rem;">Impresiones</span>
+            <div style="font-size: 1.8rem; font-weight: 900; color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+              <span>👀</span> ${impresiones}
+            </div>
+            <span style="font-size: 0.7rem; color: #94a3b8;">Vistas acumuladas</span>
+          </div>
+
+          <!-- KPI: Clics -->
+          <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(29, 78, 216, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 10px; padding: 1rem; text-align: center;">
+            <span style="font-size: 0.75rem; color: #60a5fa; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; display: block; margin-bottom: 0.25rem;">Clics Interactivos</span>
+            <div style="font-size: 1.8rem; font-weight: 900; color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+              <span>🖱️</span> ${clics}
+            </div>
+            <span style="font-size: 0.7rem; color: #94a3b8;">Interacciones directas</span>
+          </div>
+
+          <!-- KPI: CTR Ratio -->
+          <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.08) 100%); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; padding: 1rem; text-align: center;">
+            <span style="font-size: 0.75rem; color: #fbbf24; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; display: block; margin-bottom: 0.25rem;">Ratio CTR</span>
+            <div style="font-size: 1.8rem; font-weight: 900; color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 0.2rem;">
+              📈 ${ctr}%
+            </div>
+            <span style="font-size: 0.7rem; color: #94a3b8;">Conversión clic / vista</span>
+          </div>
+        </div>
+
+        <!-- Fila: Detonantes Configurados -->
+        <div style="background: rgba(30, 41, 59, 0.7); border-radius: 10px; padding: 0.85rem 1rem; border: 1px solid rgba(255,255,255,0.06);">
+          <span style="font-size: 0.8rem; font-weight: 800; color: #fbbf24; display: block; margin-bottom: 0.5rem;">⚡ Detonantes de Presentación Configurados:</span>
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.82rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; background: rgba(15, 23, 42, 0.8); padding: 0.35rem 0.75rem; border-radius: 6px; border: 1px solid ${isNav ? 'rgba(52, 211, 153, 0.4)' : 'rgba(255,255,255,0.1)'};">
+              <span>${isNav ? '✅' : '❌'}</span>
+              <span style="color: ${isNav ? '#f8fafc' : '#64748b'};">🌐 Navegación / Inicio de Sesión: <strong>${isNav ? 'Habilitado' : 'Deshabilitado'}</strong></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; background: rgba(15, 23, 42, 0.8); padding: 0.35rem 0.75rem; border-radius: 6px; border: 1px solid ${isClient ? 'rgba(52, 211, 153, 0.4)' : 'rgba(255,255,255,0.1)'};">
+              <span>${isClient ? '✅' : '❌'}</span>
+              <span style="color: ${isClient ? '#f8fafc' : '#64748b'};">💳 Consulta de Cédula (Cliente): <strong>${isClient ? 'Habilitado' : 'Deshabilitado'}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fila: Contenido del Mensaje y Previsualización Multimedia -->
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <span style="font-size: 0.8rem; font-weight: 800; color: #94a3b8;">📝 Contenido del Mensaje y Banner Adjunto:</span>
+          <div style="background: rgba(30, 41, 59, 0.5); border-left: 4px solid #3b82f6; border-radius: 6px; padding: 0.85rem 1rem; font-size: 0.88rem; color: #f8fafc; line-height: 1.5; white-space: pre-line;">
+            ${desc}
+          </div>
+
+          ${imgUrl ? `
+            <div style="margin-top: 0.25rem;">
+              <span style="font-size: 0.75rem; color: #60a5fa; font-weight: 700; display: block; margin-bottom: 0.4rem;">
+                ${isVideo ? '🎥 Previsualización del Video Anuncio:' : '🖼️ Previsualización de la Imagen / Banner:'}
+              </span>
+              <div style="max-height: 220px; width: 100%; background: #000000; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.15);">
+                ${isVideo ? `
+                  <video src="${imgUrl}" controls muted style="max-height: 220px; width: 100%; object-fit: contain;"></video>
+                ` : `
+                  <img src="${imgUrl}" style="max-height: 220px; width: 100%; object-fit: contain;">
+                `}
+              </div>
+            </div>
+          ` : `
+            <div style="padding: 0.75rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px; text-align: center; color: #64748b; font-size: 0.8rem;">
+              (Este anuncio es de tipo textual, sin banner o video adjunto)
+            </div>
+          `}
+        </div>
+
+      </div>
+    `;
   }
 };
 
