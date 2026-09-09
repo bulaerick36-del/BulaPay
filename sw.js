@@ -1,17 +1,17 @@
-const CACHE_NAME = 'bulapay-v349';
+const CACHE_NAME = 'bulapay-v350';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=349',
-  './js/db.js?v=349',
-  './js/ads.js?v=349',
-  './js/auth.js?v=349',
-  './js/supervisor.js?v=349',
-  './js/agent_v6.js?v=349',
-  './js/customer.js?v=349',
-  './js/superadmin.js?v=349',
-  './js/app.js?v=349',
+  './css/style.css?v=350',
+  './js/db.js?v=350',
+  './js/ads.js?v=350',
+  './js/auth.js?v=350',
+  './js/supervisor.js?v=350',
+  './js/agent_v6.js?v=350',
+  './js/customer.js?v=350',
+  './js/superadmin.js?v=350',
+  './js/app.js?v=350',
   './assets/logo.svg'
 ];
 
@@ -20,7 +20,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v349');
+      console.log('[Service Worker] Caching app shell bulapay-v350');
       return cache.addAll(ASSETS);
     })
   );
@@ -33,13 +33,13 @@ self.addEventListener('activate', (e) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v349] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker bulapay-v350] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v349] Reclamando clientes para control inmediato');
+      console.log('[Service Worker bulapay-v350] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );
@@ -49,12 +49,13 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = e.request ? e.request.url : '';
 
-  // Excluir esquemas no HTTP/HTTPS (como mailto:, tel:) y peticiones de orígenes externos
+  // Excluir esquemas no HTTP/HTTPS (como mailto:, tel:) y peticiones a Supabase / APIs externas (Real-time Cloud-Only)
   if (!url || url.startsWith('mailto:') || (!url.startsWith('http://') && !url.startsWith('https://'))) {
     return;
   }
 
-  if (!url.startsWith(self.location.origin)) {
+  // Las peticiones a Supabase Cloud NUNCA se guardan en caché para garantizar respuesta limpia en tiempo real
+  if (url.includes('supabase.co') || url.includes('/rest/v1/') || !url.startsWith(self.location.origin)) {
     return;
   }
 

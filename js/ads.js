@@ -442,7 +442,7 @@ const adsModule = {
           if (supabase && typeof supabase.channel === 'function') {
             supabase.channel('public:bulapay_notificaciones')
               .on('postgres_changes', { event: '*', schema: 'public', table: 'bulapay_notificaciones' }, async (payload) => {
-                console.log('⚡ [Supabase Realtime bulapay-v349] Cambio detectado en bulapay_notificaciones:', payload);
+                console.log('⚡ [Supabase Realtime bulapay-v350] Cambio detectado en bulapay_notificaciones:', payload);
                 await this.updateComunicadosBadge();
                 const modal = document.getElementById('modal-pwa-comunicados');
                 if (modal && (modal.style.display === 'flex' || modal.classList.contains('active'))) {
@@ -450,7 +450,7 @@ const adsModule = {
                 }
               })
               .subscribe();
-            console.log('📡 [Supabase Realtime bulapay-v349] Canal de notificaciones activado con éxito.');
+            console.log('📡 [Supabase Realtime bulapay-v350] Canal de notificaciones activado con éxito.');
           }
         }
       } catch(e) {
@@ -516,8 +516,8 @@ const adsModule = {
     if (content) {
       content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales en tiempo real...</p>';
       try {
-        // Limpieza de llaves obsoletas en local storage
-        ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
+        // Purga de llaves obsoletas en local storage para enfoque Cloud-Only
+        ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
 
         let notifs = [];
         if (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function') {
@@ -674,11 +674,6 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') triggerBadgeUpdate();
 });
 
-// Actualización periódica cada 15s y ante cambios de visibilidad en PWA (bulapay-v349)
-window.addEventListener('storage', (e) => {
-  if (e.key === 'bulapay_comunicados_oficiales' || e.key === 'bula_notificaciones') {
-    triggerBadgeUpdate();
-  }
-});
+// Actualización periódica cada 15s y ante cambios de visibilidad en PWA (bulapay-v350)
 setInterval(triggerBadgeUpdate, 15000);
 
