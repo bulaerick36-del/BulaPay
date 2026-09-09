@@ -3934,7 +3934,6 @@ const db = {
         titulo: String(rawTitle).trim(),
         mensaje: String(rawMsg).trim(),
         categoria: String(n.categoria || n.category || 'Institucional'),
-        prioridad: String(n.prioridad || n.priority || 'Alta'),
         created_at: n.created_at || n.createdAt || new Date().toISOString()
       };
     };
@@ -3968,14 +3967,14 @@ const db = {
             const supabaseList = data
               .map(normalize)
               .filter(n => {
-                if (!n || !n.id || n.id === 'notif_welcome' || n.id === 'notif_welcome_clean' || String(n.id).includes('actualizacion')) return false;
-                if (seenIds.has(String(n.id))) return false;
-                seenIds.add(String(n.id));
+                if (!n || (!n.id && !n.titulo) || n.id === 'notif_welcome' || n.id === 'notif_welcome_clean' || String(n.id).includes('actualizacion')) return false;
+                if (n.id && seenIds.has(String(n.id))) return false;
+                if (n.id) seenIds.add(String(n.id));
                 return true;
               });
 
             supabaseList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-            console.log(`🔔 [BulaPay Comunicados Cloud-Only Supabase bulapay-v350] Obtención exitosa de "bulapay_notificaciones" (${supabaseList.length}):`, supabaseList);
+            console.log(`🔔 [BulaPay Comunicados Cloud-Only Supabase bulapay-v351] Obtención exitosa de "bulapay_notificaciones" (${supabaseList.length}):`, supabaseList);
             return supabaseList;
           }
         }
@@ -3990,10 +3989,9 @@ const db = {
   async saveNotificacion(notifData) {
     const payload = {
       id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      titulo: String((notifData && (notifData.titulo || notifData.title)) || 'Comunicado Oficial'),
-      mensaje: String((notifData && (notifData.mensaje || notifData.message)) || ''),
-      categoria: String((notifData && (notifData.categoria || notifData.category)) || 'Institucional'),
-      prioridad: String((notifData && notifData.prioridad) || 'Alta'),
+      titulo: String((notifData && (notifData.titulo || notifData.title)) || 'Comunicado Oficial').trim(),
+      mensaje: String((notifData && (notifData.mensaje || notifData.message)) || '').trim(),
+      categoria: String((notifData && (notifData.categoria || notifData.category)) || 'Institucional').trim(),
       created_at: new Date().toISOString()
     };
 
@@ -4007,41 +4005,33 @@ const db = {
       try {
         const supabase = await initSupabase();
         if (supabase) {
+          // Intento 1: Objeto con id y únicamente los campos SQL nativos (titulo, mensaje, categoria)
           let { error } = await supabase.from('bulapay_notificaciones').insert([{
             id: payload.id,
             titulo: payload.titulo,
             mensaje: payload.mensaje,
-            categoria: payload.categoria,
-            prioridad: payload.prioridad,
-            created_at: payload.created_at
+            categoria: payload.categoria
           }]);
 
+          // Intento 2: Si id fuera de tipo auto-incremento o UUID en Supabase Cloud, probar inserción estricta sin campo id
           if (error) {
-            console.warn("⚠️ Intento directo en bulapay_notificaciones falló, probando payload extendido:", error.message);
-            const p2 = {
-              id: payload.id,
+            console.warn("⚠️ Intento 1 en bulapay_notificaciones falló (" + (error.message || JSON.stringify(error)) + "). Probando inserción sin campo id...");
+            const res2 = await supabase.from('bulapay_notificaciones').insert([{
               titulo: payload.titulo,
-              title: payload.titulo,
               mensaje: payload.mensaje,
-              message: payload.mensaje,
-              descripcion: payload.titulo + ': ' + payload.mensaje,
-              title_description: payload.titulo,
-              categoria: payload.categoria,
-              category: payload.categoria,
-              prioridad: payload.prioridad,
-              active: true,
-              created_at: payload.created_at
-            };
-            const res2 = await supabase.from('bulapay_notificaciones').insert([p2]);
+              categoria: payload.categoria
+            }]);
             error = res2.error;
           }
 
           if (!error) {
-            console.log(`✅ [BulaPay Comunicados Cloud-Only bulapay-v350] Publicado exitosamente en Supabase Cloud ("bulapay_notificaciones"):`, payload);
+            console.log(`✅ [BulaPay Comunicados Cloud-Only bulapay-v351] Publicado exitosamente en Supabase Cloud ("bulapay_notificaciones"):`, payload);
           } else {
             console.error("❌ Error guardando en Supabase Cloud bulapay_notificaciones:", error);
-            throw error;
+            throw new Error((error && (error.message || error.details || error.hint)) || "Error al insertar en Supabase Cloud.");
           }
+        } else {
+          throw new Error("No fue posible conectar con Supabase Cloud.");
         }
       } catch(e) {
         console.error("Fallo publicando en Supabase Nube:", e);

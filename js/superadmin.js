@@ -2133,7 +2133,7 @@ const superadminModule = {
       }
     } catch(e) {
       console.error("Error al enviar comunicado:", e);
-      alert('❌ Hubo un error al enviar el comunicado.');
+      alert('❌ Hubo un error al enviar el comunicado: ' + (e.message || 'Verifica la conexión.'));
     }
   },
 
