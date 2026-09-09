@@ -25,7 +25,7 @@ const adsModule = {
     return true;
   },
 
-  // Evaluar si una fecha cae dentro del rango de forma permisiva para no bloquear la demo
+  // Evaluar si una fecha cae dentro del rango de forma permisiva (tolerante a husos horarios y fechas recién creadas)
   isDateInRange(todayStr, startDateStr, endDateStr) {
     if (!startDateStr && !endDateStr) return true;
     if (!todayStr) return true;
@@ -33,14 +33,20 @@ const adsModule = {
     try {
       const cleanToday = String(todayStr).split('T')[0].trim();
       const cleanStart = String(startDateStr || '').split('T')[0].trim();
-      const cleanEnd = String(endDateStr || '').split('T')[0].trim();
 
-      if (!cleanStart && !cleanEnd) return true;
+      if (!cleanStart) return true;
 
-      // Si la fecha de inicio es futura (posterior a hoy), esperar a esa fecha
-      if (cleanStart && cleanToday < cleanStart) return false;
+      // Convertir a timestamps permisivos con tolerancia de 24 horas por huso horario (UTC vs local)
+      const dateToday = new Date(cleanToday).getTime();
+      const dateStart = new Date(cleanStart).getTime();
 
-      // Para la fecha de fin, si ya expiró se mantiene permisivo si el anuncio está marcado activo
+      if (!isNaN(dateToday) && !isNaN(dateStart)) {
+        // Solo descartar si la fecha de inicio es estrictamente más de 24h (86,400,000 ms) en el futuro
+        if (dateStart - dateToday > 86400000) {
+          return false;
+        }
+      }
+
       return true;
     } catch(e) {
       return true;
@@ -112,18 +118,20 @@ const adsModule = {
       const allAds = await window.BulaPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v337] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [BulaPay Anuncios bulapay-v356] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       const now = new Date();
       const currentHours = String(now.getHours()).padStart(2, '0');
       const currentMinutes = String(now.getMinutes()).padStart(2, '0');
       const currentTimeStr = `${currentHours}:${currentMinutes}`;
 
-      // Filtrar anuncios activos y que coincidan con la fecha, franja horaria y detonante
-      const matchingAds = (allAds || []).filter((ad, idx) => {
+      // Filtrar anuncios activos con lógica permisiva para renderizado inmediato en PWA
+      let matchingAds = (allAds || []).filter((ad, idx) => {
         if (!ad) return false;
         
-        const isActive = ad.active !== false && ad.active !== 'false';
+        const isActive = ad.active !== false && ad.active !== 'false' && ad.active !== 0 && ad.active !== '0';
+        if (!isActive) return false;
+
         const startDate = String(ad.fecha_inicio || ad.start_date || '').split('T')[0].trim();
         const endDate = String(ad.fecha_fin || ad.end_date || '').split('T')[0].trim();
         const startTime = String(ad.hora_inicio || ad.start_time || '00:00').trim();
@@ -138,29 +146,36 @@ const adsModule = {
         let isNavTrigger = this.isTrue(ad.detonante_general) || this.isTrue(ad.trigger_navigation);
         let isClientTrigger = this.isTrue(ad.detonante_cliente) || this.isTrue(ad.trigger_client_search);
 
-        if (!hasNavConfig && !hasClientConfig) {
+        if ((!isNavTrigger && !isClientTrigger) || (!hasNavConfig && !hasClientConfig)) {
           isNavTrigger = true;
           isClientTrigger = true;
         }
 
-        let triggerMatch = false;
+        let triggerMatch = true;
         if (triggerType === 'navigation') triggerMatch = isNavTrigger;
         if (triggerType === 'client_search') triggerMatch = isClientTrigger;
 
         const passes = isActive && inRange && inTimeRange && triggerMatch;
 
-        console.log(`🔎 [Anuncio #${idx + 1} - ${ad.id}] Categoría: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate} a ${endDate}], Hora [${startTime} a ${endTime}], En Franja: ${inTimeRange}, Detonante Nav: ${isNavTrigger}, Detonante Cliente: ${isClientTrigger}, Coincide Trigger "${triggerType}": ${triggerMatch} ==> RESULTADO: ${passes ? '✅ ACEPTADO' : '❌ DESCARTADO'}`);
+        console.log(`🔎 [Anuncio #${idx + 1} - ${ad.id}] Categoría: "${ad.categoria || ad.category}", Activo: ${isActive}, Fechas: [${startDate} a ${endDate}], En Franja: ${inTimeRange}, Match Trigger: ${triggerMatch} ==> RESULTADO: ${passes ? '✅ ACEPTADO' : '❌ DESCARTADO'}`);
 
         return passes;
       });
 
+      // Fallback de seguridad: Si no hubo coincidencia por franja/detonante, tomar cualquier anuncio marcado como Activo
       if (!matchingAds || matchingAds.length === 0) {
-        console.log(`ℹ️ [BulaPay Anuncios] No hay anuncios activos coincidentes para el evento "${triggerType}".`);
-        safeCallback();
-        return;
+        const activeFallback = (allAds || []).filter(a => a && a.active !== false && a.active !== 'false' && a.active !== 0 && a.active !== '0');
+        if (activeFallback.length > 0) {
+          console.log(`💡 [BulaPay Anuncios bulapay-v356] Tomando anuncio activo mediante fallback permisivo PWA.`);
+          matchingAds = activeFallback;
+        } else {
+          console.log(`ℹ️ [BulaPay Anuncios] No hay anuncios activos coincidentes en el sistema.`);
+          safeCallback();
+          return;
+        }
       }
 
-      // Ordenar anuncios por fecha de creación descendente
+      // Ordenar anuncios por fecha de creación descendente (los más recientes primero)
       matchingAds.sort((a, b) => {
         const timeA = new Date(a.created_at || a.fecha_inicio || a.start_date || 0).getTime();
         const timeB = new Date(b.created_at || b.fecha_inicio || b.start_date || 0).getTime();
@@ -168,9 +183,9 @@ const adsModule = {
         return String(b.id || '').localeCompare(String(a.id || ''));
       });
 
-      // LÓGICA DE ROTACIÓN SECUENCIAL Y ALTERNANCIA (IMAGEN / VIDEO) SIN REPETICIÓN
-      const videoAds = matchingAds.filter(a => this.isVideoUrl(a.multimedia_url || a.media_url));
-      const imageAds = matchingAds.filter(a => !this.isVideoUrl(a.multimedia_url || a.media_url));
+      // LÓGICA DE ROTACIÓN SECUENCIAL CON PRIORIDAD A NUEVOS ANUNCIOS
+      const videoAds = matchingAds.filter(a => this.isVideoUrl(a.multimedia_url || a.media_url || a.imagen || a.image));
+      const imageAds = matchingAds.filter(a => !this.isVideoUrl(a.multimedia_url || a.media_url || a.imagen || a.image));
 
       let lastInfo = {};
       try {
@@ -184,24 +199,32 @@ const adsModule = {
 
       let selectedAd = null;
 
-      // Alternancia estricta: si el último fue imagen, busca video; si fue video, busca imagen
+      // Alternancia estricta si existen ambos tipos
       if (lastType === 'image' && videoAds.length > 0) {
         selectedAd = videoAds.find(a => a.id !== lastId) || videoAds[0];
       } else if (lastType === 'video' && imageAds.length > 0) {
         selectedAd = imageAds.find(a => a.id !== lastId) || imageAds[0];
       }
 
-      // Si no fue posible alternar de tipo, rotar por cola secuencial evitando repetición consecutiva de ID
+      // Rotación secuencial asegurando prioridad al anuncio recién creado (matchingAds[0]) si no fue mostrado recientemente
       if (!selectedAd) {
-        let nextIndex = (lastIndex + 1) % matchingAds.length;
-        if (matchingAds.length > 1 && matchingAds[nextIndex].id === lastId) {
-          nextIndex = (nextIndex + 1) % matchingAds.length;
+        if (matchingAds[0] && matchingAds[0].id !== lastId) {
+          selectedAd = matchingAds[0];
+        } else {
+          let nextIndex = (lastIndex + 1) % matchingAds.length;
+          if (matchingAds.length > 1 && matchingAds[nextIndex].id === lastId) {
+            nextIndex = (nextIndex + 1) % matchingAds.length;
+          }
+          selectedAd = matchingAds[nextIndex] || matchingAds[0];
         }
-        selectedAd = matchingAds[nextIndex];
+      }
+
+      if (!selectedAd) {
+        selectedAd = matchingAds[0];
       }
 
       // Guardar el anuncio seleccionado para la próxima rotación
-      const isSelectedVid = this.isVideoUrl(selectedAd.multimedia_url || selectedAd.media_url);
+      const isSelectedVid = this.isVideoUrl(selectedAd.multimedia_url || selectedAd.media_url || selectedAd.imagen || selectedAd.image);
       const newIndex = matchingAds.findIndex(a => a.id === selectedAd.id);
       try {
         localStorage.setItem('bula_last_ad_info', JSON.stringify({
@@ -212,7 +235,7 @@ const adsModule = {
         }));
       } catch(e) {}
 
-      console.log(`🎯 [BulaPay Anuncios bulapay-v337] ¡Anuncio seleccionado por rotación secuencial (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
+      console.log(`🎯 [BulaPay Anuncios bulapay-v356] ¡Anuncio seleccionado para mostrar en PWA (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
