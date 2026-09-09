@@ -265,14 +265,23 @@ const adsModule = {
         badgeEl.style.background = badgeColor;
       }
 
-      // Descripción o mensaje del anuncio
-      const descText = (ad && (ad.descripcion || ad.title_description || ad.description)) || '';
+      // Descripción, título o mensaje del anuncio (tolerante a esquema Supabase: mensaje, message, descripcion, title, etc.)
+      const descText = (ad && (
+        ad.mensaje || 
+        ad.message || 
+        ad.descripcion || 
+        ad.title_description || 
+        ad.description || 
+        ad.titulo || 
+        ad.title
+      )) || '';
+
       if (descEl) {
-        descEl.textContent = descText;
+        descEl.textContent = descText.trim();
       }
 
-      // Multimedia: renderizado dinámico de <video> o <img>
-      const mediaUrl = (ad && (ad.multimedia_url || ad.media_url)) || '';
+      // Multimedia: renderizado dinámico de <video> o <img> (tolerante a esquema Supabase: multimedia_url, media_url, imagen, image)
+      const mediaUrl = (ad && (ad.multimedia_url || ad.media_url || ad.imagen || ad.image)) || '';
       const isVideo = mediaUrl && typeof mediaUrl === 'string' && this.isVideoUrl(mediaUrl);
 
       // ELIMINACIÓN TOTAL DE LA "X" EN ANUNCIOS DE VIDEO (REQUISITO CRÍTICO UI/UX MÓVIL)
@@ -308,7 +317,7 @@ const adsModule = {
         if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'flex';
           if (isVideo) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v354] Detectado archivo de video. Renderizando <video> único:", cleanMediaUrl.substring(0, 60));
+            console.log("🎬 [BulaPay Anuncios bulapay-v355] Detectado archivo de video. Renderizando <video> único:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -334,7 +343,7 @@ const adsModule = {
                     continueBtn.style.pointerEvents = 'auto';
                     continueBtn.style.cursor = 'pointer';
                     continueBtn.innerHTML = 'Continuar ➔';
-                    console.log("✅ [BulaPay Anuncios bulapay-v354] Video finalizado (ended/60s). Botón 'Continuar' desbloqueado.");
+                    console.log("✅ [BulaPay Anuncios bulapay-v355] Video finalizado (ended/60s). Botón 'Continuar' desbloqueado.");
                   }
                 };
 
@@ -359,7 +368,7 @@ const adsModule = {
             }, 100);
 
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v354] Detectada imagen. Renderizando <img> única:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [BulaPay Anuncios bulapay-v355] Detectada imagen. Renderizando <img> única:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
@@ -370,20 +379,28 @@ const adsModule = {
             `;
           }
 
-          // REQUISITO: Ocultar la descripción por completo si es un VIDEO para pantalla limpia sin texto estorboso
+          // REQUISITO: Renderizado completo del mensaje/texto del anuncio junto a la imagen
           if (descEl) {
             if (isVideo) {
               descEl.style.display = 'none';
-            } else if (!descText || descText.includes('Módulo de Anuncios BulaPay') || descText.includes('Aviso Publicitario')) {
-              descEl.style.display = 'none';
-            } else {
+            } else if (descText && descText.trim() !== '') {
+              descEl.textContent = descText.trim();
               descEl.style.display = 'block';
+            } else {
+              descEl.style.display = 'none';
             }
           }
         } else {
           mediaContainer.style.display = 'none';
           mediaContainer.innerHTML = '';
-          if (descEl) descEl.style.display = 'block';
+          if (descEl) {
+            if (descText && descText.trim() !== '') {
+              descEl.textContent = descText.trim();
+              descEl.style.display = 'block';
+            } else {
+              descEl.style.display = 'none';
+            }
+          }
         }
       }
 

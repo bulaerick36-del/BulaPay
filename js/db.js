@@ -3652,10 +3652,13 @@ const db = {
       detonante_general: ad.detonante_general ?? ad.trigger_navigation ?? false,
       trigger_client_search: ad.trigger_client_search ?? ad.detonante_cliente ?? false,
       detonante_cliente: ad.detonante_cliente ?? ad.trigger_client_search ?? false,
-      title_description: ad.title_description || ad.descripcion || '',
-      descripcion: ad.descripcion || ad.title_description || '',
-      media_url: ad.media_url || ad.multimedia_url || '',
-      multimedia_url: ad.multimedia_url || ad.media_url || '',
+      title_description: ad.descripcion || ad.mensaje || ad.message || ad.title_description || ad.description || ad.titulo || ad.title || '',
+      descripcion: ad.descripcion || ad.mensaje || ad.message || ad.title_description || ad.description || ad.titulo || ad.title || '',
+      mensaje: ad.mensaje || ad.message || ad.descripcion || ad.title_description || ad.description || ad.titulo || ad.title || '',
+      titulo: ad.titulo || ad.title || ad.descripcion || ad.mensaje || ad.message || '',
+      media_url: ad.media_url || ad.multimedia_url || ad.imagen || ad.image || '',
+      multimedia_url: ad.multimedia_url || ad.media_url || ad.imagen || ad.image || '',
+      imagen: ad.imagen || ad.image || ad.multimedia_url || ad.media_url || '',
       impresiones: parseInt(ad.impresiones || ad.impressions || ad.views || 0, 10) || 0,
       impressions: parseInt(ad.impressions || ad.impresiones || ad.views || 0, 10) || 0,
       clics: parseInt(ad.clics || ad.clicks || 0, 10) || 0,
@@ -3683,22 +3686,35 @@ const db = {
         const supabase = await initSupabase();
         if (supabase) {
           const verifiedTable = window._active_ads_table || 'bulapay_anuncios';
-          let { error } = await supabase.from(verifiedTable).upsert([normalized]);
+          
+          // Construir payload base estricto sin enviar propiedades sobrantes que causen error 400 en REST Supabase
+          const basePayload = {
+            id: normalized.id,
+            categoria: normalized.categoria,
+            fecha_inicio: normalized.fecha_inicio,
+            fecha_fin: normalized.fecha_fin,
+            detonante_general: normalized.detonante_general,
+            detonante_cliente: normalized.detonante_cliente,
+            descripcion: normalized.descripcion,
+            multimedia_url: normalized.multimedia_url,
+            active: normalized.active,
+            created_at: normalized.created_at
+          };
+
+          let { error } = await supabase.from(verifiedTable).upsert([basePayload]);
           if (error) {
-            console.warn("Upsert objeto completo fallo, guardando campos base en Supabase:", error.message);
-            const baseObj = {
+            console.warn("Upsert base payload falló, intentando mapeo alternativo (titulo/mensaje/imagen):", error.message);
+            const altPayload = {
               id: normalized.id,
               categoria: normalized.categoria,
+              titulo: normalized.titulo || normalized.descripcion,
+              mensaje: normalized.mensaje || normalized.descripcion,
+              imagen: normalized.multimedia_url,
               fecha_inicio: normalized.fecha_inicio,
               fecha_fin: normalized.fecha_fin,
-              detonante_general: normalized.detonante_general,
-              detonante_cliente: normalized.detonante_cliente,
-              descripcion: normalized.descripcion,
-              multimedia_url: normalized.multimedia_url,
-              active: normalized.active,
-              created_at: normalized.created_at
+              active: normalized.active
             };
-            await supabase.from(verifiedTable).upsert([baseObj]);
+            await supabase.from(verifiedTable).upsert([altPayload]);
           }
         }
       } catch(e) {
@@ -3754,33 +3770,46 @@ const db = {
               if (!error && Array.isArray(data) && data.length > 0) {
                 window._active_ads_table = table;
                 try { localStorage.setItem('bula_active_ads_table', table); } catch(e) {}
-                supabaseAds = data.map(item => ({
-                  id: String(item.id || item.ad_id || Date.now()),
-                  category: item.categoria || item.category || 'Comercial',
-                  categoria: item.categoria || item.category || 'Comercial',
-                  start_date: item.fecha_inicio || item.start_date || '',
-                  fecha_inicio: item.fecha_inicio || item.start_date || '',
-                  end_date: item.fecha_fin || item.end_date || '',
-                  fecha_fin: item.fecha_fin || item.end_date || '',
-                  start_time: item.hora_inicio || item.start_time || '00:00',
-                  hora_inicio: item.hora_inicio || item.start_time || '00:00',
-                  end_time: item.hora_fin || item.end_time || '23:59',
-                  hora_fin: item.hora_fin || item.end_time || '23:59',
-                  trigger_navigation: item.detonante_general ?? item.trigger_navigation ?? false,
-                  detonante_general: item.detonante_general ?? item.trigger_navigation ?? false,
-                  trigger_client_search: item.detonante_cliente ?? item.trigger_client_search ?? false,
-                  detonante_cliente: item.detonante_cliente ?? item.trigger_client_search ?? false,
-                  title_description: item.descripcion || item.title_description || item.description || '',
-                  descripcion: item.descripcion || item.title_description || item.description || '',
-                  media_url: item.multimedia_url || item.media_url || '',
-                  multimedia_url: item.multimedia_url || item.media_url || '',
-                  impresiones: parseInt(item.impresiones || item.impressions || item.views || 0, 10) || 0,
-                  impressions: parseInt(item.impressions || item.impresiones || item.views || 0, 10) || 0,
-                  clics: parseInt(item.clics || item.clicks || 0, 10) || 0,
-                  clicks: parseInt(item.clicks || item.clics || 0, 10) || 0,
-                  active: item.active !== false && item.active !== 'false',
-                  created_at: item.created_at || new Date().toISOString()
-                }));
+                supabaseAds = data.map(item => {
+                  const cat = item.categoria || item.category || 'Comercial';
+                  const textMsg = item.descripcion || item.mensaje || item.message || item.title_description || item.description || item.titulo || item.title || '';
+                  const media = item.multimedia_url || item.media_url || item.imagen || item.image || '';
+                  const imp = parseInt(item.impresiones || item.impressions || item.views || 0, 10) || 0;
+                  const clk = parseInt(item.clics || item.clicks || 0, 10) || 0;
+
+                  return {
+                    id: String(item.id || item.ad_id || Date.now()),
+                    category: cat,
+                    categoria: cat,
+                    start_date: item.fecha_inicio || item.start_date || '',
+                    fecha_inicio: item.fecha_inicio || item.start_date || '',
+                    end_date: item.fecha_fin || item.end_date || '',
+                    fecha_fin: item.fecha_fin || item.end_date || '',
+                    start_time: item.hora_inicio || item.start_time || '00:00',
+                    hora_inicio: item.hora_inicio || item.start_time || '00:00',
+                    end_time: item.hora_fin || item.end_time || '23:59',
+                    hora_fin: item.hora_fin || item.end_time || '23:59',
+                    trigger_navigation: item.detonante_general ?? item.trigger_navigation ?? false,
+                    detonante_general: item.detonante_general ?? item.trigger_navigation ?? false,
+                    trigger_client_search: item.detonante_cliente ?? item.trigger_client_search ?? false,
+                    detonante_cliente: item.detonante_cliente ?? item.trigger_client_search ?? false,
+                    title_description: textMsg,
+                    descripcion: textMsg,
+                    mensaje: textMsg,
+                    titulo: item.titulo || item.title || textMsg,
+                    title: item.title || item.titulo || textMsg,
+                    media_url: media,
+                    multimedia_url: media,
+                    imagen: media,
+                    image: media,
+                    impresiones: imp,
+                    impressions: imp,
+                    clics: clk,
+                    clicks: clk,
+                    active: item.active !== false && item.active !== 'false',
+                    created_at: item.created_at || new Date().toISOString()
+                  };
+                });
                 break;
               }
             }
@@ -3876,19 +3905,29 @@ const db = {
           const current = (data && (data.impresiones || data.impressions || data.views || 0)) || 0;
           const nextVal = Number(current) + 1;
 
-          let { error: err1 } = await supabase.from(verifiedTable).update({ impresiones: nextVal }).eq('id', adId);
-          if (err1) {
-            let { error: err2 } = await supabase.from(verifiedTable).update({ impressions: nextVal }).eq('id', adId);
-            if (err2) {
-              await supabase.from(verifiedTable).update({ views: nextVal }).eq('id', adId);
-            }
+          // Intentar actualizar de forma totalmente aislada evitando responder con error 400
+          const possibleCols = ['impresiones', 'impressions', 'views'];
+          let updated = false;
+          for (const col of possibleCols) {
+            try {
+              const payload = {};
+              payload[col] = nextVal;
+              const { error } = await supabase.from(verifiedTable).update(payload).eq('id', adId);
+              if (!error) {
+                updated = true;
+                break;
+              }
+            } catch(colErr) {}
           }
-          console.log(`👁️ [Supabase Cloud bulapay-v354] Impresión incrementada exitosamente a ${nextVal} para anuncio ID: "${adId}" en tabla "${verifiedTable}".`);
+
+          if (updated) {
+            console.log(`👁️ [Supabase Cloud bulapay-v355] Impresión incrementada exitosamente a ${nextVal} para anuncio ID: "${adId}".`);
+          }
           
           window.dispatchEvent(new CustomEvent('bula_ad_metrics_updated', { detail: { adId, impresiones: nextVal } }));
         }
       } catch(e) {
-        console.warn("⚠️ Error al incrementar impresiones en Supabase Cloud:", e);
+        console.warn("Error silencioso incrementando impresión en Supabase:", e);
       }
     }
   },
@@ -3917,16 +3956,28 @@ const db = {
           const current = (data && (data.clics || data.clicks || 0)) || 0;
           const nextVal = Number(current) + 1;
 
-          let { error: err1 } = await supabase.from(verifiedTable).update({ clics: nextVal }).eq('id', adId);
-          if (err1) {
-            await supabase.from(verifiedTable).update({ clicks: nextVal }).eq('id', adId);
+          const possibleCols = ['clics', 'clicks'];
+          let updated = false;
+          for (const col of possibleCols) {
+            try {
+              const payload = {};
+              payload[col] = nextVal;
+              const { error } = await supabase.from(verifiedTable).update(payload).eq('id', adId);
+              if (!error) {
+                updated = true;
+                break;
+              }
+            } catch(colErr) {}
           }
-          console.log(`🖱️ [Supabase Cloud bulapay-v354] Clic incrementado exitosamente a ${nextVal} para anuncio ID: "${adId}" en tabla "${verifiedTable}".`);
+
+          if (updated) {
+            console.log(`🖱️ [Supabase Cloud bulapay-v355] Clic incrementado exitosamente a ${nextVal} para anuncio ID: "${adId}".`);
+          }
 
           window.dispatchEvent(new CustomEvent('bula_ad_metrics_updated', { detail: { adId, clics: nextVal } }));
         }
       } catch(e) {
-        console.warn("⚠️ Error al incrementar clics en Supabase Cloud:", e);
+        console.warn("Error silencioso incrementando clic en Supabase:", e);
       }
     }
   },
