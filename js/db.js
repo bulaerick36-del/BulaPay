@@ -3987,8 +3987,10 @@ const db = {
   },
 
   async saveNotificacion(notifData) {
+    const numericId = Date.now();
+    const stringId = 'notif_' + numericId + '_' + Math.random().toString(36).substring(2, 6);
     const payload = {
-      id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      id: stringId,
       titulo: String((notifData && (notifData.titulo || notifData.title)) || 'Comunicado Oficial').trim(),
       mensaje: String((notifData && (notifData.mensaje || notifData.message)) || '').trim(),
       categoria: String((notifData && (notifData.categoria || notifData.category)) || 'Institucional').trim(),
@@ -4005,7 +4007,7 @@ const db = {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          // Intento 1: Objeto con id y únicamente los campos SQL nativos (titulo, mensaje, categoria)
+          // Intento 1: Objeto estricto con id Texto (si la columna id en Supabase es TEXT)
           let { error } = await supabase.from('bulapay_notificaciones').insert([{
             id: payload.id,
             titulo: payload.titulo,
@@ -4013,15 +4015,27 @@ const db = {
             categoria: payload.categoria
           }]);
 
-          // Intento 2: Si id fuera de tipo auto-incremento o UUID en Supabase Cloud, probar inserción estricta sin campo id
+          // Intento 2: Objeto estricto con id Numérico (si la columna id en Supabase es BIGINT/SERIAL - evita invocar secuencia nextval)
           if (error) {
-            console.warn("⚠️ Intento 1 en bulapay_notificaciones falló (" + (error.message || JSON.stringify(error)) + "). Probando inserción sin campo id...");
+            console.warn("⚠️ Intento 1 (id texto) falló (" + (error.message || JSON.stringify(error)) + "). Probando id numérico explícito...");
             const res2 = await supabase.from('bulapay_notificaciones').insert([{
+              id: numericId,
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria
             }]);
             error = res2.error;
+          }
+
+          // Intento 3: Inserción estricta sin campo id (en caso de autogeneración por secuencia en Supabase)
+          if (error) {
+            console.warn("⚠️ Intento 2 (id numérico) falló (" + (error.message || JSON.stringify(error)) + "). Probando inserción sin campo id...");
+            const res3 = await supabase.from('bulapay_notificaciones').insert([{
+              titulo: payload.titulo,
+              mensaje: payload.mensaje,
+              categoria: payload.categoria
+            }]);
+            error = res3.error;
           }
 
           if (!error) {

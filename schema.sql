@@ -317,6 +317,7 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_notificaciones" ON bu
 DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones;
 CREATE POLICY "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE bulapay_notificaciones TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
 CREATE TABLE IF NOT EXISTS notificaciones (
   "id" TEXT PRIMARY KEY,
