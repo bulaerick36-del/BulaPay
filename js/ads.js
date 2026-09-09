@@ -432,7 +432,35 @@ const adsModule = {
     }
   },
 
+  setupRealtimeNotificaciones() {
+    if (this._realtimeSubscribed) return;
+    this._realtimeSubscribed = true;
+    setTimeout(async () => {
+      try {
+        if (window.BulaPayDB && typeof window.BulaPayDB.initSupabase === 'function') {
+          const supabase = await window.BulaPayDB.initSupabase();
+          if (supabase && typeof supabase.channel === 'function') {
+            supabase.channel('public:bulapay_notificaciones')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'bulapay_notificaciones' }, async (payload) => {
+                console.log('⚡ [Supabase Realtime bulapay-v349] Cambio detectado en bulapay_notificaciones:', payload);
+                await this.updateComunicadosBadge();
+                const modal = document.getElementById('modal-pwa-comunicados');
+                if (modal && (modal.style.display === 'flex' || modal.classList.contains('active'))) {
+                  this.openComunicadosModal();
+                }
+              })
+              .subscribe();
+            console.log('📡 [Supabase Realtime bulapay-v349] Canal de notificaciones activado con éxito.');
+          }
+        }
+      } catch(e) {
+        console.warn("⚠️ Error suscribiendo a Supabase Realtime:", e);
+      }
+    }, 500);
+  },
+
   async updateComunicadosBadge() {
+    this.setupRealtimeNotificaciones();
     const btnList = document.querySelectorAll('.btn-comunicados-nav, #btn-pwa-comunicados');
     const badgeList = document.querySelectorAll('.comunicados-badge, #pwa-comunicados-count');
 
@@ -646,9 +674,11 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') triggerBadgeUpdate();
 });
 
-// Actualización periódica y ante cambios de visibilidad en PWA (bulapay-v346)
+// Actualización periódica cada 15s y ante cambios de visibilidad en PWA (bulapay-v349)
 window.addEventListener('storage', (e) => {
   if (e.key === 'bulapay_comunicados_oficiales' || e.key === 'bula_notificaciones') {
     triggerBadgeUpdate();
   }
 });
+setInterval(triggerBadgeUpdate, 15000);
+

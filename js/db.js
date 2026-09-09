@@ -3937,7 +3937,8 @@ const db = {
     };
 
     let supabaseList = [];
-    const candidateTables = ['bulapay_anuncios', 'anuncios', 'announcements', 'bulapay_notificaciones', 'notificaciones'];
+    // candidateTables exclusivo para comunicados gerenciales: 'bulapay_notificaciones' (primaria infalible) y 'notificaciones' (fallback)
+    const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
 
     // 1. Consulta prioritaria en tiempo real a Supabase (Sincronización Cloud Laptop <-> Teléfono)
     if (!window._supabase_notif_disabled) {
@@ -3952,14 +3953,15 @@ const db = {
                 .order('created_at', { ascending: false });
 
               if (error) {
-                const fallbackRes = await supabase.from(table).select('*').order('created_at', { ascending: false });
+                // Reintento sin cláusula order por resiliencia de nombre de columna
+                const fallbackRes = await supabase.from(table).select('*');
                 if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
                   data = fallbackRes.data;
                   error = null;
                 }
               }
 
-              if (!error && Array.isArray(data) && data.length > 0) {
+              if (!error && Array.isArray(data)) {
                 const seenIds = new Set();
                 supabaseList = data
                   .map(normalize)
@@ -3973,17 +3975,17 @@ const db = {
                 // Orden descendente estricto por fecha (más reciente primero)
                 supabaseList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
-                if (supabaseList.length > 0) {
-                  try {
-                    localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(supabaseList));
-                    // Purga automática de llaves viejas/duplicadas en el dispositivo
-                    ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
-                  } catch(eStore) {}
-                  console.log(`🔔 [BulaPay Comunicados Cloud Supabase bulapay-v351] Obtención exitosa de "${table}" (${supabaseList.length}):`, supabaseList);
-                  return supabaseList;
-                }
+                // Actualizar almacenamiento local como caché espejo
+                try {
+                  localStorage.setItem('bulapay_comunicados_oficiales', JSON.stringify(supabaseList));
+                  ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
+                } catch(eStore) {}
+                console.log(`🔔 [BulaPay Comunicados Cloud Supabase bulapay-v349] Obtención exitosa de "${table}" (${supabaseList.length}):`, supabaseList);
+                return supabaseList;
               }
-            } catch(tblErr) {}
+            } catch(tblErr) {
+              console.warn(`⚠️ Error consultando tabla "${table}":`, tblErr);
+            }
           }
         }
       } catch(e) {
@@ -3991,10 +3993,9 @@ const db = {
       }
     }
 
-    // 2. Fallback a almacenamiento local si Supabase está offline o sin registros
+    // 2. Fallback a almacenamiento local si Supabase está offline
     let localNotifs = [];
     try {
-      // Purgar llaves obsoletas
       ['bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
       let raw = localStorage.getItem('bulapay_comunicados_oficiales');
       if (raw) {
@@ -4007,15 +4008,14 @@ const db = {
     localNotifs = localNotifs
       .map(normalize)
       .filter(n => {
-        if (!n || !n.id || n.id === 'notif_welcome' || n.id !== 'notif_welcome_clean' && String(n.id).includes('actualizacion')) return false;
+        if (!n || !n.id || n.id === 'notif_welcome' || (n.id !== 'notif_welcome_clean' && String(n.id).includes('actualizacion'))) return false;
         if (localSeen.has(String(n.id))) return false;
         localSeen.add(String(n.id));
         return true;
       });
 
-    // Orden descendente estricto por fecha (más reciente primero)
     localNotifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    console.log(`🔔 [BulaPay Comunicados Local Fallback bulapay-v351] (${localNotifs.length}):`, localNotifs);
+    console.log(`🔔 [BulaPay Comunicados Local Fallback bulapay-v349] (${localNotifs.length}):`, localNotifs);
     return localNotifs;
   },
 
@@ -4042,51 +4042,52 @@ const db = {
       console.warn("Error guardando en localStorage:", e);
     }
 
-    // 2. Publicar en Supabase Nube para que esté disponible en celulares y otros dispositivos
+    // 2. Publicar en Supabase Nube directamente en bulapay_notificaciones para sincronizar con todos los dispositivos
     if (!window._supabase_notif_disabled) {
-      const candidateTables = ['bulapay_anuncios', 'anuncios', 'announcements', 'bulapay_notificaciones', 'notificaciones'];
+      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
       try {
         const supabase = await initSupabase();
         if (supabase) {
           for (const table of candidateTables) {
             try {
-              // Intento 1: Campos directos de notificación
-              let { error } = await supabase.from(table).insert([payload]);
-              
-              // Intento 2: Compatibilidad con tabla de anuncios/comunicados (descripcion/title_description)
+              // Intento 1: Esquema directo estándar
+              let { error } = await supabase.from(table).insert([{
+                id: payload.id,
+                titulo: payload.titulo,
+                mensaje: payload.mensaje,
+                categoria: payload.categoria,
+                prioridad: payload.prioridad,
+                created_at: payload.created_at
+              }]);
+
+              // Intento 2: Campos de compatibilidad extendidos
               if (error) {
+                console.warn(`⚠️ Intento 1 en "${table}" falló (${error.message || error}). Probando payload de compatibilidad...`);
                 const p2 = {
                   id: payload.id,
+                  titulo: payload.titulo,
+                  title: payload.titulo,
+                  mensaje: payload.mensaje,
+                  message: payload.mensaje,
+                  descripcion: payload.titulo + ': ' + payload.mensaje,
                   categoria: payload.categoria,
                   category: payload.categoria,
-                  descripcion: payload.titulo + ': ' + payload.mensaje,
-                  title_description: payload.titulo,
-                  detonante_general: false,
-                  detonante_cliente: false,
-                  active: true,
+                  prioridad: payload.prioridad,
                   created_at: payload.created_at
                 };
                 const res2 = await supabase.from(table).insert([p2]);
                 error = res2.error;
               }
 
-              // Intento 3: Esquema básico minimalista
-              if (error) {
-                const p3 = {
-                  id: payload.id,
-                  descripcion: payload.titulo + ': ' + payload.mensaje,
-                  active: true,
-                  created_at: payload.created_at
-                };
-                const res3 = await supabase.from(table).insert([p3]);
-                error = res3.error;
-              }
-
               if (!error) {
-                console.log(`✅ [BulaPay Comunicados Cloud bulapay-v350] Publicado exitosamente en Supabase Nube ("${table}"):`, payload);
+                console.log(`✅ [BulaPay Comunicados Cloud bulapay-v349] Publicado exitosamente en Supabase Nube ("${table}"):`, payload);
                 break;
+              } else {
+                console.warn(`⚠️ Error al insertar comunicado en "${table}":`, error);
               }
-            } catch(insErr) {}
+            } catch(insErr) {
+              console.warn(`⚠️ Excepción al insertar en tabla "${table}":`, insErr);
+            }
           }
         }
       } catch(e) {
@@ -4115,7 +4116,7 @@ const db = {
 
     // 2. Eliminar en Supabase Nube
     if (!window._supabase_notif_disabled) {
-      const candidateTables = ['bulapay_anuncios', 'anuncios', 'announcements', 'bulapay_notificaciones', 'notificaciones'];
+      const candidateTables = ['bulapay_notificaciones', 'notificaciones'];
       try {
         const supabase = await initSupabase();
         if (supabase) {
