@@ -3872,11 +3872,24 @@ const db = {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const { data } = await supabase.from(verifiedTable).select('impresiones, impressions').eq('id', adId).maybeSingle();
-          const current = (data && (data.impresiones || data.impressions)) || 0;
-          await supabase.from(verifiedTable).update({ impresiones: current + 1, impressions: current + 1 }).eq('id', adId);
+          const { data } = await supabase.from(verifiedTable).select('*').eq('id', adId).maybeSingle();
+          const current = (data && (data.impresiones || data.impressions || data.views || 0)) || 0;
+          const nextVal = Number(current) + 1;
+
+          let { error: err1 } = await supabase.from(verifiedTable).update({ impresiones: nextVal }).eq('id', adId);
+          if (err1) {
+            let { error: err2 } = await supabase.from(verifiedTable).update({ impressions: nextVal }).eq('id', adId);
+            if (err2) {
+              await supabase.from(verifiedTable).update({ views: nextVal }).eq('id', adId);
+            }
+          }
+          console.log(`👁️ [Supabase Cloud bulapay-v354] Impresión incrementada exitosamente a ${nextVal} para anuncio ID: "${adId}" en tabla "${verifiedTable}".`);
+          
+          window.dispatchEvent(new CustomEvent('bula_ad_metrics_updated', { detail: { adId, impresiones: nextVal } }));
         }
-      } catch(e) {}
+      } catch(e) {
+        console.warn("⚠️ Error al incrementar impresiones en Supabase Cloud:", e);
+      }
     }
   },
 
@@ -3900,11 +3913,21 @@ const db = {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const { data } = await supabase.from(verifiedTable).select('clics, clicks').eq('id', adId).maybeSingle();
-          const current = (data && (data.clics || data.clicks)) || 0;
-          await supabase.from(verifiedTable).update({ clics: current + 1, clicks: current + 1 }).eq('id', adId);
+          const { data } = await supabase.from(verifiedTable).select('*').eq('id', adId).maybeSingle();
+          const current = (data && (data.clics || data.clicks || 0)) || 0;
+          const nextVal = Number(current) + 1;
+
+          let { error: err1 } = await supabase.from(verifiedTable).update({ clics: nextVal }).eq('id', adId);
+          if (err1) {
+            await supabase.from(verifiedTable).update({ clicks: nextVal }).eq('id', adId);
+          }
+          console.log(`🖱️ [Supabase Cloud bulapay-v354] Clic incrementado exitosamente a ${nextVal} para anuncio ID: "${adId}" en tabla "${verifiedTable}".`);
+
+          window.dispatchEvent(new CustomEvent('bula_ad_metrics_updated', { detail: { adId, clics: nextVal } }));
         }
-      } catch(e) {}
+      } catch(e) {
+        console.warn("⚠️ Error al incrementar clics en Supabase Cloud:", e);
+      }
     }
   },
 

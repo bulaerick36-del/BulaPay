@@ -2567,4 +2567,17 @@ window.addEventListener('bula_support_updated', () => {
   }
 });
 
+window.addEventListener('bula_ad_metrics_updated', async () => {
+  if (window.superadminModule) {
+    const modal = document.getElementById('modal-ads-analytics');
+    if (modal && (modal.style.display === 'flex' || modal.classList.contains('active'))) {
+      await window.superadminModule.loadActiveAdsAnalytics();
+    }
+    const listContainer = document.getElementById('sa-ads-list-container');
+    if (listContainer) {
+      await window.superadminModule.loadAdsList();
+    }
+  }
+});
+
 window.superadminModule = superadminModule;

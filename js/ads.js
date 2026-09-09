@@ -301,11 +301,14 @@ const adsModule = {
       }
 
       if (mediaContainer) {
+        // CORRECCIÓN RENDERIZADO: Limpieza absoluta inicial para garantizar UNA ÚNICA miniatura/imagen por anuncio
+        mediaContainer.innerHTML = '';
         const cleanMediaUrl = typeof mediaUrl === 'string' ? mediaUrl.trim() : '';
+
         if (cleanMediaUrl !== '') {
-          mediaContainer.style.display = 'block';
+          mediaContainer.style.display = 'flex';
           if (isVideo) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v337] Detectado archivo de video. Renderizando <video> (bloqueando botón continuar hasta finalización):", cleanMediaUrl.substring(0, 60));
+            console.log("🎬 [BulaPay Anuncios bulapay-v354] Detectado archivo de video. Renderizando <video> único:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -331,7 +334,7 @@ const adsModule = {
                     continueBtn.style.pointerEvents = 'auto';
                     continueBtn.style.cursor = 'pointer';
                     continueBtn.innerHTML = 'Continuar ➔';
-                    console.log("✅ [BulaPay Anuncios bulapay-v337] Video finalizado (ended/60s). Botón 'Continuar' desbolqueado.");
+                    console.log("✅ [BulaPay Anuncios bulapay-v354] Video finalizado (ended/60s). Botón 'Continuar' desbloqueado.");
                   }
                 };
 
@@ -356,7 +359,7 @@ const adsModule = {
             }, 100);
 
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v337] Detectada imagen. Renderizando <img>:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [BulaPay Anuncios bulapay-v354] Detectada imagen. Renderizando <img> única:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
