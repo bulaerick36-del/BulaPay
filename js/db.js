@@ -3982,7 +3982,10 @@ const db = {
     }
   },
 
-  async getNotificaciones() {
+  async getNotificaciones(user) {
+    const currentUser = user || this.getCurrentUser();
+    const currentUsername = currentUser ? String(currentUser.username || currentUser.documentNumber || '').toLowerCase().trim() : null;
+
     const normalize = (n) => {
       if (!n) return null;
       let rawTitle = n.titulo || n.title || n.subject || '';
@@ -4008,6 +4011,7 @@ const db = {
         titulo: String(rawTitle).trim(),
         mensaje: String(rawMsg).trim(),
         categoria: String(n.categoria || n.category || 'Institucional'),
+        target_username: n.target_username || n.targetUsername || null,
         created_at: n.created_at || n.createdAt || new Date().toISOString()
       };
     };
@@ -4042,13 +4046,24 @@ const db = {
               .map(normalize)
               .filter(n => {
                 if (!n || (!n.id && !n.titulo) || n.id === 'notif_welcome' || n.id === 'notif_welcome_clean' || String(n.id).includes('actualizacion')) return false;
+
+                const targetUser = n.target_username ? String(n.target_username).toLowerCase().trim() : null;
+
+                // Filtrar notificaciones privadas: si tienen un destinatario específico (target_username)
+                if (targetUser && targetUser !== 'todos') {
+                  // Solo mostrar si el usuario está logueado y coincide con el destinatario
+                  if (!currentUsername || targetUser !== currentUsername) {
+                    return false;
+                  }
+                }
+
                 if (n.id && seenIds.has(String(n.id))) return false;
                 if (n.id) seenIds.add(String(n.id));
                 return true;
               });
 
             supabaseList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-            console.log(`🔔 [BulaPay Comunicados Cloud-Only Supabase bulapay-v351] Obtención exitosa de "bulapay_notificaciones" (${supabaseList.length}):`, supabaseList);
+            console.log(`🔔 [BulaPay Comunicados Cloud-Only Supabase] Obtención exitosa para ${currentUsername || 'anónimo'} (${supabaseList.length}):`, supabaseList);
             return supabaseList;
           }
         }
@@ -4068,6 +4083,7 @@ const db = {
       titulo: String((notifData && (notifData.titulo || notifData.title)) || 'Comunicado Oficial').trim(),
       mensaje: String((notifData && (notifData.mensaje || notifData.message)) || '').trim(),
       categoria: String((notifData && (notifData.categoria || notifData.category)) || 'Institucional').trim(),
+      target_username: (notifData && (notifData.target_username || notifData.targetUsername)) ? String(notifData.target_username || notifData.targetUsername).trim() : null,
       created_at: new Date().toISOString()
     };
 
@@ -4086,28 +4102,31 @@ const db = {
             id: payload.id,
             titulo: payload.titulo,
             mensaje: payload.mensaje,
-            categoria: payload.categoria
+            categoria: payload.categoria,
+            target_username: payload.target_username
           }]);
 
-          // Intento 2: Objeto estricto con id Numérico (si la columna id en Supabase es BIGINT/SERIAL - evita invocar secuencia nextval)
+          // Intento 2: Objeto estricto con id Numérico
           if (error) {
-            console.warn("⚠️ Intento 1 (id texto) falló (" + (error.message || JSON.stringify(error)) + "). Probando id numérico explícito...");
+            console.warn("⚠️ Intento 1 (id texto) falló. Probando id numérico...");
             const res2 = await supabase.from('bulapay_notificaciones').insert([{
               id: numericId,
               titulo: payload.titulo,
               mensaje: payload.mensaje,
-              categoria: payload.categoria
+              categoria: payload.categoria,
+              target_username: payload.target_username
             }]);
             error = res2.error;
           }
 
-          // Intento 3: Inserción estricta sin campo id (en caso de autogeneración por secuencia en Supabase)
+          // Intento 3: Inserción estricta sin campo id
           if (error) {
-            console.warn("⚠️ Intento 2 (id numérico) falló (" + (error.message || JSON.stringify(error)) + "). Probando inserción sin campo id...");
+            console.warn("⚠️ Intento 2 falló. Probando inserción sin campo id...");
             const res3 = await supabase.from('bulapay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
-              categoria: payload.categoria
+              categoria: payload.categoria,
+              target_username: payload.target_username
             }]);
             error = res3.error;
           }
@@ -4307,29 +4326,63 @@ const db = {
     } catch(e) {}
   },
 
-  async triggerProgresiveCobroNotifications() {
+  async evaluateUserCobroNotifications(user) {
+    if (!user || !user.username) return;
     try {
-      const progs = await this.getProgramacionCobros();
-      if (!Array.isArray(progs) || progs.length === 0) return;
+      const dbUser = (await this.getUserByUsername(user.username)) || user;
+      if (dbUser.bloqueado_por_mora === true) return;
 
-      const activeProgs = progs.filter(p => p.activo !== false);
-      const existingNotifs = await this.getNotificaciones();
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
 
-      for (const p of activeProgs) {
-        const alreadyPublished = existingNotifs.some(n => 
-          n.titulo === p.titulo || (n.mensaje && n.mensaje.includes(`- ${p.dias_previos} Días`))
-        );
+      // Obtener o calcular la fecha de corte/vencimiento del usuario
+      let fechaCorte;
+      if (dbUser.fecha_corte || dbUser.fecha_vencimiento) {
+        fechaCorte = new Date(dbUser.fecha_corte || dbUser.fecha_vencimiento);
+      } else {
+        // Fallback: calcular ciclo de suscripción (30 días desde fecha de creación o 5 días desde hoy)
+        const baseDate = dbUser.created_at ? new Date(dbUser.created_at) : new Date();
+        fechaCorte = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+        if (fechaCorte < hoy) {
+          fechaCorte = new Date(hoy.getTime() + 5 * 24 * 60 * 60 * 1000);
+        }
+      }
+      fechaCorte.setHours(0, 0, 0, 0);
 
-        if (!alreadyPublished) {
-          await this.saveNotificacion({
-            titulo: p.titulo,
-            mensaje: p.mensaje,
-            categoria: `Cobro Preventivo (${p.dias_previos}d)`
-          });
+      const diffMs = fechaCorte.getTime() - hoy.getTime();
+      const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+      // Si el servicio expiró (<= 0 días restantes), suspender acceso por mora de forma automática
+      if (diasRestantes <= 0) {
+        console.warn(`⛔ [Evaluador de Cobro] Usuario ${dbUser.username} sobrepasó la fecha de corte (${diasRestantes} días). Suspendiendo acceso...`);
+        await this.toggleUserBloqueoMora(dbUser.username, true);
+        return;
+      }
+
+      // Evaluar la cadena progresiva de 5, 4, 3, 2 y 1 día
+      if (diasRestantes >= 1 && diasRestantes <= 5) {
+        const progs = await this.getProgramacionCobros();
+        const regla = progs.find(p => p.dias_previos === diasRestantes && p.activo !== false);
+
+        if (regla) {
+          const userNotifs = await this.getNotificaciones(dbUser);
+          const alreadyHasThisNotif = userNotifs.some(n => 
+            n.categoria && n.categoria.includes(`Cobro Preventivo (${diasRestantes}d)`)
+          );
+
+          if (!alreadyHasThisNotif) {
+            console.log(`🔔 [Evaluador Interno de Cobro] Publicando aviso privado de ${diasRestantes} día(s) para usuario ${dbUser.username}`);
+            await this.saveNotificacion({
+              titulo: regla.titulo,
+              mensaje: regla.mensaje,
+              categoria: `Cobro Preventivo (${diasRestantes}d)`,
+              target_username: dbUser.username
+            });
+          }
         }
       }
     } catch(e) {
-      console.warn("Error ejecutando disparo automático de mensajes de cobro:", e);
+      console.warn("⚠️ Error en evaluación automática interna de cobros:", e);
     }
   }
 };

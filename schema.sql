@@ -330,6 +330,201 @@ CREATE TABLE IF NOT EXISTS notificaciones (
 
 ALTER TABLE notificaciones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir lectura publica en notificaciones" ON notificaciones;
+('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'agente2', 'Pagado', 'BulaPay-SIG-11223-01'),
+('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'agente2', 'Abonado', 'BulaPay-SIG-11223-02');
+
+-- Migraciones seguras para bases de datos existentes:
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "opening_time" TEXT DEFAULT '06:00';
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "closing_time" TEXT DEFAULT '18:00';
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "has_extension" BOOLEAN DEFAULT false;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "representante_legal" TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "cedula_representante" TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_name" TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "product_category" TEXT;
+ALTER TABLE routes ADD COLUMN IF NOT EXISTS "workingDays" TEXT DEFAULT 'Mon-Sat';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "amount" NUMERIC DEFAULT 0;
+
+-- Nueva tabla de movimientos de caja
+CREATE TABLE IF NOT EXISTS caja_movimientos (
+  "id" TEXT PRIMARY KEY,
+  "routeId" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "agent_id" TEXT,
+  "type" TEXT NOT NULL,
+  "amount" NUMERIC NOT NULL,
+  "date" DATE NOT NULL DEFAULT CURRENT_DATE,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE caja_movimientos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir todo a anonimos en caja_movimientos" ON caja_movimientos FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE caja_movimientos TO anon, authenticated;
+
+-- Descuentos Iniciales
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_amount" NUMERIC DEFAULT 0;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_reason" TEXT;
+
+-- Nueva tabla de inyecciones de capital
+CREATE TABLE IF NOT EXISTS capital_injections (
+  "id" TEXT PRIMARY KEY,
+  "routeId" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "agent_id" TEXT,
+  "amount" NUMERIC NOT NULL,
+  "date" DATE NOT NULL DEFAULT CURRENT_DATE,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Nueva tabla de cartones (Aislamiento de Préstamos Individuales)
+CREATE TABLE IF NOT EXISTS cartones (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "cliente_id" TEXT REFERENCES clients("cedula") ON DELETE CASCADE,
+  "numero_carton" SERIAL,
+  "fecha_apertura" TIMESTAMPTZ DEFAULT NOW(),
+  "monto_prestado" NUMERIC NOT NULL DEFAULT 0,
+  "estado" TEXT NOT NULL DEFAULT 'activo',
+  "saldo_anterior" NUMERIC DEFAULT 0,
+  "rollover_amount" NUMERIC DEFAULT 0,
+  "total_debt" NUMERIC DEFAULT 0,
+  "outstanding" NUMERIC DEFAULT 0,
+  "installments_count" INTEGER DEFAULT 1,
+  "installment_amount" NUMERIC DEFAULT 0,
+  "discount_amount" NUMERIC DEFAULT 0,
+  "discount_reason" TEXT,
+  "net_cash" NUMERIC DEFAULT 0,
+  "route_id" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "agent_id" TEXT REFERENCES users("username") ON DELETE SET NULL,
+  "supervisor_id" TEXT,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "saldo_anterior" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "rollover_amount" NUMERIC DEFAULT 0;
+
+ALTER TABLE cartones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en cartones" ON cartones;
+CREATE POLICY "Permitir todo a anonimos en cartones" ON cartones FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE cartones TO anon, authenticated;
+GRANT ALL ON SEQUENCE cartones_numero_carton_seq TO anon, authenticated;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+
+-- 6. Tabla de Tickets de Soporte Directo
+CREATE TABLE IF NOT EXISTS support_tickets (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "role" TEXT NOT NULL,
+  "document_number" TEXT,
+  "message" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'Pendiente',
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en support_tickets" ON support_tickets;
+CREATE POLICY "Permitir todo a anonimos en support_tickets" ON support_tickets FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE support_tickets TO anon, authenticated;
+
+-- 7. Tabla de Tokens de Restablecimiento de Contraseña
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "token" TEXT NOT NULL UNIQUE,
+  "user_id" TEXT NOT NULL,
+  "user_name" TEXT,
+  "document_number" TEXT,
+  "created_at" TIMESTAMPTZ DEFAULT NOW(),
+  "expires_at" TIMESTAMPTZ NOT NULL,
+  "used" BOOLEAN DEFAULT false
+);
+
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en password_reset_tokens" ON password_reset_tokens;
+CREATE POLICY "Permitir todo a anonimos en password_reset_tokens" ON password_reset_tokens FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE password_reset_tokens TO anon, authenticated;
+
+-- 8. Tablas de Anuncios y Publicidad (Módulo bulapay-v327)
+CREATE TABLE IF NOT EXISTS bulapay_anuncios (
+  "id" TEXT PRIMARY KEY,
+  "categoria" TEXT NOT NULL,
+  "fecha_inicio" DATE NOT NULL,
+  "fecha_fin" DATE NOT NULL,
+  "detonante_general" BOOLEAN DEFAULT false,
+  "detonante_cliente" BOOLEAN DEFAULT false,
+  "descripcion" TEXT NOT NULL,
+  "multimedia_url" TEXT,
+  "active" BOOLEAN DEFAULT true,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE bulapay_anuncios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_anuncios" ON bulapay_anuncios;
+CREATE POLICY "Permitir todo a anonimos en bulapay_anuncios" ON bulapay_anuncios FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_anuncios TO anon, authenticated;
+
+CREATE TABLE IF NOT EXISTS anuncios (
+  "id" TEXT PRIMARY KEY,
+  "categoria" TEXT NOT NULL,
+  "fecha_inicio" DATE NOT NULL,
+  "fecha_fin" DATE NOT NULL,
+  "detonante_general" BOOLEAN DEFAULT false,
+  "detonante_cliente" BOOLEAN DEFAULT false,
+  "descripcion" TEXT NOT NULL,
+  "multimedia_url" TEXT,
+  "active" BOOLEAN DEFAULT true,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE anuncios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en anuncios" ON anuncios;
+CREATE POLICY "Permitir todo a anonimos en anuncios" ON anuncios FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE anuncios TO anon, authenticated;
+
+CREATE TABLE IF NOT EXISTS announcements (
+  "id" TEXT PRIMARY KEY,
+  "category" TEXT NOT NULL,
+  "title_description" TEXT NOT NULL,
+  "start_date" DATE NOT NULL,
+  "end_date" DATE NOT NULL,
+  "trigger_navigation" BOOLEAN DEFAULT false,
+  "trigger_client_search" BOOLEAN DEFAULT false,
+  "media_url" TEXT,
+  "active" BOOLEAN DEFAULT true,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en announcements" ON announcements;
+CREATE POLICY "Permitir todo a anonimos en announcements" ON announcements FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE announcements TO anon, authenticated;
+
+-- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo bulapay-v349)
+CREATE TABLE IF NOT EXISTS bulapay_notificaciones (
+  "id" TEXT PRIMARY KEY,
+  "titulo" TEXT NOT NULL,
+  "mensaje" TEXT NOT NULL,
+  "categoria" TEXT DEFAULT 'Institucional',
+  "prioridad" TEXT DEFAULT 'Alta',
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE bulapay_notificaciones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura publica en bulapay_notificaciones" ON bulapay_notificaciones;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_notificaciones" ON bulapay_notificaciones;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones;
+CREATE POLICY "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_notificaciones TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+
+CREATE TABLE IF NOT EXISTS notificaciones (
+  "id" TEXT PRIMARY KEY,
+  "titulo" TEXT NOT NULL,
+  "mensaje" TEXT NOT NULL,
+  "categoria" TEXT DEFAULT 'Institucional',
+  "prioridad" TEXT DEFAULT 'Alta',
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE notificaciones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura publica en notificaciones" ON notificaciones;
 DROP POLICY IF EXISTS "Permitir todo a anonimos en notificaciones" ON notificaciones;
 DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en notificaciones" ON notificaciones;
 CREATE POLICY "Permitir todo a anonimos y autenticados en notificaciones" ON notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -337,6 +532,10 @@ GRANT ALL ON TABLE notificaciones TO anon, authenticated;
 
 -- 10. Migración de Campo de Bloqueo por Mora y Programación de Cobros
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "bloqueado_por_mora" BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "fecha_corte" DATE;
+
+ALTER TABLE bulapay_notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
+ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
 
 CREATE TABLE IF NOT EXISTS bulapay_programacion_cobros (
   "id" TEXT PRIMARY KEY,

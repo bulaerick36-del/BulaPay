@@ -357,6 +357,15 @@ const authModule = {
     } else if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
       window.app.router.navigate('agent');
     }
+
+    // Evaluación automática e interna de notificaciones de cobro privadas para este usuario
+    if (window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
+      window.BulaPayDB.evaluateUserCobroNotifications(user).then(() => {
+        if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
+          window.adsModule.updateComunicadosBadge();
+        }
+      });
+    }
   },
 
   updateNavBar(user) {
@@ -378,6 +387,13 @@ const authModule = {
     }
     if (user) {
       this.updateNavBar(user);
+      if (window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
+        window.BulaPayDB.evaluateUserCobroNotifications(user).then(() => {
+          if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
+            window.adsModule.updateComunicadosBadge();
+          }
+        });
+      }
     } else {
       this.userNavInfo.style.display = 'none';
     }

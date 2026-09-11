@@ -703,13 +703,17 @@ const superadminModule = {
     const newPhone = prompt(`Modificar Teléfono para "${username}":`, user.phone || '');
     if (newPhone === null) return;
 
+    const newFechaCorte = prompt(`Modificar Fecha de Corte / Vencimiento para "${username}" (YYYY-MM-DD):`, user.fecha_corte || user.fecha_vencimiento || '');
+    if (newFechaCorte === null) return;
+
     try {
       await window.BulaPayDB.updateUserProfile(username, {
         name: newName.trim(),
         phone: newPhone.trim(),
-        company: newName.trim()
+        company: newName.trim(),
+        fecha_corte: newFechaCorte.trim()
       });
-      alert(`✅ Perfil de "${username}" actualizado correctamente.`);
+      alert(`✅ Perfil y Fecha de Corte de "${username}" actualizados correctamente.`);
       await this.renderCurrentTab();
     } catch (err) {
       console.error(err);
@@ -2680,15 +2684,12 @@ const superadminModule = {
         <!-- Botones de Acción Rápida -->
         <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem;">
           <div>
-            <h5 style="color: #fbbf24; margin: 0 0 0.2rem 0; font-size: 0.9rem; font-weight: 800;">⚡ Carga Rápida de Plantilla Progresiva</h5>
-            <p style="color: #cbd5e1; font-size: 0.78rem; margin: 0;">Genera automáticamente la cadena completa de recordatorios (desde 5 días antes hasta el último día).</p>
+            <h5 style="color: #fbbf24; margin: 0 0 0.2rem 0; font-size: 0.9rem; font-weight: 800;">⚡ Cadena 100% Automática e Interna</h5>
+            <p style="color: #cbd5e1; font-size: 0.78rem; margin: 0;">Los avisos (5 a 1 días) se evalúan internamente contra la fecha de cada usuario al iniciar sesión y aparecen de forma privada en su campanita.</p>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button onclick="superadminModule.cargarPlantillaProgresivaCobros()" class="btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #0b132b; font-weight: 800; font-size: 0.8rem; padding: 0.55rem 1rem; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
               🚀 Restablecer / Cargar Cadena de 5 Días
-            </button>
-            <button onclick="superadminModule.dispararNotificacionesCobroEnCampanita()" class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 800; font-size: 0.8rem; padding: 0.55rem 1rem; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; cursor: pointer;">
-              🔔 Disparar a la Campanita Ahora
             </button>
           </div>
         </div>
@@ -2808,18 +2809,6 @@ const superadminModule = {
       await window.BulaPayDB.deleteProgramacionCobro(id);
       await this.renderProgramarCobroModalContent();
     } catch(e) {}
-  },
-
-  async dispararNotificacionesCobroEnCampanita() {
-    try {
-      await window.BulaPayDB.triggerProgresiveCobroNotifications();
-      alert('🔔 Mensajes progresivos de cobro publicados en la campanita de notificaciones oficiales.');
-      if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
-        await window.adsModule.updateComunicadosBadge();
-      }
-    } catch(e) {
-      console.error("Error disparando notificaciones:", e);
-    }
   }
 };
 
