@@ -234,6 +234,9 @@ const superadminModule = {
               <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              <button id="sa-btn-cedula-modal" onclick="superadminModule.openGestionCedulaModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;" title="Gestión rápida por cédula">
+                🔍 Buscar Cédula
+              </button>
               <button id="sa-btn-programar-cobro" onclick="superadminModule.openProgramarCobroModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" title="Programar mensajes de cobro preventivo">
                 📅 Programar mensaje de cobro
               </button>
@@ -549,6 +552,24 @@ const superadminModule = {
           </div>
         </div>
 
+        <!-- Tarjeta de Búsqueda y Gestión Rápida por Cédula -->
+        <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.85rem;">
+            <h4 style="margin: 0; color: #fbbf24; font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+              <span>🔍</span> Buscador Rápido de Suspensión y Liberación por Cédula
+            </h4>
+            <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Consulta básica de usuario, estado y acciones instantáneas de suspensión/liberación</span>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="sa-quick-cedula-input" placeholder="💳 Ingresa el número de cédula o usuario (Ej: 1098765432)..." style="flex: 1; min-width: 260px; padding: 0.65rem 1rem; font-size: 0.9rem; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.4); background: #0f172a; color: #ffffff; outline: none; font-weight: 700;">
+            <button type="button" onclick="superadminModule.buscarUsuarioPorCedulaDirecto()" class="btn" style="padding: 0.65rem 1.3rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #0b132b; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.25);">🔍 Buscar Cédula</button>
+          </div>
+
+          <!-- Contenedor de Resultado Dinámico -->
+          <div id="sa-quick-cedula-result-container" style="display: none; margin-top: 1rem;"></div>
+        </div>
+
         <div id="sa-users-list-wrapper" style="overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); background: #0b132b;">
           <p style="color: #94a3b8; padding: 1.5rem; text-align: center;">Cargando usuarios desde Supabase...</p>
         </div>
@@ -566,6 +587,13 @@ const superadminModule = {
     }
 
     this.renderUsersListTable(allUsers);
+
+    const quickCedulaInput = document.getElementById('sa-quick-cedula-input');
+    if (quickCedulaInput) {
+      quickCedulaInput.oninput = () => {
+        this.buscarUsuarioPorCedulaDirecto(quickCedulaInput.value, 'sa-quick-cedula-result-container');
+      };
+    }
 
     const searchInput = document.getElementById('sa-users-search');
     if (searchInput) {
@@ -2809,6 +2837,201 @@ const superadminModule = {
       await window.BulaPayDB.deleteProgramacionCobro(id);
       await this.renderProgramarCobroModalContent();
     } catch(e) {}
+  },
+
+  // ----------------------------------------------------
+  // NUEVA SECCIÓN Y MODAL: GESTIÓN RÁPIDA POR CÉDULA
+  // ----------------------------------------------------
+  async buscarUsuarioPorCedulaDirecto(cedulaQuery, containerId = 'sa-quick-cedula-result-container') {
+    const inputEl = document.getElementById('sa-quick-cedula-input') || document.getElementById('sa-modal-cedula-input');
+    const query = (cedulaQuery || (inputEl ? inputEl.value : '')).toString().trim().toLowerCase();
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!query) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    let allUsers = [];
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAllUsers === 'function') {
+        allUsers = await window.BulaPayDB.getAllUsers();
+      }
+    } catch(e) {}
+    if (!allUsers || allUsers.length === 0) {
+      allUsers = this.getFallbackUsers();
+    }
+
+    const matchedUser = allUsers.find(u => 
+      (u.documentNumber && String(u.documentNumber).toLowerCase().trim() === query) ||
+      (u.username && String(u.username).toLowerCase().trim() === query) ||
+      (u.name && String(u.name).toLowerCase().includes(query))
+    );
+
+    if (!matchedUser) {
+      container.style.display = 'block';
+      container.innerHTML = `
+        <div style="background: #0b132b; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 10px; padding: 1.25rem; text-align: center; color: #fca5a5;">
+          <span style="font-size: 1.5rem;">🔍</span>
+          <p style="margin: 0.3rem 0 0 0; font-weight: 700; font-size: 0.9rem;">No se encontró ningún usuario registrado con la cédula / término "${query}".</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Obtener información adicional de Cartera / Rutas
+    let carteraText = 'Sin Ruta Registrada';
+    if (matchedUser.routeId) {
+      carteraText = `Ruta ID: ${matchedUser.routeId}`;
+    } else if (matchedUser.company) {
+      carteraText = matchedUser.company;
+    } else if (matchedUser.supervisor) {
+      carteraText = `Supervisado por ${matchedUser.supervisor}`;
+    } else {
+      carteraText = `Rol: ${matchedUser.role || 'Usuario General'}`;
+    }
+
+    const isBlocked = matchedUser.bloqueado_por_mora === true;
+
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="background: #0b132b; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 1.25rem; color: #f8fafc; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+        
+        <!-- Cabecera de Datos Básicos -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem;">
+          <div>
+            <span style="font-size: 0.75rem; color: #38bdf8; font-weight: 800; text-transform: uppercase; background: rgba(56, 189, 248, 0.15); padding: 0.15rem 0.55rem; border-radius: 5px; border: 1px solid rgba(56, 189, 248, 0.3);">💳 ${matchedUser.documentType || 'CC'}: ${matchedUser.documentNumber || matchedUser.username}</span>
+            <h4 style="margin: 0.4rem 0 0.15rem 0; font-size: 1.2rem; font-weight: 900; color: #ffffff;">${matchedUser.name || matchedUser.nombre_firmante || 'Sin Nombre'}</h4>
+            <p style="margin: 0; color: #94a3b8; font-size: 0.82rem;">Usuario: <strong style="color: #ffffff;">${matchedUser.username}</strong> | Rol: <span style="color: #60a5fa; font-weight: 700;">${matchedUser.role || 'Usuario'}</span></p>
+          </div>
+          <div style="text-align: right;">
+            <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 0.25rem;">Estado Actual:</span>
+            ${isBlocked 
+              ? `<span style="background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.3rem 0.8rem; border-radius: 9999px; font-weight: 800; font-size: 0.8rem; display: inline-block;">🔴 SUSPENDIDO (Impago)</span>`
+              : `<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.3rem 0.8rem; border-radius: 9999px; font-weight: 800; font-size: 0.8rem; display: inline-block;">🟢 SERVICIO ACTIVO</span>`
+            }
+          </div>
+        </div>
+
+        <!-- Información de Cartera y Datos de Contacto -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.85rem; font-size: 0.82rem; background: rgba(15, 23, 42, 0.6); padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+          <div>
+            <span style="color: #94a3b8; display: block; font-weight: 600;">📞 Teléfono Contacto:</span>
+            <span style="color: #f8fafc; font-weight: 700;">${matchedUser.phone || 'N/A'}</span>
+          </div>
+          <div>
+            <span style="color: #94a3b8; display: block; font-weight: 600;">✉️ Correo Electrónico:</span>
+            <span style="color: #f8fafc; font-weight: 700;">${matchedUser.email || 'N/A'}</span>
+          </div>
+          <div>
+            <span style="color: #94a3b8; display: block; font-weight: 600;">💼 Cartera / Asignación:</span>
+            <span style="color: #fbbf24; font-weight: 700;">${carteraText}</span>
+          </div>
+          <div>
+            <span style="color: #94a3b8; display: block; font-weight: 600;">📅 Fecha de Corte:</span>
+            <span style="color: #34d399; font-weight: 700;">${matchedUser.fecha_corte || matchedUser.fecha_vencimiento || 'Al día'}</span>
+          </div>
+        </div>
+
+        <!-- Dos Botones Claros al Final de la Tarjeta (Rojo: Suspender | Verde: Liberar) -->
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.85rem; flex-wrap: wrap;">
+          <button onclick="superadminModule.suspenderUsuarioCedula('${matchedUser.username}', '${containerId}')" class="btn" style="padding: 0.65rem 1.4rem; font-size: 0.85rem; font-weight: 900; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); flex: 1; max-width: 240px; text-align: center;">
+            🔴 Suspender
+          </button>
+          <button onclick="superadminModule.liberarUsuarioCedula('${matchedUser.username}', '${containerId}')" class="btn" style="padding: 0.65rem 1.4rem; font-size: 0.85rem; font-weight: 900; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4); flex: 1; max-width: 240px; text-align: center;">
+            🟢 Liberar
+          </button>
+        </div>
+
+      </div>
+    `;
+  },
+
+  async suspenderUsuarioCedula(username, containerId) {
+    if (!confirm(`¿Confirma SUSPENDER Y BLOQUEAR inmediatamente el acceso del usuario "${username}" en Supabase?`)) return;
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+        await window.BulaPayDB.toggleUserBloqueoMora(username, true);
+      }
+      alert(`🔴 Acceso Suspendido con Éxito\n\nEl usuario "${username}" ha sido bloqueado por mora en Supabase.`);
+      await this.buscarUsuarioPorCedulaDirecto(username, containerId);
+      if (typeof this.renderCurrentTab === 'function') await this.renderCurrentTab();
+    } catch(e) {
+      console.error("Error al suspender por cédula:", e);
+      alert('❌ Error al actualizar el estado en Supabase.');
+    }
+  },
+
+  async liberarUsuarioCedula(username, containerId) {
+    if (!confirm(`¿Confirma LIBERAR Y REACTIVAR el servicio de inmediato para el usuario "${username}"?`)) return;
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+        await window.BulaPayDB.toggleUserBloqueoMora(username, false);
+      }
+      alert(`🟢 Servicio Liberado con Éxito\n\nEl usuario "${username}" ha sido reactivado en Supabase y puede acceder normalmente.`);
+      await this.buscarUsuarioPorCedulaDirecto(username, containerId);
+      if (typeof this.renderCurrentTab === 'function') await this.renderCurrentTab();
+    } catch(e) {
+      console.error("Error al liberar por cédula:", e);
+      alert('❌ Error al actualizar el estado en Supabase.');
+    }
+  },
+
+  async openGestionCedulaModal(e) {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+
+    let modal = document.getElementById('modal-gestion-cedula');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'modal-gestion-cedula';
+    modal.style.cssText = `
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(11, 19, 43, 0.88) !important;
+      backdrop-filter: blur(8px) !important;
+      z-index: 999999 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 1rem !important;
+      box-sizing: border-box !important;
+      font-family: system-ui, -apple-system, sans-serif !important;
+    `;
+
+    modal.innerHTML = `
+      <div style="background: #1c2541; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 16px; width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto; padding: 1.75rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); color: #f8fafc;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 0.85rem; margin-bottom: 1.2rem;">
+          <div>
+            <span style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-weight: 800; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 9999px; text-transform: uppercase;">🔍 BÚSQUEDA RÁPIDA DE USUARIO / AGENTE</span>
+            <h3 style="font-size: 1.25rem; font-weight: 900; color: #ffffff; margin-top: 0.4rem; margin-bottom: 0.1rem;">Gestión Rápida por Cédula</h3>
+          </div>
+          <button onclick="document.getElementById('modal-gestion-cedula').remove()" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-size: 1.2rem; font-weight: 800; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        </div>
+
+        <div style="margin-bottom: 1.2rem;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.4rem;">Número de Cédula o Usuario:</label>
+          <div style="display: flex; gap: 0.6rem;">
+            <input type="text" id="sa-modal-cedula-input" placeholder="Ingresa el número de cédula o usuario..." oninput="superadminModule.buscarUsuarioPorCedulaDirecto(this.value, 'sa-modal-cedula-result')" style="width: 100%; padding: 0.7rem 1rem; font-size: 0.95rem; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.4); background: #0f172a; color: #ffffff; outline: none; font-weight: 700;">
+            <button onclick="superadminModule.buscarUsuarioPorCedulaDirecto(document.getElementById('sa-modal-cedula-input').value, 'sa-modal-cedula-result')" class="btn" style="padding: 0.7rem 1.2rem; background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-weight: 800; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; cursor: pointer;">🔍 Buscar</button>
+          </div>
+        </div>
+
+        <div id="sa-modal-cedula-result"></div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
   }
 };
 
