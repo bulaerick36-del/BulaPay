@@ -381,8 +381,15 @@
 
         <!-- Formulario Registrarse (Agente Independiente) -->
         <form id="form-register" class="auth-form" style="display: none;">
-          <!-- Tipo de Cuenta forzado fijamente como Agente Independiente -->
-          <input type="hidden" id="register-type" value="Agente Independiente">
+          <!-- Tipo de Cuenta / Rol -->
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="register-type">Tipo de Cuenta / Rol</label>
+            <select id="register-type" style="width: 100%; padding: 0.65rem 0.85rem; font-size: 0.9rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); outline: none; font-weight: 700;">
+              <option value="Usuario Supervisor" selected>👔 Supervisor / Administrador</option>
+              <option value="Agente Independiente">💼 Agente Independiente</option>
+              <option value="Otros (Comercios, Compraventas, Mercados)">🏪 Otros (Comercios, Compraventas, Mercados)</option>
+            </select>
+          </div>
 
           <!-- 1. Nombre Completo -->
           <div id="register-fields-standard">

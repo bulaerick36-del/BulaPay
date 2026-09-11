@@ -80,11 +80,16 @@ const app = {
         }
       }
 
-      const supervisorRoles = ['Usuario Supervisor', 'Comercio Independiente', 'supervisor', 'Administrador de Rutas', 'Otros (Comercios, Compraventas, Mercados)'];
+      const masterOrAdminRoles = ['Usuario Supervisor', 'Supervisor', 'Administrador', 'Administrador de Rutas', 'Superadministrador', 'Superadmin'];
+      const isMaster = user && (user.username === '1121338578' || user.documentNumber === '1121338578' || user.username === 'admin' || masterOrAdminRoles.includes(user.role));
       const agentRoles = ['Agente de Ruta', 'agent', 'Agente Independiente'];
+      const commerceRoles = ['Otros (Comercios, Compraventas, Mercados)', 'Comercio Independiente'];
 
       if (user) {
-        if (supervisorRoles.includes(user.role)) {
+        if (isMaster) {
+          sessionStorage.setItem('bula_superadmin_active', 'true');
+          this.navigate('superadmin');
+        } else if (commerceRoles.includes(user.role)) {
           this.navigate('supervisor');
         } else if (agentRoles.includes(user.role)) {
           this.navigate('agent');

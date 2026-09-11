@@ -171,10 +171,11 @@ const authModule = {
       });
     }
 
-    // Submit Registrarse (Agente Independiente)
+    // Submit Registrarse
     this.formRegister.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const type = 'Agente Independiente'; // Forzado de manera fija e invariable
+      const registerTypeElem = document.getElementById('register-type');
+      const selectedType = registerTypeElem ? registerTypeElem.value : 'Usuario Supervisor';
       const email = document.getElementById('register-email').value.trim();
       const username = document.getElementById('register-username').value.trim().toLowerCase();
       const password = document.getElementById('register-password').value;
@@ -209,7 +210,7 @@ const authModule = {
           username,
           password,
           name,
-          role: 'Agente Independiente',
+          role: selectedType,
           company,
           phone,
           email,
@@ -331,31 +332,57 @@ const authModule = {
     otherInputs.forEach(i => i.removeAttribute('required'));
   },
 
-  loginUser(user) {
+  async loginUser(user) {
     window.BulaPayDB.setCurrentUser(user);
     this.updateNavBar(user);
 
+    const role = user.role || '';
+    const username = String(user.username || '').trim();
+    const docNum = String(user.documentNumber || '').trim();
+
+    const isMaster = username === '1121338578' || docNum === '1121338578' || username === 'admin';
+    const isSupervisorOrAdmin = isMaster || 
+      role === 'Usuario Supervisor' || 
+      role === 'Supervisor' || 
+      role === 'Administrador' || 
+      role === 'Administrador de Rutas' || 
+      role === 'Superadministrador' || 
+      role === 'Superadmin';
+
+    const isCommerce = role === 'Otros (Comercios, Compraventas, Mercados)' || role === 'Comercio Independiente';
+
     // Sincronizar el rol del usuario con el tema de colores dinámico
-    let targetRole = 'supervisor';
-    if (user.role === 'Usuario Supervisor' || user.role === 'supervisor' || user.role === 'Administrador de Rutas') {
-      targetRole = 'supervisor';
-    } else if (user.role === 'Agente de Ruta' || user.role === 'agent') {
-      targetRole = 'route';
-    } else if (user.role === 'Agente Independiente') {
-      targetRole = 'independent';
-    } else if (user.role === 'Otros (Comercios, Compraventas, Mercados)') {
-      targetRole = 'commerce';
+    let targetThemeRole = 'supervisor';
+    if (isSupervisorOrAdmin) {
+      targetThemeRole = 'supervisor';
+    } else if (role === 'Agente de Ruta' || role === 'agent') {
+      targetThemeRole = 'route';
+    } else if (role === 'Agente Independiente') {
+      targetThemeRole = 'independent';
+    } else if (isCommerce) {
+      targetThemeRole = 'commerce';
     }
-    localStorage.setItem('bulaRole', targetRole);
+    localStorage.setItem('bulaRole', targetThemeRole);
     if (typeof window.applyDynamicTheme === 'function') {
       window.applyDynamicTheme();
     }
 
-    // Redirigir según el rol del usuario y verificar aviso global
-    if (user.role === 'Usuario Supervisor' || user.role === 'Comercio Independiente' || user.role === 'supervisor' || user.role === 'Administrador de Rutas' || user.role === 'Otros (Comercios, Compraventas, Mercados)') {
-      window.app.router.navigate('supervisor');
-    } else if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
-      window.app.router.navigate('agent');
+    // Redirigir según el rol del usuario: Supervisor/Administrador/Cédula Maestra -> Superadmin Panel
+    if (isSupervisorOrAdmin) {
+      sessionStorage.setItem('bula_superadmin_active', 'true');
+      if (window.superadminModule && typeof window.superadminModule.openSuperadminPanel === 'function') {
+        await window.superadminModule.openSuperadminPanel();
+      } else if (window.app && window.app.router) {
+        window.app.router.navigate('superadmin');
+      }
+    } else if (isCommerce) {
+      if (window.app && window.app.router) {
+        window.app.router.navigate('supervisor');
+      }
+    } else {
+      if (window.app && window.app.router) {
+        window.app.router.navigate('agent');
+      }
     }
 
     // Evaluación automática e interna de notificaciones de cobro privadas para este usuario
