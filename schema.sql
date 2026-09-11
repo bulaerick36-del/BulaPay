@@ -335,11 +335,22 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en notificaciones
 CREATE POLICY "Permitir todo a anonimos y autenticados en notificaciones" ON notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE notificaciones TO anon, authenticated;
 
+-- 10. Migración de Campo de Bloqueo por Mora y Programación de Cobros
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "bloqueado_por_mora" BOOLEAN DEFAULT false;
 
+CREATE TABLE IF NOT EXISTS bulapay_programacion_cobros (
+  "id" TEXT PRIMARY KEY,
+  "dias_previos" INTEGER NOT NULL,
+  "titulo" TEXT NOT NULL,
+  "mensaje" TEXT NOT NULL,
+  "activo" BOOLEAN DEFAULT true,
+  "prioridad" TEXT DEFAULT 'Alta',
+  "target_roles" TEXT DEFAULT 'todos',
+  "created_at" TIMESTAMPTZ DEFAULT NOW(),
+  "updated_at" TIMESTAMPTZ DEFAULT NOW()
+);
 
-
-
-
-
-
-
+ALTER TABLE bulapay_programacion_cobros ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en bulapay_programacion_cobros" ON bulapay_programacion_cobros;
+CREATE POLICY "Permitir todo a anonimos y autenticados en bulapay_programacion_cobros" ON bulapay_programacion_cobros FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_programacion_cobros TO anon, authenticated;

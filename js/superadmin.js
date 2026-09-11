@@ -206,7 +206,7 @@ const superadminModule = {
               </div>
             </td>
             <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle;">
-              <span style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700; font-size: 0.75rem; display: inline-block;">Activo</span>
+              ${u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`}
             </td>
             <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
               <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
@@ -234,6 +234,9 @@ const superadminModule = {
               <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              <button id="sa-btn-programar-cobro" onclick="superadminModule.openProgramarCobroModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" title="Programar mensajes de cobro preventivo">
+                📅 Programar mensaje de cobro
+              </button>
               <button id="sa-bell-btn" onclick="superadminModule.switchSuperadminTab('support', event)" style="position: relative; padding: 0.55rem 0.85rem; font-size: 1.1rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Notificaciones de Mensajes de Soporte">
                 🔔
                 <span id="sa-bell-badge" style="display: none; position: absolute; top: -6px; right: -6px; background: #ef4444; color: #ffffff; font-size: 0.72rem; font-weight: 900; padding: 0.15rem 0.45rem; border-radius: 9999px; border: 2px solid #1c2541; box-shadow: 0 0 10px rgba(239, 68, 68, 0.9);">0</span>
@@ -631,7 +634,7 @@ const superadminModule = {
             </div>
           </td>
           <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle; width: 8%;">
-            <span style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 700; font-size: 0.75rem; display: inline-block;">Activo</span>
+            ${u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`}
           </td>
           <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
             <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
@@ -2553,6 +2556,270 @@ const superadminModule = {
 
       </div>
     `;
+  },
+
+  // ----------------------------------------------------
+  // NUEVAS FUNCIONALIDADES: BLOQUEO POR MORA Y PROGRAMACIÓN DE COBROS
+  // ----------------------------------------------------
+  async toggleUserBloqueo(username, currentlyBlocked) {
+    const targetStatus = !currentlyBlocked;
+    const actionText = targetStatus ? '🔴 BLOQUEAR ACCESO POR IMPAGO/MORA' : '🟢 DESBLOQUEAR Y RESTABLECER SERVICIO';
+    const confirmMsg = `¿Confirma cambiar el estado del usuario "${username}"?\n\nAcción: ${actionText}\n\n` +
+      (targetStatus ? 'El usuario quedará impedido de iniciar sesión de forma inmediata.' : 'El usuario podrá volver a ingresar normalmente a la aplicación.');
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+        await window.BulaPayDB.toggleUserBloqueoMora(username, targetStatus);
+      }
+      alert(`🎉 Estado actualizado con éxito.\n\n👤 Usuario: ${username}\nNuevo Estado: ${targetStatus ? '🔴 Suspendido por Mora' : '🟢 Activo'}`);
+      if (typeof this.renderCurrentTab === 'function') {
+        await this.renderCurrentTab();
+      }
+    } catch(err) {
+      console.error("Error al actualizar bloqueo por mora:", err);
+      alert('❌ Error al actualizar el estado de bloqueo en Supabase.');
+    }
+  },
+
+  async openProgramarCobroModal(e) {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+
+    let modal = document.getElementById('modal-programar-cobro');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'modal-programar-cobro';
+    modal.style.cssText = `
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(11, 19, 43, 0.88) !important;
+      backdrop-filter: blur(8px) !important;
+      z-index: 999999 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 1rem !important;
+      box-sizing: border-box !important;
+      font-family: system-ui, -apple-system, sans-serif !important;
+    `;
+
+    document.body.appendChild(modal);
+    await this.renderProgramarCobroModalContent();
+  },
+
+  async renderProgramarCobroModalContent() {
+    const modal = document.getElementById('modal-programar-cobro');
+    if (!modal) return;
+
+    let progs = [];
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getProgramacionCobros === 'function') {
+        progs = await window.BulaPayDB.getProgramacionCobros();
+      }
+    } catch(e) {}
+
+    let rowsHtml = '';
+    if (Array.isArray(progs) && progs.length > 0) {
+      progs.sort((a, b) => (b.dias_previos || 0) - (a.dias_previos || 0));
+      progs.forEach(p => {
+        const badgeColor = p.dias_previos <= 1 ? 'rgba(239, 68, 68, 0.25)' : (p.dias_previos <= 3 ? 'rgba(245, 158, 11, 0.25)' : 'rgba(59, 130, 246, 0.25)');
+        const textColor = p.dias_previos <= 1 ? '#fca5a5' : (p.dias_previos <= 3 ? '#fcd34d' : '#93c5fd');
+
+        rowsHtml += `
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 0.9rem; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 260px;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+                <span style="background: ${badgeColor}; color: ${textColor}; padding: 0.2rem 0.6rem; border-radius: 6px; font-weight: 800; font-size: 0.75rem; text-transform: uppercase;">
+                  📅 Faltan ${p.dias_previos} Días ${p.dias_previos === 1 ? '(Último Día)' : ''}
+                </span>
+                <span style="font-size: 0.72rem; color: ${p.activo !== false ? '#34d399' : '#94a3b8'}; font-weight: 700;">
+                  ${p.activo !== false ? '🟢 Programado Activo' : '⚪ Pausado'}
+                </span>
+              </div>
+              <h5 style="color: #ffffff; margin: 0 0 0.25rem 0; font-size: 0.92rem; font-weight: 800;">${p.titulo}</h5>
+              <p style="color: #cbd5e1; font-size: 0.82rem; margin: 0; line-height: 1.35;">${p.mensaje}</p>
+            </div>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <button onclick="superadminModule.toggleCobroActivo('${p.id}', ${p.activo !== false})" class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; font-weight: 700; background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer;">
+                ${p.activo !== false ? '⏸️ Pausar' : '▶️ Activar'}
+              </button>
+              <button onclick="superadminModule.eliminarCobroProgramado('${p.id}')" class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.75rem; font-weight: 700; background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; cursor: pointer;">
+                🗑️ Eliminar
+              </button>
+            </div>
+          </div>
+        `;
+      });
+    } else {
+      rowsHtml = `<p style="color: #94a3b8; text-align: center; padding: 1rem;">No hay recordatorios programados actualmente.</p>`;
+    }
+
+    modal.innerHTML = `
+      <div style="background: #1c2541; border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 16px; width: 100%; max-width: 820px; max-height: 90vh; overflow-y: auto; padding: 1.75rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); color: #f8fafc;">
+        
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 1rem; margin-bottom: 1.25rem;">
+          <div>
+            <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-weight: 800; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 9999px; text-transform: uppercase;">🔔 MÓDULO DE NOTIFICACIONES Y CAMPANITA BULAPAY</span>
+            <h3 style="font-size: 1.35rem; font-weight: 900; color: #ffffff; margin-top: 0.4rem; margin-bottom: 0.15rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📅 Programación de Mensajes de Cobro Preventivo</span>
+            </h3>
+            <p style="color: #94a3b8; font-size: 0.82rem; margin: 0;">Configura el envío progresivo y automatizado de avisos de suspensión por mora a los usuarios.</p>
+          </div>
+          <button onclick="document.getElementById('modal-programar-cobro').remove()" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; font-size: 1.2rem; font-weight: 800; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        </div>
+
+        <!-- Botones de Acción Rápida -->
+        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem;">
+          <div>
+            <h5 style="color: #fbbf24; margin: 0 0 0.2rem 0; font-size: 0.9rem; font-weight: 800;">⚡ Carga Rápida de Plantilla Progresiva</h5>
+            <p style="color: #cbd5e1; font-size: 0.78rem; margin: 0;">Genera automáticamente la cadena completa de recordatorios (desde 5 días antes hasta el último día).</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button onclick="superadminModule.cargarPlantillaProgresivaCobros()" class="btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #0b132b; font-weight: 800; font-size: 0.8rem; padding: 0.55rem 1rem; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
+              🚀 Restablecer / Cargar Cadena de 5 Días
+            </button>
+            <button onclick="superadminModule.dispararNotificacionesCobroEnCampanita()" class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 800; font-size: 0.8rem; padding: 0.55rem 1rem; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; cursor: pointer;">
+              🔔 Disparar a la Campanita Ahora
+            </button>
+          </div>
+        </div>
+
+        <!-- Formulario para Añadir/Editar Mensaje de Cobro -->
+        <form id="form-nuevo-mensaje-cobro" onsubmit="event.preventDefault(); superadminModule.guardarMensajeCobroForm(event);" style="background: #0f172a; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.2rem; margin-bottom: 1.5rem;">
+          <h4 style="color: #38bdf8; font-size: 0.95rem; font-weight: 800; margin: 0 0 0.85rem 0;">✏️ Agregar o Modificar Recordatorio Programado</h4>
+          
+          <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+            <div>
+              <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.3rem;">Días Previos al Corte:</label>
+              <select id="cobro-dias-previos" style="width: 100%; padding: 0.55rem; font-size: 0.85rem; border-radius: 8px; background: #1e293b; color: #ffffff; border: 1px solid rgba(255,255,255,0.2); outline: none;">
+                <option value="5">5 Días Antes</option>
+                <option value="4">4 Días Antes</option>
+                <option value="3">3 Días Antes (Advertencia)</option>
+                <option value="2">2 Días Antes (Urgente)</option>
+                <option value="1">1 Día Antes (Último Día previo a suspensión)</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.3rem;">Título del Mensaje:</label>
+              <input type="text" id="cobro-titulo-input" placeholder="Ej: 🚨 Advertencia Preventiva - Faltan 3 días para suspensión" required style="width: 100%; padding: 0.55rem; font-size: 0.85rem; border-radius: 8px; background: #1e293b; color: #ffffff; border: 1px solid rgba(255,255,255,0.2); outline: none;">
+            </div>
+          </div>
+
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.3rem;">Texto de Advertencia Preventiva:</label>
+            <textarea id="cobro-mensaje-textarea" rows="3" placeholder="Ingresa el mensaje preventivo de cobro que se mostrará en las notificaciones..." required style="width: 100%; padding: 0.65rem; font-size: 0.85rem; border-radius: 8px; background: #1e293b; color: #ffffff; border: 1px solid rgba(255,255,255,0.2); outline: none; line-height: 1.4; resize: vertical;"></textarea>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-weight: 800; font-size: 0.85rem; padding: 0.6rem 1.3rem; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; cursor: pointer;">
+              💾 Guardar Recordatorio
+            </button>
+          </div>
+        </form>
+
+        <!-- Lista de Mensajes Programados -->
+        <h4 style="color: #ffffff; font-size: 1rem; font-weight: 800; margin: 0 0 0.85rem 0;">📋 Cadena Progresiva de Cobro Configurada</h4>
+        <div id="lista-cobros-programados-container">
+          ${rowsHtml}
+        </div>
+
+      </div>
+    `;
+  },
+
+  async guardarMensajeCobroForm(e) {
+    if (e) e.preventDefault();
+    const diasInput = document.getElementById('cobro-dias-previos');
+    const tituloInput = document.getElementById('cobro-titulo-input');
+    const mensajeInput = document.getElementById('cobro-mensaje-textarea');
+
+    if (!diasInput || !tituloInput || !mensajeInput) return;
+    const dias = diasInput.value;
+    const titulo = tituloInput.value.trim();
+    const mensaje = mensajeInput.value.trim();
+
+    if (!titulo || !mensaje) {
+      alert('Por favor completa todos los campos.');
+      return;
+    }
+
+    try {
+      await window.BulaPayDB.saveProgramacionCobro({
+        id: `prog_${dias}d`,
+        dias_previos: parseInt(dias),
+        titulo: titulo,
+        mensaje: mensaje,
+        activo: true
+      });
+      alert('✅ Mensaje de cobro programado guardado correctamente.');
+      await this.renderProgramarCobroModalContent();
+    } catch(err) {
+      console.error("Error al guardar mensaje de cobro:", err);
+      alert('❌ Error al guardar el recordatorio de cobro.');
+    }
+  },
+
+  async cargarPlantillaProgresivaCobros() {
+    if (!confirm('¿Confirma cargar la cadena progresiva estándar de recordatorios de cobro (5 a 1 días)?')) return;
+
+    const plantillas = [
+      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio BulaPay. Realice su pago a tiempo para evitar suspensiones.', activo: true },
+      { id: 'prog_4d', dias_previos: 4, titulo: '⚠️ Recordatorio Preventivo - 4 Días', mensaje: 'Faltan 4 días para el corte de su suscripción. Por favor efectúe el pago para mantener sus rutas y cobros activos.', activo: true },
+      { id: 'prog_3d', dias_previos: 3, titulo: '🚨 Advertencia Preventiva - 3 Días', mensaje: 'Atención: Solo restan 3 días antes de la suspensión del servicio por impago. Evite la interrupción de su acceso.', activo: true },
+      { id: 'prog_2d', dias_previos: 2, titulo: '🔥 URGENTE: Corte Próximo - 2 Días', mensaje: 'Faltan 2 días para el bloqueo por mora de su cuenta. Por favor reporte su pago inmediatamente a administración.', activo: true },
+      { id: 'prog_1d', dias_previos: 1, titulo: '⛔ ÚLTIMO AVISO - Suspensión Mañana', mensaje: '🚨 ULTIMO DÍA PREVIO A SUSPENSIÓN: Su cuenta entrará en bloqueo automático por impago al finalizar el día de mañana.', activo: true }
+    ];
+
+    try {
+      for (const p of plantillas) {
+        await window.BulaPayDB.saveProgramacionCobro(p);
+      }
+      alert('🎉 Cadena progresiva de 5 días de cobro preventivo cargada con éxito.');
+      await this.renderProgramarCobroModalContent();
+    } catch(e) {
+      console.error("Error cargando plantillas:", e);
+    }
+  },
+
+  async toggleCobroActivo(id, currentlyActive) {
+    try {
+      const progs = await window.BulaPayDB.getProgramacionCobros();
+      const item = progs.find(p => p.id === id);
+      if (item) {
+        item.activo = !currentlyActive;
+        await window.BulaPayDB.saveProgramacionCobro(item);
+        await this.renderProgramarCobroModalContent();
+      }
+    } catch(e) {}
+  },
+
+  async eliminarCobroProgramado(id) {
+    if (!confirm('¿Confirma eliminar este recordatorio programado?')) return;
+    try {
+      await window.BulaPayDB.deleteProgramacionCobro(id);
+      await this.renderProgramarCobroModalContent();
+    } catch(e) {}
+  },
+
+  async dispararNotificacionesCobroEnCampanita() {
+    try {
+      await window.BulaPayDB.triggerProgresiveCobroNotifications();
+      alert('🔔 Mensajes progresivos de cobro publicados en la campanita de notificaciones oficiales.');
+      if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
+        await window.adsModule.updateComunicadosBadge();
+      }
+    } catch(e) {
+      console.error("Error disparando notificaciones:", e);
+    }
   }
 };
 

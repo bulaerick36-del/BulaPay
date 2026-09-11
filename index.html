@@ -1913,15 +1913,15 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="js/db.js?v=356"></script>
-  <script src="js/ads.js?v=356"></script>
-  <script src="js/auth.js?v=356"></script>
-  <script src="js/supervisor.js?v=356"></script>
-  <script src="js/agent_v6.js?v=356"></script>
-  <script src="js/customer.js?v=356"></script>
-  <script src="js/superadmin.js?v=356"></script>
+  <script src="js/db.js?v=357"></script>
+  <script src="js/ads.js?v=357"></script>
+  <script src="js/auth.js?v=357"></script>
+  <script src="js/supervisor.js?v=357"></script>
+  <script src="js/agent_v6.js?v=357"></script>
+  <script src="js/customer.js?v=357"></script>
+  <script src="js/superadmin.js?v=357"></script>
   <!-- Controlador Principal -->
-  <script src="js/app.js?v=356"></script>
+  <script src="js/app.js?v=357"></script>
 
   <!-- MODAL DE RECIBO DIGITAL (GLOBAL / COMPARTIDO) -->
   <div class="receipt-overlay" id="receipt-modal">
@@ -2801,11 +2801,14 @@
   <!-- MODAL DE NOTIFICACIONES Y COMUNICADOS GERENCIALES -->
   <div id="modal-pwa-comunicados" class="pwa-ad-modal-overlay" style="display: none;">
     <div class="pwa-ad-modal-card" style="max-width: 520px; max-height: 85vh; border-radius: 20px; padding: 1.25rem !important; background: #0f172a;">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 0.85rem; margin-bottom: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 0.85rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
         <h3 style="margin: 0; color: #fbbf24; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
           <span>🔔</span> Comunicados Oficiales BulaPay
         </h3>
-        <button type="button" class="btn-close-modal" onclick="adsModule.closeComunicadosModal()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; width: 32px; height: 32px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <button type="button" class="btn" onclick="if(window.superadminModule) { adsModule.closeComunicadosModal(); window.superadminModule.openProgramarCobroModal(event); }" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; font-weight: 800; border-radius: 6px; cursor: pointer;" title="Configurar recordatorios progresivos de pago">📅 Programar mensaje de cobro</button>
+          <button type="button" class="btn-close-modal" onclick="adsModule.closeComunicadosModal()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; width: 32px; height: 32px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        </div>
       </div>
       <div id="modal-pwa-comunicados-content" style="max-height: 60vh; overflow-y: auto; padding-right: 0.25rem;">
         <!-- Comunicados renderizados dinámicamente -->

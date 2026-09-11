@@ -118,6 +118,11 @@ const authModule = {
       try {
         const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
+        if (user && user.bloqueado_por_mora === true) {
+          alert('⛔ ACCESO SUSPENDIDO POR MORA / IMPAGO\n\nEstimado usuario, su cuenta ha sido suspendida temporalmente por impago. Por favor comuníquese con el Administrador para regularizar su suscripción.');
+          return;
+        }
+
         if (user && String(user.password).trim() === String(passwordInput).trim()) {
           this.loginUser(user);
         } else if ((usernameInput === '1121338578' || usernameInput === 'admin') && window.superadminModule) {
@@ -146,6 +151,11 @@ const authModule = {
 
         try {
           const user = await window.BulaPayDB.getUserByUsername(usernameInput);
+
+          if (user && user.bloqueado_por_mora === true) {
+            alert('⛔ ACCESO SUSPENDIDO POR MORA / IMPAGO\n\nEstimado usuario, su cuenta ha sido suspendida temporalmente por impago. Por favor comuníquese con el Administrador para regularizar su suscripción.');
+            return;
+          }
 
           if (user && String(user.password).trim() === String(passwordInput).trim() && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente')) {
             this.loginUser(user);
@@ -361,6 +371,11 @@ const authModule = {
 
   checkCurrentSession() {
     const user = window.BulaPayDB.getCurrentUser();
+    if (user && user.bloqueado_por_mora === true) {
+      alert('⛔ ACCESO SUSPENDIDO POR MORA / IMPAGO\n\nSu cuenta se encuentra suspendida. La sesión se cerrará automáticamente.');
+      this.logout();
+      return;
+    }
     if (user) {
       this.updateNavBar(user);
     } else {

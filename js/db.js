@@ -4194,6 +4194,143 @@ const db = {
         localStorage.setItem('bula_announcements', JSON.stringify(ads));
       }
     } catch(e) {}
+  },
+
+  // ----------------------------------------------------
+  // GESTIÓN DE BLOQUEO POR MORA / SUSPENSIÓN DE USUARIOS
+  // ----------------------------------------------------
+  async toggleUserBloqueoMora(username, isBlocked) {
+    if (!username) return false;
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('users')
+          .update({ bloqueado_por_mora: Boolean(isBlocked) })
+          .eq('username', String(username).trim());
+        if (error) {
+          console.warn("⚠️ Error actualizando bloqueado_por_mora en Supabase:", error);
+        } else {
+          console.log(`🔒 Estado de bloqueo por mora actualizado para ${username}: ${isBlocked}`);
+        }
+      }
+    } catch(e) {
+      console.error("Fallo al actualizar bloqueo por mora en Supabase:", e);
+    }
+    return true;
+  },
+
+  // ----------------------------------------------------
+  // PROGRAMACIÓN DE MENSAJES DE COBRO EN LA CAMPANITA
+  // ----------------------------------------------------
+  async getProgramacionCobros() {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('bulapay_programacion_cobros')
+          .select('*')
+          .order('dias_previos', { ascending: false });
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch(e) {
+      console.warn("⚠️ Error obteniendo bulapay_programacion_cobros de Supabase:", e);
+    }
+
+    try {
+      const raw = localStorage.getItem('bula_programacion_cobros');
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+
+    return [
+      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio BulaPay. Realice su pago a tiempo para evitar suspensiones.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
+      { id: 'prog_4d', dias_previos: 4, titulo: '⚠️ Recordatorio Preventivo - 4 Días', mensaje: 'Faltan 4 días para el corte de su suscripción. Por favor efectúe el pago para mantener sus rutas y cobros activos.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
+      { id: 'prog_3d', dias_previos: 3, titulo: '🚨 Advertencia Preventiva - 3 Días', mensaje: 'Atención: Solo restan 3 días antes de la suspensión del servicio por impago. Evite la interrupción de su acceso.', activo: true, prioridad: 'Alta', created_at: new Date().toISOString() },
+      { id: 'prog_2d', dias_previos: 2, titulo: '🔥 URGENTE: Corte Próximo - 2 Días', mensaje: 'Faltan 2 días para el bloqueo por mora de su cuenta. Por favor reporte su pago inmediatamente a administración.', activo: true, prioridad: 'Alta', created_at: new Date().toISOString() },
+      { id: 'prog_1d', dias_previos: 1, titulo: '⛔ ÚLTIMO AVISO - Suspensión Mañana', mensaje: '🚨 ULTIMO DÍA PREVIO A SUSPENSIÓN: Su cuenta entrará en bloqueo automático por impago al finalizar el día de mañana.', activo: true, prioridad: 'Alta', created_at: new Date().toISOString() }
+    ];
+  },
+
+  async saveProgramacionCobro(cobroData) {
+    const id = cobroData.id || ('prog_' + cobroData.dias_previos + 'd_' + Date.now());
+    const payload = {
+      id: id,
+      dias_previos: parseInt(cobroData.dias_previos) || 1,
+      titulo: String(cobroData.titulo || 'Mensaje de Cobro').trim(),
+      mensaje: String(cobroData.mensaje || '').trim(),
+      activo: cobroData.activo !== false,
+      prioridad: cobroData.prioridad || 'Alta',
+      target_roles: cobroData.target_roles || 'todos',
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { error } = await supabase.from('bulapay_programacion_cobros').upsert([payload]);
+        if (error) {
+          console.warn("⚠️ Upsert en bulapay_programacion_cobros falló:", error);
+        }
+      }
+    } catch(e) {
+      console.warn("Fallo guardando programación cobro en Supabase:", e);
+    }
+
+    try {
+      const current = await this.getProgramacionCobros();
+      const idx = current.findIndex(c => c.id === id || c.dias_previos === payload.dias_previos);
+      if (idx >= 0) current[idx] = { ...current[idx], ...payload };
+      else current.push(payload);
+      localStorage.setItem('bula_programacion_cobros', JSON.stringify(current));
+    } catch(e) {}
+
+    return payload;
+  },
+
+  async deleteProgramacionCobro(cobroId) {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('bulapay_programacion_cobros').delete().eq('id', cobroId);
+      }
+    } catch(e) {}
+
+    try {
+      const raw = localStorage.getItem('bula_programacion_cobros');
+      if (raw) {
+        let list = JSON.parse(raw);
+        list = list.filter(item => item.id !== cobroId);
+        localStorage.setItem('bula_programacion_cobros', JSON.stringify(list));
+      }
+    } catch(e) {}
+  },
+
+  async triggerProgresiveCobroNotifications() {
+    try {
+      const progs = await this.getProgramacionCobros();
+      if (!Array.isArray(progs) || progs.length === 0) return;
+
+      const activeProgs = progs.filter(p => p.activo !== false);
+      const existingNotifs = await this.getNotificaciones();
+
+      for (const p of activeProgs) {
+        const alreadyPublished = existingNotifs.some(n => 
+          n.titulo === p.titulo || (n.mensaje && n.mensaje.includes(`- ${p.dias_previos} Días`))
+        );
+
+        if (!alreadyPublished) {
+          await this.saveNotificacion({
+            titulo: p.titulo,
+            mensaje: p.mensaje,
+            categoria: `Cobro Preventivo (${p.dias_previos}d)`
+          });
+        }
+      }
+    } catch(e) {
+      console.warn("Error ejecutando disparo automático de mensajes de cobro:", e);
+    }
   }
 };
 
