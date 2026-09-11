@@ -1404,10 +1404,17 @@ const supervisorModule = {
   async renderDashboard() {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
     
+    const infoVigencia = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' 
+      ? window.BulaPayDB.getDiasRestantes(currentUser) 
+      : null;
+    const badgeVigencia = infoVigencia 
+      ? `<span style="margin-left: 0.75rem; background: ${infoVigencia.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; color: ${infoVigencia.dias <= 5 ? '#fca5a5' : '#38bdf8'}; border: 1px solid ${infoVigencia.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.35)'}; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.3rem;" title="Fecha de corte: ${infoVigencia.fechaCorteStr}">⏳ Vigencia: Faltan ${infoVigencia.dias} días</span>` 
+      : '';
+
     // Check if the user is a commerce role
     if (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente') {
       if (this.welcomeMsg) {
-        this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'Comercio'}</span>`;
+        this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'Comercio'}</span> ${badgeVigencia}`;
       }
       
       const btnSchedule = document.getElementById('btn-schedule-config');
@@ -1447,7 +1454,7 @@ const supervisorModule = {
     }
 
     if (this.welcomeMsg) {
-      this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'BulaPay'}</span>`;
+      this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'BulaPay'}</span> ${badgeVigencia}`;
     }
 
     const routes = await window.BulaPayDB.getRoutes();

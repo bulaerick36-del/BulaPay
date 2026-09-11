@@ -210,6 +210,21 @@ const db = {
          user.role === 'Agente Independiente') && !user.supervisor_id) {
       user.supervisor_id = user.username;
     }
+
+    // Inicializar ciclo de vigencia de 30 días para nuevos usuarios
+    const nowIso = new Date().toISOString();
+    if (!user.subscription_start_date) {
+      user.subscription_start_date = nowIso;
+    }
+    if (!user.fecha_corte && !user.fecha_vencimiento) {
+      const baseDate = new Date(user.subscription_start_date);
+      const corteDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const yyyy = corteDate.getFullYear();
+      const mm = String(corteDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(corteDate.getDate()).padStart(2, '0');
+      user.fecha_corte = `${yyyy}-${mm}-${dd}`;
+    }
+
     let { data, error } = await supabase
       .from('users')
       .insert([user])
@@ -4339,6 +4354,58 @@ const db = {
   },
 
   // ----------------------------------------------------
+  // CÁLCULO DINÁMICO DE DÍAS RESTANTES DE VIGENCIA (CUENTA REGRESIVA DE 30 DÍAS)
+  // ----------------------------------------------------
+  getDiasRestantes(user) {
+    if (!user) return { dias: 0, diasExactos: 0, fechaCorteStr: 'N/A', status: 'expirado' };
+
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    let fechaCorte;
+    if (user.fecha_corte || user.fecha_vencimiento) {
+      const rawDateStr = String(user.fecha_corte || user.fecha_vencimiento).trim();
+      if (rawDateStr.includes('T')) {
+        fechaCorte = new Date(rawDateStr);
+      } else {
+        const parts = rawDateStr.split('-');
+        if (parts.length === 3) {
+          fechaCorte = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else {
+          fechaCorte = new Date(rawDateStr);
+        }
+      }
+    } else {
+      const baseDate = user.subscription_start_date ? new Date(user.subscription_start_date) : (user.created_at ? new Date(user.created_at) : new Date());
+      fechaCorte = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    }
+    fechaCorte.setHours(0, 0, 0, 0);
+
+    const diffMs = fechaCorte.getTime() - hoy.getTime();
+    const diasCalculados = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const diasRestantes = diasCalculados > 0 ? diasCalculados : 0;
+
+    const yyyy = fechaCorte.getFullYear();
+    const mm = String(fechaCorte.getMonth() + 1).padStart(2, '0');
+    const dd = String(fechaCorte.getDate()).padStart(2, '0');
+    const fechaCorteStr = `${yyyy}-${mm}-${dd}`;
+
+    let status = 'activo';
+    if (user.bloqueado_por_mora === true || diasCalculados <= 0) {
+      status = 'suspendido';
+    } else if (diasRestantes <= 5) {
+      status = 'por_vencer';
+    }
+
+    return {
+      dias: diasRestantes,
+      diasExactos: diasCalculados,
+      fechaCorteStr: fechaCorteStr,
+      status: status
+    };
+  },
+
+  // ----------------------------------------------------
   // PROGRAMACIÓN DE MENSAJES DE COBRO EN LA CAMPANITA
   // ----------------------------------------------------
   async getProgramacionCobros() {
@@ -4431,25 +4498,8 @@ const db = {
       const dbUser = (await this.getUserByUsername(user.username)) || user;
       if (dbUser.bloqueado_por_mora === true) return;
 
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-
-      // Obtener o calcular la fecha de corte/vencimiento del usuario
-      let fechaCorte;
-      if (dbUser.fecha_corte || dbUser.fecha_vencimiento) {
-        fechaCorte = new Date(dbUser.fecha_corte || dbUser.fecha_vencimiento);
-      } else {
-        // Fallback: calcular ciclo de suscripción (30 días desde fecha de creación o 5 días desde hoy)
-        const baseDate = dbUser.created_at ? new Date(dbUser.created_at) : new Date();
-        fechaCorte = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-        if (fechaCorte < hoy) {
-          fechaCorte = new Date(hoy.getTime() + 5 * 24 * 60 * 60 * 1000);
-        }
-      }
-      fechaCorte.setHours(0, 0, 0, 0);
-
-      const diffMs = fechaCorte.getTime() - hoy.getTime();
-      const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      const infoVigencia = this.getDiasRestantes(dbUser);
+      const diasRestantes = infoVigencia.diasExactos;
 
       // Si el servicio expiró (<= 0 días restantes), suspender acceso por mora de forma automática
       if (diasRestantes <= 0) {

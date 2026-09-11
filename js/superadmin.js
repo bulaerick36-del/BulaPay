@@ -206,7 +206,14 @@ const superadminModule = {
               </div>
             </td>
             <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle;">
-              ${u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`}
+              ${(() => {
+                const diasInfo = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' ? window.BulaPayDB.getDiasRestantes(u) : { dias: 0, fechaCorteStr: 'N/A' };
+                const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
+                return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
+                  ${btnHtml}
+                  <span style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.45rem; border-radius: 6px; display: inline-block;" title="Corte: ${diasInfo.fechaCorteStr}">⏳ Faltan ${diasInfo.dias} días</span>
+                </div>`;
+              })()}
             </td>
             <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
               <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
@@ -659,7 +666,14 @@ const superadminModule = {
             </div>
           </td>
           <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle; width: 8%;">
-            ${u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`}
+            ${(() => {
+              const diasInfo = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' ? window.BulaPayDB.getDiasRestantes(u) : { dias: 0, fechaCorteStr: 'N/A' };
+              const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
+              return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
+                ${btnHtml}
+                <span style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.45rem; border-radius: 6px; display: inline-block;" title="Corte: ${diasInfo.fechaCorteStr}">⏳ Faltan ${diasInfo.dias} días</span>
+              </div>`;
+            })()}
           </td>
           <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
             <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
@@ -2891,6 +2905,9 @@ const superadminModule = {
     }
 
     const isBlocked = matchedUser.bloqueado_por_mora === true;
+    const diasInfo = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' 
+      ? window.BulaPayDB.getDiasRestantes(matchedUser) 
+      : { dias: 0, fechaCorteStr: 'N/A' };
 
     container.style.display = 'block';
     container.innerHTML = `
@@ -2912,7 +2929,7 @@ const superadminModule = {
           </div>
         </div>
 
-        <!-- Información de Cartera y Datos de Contacto -->
+        <!-- Información de Cartera, Vigencia y Contacto -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.85rem; font-size: 0.82rem; background: rgba(15, 23, 42, 0.6); padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
           <div>
             <span style="color: #94a3b8; display: block; font-weight: 600;">📞 Teléfono Contacto:</span>
@@ -2928,7 +2945,11 @@ const superadminModule = {
           </div>
           <div>
             <span style="color: #94a3b8; display: block; font-weight: 600;">📅 Fecha de Corte:</span>
-            <span style="color: #34d399; font-weight: 700;">${matchedUser.fecha_corte || matchedUser.fecha_vencimiento || 'Al día'}</span>
+            <span style="color: #34d399; font-weight: 700;">${diasInfo.fechaCorteStr}</span>
+          </div>
+          <div>
+            <span style="color: #94a3b8; display: block; font-weight: 600;">⏳ Vigencia Restante:</span>
+            <span style="color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; font-weight: 800; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.5rem; border-radius: 6px; display: inline-block;">Faltan ${diasInfo.dias} días</span>
           </div>
         </div>
 

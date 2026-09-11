@@ -372,9 +372,26 @@ const authModule = {
     if (user) {
       if (this.navUserName) this.navUserName.textContent = user.name;
       if (this.navUserRole) this.navUserRole.textContent = user.role;
-      this.userNavInfo.style.display = 'flex';
+      if (this.userNavInfo) {
+        this.userNavInfo.style.display = 'flex';
+        let badge = document.getElementById('nav-user-vigencia-badge');
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.id = 'nav-user-vigencia-badge';
+          badge.style.cssText = "font-size: 0.76rem; font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 9999px; display: inline-flex; align-items: center; gap: 0.3rem;";
+          this.userNavInfo.insertBefore(badge, this.userNavInfo.firstChild);
+        }
+        if (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function') {
+          const info = window.BulaPayDB.getDiasRestantes(user);
+          badge.textContent = `⏳ Vigencia: Faltan ${info.dias} días`;
+          badge.style.color = info.dias <= 5 ? '#fca5a5' : '#38bdf8';
+          badge.style.background = info.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)';
+          badge.style.border = info.dias <= 5 ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(56, 189, 248, 0.35)';
+          badge.title = `Fecha de Corte: ${info.fechaCorteStr}`;
+        }
+      }
     } else {
-      this.userNavInfo.style.display = 'none';
+      if (this.userNavInfo) this.userNavInfo.style.display = 'none';
     }
   },
 

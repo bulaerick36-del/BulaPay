@@ -533,6 +533,7 @@ GRANT ALL ON TABLE notificaciones TO anon, authenticated;
 -- 10. Migración de Campo de Bloqueo por Mora y Programación de Cobros
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "bloqueado_por_mora" BOOLEAN DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "fecha_corte" DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "subscription_start_date" TIMESTAMPTZ DEFAULT NOW();
 
 ALTER TABLE bulapay_notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
 ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
