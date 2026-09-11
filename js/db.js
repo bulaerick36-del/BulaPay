@@ -1827,14 +1827,41 @@ const db = {
 
   async updateUserProfile(username, updatedData) {
     const supabase = await initSupabase();
-    const { data, error } = await supabase
+    const cleanUser = String(username).trim();
+    
+    let { data, error } = await supabase
       .from('users')
       .update(updatedData)
-      .eq('username', username)
+      .eq('username', cleanUser)
       .select();
+
+    if ((!data || data.length === 0) && !error) {
+      const retryRes = await supabase
+        .from('users')
+        .update(updatedData)
+        .eq('documentNumber', cleanUser)
+        .select();
+      data = retryRes.data;
+      error = retryRes.error;
+    }
+
     if (error) {
       console.error(`Error al actualizar perfil de usuario "${username}":`, error);
       throw error;
+    }
+
+    // Sincronizar estado en memoria y localStorage si coincide con la sesion actual
+    const currentUser = this.getCurrentUser();
+    if (currentUser && (currentUser.username === cleanUser || currentUser.documentNumber === cleanUser)) {
+      Object.assign(currentUser, updatedData);
+      this.setCurrentUser(currentUser);
+      if (updatedData.role) {
+        if (updatedData.role === 'Usuario Supervisor' || updatedData.role === 'Supervisor' || updatedData.role === 'Administrador') {
+          localStorage.setItem('bulaRole', 'supervisor');
+        } else if (updatedData.role === 'Agente Independiente') {
+          localStorage.setItem('bulaRole', 'independent');
+        }
+      }
     }
     return data && data[0] ? data[0] : null;
   },

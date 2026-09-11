@@ -107,7 +107,7 @@ const authModule = {
       const usernameInput = document.getElementById('login-username').value.trim();
       const passwordInput = document.getElementById('login-password').value;
 
-      if ((usernameInput === '1121338578' || usernameInput === 'admin') && window.superadminModule) {
+      if ((usernameInput === '1121338578' || usernameInput === 'admin' || usernameInput === 'erick26') && window.superadminModule) {
         if (window.superadminModule.login(usernameInput, passwordInput)) {
           alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
           await window.superadminModule.openSuperadminPanel();
@@ -125,7 +125,7 @@ const authModule = {
 
         if (user && String(user.password).trim() === String(passwordInput).trim()) {
           this.loginUser(user);
-        } else if ((usernameInput === '1121338578' || usernameInput === 'admin') && window.superadminModule) {
+        } else if ((usernameInput === '1121338578' || usernameInput === 'admin' || usernameInput === 'erick26') && window.superadminModule) {
           if (window.superadminModule.login('1121338578', passwordInput)) {
             alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
             await window.superadminModule.openSuperadminPanel();
@@ -175,7 +175,7 @@ const authModule = {
     this.formRegister.addEventListener('submit', async (e) => {
       e.preventDefault();
       const registerTypeElem = document.getElementById('register-type');
-      const selectedType = registerTypeElem ? registerTypeElem.value : 'Usuario Supervisor';
+      let selectedType = (registerTypeElem && registerTypeElem.value) ? registerTypeElem.value.trim() : 'Usuario Supervisor';
       const email = document.getElementById('register-email').value.trim();
       const username = document.getElementById('register-username').value.trim().toLowerCase();
       const password = document.getElementById('register-password').value;
@@ -184,6 +184,12 @@ const authModule = {
       if (!legalChecked) {
         alert('⚠️ Debe aceptar los Términos y Condiciones para registrarse.');
         return;
+      }
+
+      const docNum = document.getElementById('register-doc-num').value.trim();
+      // Si se registra erick26 o cédula 1121338578, asignar rol Supervisor por defecto
+      if (username === 'erick26' || docNum === '1121338578') {
+        selectedType = 'Usuario Supervisor';
       }
 
       try {
@@ -197,7 +203,6 @@ const authModule = {
         const name = document.getElementById('register-name').value.trim();
         const company = name;
         const docType = document.getElementById('register-doc-type').value;
-        const docNum = document.getElementById('register-doc-num').value.trim();
         const phone = document.getElementById('register-phone') ? document.getElementById('register-phone').value.trim() : '';
         const representanteLegal = null;
         const cedulaRepresentante = null;
@@ -340,7 +345,7 @@ const authModule = {
     const username = String(user.username || '').trim();
     const docNum = String(user.documentNumber || '').trim();
 
-    const isMaster = username === '1121338578' || docNum === '1121338578' || username === 'admin';
+    const isMaster = username === '1121338578' || docNum === '1121338578' || username === 'admin' || username === 'erick26';
     const isSupervisorOrAdmin = isMaster || 
       role === 'Usuario Supervisor' || 
       role === 'Supervisor' || 

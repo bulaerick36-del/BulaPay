@@ -733,31 +733,109 @@ const superadminModule = {
   },
 
   async openEditUserModal(username) {
-    const user = await window.BulaPayDB.getUserByUsername(username);
-    if (!user) return;
-
-    const newName = prompt(`Modificar Nombre Completo para "${username}":`, user.name || '');
-    if (newName === null) return;
-
-    const newPhone = prompt(`Modificar Teléfono para "${username}":`, user.phone || '');
-    if (newPhone === null) return;
-
-    const newFechaCorte = prompt(`Modificar Fecha de Corte / Vencimiento para "${username}" (YYYY-MM-DD):`, user.fecha_corte || user.fecha_vencimiento || '');
-    if (newFechaCorte === null) return;
-
-    try {
-      await window.BulaPayDB.updateUserProfile(username, {
-        name: newName.trim(),
-        phone: newPhone.trim(),
-        company: newName.trim(),
-        fecha_corte: newFechaCorte.trim()
-      });
-      alert(`✅ Perfil y Fecha de Corte de "${username}" actualizados correctamente.`);
-      await this.renderCurrentTab();
-    } catch (err) {
-      console.error(err);
-      alert('❌ Error al actualizar el perfil.');
+    let user = await window.BulaPayDB.getUserByUsername(username);
+    if (!user) {
+      const all = await window.BulaPayDB.getAllUsers();
+      user = (all || []).find(u => u.username === username || u.documentNumber === username);
     }
+    if (!user) {
+      alert(`❌ No se encontró la información del usuario "${username}".`);
+      return;
+    }
+
+    let modal = document.getElementById('modal-edit-user-sa');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'modal-edit-user-sa';
+      modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 2147483647; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box;';
+      modal.innerHTML = `
+        <div style="background: #1e293b; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 12px; width: 100%; max-width: 480px; color: #fff; padding: 1.5rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6); position: relative; max-height: 90vh; overflow-y: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+            <h3 style="margin: 0; color: #60a5fa; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+              <span>✏️</span> Editar Perfil y Rol de Usuario
+            </h3>
+            <button id="btn-close-edit-user-sa" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">✕</button>
+          </div>
+          <form id="form-edit-user-sa">
+            <input type="hidden" id="edit-sa-target-username">
+            <div style="margin-bottom: 0.85rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.3rem;">Usuario (ID / Cédula):</label>
+              <input type="text" id="edit-sa-username" disabled style="width: 100%; padding: 0.55rem 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid #334155; border-radius: 8px; color: #94a3b8; font-size: 0.88rem; box-sizing: border-box;">
+            </div>
+            <div style="margin-bottom: 0.85rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.3rem;">Nombre Completo:</label>
+              <input type="text" id="edit-sa-name" required style="width: 100%; padding: 0.6rem 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.88rem; box-sizing: border-box;">
+            </div>
+            <div style="margin-bottom: 0.85rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #38bdf8; margin-bottom: 0.3rem;">Rol de Usuario (Jerarquía):</label>
+              <select id="edit-sa-role" required style="width: 100%; padding: 0.65rem 0.75rem; background: #0f172a; border: 1px solid #38bdf8; border-radius: 8px; color: #fff; font-weight: 800; font-size: 0.9rem; box-sizing: border-box;">
+                <option value="Usuario Supervisor">👔 Usuario Supervisor / Administrador</option>
+                <option value="Agente Independiente">💼 Agente Independiente</option>
+                <option value="Agente de Ruta">🛵 Agente de Ruta</option>
+                <option value="Otros (Comercios, Compraventas, Mercados)">🏪 Otros (Comercios, Compraventas, Mercados)</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 0.85rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.3rem;">Teléfono / WhatsApp:</label>
+              <input type="tel" id="edit-sa-phone" style="width: 100%; padding: 0.6rem 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.88rem; box-sizing: border-box;">
+            </div>
+            <div style="margin-bottom: 1.25rem;">
+              <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 0.3rem;">Fecha de Corte (YYYY-MM-DD):</label>
+              <input type="date" id="edit-sa-corte" style="width: 100%; padding: 0.6rem 0.75rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.88rem; box-sizing: border-box;">
+            </div>
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+              <button type="button" id="btn-cancel-edit-user-sa" style="padding: 0.55rem 1rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #cbd5e1; font-weight: 700; cursor: pointer;">Cancelar</button>
+              <button type="submit" style="padding: 0.55rem 1.25rem; background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: none; border-radius: 8px; color: #fff; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);">💾 Guardar Cambios</button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      document.getElementById('btn-close-edit-user-sa').onclick = () => { modal.style.display = 'none'; };
+      document.getElementById('btn-cancel-edit-user-sa').onclick = () => { modal.style.display = 'none'; };
+
+      document.getElementById('form-edit-user-sa').onsubmit = async (e) => {
+        e.preventDefault();
+        const targetUsername = document.getElementById('edit-sa-target-username').value;
+        const nameVal = document.getElementById('edit-sa-name').value.trim();
+        const roleVal = document.getElementById('edit-sa-role').value;
+        const phoneVal = document.getElementById('edit-sa-phone').value.trim();
+        const corteVal = document.getElementById('edit-sa-corte').value;
+
+        try {
+          await window.BulaPayDB.updateUserProfile(targetUsername, {
+            name: nameVal,
+            role: roleVal,
+            phone: phoneVal,
+            company: nameVal,
+            fecha_corte: corteVal
+          });
+
+          // Si se editó a 'erick26' o al usuario actual en sesión, actualizar de inmediato permisos y rol
+          if (targetUsername === 'erick26' || targetUsername === '1121338578') {
+            await window.BulaPayDB.updateUserProfile('erick26', { role: roleVal });
+            await window.BulaPayDB.updateUserProfile('1121338578', { role: roleVal });
+          }
+
+          alert(`✅ Usuario "${targetUsername}" actualizado exitosamente en Supabase.\nNuevo rol: ${roleVal}`);
+          modal.style.display = 'none';
+          await window.superadminModule.renderCurrentTab();
+        } catch (err) {
+          console.error("Error al actualizar usuario:", err);
+          alert('❌ Error al guardar la actualización en Supabase.');
+        }
+      };
+    }
+
+    document.getElementById('edit-sa-target-username').value = user.username;
+    document.getElementById('edit-sa-username').value = `${user.username} (${user.documentNumber || 'Sin Documento'})`;
+    document.getElementById('edit-sa-name').value = user.name || user.nombre_firmante || '';
+    document.getElementById('edit-sa-role').value = user.role || 'Usuario Supervisor';
+    document.getElementById('edit-sa-phone').value = user.phone || '';
+    document.getElementById('edit-sa-corte').value = user.fecha_corte || user.fecha_vencimiento || '';
+
+    modal.style.display = 'flex';
   },
 
   // ----------------------------------------------------
