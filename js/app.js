@@ -84,7 +84,7 @@ const app = {
       const uDoc = user ? String(user.documentNumber || '').trim() : '';
       const uRole = user ? String(user.role || '').trim() : '';
 
-      const isMasterSuperadmin = user && (uName === '1121338578' || uDoc === '1121338578' || uName === 'admin' || uName === 'erick26' || uRole === 'Superadministrador' || uRole === 'Superadmin');
+      const isMasterSuperadmin = user && (uName === 'admin' || uRole === 'Superadministrador' || uRole === 'Superadmin');
       const isSupervisor = user && !isMasterSuperadmin && (uRole === 'Usuario Supervisor' || uRole === 'Supervisor' || uRole === 'Administrador' || uRole === 'Administrador de Rutas' || uRole.includes('Comercio') || uRole.includes('Otros') || uRole.toLowerCase().includes('supervisor'));
       const isAgent = user && (uRole === 'Agente Independiente' || uRole === 'Agente de Ruta' || uRole === 'agent');
 
@@ -158,7 +158,7 @@ const app = {
       const curDoc = user ? String(user.documentNumber || '').trim() : '';
       const curRole = user ? String(user.role || '').trim() : '';
 
-      const isUserMasterAdmin = user && (curName === '1121338578' || curDoc === '1121338578' || curName === 'admin' || curName === 'erick26' || curRole === 'Superadministrador' || curRole === 'Superadmin');
+      const isUserMasterAdmin = user && (curName === 'admin' || curRole === 'Superadministrador' || curRole === 'Superadmin');
       const isUserSupervisor = user && !isUserMasterAdmin && (curRole === 'Usuario Supervisor' || curRole === 'Supervisor' || curRole === 'Administrador' || curRole === 'Administrador de Rutas' || curRole.includes('Comercio') || curRole.includes('Otros') || curRole.toLowerCase().includes('supervisor'));
       const agentRoles = ['Agente de Ruta', 'agent', 'Agente Independiente'];
 

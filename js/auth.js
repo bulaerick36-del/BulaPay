@@ -107,7 +107,8 @@ const authModule = {
       const usernameInput = document.getElementById('login-username').value.trim();
       const passwordInput = document.getElementById('login-password').value;
 
-      if ((usernameInput === '1121338578' || usernameInput === 'admin' || usernameInput === 'erick26') && window.superadminModule) {
+      // Acceso directo por credenciales de Superadmin Maestro (usuario 'admin' o cédula maestra '1121338578' con clave de superadmin)
+      if ((usernameInput === '1121338578' || usernameInput === 'admin') && window.superadminModule) {
         if (window.superadminModule.login(usernameInput, passwordInput)) {
           alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
           await window.superadminModule.openSuperadminPanel();
@@ -125,14 +126,6 @@ const authModule = {
 
         if (user && String(user.password).trim() === String(passwordInput).trim()) {
           this.loginUser(user);
-        } else if ((usernameInput === '1121338578' || usernameInput === 'admin' || usernameInput === 'erick26') && window.superadminModule) {
-          if (window.superadminModule.login('1121338578', passwordInput)) {
-            alert('🔑 Acceso concedido al Panel de Superadministrador Maestro.');
-            await window.superadminModule.openSuperadminPanel();
-            return;
-          } else {
-            alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
-          }
         } else {
           alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
         }
@@ -187,10 +180,6 @@ const authModule = {
       }
 
       const docNum = document.getElementById('register-doc-num').value.trim();
-      // Si se registra erick26 o cédula 1121338578, asignar rol Supervisor por defecto
-      if (username === 'erick26' || docNum === '1121338578') {
-        selectedType = 'Usuario Supervisor';
-      }
 
       try {
         // Validar si el usuario ya existe
@@ -330,8 +319,8 @@ const authModule = {
     const username = String(user.username || '').trim().toLowerCase();
     const docNum = String(user.documentNumber || '').trim();
 
-    // 1. Cédula Maestra / Superadmin (Acceso Total Exclusivo)
-    const isMasterSuperadmin = username === '1121338578' || docNum === '1121338578' || username === 'admin' || username === 'erick26' || role === 'Superadministrador' || role === 'Superadmin';
+    // 1. Superadmin Maestro (Solo si el usuario es 'admin' o si el rol guardado en DB es explícitamente Superadministrador / Superadmin)
+    const isMasterSuperadmin = username === 'admin' || role === 'Superadministrador' || role === 'Superadmin';
 
     // 2. Supervisor Estándar / Administrador de Rutas / Comercios (Panel de Supervisor)
     const isSupervisor = !isMasterSuperadmin && (
