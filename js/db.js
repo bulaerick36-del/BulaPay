@@ -225,38 +225,105 @@ const db = {
       user.fecha_corte = `${yyyy}-${mm}-${dd}`;
     }
 
+    // Limpiar campos undefined o nulos propensos a romper restricciones FK (como routeId o supervisor)
+    const primaryPayload = { ...user };
+    if (!primaryPayload.routeId) {
+      delete primaryPayload.routeId;
+    }
+    if (!primaryPayload.supervisor) {
+      delete primaryPayload.supervisor;
+    }
+
+    console.log('[DEBUG DB] Intentando guardar usuario en Supabase (tabla users):', primaryPayload);
+
+    // Intento 1: Payload Completo
     let { data, error } = await supabase
       .from('users')
-      .insert([user])
+      .insert([primaryPayload])
       .select();
 
-    if (error && (error.message.includes('representante_legal') || error.message.includes('cedula_representante') || error.message.includes('aceptacion_terminos') || error.message.includes('nombre_firmante') || error.code === '42703')) {
-      console.warn("Columnas adicionales no encontradas en Supabase, reintentando sin ellas...");
-      const fallbackUser = { ...user };
-      delete fallbackUser.representante_legal;
-      delete fallbackUser.cedula_representante;
-      delete fallbackUser.aceptacion_terminos;
-      delete fallbackUser.fecha_aceptacion_terminos;
-      delete fallbackUser.version_terminos;
-      delete fallbackUser.nombre_firmante;
-      delete fallbackUser.documento_firmante;
-      delete fallbackUser.tipo_documento_firmante;
-      delete fallbackUser.hash_firma_digital;
-      
-      const retryResult = await supabase
+    if (!error && data && data.length > 0) {
+      console.log('✅ Usuario registrado exitosamente en Supabase (Intento 1):', data[0]);
+      return data[0];
+    }
+
+    if (error) {
+      console.warn("⚠️ Intento 1 de inserción en users falló:", error.message || error);
+
+      // Intento 2: Sin columnas legales extendidas o fechas no reconocidas
+      const fallbackPayload1 = { ...primaryPayload };
+      delete fallbackPayload1.representante_legal;
+      delete fallbackPayload1.cedula_representante;
+      delete fallbackPayload1.aceptacion_terminos;
+      delete fallbackPayload1.fecha_aceptacion_terminos;
+      delete fallbackPayload1.version_terminos;
+      delete fallbackPayload1.nombre_firmante;
+      delete fallbackPayload1.documento_firmante;
+      delete fallbackPayload1.tipo_documento_firmante;
+      delete fallbackPayload1.hash_firma_digital;
+      delete fallbackPayload1.subscription_start_date;
+      delete fallbackPayload1.fecha_corte;
+
+      const res2 = await supabase
         .from('users')
-        .insert([fallbackUser])
+        .insert([fallbackPayload1])
         .select();
-      
-      if (retryResult.error) {
-        console.error("Error al guardar usuario en Supabase (reintento fallido):", retryResult.error);
-        throw retryResult.error;
+
+      if (!res2.error && res2.data && res2.data.length > 0) {
+        console.log('✅ Usuario registrado exitosamente en Supabase (Intento 2):', res2.data[0]);
+        return res2.data[0];
       }
-      data = retryResult.data;
-      error = null;
-    } else if (error) {
-      console.error("Error al guardar usuario en Supabase:", error);
-      throw error;
+
+      console.warn("⚠️ Intento 2 de inserción en users falló:", res2.error ? res2.error.message : res2.error);
+
+      // Intento 3: Esquema Esencial Garantizado
+      const essentialPayload = {
+        username: String(user.username).trim().toLowerCase(),
+        password: String(user.password),
+        name: String(user.name || user.username).trim(),
+        role: String(user.role || 'Usuario Supervisor').trim(),
+        documentType: String(user.documentType || 'CC').trim(),
+        documentNumber: String(user.documentNumber || user.username).trim(),
+        phone: String(user.phone || '').trim(),
+        email: String(user.email || '').trim(),
+        company: String(user.company || user.name || '').trim()
+      };
+
+      const res3 = await supabase
+        .from('users')
+        .insert([essentialPayload])
+        .select();
+
+      if (!res3.error && res3.data && res3.data.length > 0) {
+        console.log('✅ Usuario registrado exitosamente en Supabase (Intento 3):', res3.data[0]);
+        return res3.data[0];
+      }
+
+      console.warn("⚠️ Intento 3 de inserción en users falló:", res3.error ? res3.error.message : res3.error);
+
+      // Intento 4: Esquema Mínimo Estricto (username, password, name, role)
+      const barePayload = {
+        username: String(user.username).trim().toLowerCase(),
+        password: String(user.password),
+        name: String(user.name || user.username).trim(),
+        role: String(user.role || 'Usuario Supervisor').trim()
+      };
+
+      const res4 = await supabase
+        .from('users')
+        .insert([barePayload])
+        .select();
+
+      if (!res4.error && res4.data && res4.data.length > 0) {
+        console.log('✅ Usuario registrado exitosamente en Supabase (Intento 4 Mínimo):', res4.data[0]);
+        return res4.data[0];
+      }
+
+      if (res4.error) {
+        console.error("❌ Todos los intentos de guardar usuario en Supabase fallaron:", res4.error);
+        throw res4.error;
+      }
+      return res4.data ? res4.data[0] : user;
     }
 
     return data ? data[0] : user;
