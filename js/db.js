@@ -4218,25 +4218,124 @@ const db = {
   // ----------------------------------------------------
   // GESTIÓN DE BLOQUEO POR MORA / SUSPENSIÓN DE USUARIOS
   // ----------------------------------------------------
-  async toggleUserBloqueoMora(username, isBlocked) {
-    if (!username) return false;
+  async toggleUserBloqueoMora(identifier, isBlocked) {
+    if (!identifier) return false;
+    const targetBool = Boolean(isBlocked);
+
     try {
       const supabase = await initSupabase();
-      if (supabase) {
+      if (!supabase) {
+        console.warn("⚠️ Supabase no inicializado en toggleUserBloqueoMora");
+        return false;
+      }
+
+      let cleanId = '';
+      let docNum = '';
+      let username = '';
+
+      if (typeof identifier === 'object') {
+        username = identifier.username ? String(identifier.username).trim() : '';
+        docNum = identifier.documentNumber ? String(identifier.documentNumber).trim() : '';
+        cleanId = username || docNum;
+      } else {
+        cleanId = String(identifier).trim();
+        username = cleanId;
+        docNum = cleanId;
+      }
+
+      if (!cleanId) return false;
+
+      let updatedData = null;
+      let updateError = null;
+
+      // 1. Intentar update por username exacto
+      if (username) {
         const { data, error } = await supabase
           .from('users')
-          .update({ bloqueado_por_mora: Boolean(isBlocked) })
-          .eq('username', String(username).trim());
-        if (error) {
-          console.warn("⚠️ Error actualizando bloqueado_por_mora en Supabase:", error);
-        } else {
-          console.log(`🔒 Estado de bloqueo por mora actualizado para ${username}: ${isBlocked}`);
+          .update({ bloqueado_por_mora: targetBool })
+          .eq('username', username)
+          .select();
+        if (!error && data && data.length > 0) {
+          updatedData = data;
+        } else if (error) {
+          updateError = error;
         }
+      }
+
+      // 2. Si no actualizó, intentar update por username case-insensitive (ilike)
+      if (!updatedData && username) {
+        const { data, error } = await supabase
+          .from('users')
+          .update({ bloqueado_por_mora: targetBool })
+          .ilike('username', username)
+          .select();
+        if (!error && data && data.length > 0) {
+          updatedData = data;
+        } else if (error) {
+          updateError = error;
+        }
+      }
+
+      // 3. Si no actualizó, intentar update por documentNumber
+      if (!updatedData && docNum) {
+        const { data, error } = await supabase
+          .from('users')
+          .update({ bloqueado_por_mora: targetBool })
+          .eq('documentNumber', docNum)
+          .select();
+        if (!error && data && data.length > 0) {
+          updatedData = data;
+        } else if (error) {
+          updateError = error;
+        }
+      }
+
+      // 4. Si no actualizó, intentar update por documento_firmante
+      if (!updatedData && cleanId) {
+        const { data, error } = await supabase
+          .from('users')
+          .update({ bloqueado_por_mora: targetBool })
+          .eq('documento_firmante', cleanId)
+          .select();
+        if (!error && data && data.length > 0) {
+          updatedData = data;
+        } else if (error) {
+          updateError = error;
+        }
+      }
+
+      // 5. Si no actualizó, intentar update por id
+      if (!updatedData && cleanId) {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .update({ bloqueado_por_mora: targetBool })
+            .eq('id', cleanId)
+            .select();
+          if (!error && data && data.length > 0) {
+            updatedData = data;
+          }
+        } catch(e) {}
+      }
+
+      if (updatedData && updatedData.length > 0) {
+        console.log(`🔒 Estado de bloqueo por mora actualizado con éxito en Supabase para "${cleanId}": ${targetBool}`, updatedData);
+        try {
+          const cur = this.getCurrentUser();
+          if (cur && (cur.username === cleanId || cur.documentNumber === cleanId)) {
+            cur.bloqueado_por_mora = targetBool;
+            localStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(cur));
+          }
+        } catch(e) {}
+        return true;
+      } else {
+        console.error(`❌ No se encontró o no se pudo actualizar ningún usuario en Supabase con el identificador "${cleanId}". Error:`, updateError);
+        throw new Error(updateError ? updateError.message : `No se encontró la cuenta "${cleanId}" en Supabase.`);
       }
     } catch(e) {
       console.error("Fallo al actualizar bloqueo por mora en Supabase:", e);
+      throw e;
     }
-    return true;
   },
 
   // ----------------------------------------------------

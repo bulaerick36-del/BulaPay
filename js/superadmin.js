@@ -234,9 +234,6 @@ const superadminModule = {
               <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-              <button id="sa-btn-cedula-modal" onclick="superadminModule.openGestionCedulaModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;" title="Gestión rápida por cédula">
-                🔍 Buscar Cédula
-              </button>
               <button id="sa-btn-programar-cobro" onclick="superadminModule.openProgramarCobroModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" title="Programar mensajes de cobro preventivo">
                 📅 Programar mensaje de cobro
               </button>
@@ -2937,10 +2934,10 @@ const superadminModule = {
 
         <!-- Dos Botones Claros al Final de la Tarjeta (Rojo: Suspender | Verde: Liberar) -->
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.85rem; flex-wrap: wrap;">
-          <button onclick="superadminModule.suspenderUsuarioCedula('${matchedUser.username}', '${containerId}')" class="btn" style="padding: 0.65rem 1.4rem; font-size: 0.85rem; font-weight: 900; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); flex: 1; max-width: 240px; text-align: center;">
+          <button onclick="superadminModule.suspenderUsuarioCedula('${(matchedUser.username || matchedUser.documentNumber || matchedUser.documento_firmante || '').toString().replace(/'/g, "\\'")}', '${containerId}')" class="btn" style="padding: 0.65rem 1.4rem; font-size: 0.85rem; font-weight: 900; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); flex: 1; max-width: 240px; text-align: center;">
             🔴 Suspender
           </button>
-          <button onclick="superadminModule.liberarUsuarioCedula('${matchedUser.username}', '${containerId}')" class="btn" style="padding: 0.65rem 1.4rem; font-size: 0.85rem; font-weight: 900; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4); flex: 1; max-width: 240px; text-align: center;">
+          <button onclick="superadminModule.liberarUsuarioCedula('${(matchedUser.username || matchedUser.documentNumber || matchedUser.documento_firmante || '').toString().replace(/'/g, "\\'")}', '${containerId}')" class="btn" style="padding: 0.65rem 1.4rem; font-size: 0.85rem; font-weight: 900; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4); flex: 1; max-width: 240px; text-align: center;">
             🟢 Liberar
           </button>
         </div>
@@ -2950,32 +2947,38 @@ const superadminModule = {
   },
 
   async suspenderUsuarioCedula(username, containerId) {
+    const inputEl = document.getElementById('sa-quick-cedula-input') || document.getElementById('sa-modal-cedula-input');
+    const currentQuery = (inputEl && inputEl.value ? inputEl.value.trim() : '') || username;
+
     if (!confirm(`¿Confirma SUSPENDER Y BLOQUEAR inmediatamente el acceso del usuario "${username}" en Supabase?`)) return;
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
         await window.BulaPayDB.toggleUserBloqueoMora(username, true);
       }
       alert(`🔴 Acceso Suspendido con Éxito\n\nEl usuario "${username}" ha sido bloqueado por mora en Supabase.`);
-      await this.buscarUsuarioPorCedulaDirecto(username, containerId);
+      await this.buscarUsuarioPorCedulaDirecto(currentQuery, containerId);
       if (typeof this.renderCurrentTab === 'function') await this.renderCurrentTab();
     } catch(e) {
       console.error("Error al suspender por cédula:", e);
-      alert('❌ Error al actualizar el estado en Supabase.');
+      alert('❌ Error al actualizar el estado en Supabase: ' + (e.message || e));
     }
   },
 
   async liberarUsuarioCedula(username, containerId) {
+    const inputEl = document.getElementById('sa-quick-cedula-input') || document.getElementById('sa-modal-cedula-input');
+    const currentQuery = (inputEl && inputEl.value ? inputEl.value.trim() : '') || username;
+
     if (!confirm(`¿Confirma LIBERAR Y REACTIVAR el servicio de inmediato para el usuario "${username}"?`)) return;
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
         await window.BulaPayDB.toggleUserBloqueoMora(username, false);
       }
       alert(`🟢 Servicio Liberado con Éxito\n\nEl usuario "${username}" ha sido reactivado en Supabase y puede acceder normalmente.`);
-      await this.buscarUsuarioPorCedulaDirecto(username, containerId);
+      await this.buscarUsuarioPorCedulaDirecto(currentQuery, containerId);
       if (typeof this.renderCurrentTab === 'function') await this.renderCurrentTab();
     } catch(e) {
       console.error("Error al liberar por cédula:", e);
-      alert('❌ Error al actualizar el estado en Supabase.');
+      alert('❌ Error al actualizar el estado en Supabase: ' + (e.message || e));
     }
   },
 
