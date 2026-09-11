@@ -222,8 +222,7 @@ const authModule = {
           documentType: docType,
           documentNumber: docNum,
           estado_suscripcion: 'activa_prueba',
-          id_metodo_pago: null,
-          routeId: 'route_' + username,
+          routeId: null,
           supervisor_id: username,
           representante_legal: representanteLegal,
           cedula_representante: cedulaRepresentante,
@@ -236,22 +235,7 @@ const authModule = {
           hash_firma_digital: signatureHash
         };
 
-        const defaultRoute = {
-          id: 'route_' + username,
-          name: 'Ruta ' + name,
-          agentUsername: username,
-          agentName: name,
-          capital: 0,
-          collected: 0,
-          status: 'En Ruta',
-          supervisor_id: username,
-          opening_time: '06:00',
-          closing_time: '18:00',
-          has_extension: false
-        };
-        await window.BulaPayDB.saveRoute(defaultRoute);
-
-        // Guardar en base de datos
+        // Guardar usuario en base de datos sin generar rutas fantasmas
         await window.BulaPayDB.saveUser(newUser);
         alert('🎉 Registro exitoso. ¡Bienvenido a BulaPay!');
         this.loginUser(newUser);
