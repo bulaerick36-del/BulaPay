@@ -341,12 +341,16 @@ const authModule = {
     window.BulaPayDB.setCurrentUser(user);
     this.updateNavBar(user);
 
-    const role = user.role || '';
-    const username = String(user.username || '').trim();
+    const role = String(user.role || '').trim();
+    const roleLower = role.toLowerCase();
+    const username = String(user.username || '').trim().toLowerCase();
     const docNum = String(user.documentNumber || '').trim();
 
     const isMaster = username === '1121338578' || docNum === '1121338578' || username === 'admin' || username === 'erick26';
     const isSupervisorOrAdmin = isMaster || 
+      roleLower.includes('supervisor') || 
+      roleLower.includes('admin') || 
+      roleLower.includes('administrador') || 
       role === 'Usuario Supervisor' || 
       role === 'Supervisor' || 
       role === 'Administrador' || 
@@ -354,7 +358,7 @@ const authModule = {
       role === 'Superadministrador' || 
       role === 'Superadmin';
 
-    const isCommerce = role === 'Otros (Comercios, Compraventas, Mercados)' || role === 'Comercio Independiente';
+    const isCommerce = role === 'Otros (Comercios, Compraventas, Mercados)' || role === 'Comercio Independiente' || roleLower.includes('comercio');
 
     // Sincronizar el rol del usuario con el tema de colores dinámico
     let targetThemeRole = 'supervisor';
@@ -372,7 +376,8 @@ const authModule = {
       window.applyDynamicTheme();
     }
 
-    // Redirigir según el rol del usuario: Supervisor/Administrador/Cédula Maestra -> Superadmin Panel
+    // Redirigir según el rol del usuario:
+    // 1. Supervisor / Administrador / Cédula Maestra -> ÚNICA Y ESTRICTAMENTE al Panel de Superadministrador Maestro
     if (isSupervisorOrAdmin) {
       sessionStorage.setItem('bula_superadmin_active', 'true');
       if (window.superadminModule && typeof window.superadminModule.openSuperadminPanel === 'function') {
@@ -385,6 +390,7 @@ const authModule = {
         window.app.router.navigate('supervisor');
       }
     } else {
+      // 2. Agente Independiente / Agente de Ruta -> Terminal de Cobro Agente
       if (window.app && window.app.router) {
         window.app.router.navigate('agent');
       }
