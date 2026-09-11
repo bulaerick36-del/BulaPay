@@ -80,22 +80,23 @@ const app = {
         }
       }
 
-      const adminRoles = ['Usuario Supervisor', 'Supervisor', 'Administrador', 'Administrador de Rutas', 'Superadministrador', 'Superadmin'];
       const uName = user ? String(user.username || '').toLowerCase() : '';
       const uDoc = user ? String(user.documentNumber || '').trim() : '';
-      const uRole = user ? String(user.role || '').trim().toLowerCase() : '';
+      const uRole = user ? String(user.role || '').trim() : '';
 
-      const isMasterAdmin = user && (uName === '1121338578' || uDoc === '1121338578' || uName === 'admin' || uName === 'erick26' || uRole.includes('supervisor') || uRole.includes('admin') || adminRoles.includes(user.role));
-      const agentRoles = ['Agente de Ruta', 'agent', 'Agente Independiente'];
-      const commerceRoles = ['Otros (Comercios, Compraventas, Mercados)', 'Comercio Independiente'];
+      const isMasterSuperadmin = user && (uName === '1121338578' || uDoc === '1121338578' || uName === 'admin' || uName === 'erick26' || uRole === 'Superadministrador' || uRole === 'Superadmin');
+      const isSupervisor = user && !isMasterSuperadmin && (uRole === 'Usuario Supervisor' || uRole === 'Supervisor' || uRole === 'Administrador' || uRole === 'Administrador de Rutas' || uRole.includes('Comercio') || uRole.includes('Otros') || uRole.toLowerCase().includes('supervisor'));
+      const isAgent = user && (uRole === 'Agente Independiente' || uRole === 'Agente de Ruta' || uRole === 'agent');
 
       if (user) {
-        if (isMasterAdmin) {
+        if (isMasterSuperadmin) {
           sessionStorage.setItem('bula_superadmin_active', 'true');
           this.navigate('superadmin');
-        } else if (commerceRoles.includes(user.role) || uRole.includes('comercio')) {
+        } else if (isSupervisor) {
+          sessionStorage.removeItem('bula_superadmin_active');
           this.navigate('supervisor');
-        } else if (agentRoles.includes(user.role) || uRole.includes('agente')) {
+        } else if (isAgent) {
+          sessionStorage.removeItem('bula_superadmin_active');
           this.navigate('agent');
         } else {
           this.navigate('auth');
@@ -153,22 +154,32 @@ const app = {
       }
 
       const user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
-      const adminRoles = ['Usuario Supervisor', 'Supervisor', 'Administrador', 'Administrador de Rutas', 'Superadministrador', 'Superadmin'];
       const curName = user ? String(user.username || '').toLowerCase() : '';
       const curDoc = user ? String(user.documentNumber || '').trim() : '';
-      const curRole = user ? String(user.role || '').trim().toLowerCase() : '';
+      const curRole = user ? String(user.role || '').trim() : '';
 
-      const isUserAdmin = user && (curName === '1121338578' || curDoc === '1121338578' || curName === 'admin' || curName === 'erick26' || curRole.includes('supervisor') || curRole.includes('admin') || adminRoles.includes(user.role));
+      const isUserMasterAdmin = user && (curName === '1121338578' || curDoc === '1121338578' || curName === 'admin' || curName === 'erick26' || curRole === 'Superadministrador' || curRole === 'Superadmin');
+      const isUserSupervisor = user && !isUserMasterAdmin && (curRole === 'Usuario Supervisor' || curRole === 'Supervisor' || curRole === 'Administrador' || curRole === 'Administrador de Rutas' || curRole.includes('Comercio') || curRole.includes('Otros') || curRole.toLowerCase().includes('supervisor'));
       const agentRoles = ['Agente de Ruta', 'agent', 'Agente Independiente'];
 
       // SEGURIDAD DE RUTAS RBAC:
-      // Si el usuario es Administrador / Supervisor, NUNCA permitir acceso a vistas de agente
-      if (isUserAdmin && (route === 'agent' || route === 'agent-login')) {
-        console.warn('⛔ Acceso restringido: Usuario administrativo no puede abrir interfaz de agentes. Redirigiendo a Superadmin.');
-        sessionStorage.setItem('bula_superadmin_active', 'true');
-        window.location.hash = '#superadmin';
-        if (window.superadminModule) {
-          await window.superadminModule.openSuperadminPanel();
+      // 1. Si Usuario Supervisor estándar intenta entrar a Superadmin Maestro, redirigir a #supervisor
+      if (isUserSupervisor && route === 'superadmin') {
+        console.warn('⛔ Usuario Supervisor intentando acceder a Superadmin Maestro. Redirigiendo a panel de supervisor.');
+        sessionStorage.removeItem('bula_superadmin_active');
+        this.navigate('supervisor');
+        return;
+      }
+
+      // 2. Si un Administrador o Supervisor intenta abrir interfaz de agentes, redirigir adecuadamente
+      if ((isUserSupervisor || isUserMasterAdmin) && (route === 'agent' || route === 'agent-login')) {
+        console.warn('⛔ Acceso restringido: Usuario administrativo no puede abrir interfaz de agentes.');
+        if (isUserMasterAdmin) {
+          sessionStorage.setItem('bula_superadmin_active', 'true');
+          this.navigate('superadmin');
+        } else {
+          sessionStorage.removeItem('bula_superadmin_active');
+          this.navigate('supervisor');
         }
         return;
       }

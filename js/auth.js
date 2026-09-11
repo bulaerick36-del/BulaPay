@@ -330,51 +330,53 @@ const authModule = {
     const username = String(user.username || '').trim().toLowerCase();
     const docNum = String(user.documentNumber || '').trim();
 
-    const isMaster = username === '1121338578' || docNum === '1121338578' || username === 'admin' || username === 'erick26';
-    const isSupervisorOrAdmin = isMaster || 
-      roleLower.includes('supervisor') || 
-      roleLower.includes('admin') || 
-      roleLower.includes('administrador') || 
+    // 1. Cédula Maestra / Superadmin (Acceso Total Exclusivo)
+    const isMasterSuperadmin = username === '1121338578' || docNum === '1121338578' || username === 'admin' || username === 'erick26' || role === 'Superadministrador' || role === 'Superadmin';
+
+    // 2. Supervisor Estándar / Administrador de Rutas / Comercios (Panel de Supervisor)
+    const isSupervisor = !isMasterSuperadmin && (
       role === 'Usuario Supervisor' || 
       role === 'Supervisor' || 
       role === 'Administrador' || 
       role === 'Administrador de Rutas' || 
-      role === 'Superadministrador' || 
-      role === 'Superadmin';
-
-    const isCommerce = role === 'Otros (Comercios, Compraventas, Mercados)' || role === 'Comercio Independiente' || roleLower.includes('comercio');
+      role === 'Otros (Comercios, Compraventas, Mercados)' || 
+      role === 'Comercio Independiente' || 
+      roleLower.includes('supervisor') || 
+      roleLower.includes('comercio')
+    );
 
     // Sincronizar el rol del usuario con el tema de colores dinámico
     let targetThemeRole = 'supervisor';
-    if (isSupervisorOrAdmin) {
+    if (isMasterSuperadmin || isSupervisor) {
       targetThemeRole = 'supervisor';
     } else if (role === 'Agente de Ruta' || role === 'agent') {
       targetThemeRole = 'route';
     } else if (role === 'Agente Independiente') {
       targetThemeRole = 'independent';
-    } else if (isCommerce) {
-      targetThemeRole = 'commerce';
     }
     localStorage.setItem('bulaRole', targetThemeRole);
     if (typeof window.applyDynamicTheme === 'function') {
       window.applyDynamicTheme();
     }
 
-    // Redirigir según el rol del usuario:
-    // 1. Supervisor / Administrador / Cédula Maestra -> ÚNICA Y ESTRICTAMENTE al Panel de Superadministrador Maestro
-    if (isSupervisorOrAdmin) {
+    // Redirección Estricta por Jerarquía de Rol:
+    if (isMasterSuperadmin) {
+      // Cédula Maestra / Superadmin -> Panel de Superadministrador Maestro (#superadmin)
       sessionStorage.setItem('bula_superadmin_active', 'true');
       if (window.superadminModule && typeof window.superadminModule.openSuperadminPanel === 'function') {
         await window.superadminModule.openSuperadminPanel();
       } else if (window.app && window.app.router) {
         window.app.router.navigate('superadmin');
       }
-    } else if (isCommerce) {
+    } else if (isSupervisor) {
+      // Usuario Supervisor Estándar -> Panel de Supervisor (#supervisor)
+      sessionStorage.removeItem('bula_superadmin_active');
       if (window.app && window.app.router) {
         window.app.router.navigate('supervisor');
       }
     } else {
-      // 2. Agente Independiente / Agente de Ruta -> Terminal de Cobro Agente
+      // Agente Independiente / Agente de Ruta -> Terminal de Agente (#agent)
+      sessionStorage.removeItem('bula_superadmin_active');
       if (window.app && window.app.router) {
         window.app.router.navigate('agent');
       }
