@@ -1,8 +1,8 @@
-// Vercel Serverless Function: /api/restaurants
+// Vercel Serverless Function: /api/restaurants (v=9000 rebuild trigger)
 // Backend proxy serverless para la tabla restaurants en Supabase utilizando la Secret Key desde variables de entorno
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_gXixzFlqN8TgbAwq6BsgWQ_LFfhnU4X';
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_mnfzndBWIgcp3yGRUMh9ng_xOrDNrPn';
 
 module.exports = async (req, res) => {
   // Manejo de CORS
