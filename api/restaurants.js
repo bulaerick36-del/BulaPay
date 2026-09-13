@@ -2,7 +2,7 @@
 // Backend proxy serverless para la tabla restaurants en Supabase utilizando la Secret Key desde variables de entorno
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
-const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_gXixzFlqN8TgbAwq6BsgWQ_LFfhnU4X';
 
 module.exports = async (req, res) => {
   // Manejo de CORS
@@ -12,13 +12,6 @@ module.exports = async (req, res) => {
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
-    return;
-  }
-
-  if (!SUPABASE_SECRET_KEY) {
-    res.status(500).json({ 
-      error: 'La variable de entorno SUPABASE_SECRET_KEY no está configurada en Vercel.' 
-    });
     return;
   }
 
@@ -33,8 +26,8 @@ module.exports = async (req, res) => {
     }
 
     const headers = {
-      'apikey': SUPABASE_SECRET_KEY,
-      'Authorization': `Bearer ${SUPABASE_SECRET_KEY}`,
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json'
     };
 
