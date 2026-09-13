@@ -5,7 +5,7 @@ const DB_KEYS = {
 };
 
 const SUPABASE_URL = 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_gXixzFlqN8TgbAwq6BsgWQ_LFfhnU4X';
+const SUPABASE_ANON_KEY = 'sb_publishable_mnfzndBWIgcp3yGRUMh9ng_xOrDNrPn';
 
 let supabaseInstance = null;
 
