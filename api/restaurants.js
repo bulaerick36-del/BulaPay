@@ -1,8 +1,8 @@
-// Vercel Serverless Function: /api/restaurants (v=9000 rebuild trigger)
-// Backend proxy serverless para la tabla restaurants en Supabase utilizando la Secret Key desde variables de entorno
+// Serverless Function de Vercel (/api/restaurants) - v=10001
+// Ejecuta consultas y escrituras del lado del servidor (Node.js) enviando apikey y Authorization explicito
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_mnfzndBWIgcp3yGRUMh9ng_xOrDNrPn';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_gXixzFlqN8TgbAwq6BsgWQ_LFfhnU4X';
 
 module.exports = async (req, res) => {
   // Manejo de CORS
@@ -15,28 +15,22 @@ module.exports = async (req, res) => {
     return;
   }
 
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json'
+  };
+
   try {
-    let body = req.body;
-    if (typeof body === 'string' && body.trim() !== '') {
-      try {
-        body = JSON.parse(body);
-      } catch (e) {
-        // Mantener como string si no se puede parsear
-      }
-    }
-
-    const headers = {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json'
-    };
-
     let targetUrl = `${SUPABASE_URL}/rest/v1/restaurants`;
-    
-    // Obtener la query string si existe (ej. ?select=* o ?id=eq.123)
     const queryString = new URL(req.url, `http://${req.headers.host || 'localhost'}`).search;
     if (queryString) {
       targetUrl += queryString;
+    }
+
+    let bodyData = req.body;
+    if (typeof bodyData === 'string' && bodyData.trim() !== '') {
+      try { bodyData = JSON.parse(bodyData); } catch (e) {}
     }
 
     const fetchOptions = {
@@ -46,9 +40,11 @@ module.exports = async (req, res) => {
 
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
       headers['Prefer'] = 'return=representation';
-      if (body) {
-        fetchOptions.body = typeof body === 'object' ? JSON.stringify(body) : body;
+      if (bodyData) {
+        fetchOptions.body = typeof bodyData === 'object' ? JSON.stringify(bodyData) : bodyData;
       }
+    } else if (req.method === 'GET') {
+      headers['Prefer'] = 'count=exact';
     }
 
     const response = await fetch(targetUrl, fetchOptions);
@@ -62,8 +58,8 @@ module.exports = async (req, res) => {
     }
 
     res.status(response.status).json(jsonResponse);
-  } catch (error) {
-    console.error('[API RESTAURANTS ERROR]', error);
-    res.status(500).json({ error: error.message || 'Error interno del servidor' });
+  } catch (err) {
+    console.error("Excepción en /api/restaurants:", err);
+    res.status(500).json({ error: err.message || 'Error interno del servidor' });
   }
 };
