@@ -1,14 +1,18 @@
-// Vercel Serverless Function: /api/restaurants (?v=11004)
-// Conexión directa mediante instancia Client de pg (node-postgres) con conexion y cierre por peticion
+// Vercel Serverless Function: /api/restaurants (?v=11005)
+// Conexión a Neon PostgreSQL mediante pg Pool
 
-const { Client } = require('pg');
+const { Pool } = require('pg');
 
 const connectionString = process.env.DATABASE_URL || 
                          process.env.NEON_DATABASE_URL || 
                          'postgresql://neondb_owner:npg_79zJpZqT6xfa@ep-falling-pond-ayeyaxml-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
 
-// Asegurar que la tabla existe en Neon PostgreSQL
-async function initDatabase(client) {
+const pool = new Pool({
+  connectionString: connectionString,
+  ssl: { rejectUnauthorized: false }
+});
+
+async function ensureTableExists(client) {
   const createTableQuery = `
     CREATE TABLE IF NOT EXISTS restaurants (
       id TEXT PRIMARY KEY,
@@ -32,7 +36,7 @@ async function initDatabase(client) {
 }
 
 module.exports = async (req, res) => {
-  // Configuración de CORS
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -42,32 +46,15 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const client = new Client({
-    connectionString: connectionString,
-    ssl: { rejectUnauthorized: false }
-  });
-
+  let client;
   try {
-    await client.connect();
+    client = await pool.connect();
+    await ensureTableExists(client);
 
-    // Asegurar existencia de la tabla
-    await initDatabase(client);
-
-    // 1. GET: Obtener todos los restaurantes
-    if (req.method === 'GET') {
-      const result = await client.query('SELECT * FROM restaurants ORDER BY created_at DESC');
-      return res.status(200).json(result.rows);
-    }
-
-    // 2. POST: Insertar o actualizar un restaurante
     if (req.method === 'POST') {
       let body = req.body;
       if (typeof body === 'string' && body.trim() !== '') {
         try { body = JSON.parse(body); } catch (e) {}
-      }
-
-      if (!body) {
-        return res.status(400).json({ error: 'El cuerpo de la petición no puede estar vacío' });
       }
 
       const id = body.id || 'rest_' + Date.now();
@@ -114,23 +101,19 @@ module.exports = async (req, res) => {
       ];
 
       const result = await client.query(insertQuery, values);
+      client.release();
       return res.status(200).json(result.rows[0]);
     }
 
-    res.status(405).json({ error: 'Método no permitido' });
-  } catch (error) {
-    console.error('[NEON POSTGRES CLIENT API ERROR]', error);
-    res.status(500).json({ 
-      error: error.message || 'Error en la base de datos Neon PostgreSQL',
-      detail: error.detail || null,
-      code: error.code || null,
-      stack: error.stack || null
-    });
-  } finally {
-    try {
-      await client.end();
-    } catch (e) {
-      // Ignorar errores al cerrar la conexión
+    // Default GET: Obtener todos los restaurantes
+    const result = await client.query('SELECT * FROM restaurants ORDER BY created_at DESC');
+    client.release();
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    if (client) {
+      try { client.release(); } catch (e) {}
     }
+    console.error('Database error:', err);
+    return res.status(500).json({ error: err.message, detail: err.stack });
   }
 };
