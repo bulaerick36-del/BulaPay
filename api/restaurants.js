@@ -1,4 +1,4 @@
-// Vercel Serverless Function: /api/restaurants (?v=11001)
+// Vercel Serverless Function: /api/restaurants (?v=11002)
 // Conexión exclusiva a Neon PostgreSQL mediante la librería pg (node-postgres) sin dependencias de Supabase
 
 const { Pool } = require('pg');
