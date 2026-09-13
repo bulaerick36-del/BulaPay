@@ -1,5 +1,5 @@
-// Vercel Serverless Function: /api/restaurants (?v=11007)
-// Consulta a Neon PostgreSQL con liberacion adecuada de cliente para Vercel Serverless
+// Vercel Serverless Function: /api/restaurants (?v=11008)
+// Función ultra limpia con Pool de pg, SELECT * y liberación garantizada de cliente en finally
 
 const { Pool } = require('pg');
 
@@ -7,19 +7,10 @@ const connectionString = process.env.DATABASE_URL ||
                          process.env.NEON_DATABASE_URL || 
                          'postgresql://neondb_owner:npg_79zJpZqT6xfa@ep-falling-pond-ayeyaxml-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
 
-let pool;
-function getPool() {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: connectionString,
-      ssl: { rejectUnauthorized: false },
-      max: 3,
-      idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 5000
-    });
-  }
-  return pool;
-}
+const pool = new Pool({
+  connectionString: connectionString,
+  ssl: { rejectUnauthorized: false }
+});
 
 async function ensureTableExists(client) {
   const createTableQuery = `
@@ -55,14 +46,11 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const p = getPool();
   let client;
-
   try {
-    client = await p.connect();
+    client = await pool.connect();
     await ensureTableExists(client);
 
-    // Manejar POST (Insertar / Actualizar Restaurante)
     if (req.method === 'POST') {
       let body = req.body;
       if (typeof body === 'string' && body.trim() !== '') {
@@ -120,22 +108,15 @@ module.exports = async (req, res) => {
       return res.status(200).json(result.rows[0]);
     }
 
-    // Default GET: SELECT * FROM restaurants
+    // GET: SELECT * FROM restaurants ORDER BY created_at DESC
     const result = await client.query('SELECT * FROM restaurants ORDER BY created_at DESC');
     return res.status(200).json(result.rows);
   } catch (err) {
-    console.error('[NEON SERVERLESS DB ERROR]', err);
-    return res.status(500).json({ 
-      error: err.message || 'Error al consultar Neon PostgreSQL',
-      detail: err.stack || null
-    });
+    console.error('Database error:', err);
+    return res.status(500).json({ error: err.message });
   } finally {
     if (client) {
-      try {
-        client.release();
-      } catch (e) {
-        console.warn("Error liberando cliente de bd:", e);
-      }
+      try { client.release(); } catch (e) {}
     }
   }
 };
