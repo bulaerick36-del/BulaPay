@@ -1,10 +1,10 @@
-// Vercel Serverless Function: /api/restaurants (?v=11002)
-// Conexión exclusiva a Neon PostgreSQL mediante la librería pg (node-postgres) sin dependencias de Supabase
+// Vercel Serverless Function: /api/restaurants (?v=11003)
+// Conexión exclusiva a Neon PostgreSQL mediante la librería pg (node-postgres)
 
 const { Pool } = require('pg');
 
-const connectionString = process.env.NEON_DATABASE_URL || 
-                         process.env.DATABASE_URL || 
+const connectionString = process.env.DATABASE_URL || 
+                         process.env.NEON_DATABASE_URL || 
                          'postgresql://neondb_owner:npg_79zJpZqT6xfa@ep-falling-pond-ayeyaxml-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
 
 let pool;
@@ -58,11 +58,12 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const p = getPool();
   let client;
 
   try {
+    const p = getPool();
     client = await p.connect();
+
     // Asegurar que la tabla existe
     await initDatabase(client);
 
@@ -133,10 +134,14 @@ module.exports = async (req, res) => {
     res.status(405).json({ error: 'Método no permitido' });
   } catch (error) {
     console.error('[NEON POSTGRES API ERROR]', error);
-    res.status(500).json({ error: error.message || 'Error en la base de datos Neon PostgreSQL' });
+    res.status(500).json({ 
+      error: error.message || 'Error en la base de datos Neon PostgreSQL',
+      detail: error.detail || null,
+      code: error.code || null
+    });
   } finally {
     if (client) {
-      client.release();
+      try { client.release(); } catch (e) {}
     }
   }
 };
