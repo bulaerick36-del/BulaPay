@@ -1,29 +1,13 @@
-// Vercel Serverless Function: /api/restaurants (?v=11003)
-// Conexión exclusiva a Neon PostgreSQL mediante la librería pg (node-postgres)
+// Vercel Serverless Function: /api/restaurants (?v=11004)
+// Conexión directa mediante instancia Client de pg (node-postgres) con conexion y cierre por peticion
 
-const { Pool } = require('pg');
+const { Client } = require('pg');
 
 const connectionString = process.env.DATABASE_URL || 
                          process.env.NEON_DATABASE_URL || 
                          'postgresql://neondb_owner:npg_79zJpZqT6xfa@ep-falling-pond-ayeyaxml-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
 
-let pool;
-function getPool() {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: connectionString,
-      ssl: {
-        rejectUnauthorized: false
-      },
-      max: 5,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000
-    });
-  }
-  return pool;
-}
-
-// Inicialización automática de la tabla de restaurantes en Neon PostgreSQL
+// Asegurar que la tabla existe en Neon PostgreSQL
 async function initDatabase(client) {
   const createTableQuery = `
     CREATE TABLE IF NOT EXISTS restaurants (
@@ -58,13 +42,15 @@ module.exports = async (req, res) => {
     return;
   }
 
-  let client;
+  const client = new Client({
+    connectionString: connectionString,
+    ssl: { rejectUnauthorized: false }
+  });
 
   try {
-    const p = getPool();
-    client = await p.connect();
+    await client.connect();
 
-    // Asegurar que la tabla existe
+    // Asegurar existencia de la tabla
     await initDatabase(client);
 
     // 1. GET: Obtener todos los restaurantes
@@ -133,15 +119,18 @@ module.exports = async (req, res) => {
 
     res.status(405).json({ error: 'Método no permitido' });
   } catch (error) {
-    console.error('[NEON POSTGRES API ERROR]', error);
+    console.error('[NEON POSTGRES CLIENT API ERROR]', error);
     res.status(500).json({ 
       error: error.message || 'Error en la base de datos Neon PostgreSQL',
       detail: error.detail || null,
-      code: error.code || null
+      code: error.code || null,
+      stack: error.stack || null
     });
   } finally {
-    if (client) {
-      try { client.release(); } catch (e) {}
+    try {
+      await client.end();
+    } catch (e) {
+      // Ignorar errores al cerrar la conexión
     }
   }
 };
