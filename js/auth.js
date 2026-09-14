@@ -323,16 +323,19 @@ const authModule = {
     // 1. Superadmin Maestro (Solo si el usuario es 'admin' o si el rol guardado en DB es explícitamente Superadministrador / Superadmin)
     const isMasterSuperadmin = username === 'admin' || role === 'Superadministrador' || role === 'Superadmin';
 
-    // 2. Supervisor Estándar / Administrador de Rutas / Comercios (Panel de Supervisor)
-    const isSupervisor = !isMasterSuperadmin && (
+    // 2. Agente Independiente (Ámbito autónomo)
+    const isIndependentAgent = role === 'Agente Independiente' || roleLower === 'agente independiente';
+
+    // 3. Supervisor Estándar / Administrador de Rutas / Comercios (Panel de Supervisor)
+    const isSupervisor = !isMasterSuperadmin && !isIndependentAgent && (
       role === 'Usuario Supervisor' || 
       role === 'Supervisor' || 
       role === 'Administrador' || 
       role === 'Administrador de Rutas' || 
       role === 'Otros (Comercios, Compraventas, Mercados)' || 
       role === 'Comercio Independiente' || 
-      roleLower.includes('supervisor') || 
-      roleLower.includes('comercio')
+      (roleLower.includes('supervisor') && !roleLower.includes('independiente')) || 
+      (roleLower.includes('comercio') && !roleLower.includes('independiente'))
     );
 
     // Sincronizar el rol del usuario con el tema de colores dinámico
