@@ -1,16 +1,23 @@
-// Vercel Serverless Function: /api/restaurants (?v=11008)
-// Función ultra limpia con Pool de pg, SELECT * y liberación garantizada de cliente en finally
-
+// Vercel Serverless Function: /api/restaurants (BulaFoodboT / Neon PostgreSQL)
 const { Pool } = require('pg');
 
 const connectionString = process.env.DATABASE_URL || 
                          process.env.NEON_DATABASE_URL || 
                          'postgresql://neondb_owner:npg_79zJpZqT6xfa@ep-falling-pond-ayeyaxml-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
 
-const pool = new Pool({
-  connectionString: connectionString,
-  ssl: { rejectUnauthorized: false }
-});
+let pool;
+function getPool() {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: connectionString,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+  }
+  return pool;
+}
 
 async function ensureTableExists(client) {
   const createTableQuery = `
@@ -48,8 +55,14 @@ module.exports = async (req, res) => {
 
   let client;
   try {
-    client = await pool.connect();
-    await ensureTableExists(client);
+    const currentPool = getPool();
+    client = await currentPool.connect();
+
+    try {
+      await ensureTableExists(client);
+    } catch (tblErr) {
+      console.warn('Aviso al verificar la estructura de la tabla restaurants:', tblErr.message);
+    }
 
     if (req.method === 'POST') {
       let body = req.body;
@@ -57,8 +70,8 @@ module.exports = async (req, res) => {
         try { body = JSON.parse(body); } catch (e) {}
       }
 
-      if (!body) {
-        return res.status(400).json({ error: 'El cuerpo de la petición no puede estar vacío' });
+      if (!body || typeof body !== 'object') {
+        return res.status(400).json({ error: 'El cuerpo de la petición es inválido o está vacío' });
       }
 
       const id = body.id || 'rest_' + Date.now();
@@ -69,11 +82,11 @@ module.exports = async (req, res) => {
       const description = body.description || body.descripcion || '';
       const logo_url = body.logo_url || body.logo || '';
       const cover_url = body.cover_url || body.cover || body.banner || '';
-      const is_open = body.is_open !== undefined ? body.is_open : true;
-      const delivery_fee = body.delivery_fee !== undefined ? body.delivery_fee : 0;
-      const min_order = body.min_order !== undefined ? body.min_order : 0;
-      const rating = body.rating !== undefined ? body.rating : 5.0;
-      const reviews_count = body.reviews_count !== undefined ? body.reviews_count : 0;
+      const is_open = body.is_open !== undefined ? Boolean(body.is_open) : true;
+      const delivery_fee = body.delivery_fee !== undefined ? Number(body.delivery_fee) || 0 : 0;
+      const min_order = body.min_order !== undefined ? Number(body.min_order) || 0 : 0;
+      const rating = body.rating !== undefined ? Number(body.rating) || 5.0 : 5.0;
+      const reviews_count = body.reviews_count !== undefined ? Number(body.reviews_count) || 0 : 0;
       const delivery_time = body.delivery_time || '20-30 min';
 
       const insertQuery = `
@@ -105,15 +118,19 @@ module.exports = async (req, res) => {
       ];
 
       const result = await client.query(insertQuery, values);
-      return res.status(200).json(result.rows[0]);
+      return res.status(200).json(result.rows[0] || {});
     }
 
-    // GET: SELECT * FROM restaurants ORDER BY created_at DESC
+    // Consulta por defecto GET: Obtener todos los restaurantes
     const result = await client.query('SELECT * FROM restaurants ORDER BY created_at DESC');
-    return res.status(200).json(result.rows);
+    return res.status(200).json(result.rows || []);
+
   } catch (err) {
-    console.error('Database error:', err);
-    return res.status(500).json({ error: err.message });
+    console.error('Error en base de datos Neon PostgreSQL (/api/restaurants):', err);
+    return res.status(500).json({ 
+      error: 'Error de conexión o consulta en Neon PostgreSQL: ' + (err.message || 'Fallo interno'),
+      timestamp: new Date().toISOString()
+    });
   } finally {
     if (client) {
       try { client.release(); } catch (e) {}
