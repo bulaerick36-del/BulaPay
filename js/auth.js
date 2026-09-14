@@ -234,7 +234,11 @@ const authModule = {
 
         // Guardar usuario en base de datos sin generar rutas fantasmas
         await window.BulaPayDB.saveUser(newUser);
-        alert('🎉 Registro exitoso. ¡Bienvenido a BulaPay!');
+        if (newUser.role === 'Otros (Comercios, Compraventas, Mercados)' || newUser.role === 'Comercio Independiente' || (newUser.role && (newUser.role.toLowerCase().includes('comercio') || newUser.role.toLowerCase().includes('vitrina')))) {
+          alert('¡Tu Vitrina Digital ha sido creada y guardada en Neon PostgreSQL!');
+        } else {
+          alert('🎉 Registro exitoso. ¡Bienvenido a BulaPay!');
+        }
         this.loginUser(newUser);
       } catch (err) {
         console.error(err);

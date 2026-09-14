@@ -26,14 +26,17 @@ async function ensureTableExists(client) {
   const createTableQuery = `
     CREATE TABLE IF NOT EXISTS restaurants (
       id TEXT PRIMARY KEY,
+      username TEXT,
+      password TEXT,
       name TEXT NOT NULL,
-      category TEXT DEFAULT 'Restaurante',
+      category TEXT DEFAULT 'Vitrina Digital',
       whatsapp TEXT,
       address TEXT,
       description TEXT,
       logo_url TEXT,
       cover_url TEXT,
       is_open BOOLEAN DEFAULT true,
+      status TEXT DEFAULT 'activo',
       delivery_fee NUMERIC DEFAULT 0,
       min_order NUMERIC DEFAULT 0,
       rating NUMERIC DEFAULT 5.0,
@@ -43,6 +46,17 @@ async function ensureTableExists(client) {
     );
   `;
   await client.query(createTableQuery);
+
+  // Asegurar columnas opcionales en tablas previamente creadas en Neon
+  try {
+    await client.query(`
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS username TEXT;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS password TEXT;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'activo';
+    `);
+  } catch (e) {
+    console.warn('Aviso agregando columnas adicionales a restaurants:', e.message);
+  }
 }
 
 // Helper para leer y parsear req.body en entornos Node/Vercel Serverless raw HTTP Stream
@@ -100,17 +114,22 @@ module.exports = async (req, res) => {
         });
       }
 
-      const id = String(body.id || body.restaurant_id || 'rest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)).trim();
-      const name = String(body.name || body.nombre || body.store_name || body.restaurante || 'Nuevo Restaurante').trim();
-      const category = String(body.category || body.categoria || 'Restaurante').trim();
+      // Mapeo exhaustivo de campos recibidos del formulario (username, password, whatsapp, name, status, etc.)
+      const username = String(body.username || body.user || body.usuario || '').trim();
+      const id = String(body.id || body.username || body.restaurant_id || 'rest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)).trim();
+      const password = String(body.password || body.clave || body.pass || '').trim();
+      const name = String(body.name || body.nombre || body.username || body.company || body.razon_social || 'Nueva Vitrina Digital').trim();
+      const category = String(body.category || body.categoria || 'Vitrina Digital').trim();
       const whatsapp = String(body.whatsapp || body.phone || body.telefono || body.celular || '').trim();
       const address = String(body.address || body.direccion || '').trim();
       const description = String(body.description || body.descripcion || '').trim();
       const logo_url = String(body.logo_url || body.logo || body.logoUrl || body.image || '').trim();
       const cover_url = String(body.cover_url || body.cover || body.coverUrl || body.banner || '').trim();
       
+      const rawStatus = String(body.status || body.estado || '').trim();
       const rawIsOpen = body.is_open !== undefined ? body.is_open : (body.isOpen !== undefined ? body.isOpen : body.abierto);
-      const is_open = rawIsOpen !== undefined ? Boolean(rawIsOpen) : true;
+      const is_open = rawIsOpen !== undefined ? Boolean(rawIsOpen) : (rawStatus.toLowerCase() !== 'inactivo' && rawStatus.toLowerCase() !== 'closed');
+      const status = rawStatus || (is_open ? 'activo' : 'inactivo');
 
       const rawDeliveryFee = body.delivery_fee !== undefined ? body.delivery_fee : (body.deliveryFee !== undefined ? body.deliveryFee : body.domicilio);
       const delivery_fee = rawDeliveryFee !== undefined ? Number(rawDeliveryFee) || 0 : 0;
@@ -124,11 +143,14 @@ module.exports = async (req, res) => {
 
       const insertQuery = `
         INSERT INTO restaurants (
-          id, name, category, whatsapp, address, description, logo_url, cover_url, 
-          is_open, delivery_fee, min_order, rating, reviews_count, delivery_time
+          id, username, password, name, category, whatsapp, address, description, 
+          logo_url, cover_url, is_open, status, delivery_fee, min_order, rating, 
+          reviews_count, delivery_time
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (id) DO UPDATE SET
+          username = EXCLUDED.username,
+          password = EXCLUDED.password,
           name = EXCLUDED.name,
           category = EXCLUDED.category,
           whatsapp = EXCLUDED.whatsapp,
@@ -137,6 +159,7 @@ module.exports = async (req, res) => {
           logo_url = EXCLUDED.logo_url,
           cover_url = EXCLUDED.cover_url,
           is_open = EXCLUDED.is_open,
+          status = EXCLUDED.status,
           delivery_fee = EXCLUDED.delivery_fee,
           min_order = EXCLUDED.min_order,
           rating = EXCLUDED.rating,
@@ -146,8 +169,9 @@ module.exports = async (req, res) => {
       `;
 
       const values = [
-        id, name, category, whatsapp, address, description, logo_url, cover_url,
-        is_open, delivery_fee, min_order, rating, reviews_count, delivery_time
+        id, username, password, name, category, whatsapp, address, description,
+        logo_url, cover_url, is_open, status, delivery_fee, min_order, rating,
+        reviews_count, delivery_time
       ];
 
       const result = await client.query(insertQuery, values);
@@ -155,7 +179,7 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        message: 'Restaurante / vitrina guardado exitosamente',
+        message: '¡Tu Vitrina Digital ha sido creada y guardada en Neon PostgreSQL!',
         data: savedRestaurant,
         ...savedRestaurant
       });
