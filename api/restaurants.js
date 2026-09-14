@@ -25,37 +25,27 @@ function getPool() {
 async function ensureTableExists(client) {
   const createTableQuery = `
     CREATE TABLE IF NOT EXISTS restaurants (
-      id TEXT PRIMARY KEY,
-      username TEXT,
-      password TEXT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
-      category TEXT DEFAULT 'Vitrina Digital',
       whatsapp TEXT,
-      address TEXT,
-      description TEXT,
-      logo_url TEXT,
-      cover_url TEXT,
-      is_open BOOLEAN DEFAULT true,
-      status TEXT DEFAULT 'activo',
-      delivery_fee NUMERIC DEFAULT 0,
-      min_order NUMERIC DEFAULT 0,
+      delivery_time TEXT DEFAULT '20-30 min',
+      delivery_price NUMERIC DEFAULT 0,
       rating NUMERIC DEFAULT 5.0,
       reviews_count INTEGER DEFAULT 0,
-      delivery_time TEXT DEFAULT '20-30 min',
+      image TEXT,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
   await client.query(createTableQuery);
 
-  // Asegurar columnas opcionales en tablas previamente creadas en Neon
+  // Asegurar que columnas adicionales existan si la tabla fue creada previamente
   try {
     await client.query(`
-      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS username TEXT;
-      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS password TEXT;
-      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'activo';
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS delivery_price NUMERIC DEFAULT 0;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS image TEXT;
     `);
   } catch (e) {
-    console.warn('Aviso agregando columnas adicionales a restaurants:', e.message);
+    console.warn('Aviso agregando columnas a restaurants:', e.message);
   }
 }
 
@@ -114,65 +104,28 @@ module.exports = async (req, res) => {
         });
       }
 
-      // Mapeo exhaustivo de campos recibidos del formulario (username, password, whatsapp, name, status, etc.)
-      const username = String(body.username || body.user || body.usuario || '').trim();
-      const id = String(body.id || body.username || body.restaurant_id || 'rest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)).trim();
-      const password = String(body.password || body.clave || body.pass || '').trim();
-      const name = String(body.name || body.nombre || body.username || body.company || body.razon_social || 'Nueva Vitrina Digital').trim();
-      const category = String(body.category || body.categoria || 'Vitrina Digital').trim();
+      // Mapeo exclusivo de las columnas reales de la tabla restaurants en Neon (omitiendo campos de login/modal)
+      const name = String(body.name || body.nombre || body.company || body.username || 'Nueva Vitrina Digital').trim();
       const whatsapp = String(body.whatsapp || body.phone || body.telefono || body.celular || '').trim();
-      const address = String(body.address || body.direccion || '').trim();
-      const description = String(body.description || body.descripcion || '').trim();
-      const logo_url = String(body.logo_url || body.logo || body.logoUrl || body.image || '').trim();
-      const cover_url = String(body.cover_url || body.cover || body.coverUrl || body.banner || '').trim();
+      const delivery_time = String(body.delivery_time || body.deliveryTime || body.tiempoEntrega || '20-30 min').trim();
       
-      const rawStatus = String(body.status || body.estado || '').trim();
-      const rawIsOpen = body.is_open !== undefined ? body.is_open : (body.isOpen !== undefined ? body.isOpen : body.abierto);
-      const is_open = rawIsOpen !== undefined ? Boolean(rawIsOpen) : (rawStatus.toLowerCase() !== 'inactivo' && rawStatus.toLowerCase() !== 'closed');
-      const status = rawStatus || (is_open ? 'activo' : 'inactivo');
-
-      const rawDeliveryFee = body.delivery_fee !== undefined ? body.delivery_fee : (body.deliveryFee !== undefined ? body.deliveryFee : body.domicilio);
-      const delivery_fee = rawDeliveryFee !== undefined ? Number(rawDeliveryFee) || 0 : 0;
-
-      const rawMinOrder = body.min_order !== undefined ? body.min_order : (body.minOrder !== undefined ? body.minOrder : body.pedidoMinimo);
-      const min_order = rawMinOrder !== undefined ? Number(rawMinOrder) || 0 : 0;
+      const rawDeliveryPrice = body.delivery_price !== undefined ? body.delivery_price : (body.deliveryPrice !== undefined ? body.deliveryPrice : body.delivery_fee);
+      const delivery_price = rawDeliveryPrice !== undefined ? Number(rawDeliveryPrice) || 0 : 0;
 
       const rating = body.rating !== undefined ? Number(body.rating) || 5.0 : 5.0;
-      const reviews_count = body.reviews_count !== undefined ? Number(body.reviews_count) || (body.reviewsCount !== undefined ? Number(body.reviewsCount) || 0 : 0) : 0;
-      const delivery_time = String(body.delivery_time || body.deliveryTime || body.tiempoEntrega || '20-30 min').trim();
+
+      const rawReviewsCount = body.reviews_count !== undefined ? body.reviews_count : body.reviewsCount;
+      const reviews_count = rawReviewsCount !== undefined ? Number(rawReviewsCount) || 0 : 0;
+
+      const image = String(body.image || body.logo_url || body.logo || body.logoUrl || body.cover_url || '').trim();
 
       const insertQuery = `
-        INSERT INTO restaurants (
-          id, username, password, name, category, whatsapp, address, description, 
-          logo_url, cover_url, is_open, status, delivery_fee, min_order, rating, 
-          reviews_count, delivery_time
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-        ON CONFLICT (id) DO UPDATE SET
-          username = EXCLUDED.username,
-          password = EXCLUDED.password,
-          name = EXCLUDED.name,
-          category = EXCLUDED.category,
-          whatsapp = EXCLUDED.whatsapp,
-          address = EXCLUDED.address,
-          description = EXCLUDED.description,
-          logo_url = EXCLUDED.logo_url,
-          cover_url = EXCLUDED.cover_url,
-          is_open = EXCLUDED.is_open,
-          status = EXCLUDED.status,
-          delivery_fee = EXCLUDED.delivery_fee,
-          min_order = EXCLUDED.min_order,
-          rating = EXCLUDED.rating,
-          reviews_count = EXCLUDED.reviews_count,
-          delivery_time = EXCLUDED.delivery_time
+        INSERT INTO restaurants (name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *;
       `;
 
-      const values = [
-        id, username, password, name, category, whatsapp, address, description,
-        logo_url, cover_url, is_open, status, delivery_fee, min_order, rating,
-        reviews_count, delivery_time
-      ];
+      const values = [name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image];
 
       const result = await client.query(insertQuery, values);
       const savedRestaurant = result.rows[0] || {};

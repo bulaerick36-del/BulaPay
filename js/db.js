@@ -393,9 +393,11 @@ const db = {
     const payload = {
       name: String(restaurantData.name || restaurantData.nombre || restaurantData.company || restaurantData.username || 'Nueva Vitrina Digital').trim(),
       whatsapp: String(restaurantData.whatsapp || restaurantData.phone || restaurantData.telefono || restaurantData.celular || '').trim(),
-      status: String(restaurantData.status || restaurantData.estado || 'activo').trim(),
-      username: String(restaurantData.username || restaurantData.user || restaurantData.usuario || '').trim().toLowerCase(),
-      password: String(restaurantData.password || restaurantData.clave || '').trim()
+      delivery_time: String(restaurantData.delivery_time || restaurantData.deliveryTime || restaurantData.tiempoEntrega || '20-30 min').trim(),
+      delivery_price: restaurantData.delivery_price !== undefined ? Number(restaurantData.delivery_price) : (restaurantData.delivery_fee !== undefined ? Number(restaurantData.delivery_fee) : 0),
+      rating: restaurantData.rating !== undefined ? Number(restaurantData.rating) : 5.0,
+      reviews_count: restaurantData.reviews_count !== undefined ? Number(restaurantData.reviews_count) : 0,
+      image: String(restaurantData.image || restaurantData.logo_url || restaurantData.logo || restaurantData.logoUrl || restaurantData.cover_url || '').trim()
     };
 
     console.log('📡 [BulaPay DB saveRestaurant] Enviando vitrina a /api/restaurants (Neon PostgreSQL):', payload);
