@@ -3148,7 +3148,7 @@ const supervisorModule = {
       }
 
       routes.forEach(r => {
-        const routeAgents = agents.filter(a => a.routeId === r.id && (a.role === 'Agente de Ruta' || a.role === 'agent' || a.role === 'Agente Independiente'));
+        const routeAgents = agents.filter(a => a.routeId === r.id && (a.role === 'Agente de Ruta' || a.role === 'agent'));
         
         let agentsHtml = '';
         if (routeAgents.length === 0) {

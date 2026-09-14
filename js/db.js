@@ -115,9 +115,24 @@ const db = {
   async getCartones() {
     try {
       const supabase = await initSupabase();
+      const currentUser = this.getCurrentUser();
+      if (!currentUser) return [];
+      const isMaster = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
+      const supId = await this.getSupervisorIdForUser(currentUser);
+
       const { data, error } = await supabase.from('cartones').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return data || [];
+      let rawCartones = data || [];
+      if (!isMaster && currentUser) {
+        if (currentUser.role === 'Agente Independiente') {
+          rawCartones = rawCartones.filter(c => (c.supervisor_id && c.supervisor_id === currentUser.username) || (c.agent_id && c.agent_id === currentUser.username) || (!c.supervisor_id && (!c.agent_id || c.agent_id === currentUser.username)));
+        } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+          rawCartones = rawCartones.filter(c => (c.supervisor_id && c.supervisor_id === supId) || (c.agent_id && c.agent_id === currentUser.username) || (currentUser.routeId && c.route_id === currentUser.routeId));
+        } else if (supId) {
+          rawCartones = rawCartones.filter(c => (c.supervisor_id && c.supervisor_id === supId) || (c.agent_id && c.agent_id === supId));
+        }
+      }
+      return rawCartones;
     } catch (e) {
       console.warn("Error consultando la tabla cartones:", e.message);
       return [];
@@ -185,6 +200,24 @@ const db = {
   // USERS
   async getUsers() {
     const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) return [];
+
+    if (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin') {
+      const { data, error } = await supabase.from('users').select('*');
+      if (error) return [];
+      return data || [];
+    }
+
+    if (currentUser.role === 'Agente Independiente') {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', currentUser.username);
+      if (error) return [currentUser];
+      return (data && data.length > 0) ? data : [currentUser];
+    }
+
     const supId = this.getSupervisorId();
     if (!supId) return [];
     const { data, error } = await supabase
@@ -207,8 +240,9 @@ const db = {
     if ((user.role === 'Usuario Supervisor' || 
          user.role === 'Administrador de Rutas' || 
          user.role === 'Otros (Comercios, Compraventas, Mercados)' || 
-         user.role === 'Agente Independiente') && !user.supervisor_id) {
-      user.supervisor_id = user.username;
+         user.role === 'Agente Independiente')) {
+      if (!user.supervisor_id) user.supervisor_id = user.username;
+      if (!user.supervisor) user.supervisor = user.username;
     }
 
     // Inicializar ciclo de vigencia de 30 días para nuevos usuarios
@@ -421,9 +455,8 @@ const db = {
   getSupervisorId() {
     const user = this.getCurrentUser();
     if (!user) return null;
-    // v108: Los agentes (incluido Agente Independiente) devuelven su supervisor real, no su username
-    if (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente') {
-      return user.supervisor || null;
+    if (user.role === 'Agente de Ruta' || user.role === 'agent') {
+      return user.supervisor || user.supervisor_id || user.username;
     }
     return user.username;
   },
@@ -460,10 +493,17 @@ const db = {
 
   async getSupervisorIdForUser(user) {
     if (!user) return null;
-    if (user.role === 'Usuario Supervisor' || user.role === 'supervisor' || user.role === 'Comercio Independiente' || user.role === 'Otros (Comercios, Compraventas, Mercados)') {
+    if (
+      user.role === 'Usuario Supervisor' || 
+      user.role === 'supervisor' || 
+      user.role === 'Comercio Independiente' || 
+      user.role === 'Otros (Comercios, Compraventas, Mercados)' || 
+      user.role === 'Agente Independiente'
+    ) {
       return user.username;
     }
     if (user.supervisor) return user.supervisor;
+    if (user.supervisor_id) return user.supervisor_id;
     
     try {
       const supabase = await initSupabase();
@@ -703,24 +743,19 @@ const db = {
 
   async getAgents() {
     const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser();
     
-    // Intentar consultar la tabla 'agents' primero
-    try {
-      const { data, error } = await supabase
-        .from('agents')
-        .select('*');
-      if (!error && data && data.length > 0) {
-        return data;
-      }
-    } catch (e) {
-      console.warn("No se pudo consultar la tabla 'agents', usando fallback a 'users':", e);
+    // Un Agente Independiente no administra sub-agentes
+    if (currentUser && currentUser.role === 'Agente Independiente') {
+      return [];
     }
 
-    // Fallback: Consultar la tabla 'users' filtrando por rol de Agente
     const supId = this.getSupervisorId();
-    let query = supabase.from('users').select('*').in('role', ['Agente de Ruta', 'agent', 'Agente Independiente']);
+    if (!supId) return [];
+
+    let query = supabase.from('users').select('*').in('role', ['Agente de Ruta', 'agent']);
     if (supId) {
-      query = query.eq('supervisor_id', supId);
+      query = query.or(`supervisor_id.eq."${supId}",supervisor.eq."${supId}"`);
     }
     const { data, error } = await query;
     if (error) {
@@ -808,6 +843,29 @@ const db = {
         const installmentAmount = Number(carton.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
         const discountAmount = Number(carton.discount_amount || 0);
         const netCash = Number(carton.net_cash || (montoPrestado - discountAmount));
+
+        const cartonSupervisorId = carton.supervisor_id || joinedClient.supervisor_id || null;
+        const cartonAgentId = carton.agent_id || joinedClient.agent_id || null;
+        const cartonRouteId = carton.route_id || carton.routeId || joinedClient.routeId || null;
+
+        const isMasterUser = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
+        if (!isMasterUser) {
+          if (currentUser.role === 'Agente Independiente') {
+            const matchesUser = (cartonSupervisorId && cartonSupervisorId === currentUser.username) ||
+                                (cartonAgentId && cartonAgentId === currentUser.username) ||
+                                (!cartonSupervisorId && (!cartonAgentId || cartonAgentId === currentUser.username));
+            if (!matchesUser) return;
+          } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+            const matchesRouteAgent = (cartonSupervisorId && cartonSupervisorId === supId) ||
+                                      (cartonAgentId && cartonAgentId === currentUser.username) ||
+                                      (currentUser.routeId && cartonRouteId === currentUser.routeId);
+            if (!matchesRouteAgent) return;
+          } else if (supId) {
+            const matchesSupervisor = (cartonSupervisorId && cartonSupervisorId === supId) ||
+                                      (cartonAgentId && cartonAgentId === supId);
+            if (!matchesSupervisor) return;
+          }
+        }
 
         activeCreditsList.push({
           ...joinedClient,

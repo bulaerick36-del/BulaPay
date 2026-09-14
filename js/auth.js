@@ -213,6 +213,7 @@ const authModule = {
           estado_suscripcion: 'activa_prueba',
           routeId: null,
           supervisor_id: username,
+          supervisor: username,
           representante_legal: representanteLegal,
           cedula_representante: cedulaRepresentante,
           aceptacion_terminos: true,
