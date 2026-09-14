@@ -279,7 +279,9 @@ const db = {
 
     if (!error && data && data.length > 0) {
       console.log('✅ Usuario registrado exitosamente en Supabase (Intento 1):', data[0]);
-      return data[0];
+      const saved = data[0];
+      await this.checkAndSaveVitrina(user);
+      return saved;
     }
 
     if (error) {
@@ -306,7 +308,9 @@ const db = {
 
       if (!res2.error && res2.data && res2.data.length > 0) {
         console.log('✅ Usuario registrado exitosamente en Supabase (Intento 2):', res2.data[0]);
-        return res2.data[0];
+        const saved = res2.data[0];
+        await this.checkAndSaveVitrina(user);
+        return saved;
       }
 
       console.warn("⚠️ Intento 2 de inserción en users falló:", res2.error ? res2.error.message : res2.error);
@@ -331,7 +335,9 @@ const db = {
 
       if (!res3.error && res3.data && res3.data.length > 0) {
         console.log('✅ Usuario registrado exitosamente en Supabase (Intento 3):', res3.data[0]);
-        return res3.data[0];
+        const saved = res3.data[0];
+        await this.checkAndSaveVitrina(user);
+        return saved;
       }
 
       console.warn("⚠️ Intento 3 de inserción en users falló:", res3.error ? res3.error.message : res3.error);
@@ -351,17 +357,64 @@ const db = {
 
       if (!res4.error && res4.data && res4.data.length > 0) {
         console.log('✅ Usuario registrado exitosamente en Supabase (Intento 4 Mínimo):', res4.data[0]);
-        return res4.data[0];
+        const saved = res4.data[0];
+        await this.checkAndSaveVitrina(user);
+        return saved;
       }
 
       if (res4.error) {
         console.error("❌ Todos los intentos de guardar usuario en Supabase fallaron:", res4.error);
         throw res4.error;
       }
-      return res4.data ? res4.data[0] : user;
+      const saved = res4.data ? res4.data[0] : user;
+      await this.checkAndSaveVitrina(user);
+      return saved;
     }
 
-    return data ? data[0] : user;
+    const saved = data ? data[0] : user;
+    await this.checkAndSaveVitrina(user);
+    return saved;
+  },
+
+  async checkAndSaveVitrina(user) {
+    if (user && (user.role === 'Otros (Comercios, Compraventas, Mercados)' || 
+                 user.role === 'Comercio Independiente' || 
+                 (user.role && (String(user.role).toLowerCase().includes('comercio') || String(user.role).toLowerCase().includes('vitrina'))))) {
+      try {
+        await this.saveRestaurant(user);
+      } catch (e) {
+        console.warn("⚠️ Aviso al sincronizar vitrina con Neon PostgreSQL (/api/restaurants):", e);
+      }
+    }
+  },
+
+  async saveRestaurant(restaurantData) {
+    if (!restaurantData) return null;
+    const payload = {
+      name: String(restaurantData.name || restaurantData.nombre || restaurantData.company || restaurantData.username || 'Nueva Vitrina Digital').trim(),
+      whatsapp: String(restaurantData.whatsapp || restaurantData.phone || restaurantData.telefono || restaurantData.celular || '').trim(),
+      status: String(restaurantData.status || restaurantData.estado || 'activo').trim(),
+      username: String(restaurantData.username || restaurantData.user || restaurantData.usuario || '').trim().toLowerCase(),
+      password: String(restaurantData.password || restaurantData.clave || '').trim()
+    };
+
+    console.log('📡 [BulaPay DB saveRestaurant] Enviando vitrina a /api/restaurants (Neon PostgreSQL):', payload);
+
+    try {
+      const response = await fetch('/api/restaurants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const resData = await response.json();
+      console.log('✅ [BulaPay DB saveRestaurant] Respuesta de /api/restaurants:', resData);
+      return resData;
+    } catch (err) {
+      console.error('❌ [BulaPay DB saveRestaurant] Error en fetch /api/restaurants:', err);
+      throw err;
+    }
   },
 
   async getUserByUsername(username) {
