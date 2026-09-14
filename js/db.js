@@ -233,6 +233,7 @@ const db = {
 
   async saveUser(user) {
     const supabase = await initSupabase();
+    console.log('💾 [BulaPay DB saveUser] Recibido usuario para inserción con rol:', user.role);
     const supId = this.getSupervisorId();
     if (supId && !user.supervisor_id) {
       user.supervisor_id = supId;
@@ -315,7 +316,7 @@ const db = {
         username: String(user.username).trim().toLowerCase(),
         password: String(user.password),
         name: String(user.name || user.username).trim(),
-        role: String(user.role || 'Usuario Supervisor').trim(),
+        role: String(user.role).trim(),
         documentType: String(user.documentType || 'CC').trim(),
         documentNumber: String(user.documentNumber || user.username).trim(),
         phone: String(user.phone || '').trim(),
@@ -340,7 +341,7 @@ const db = {
         username: String(user.username).trim().toLowerCase(),
         password: String(user.password),
         name: String(user.name || user.username).trim(),
-        role: String(user.role || 'Usuario Supervisor').trim()
+        role: String(user.role).trim()
       };
 
       const res4 = await supabase

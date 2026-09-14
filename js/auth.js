@@ -168,7 +168,14 @@ const authModule = {
     this.formRegister.addEventListener('submit', async (e) => {
       e.preventDefault();
       const registerTypeElem = document.getElementById('register-type');
-      let selectedType = (registerTypeElem && registerTypeElem.value) ? registerTypeElem.value.trim() : 'Usuario Supervisor';
+      let selectedType = (registerTypeElem && registerTypeElem.value) ? registerTypeElem.value.trim() : null;
+      if (!selectedType) {
+        const bulaRole = localStorage.getItem('bulaRole');
+        if (bulaRole === 'independent') selectedType = 'Agente Independiente';
+        else if (bulaRole === 'commerce') selectedType = 'Otros (Comercios, Compraventas, Mercados)';
+        else selectedType = 'Usuario Supervisor';
+      }
+      console.log('📌 [REGISTRO] Rol exacto capturado para la inserción:', selectedType);
       const email = document.getElementById('register-email').value.trim();
       const username = document.getElementById('register-username').value.trim().toLowerCase();
       const password = document.getElementById('register-password').value;
@@ -289,6 +296,14 @@ const authModule = {
           e.preventDefault();
           this.switchTab('login');
         });
+      }
+      // Sincronizar el selector de tipo de cuenta con la navegación actual
+      const regSelect = document.getElementById('register-type');
+      const currentBulaRole = localStorage.getItem('bulaRole');
+      if (regSelect && currentBulaRole) {
+        if (currentBulaRole === 'independent') regSelect.value = 'Agente Independiente';
+        else if (currentBulaRole === 'supervisor') regSelect.value = 'Usuario Supervisor';
+        else if (currentBulaRole === 'commerce') regSelect.value = 'Otros (Comercios, Compraventas, Mercados)';
       }
     }
   },

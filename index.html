@@ -2836,6 +2836,12 @@
       // 1. Navegar e intercambiar panel de forma inmediata
       try {
         localStorage.setItem('bulaRole', role);
+        const regSelect = document.getElementById('register-type');
+        if (regSelect) {
+          if (role === 'independent') regSelect.value = 'Agente Independiente';
+          else if (role === 'supervisor') regSelect.value = 'Usuario Supervisor';
+          else if (role === 'commerce') regSelect.value = 'Otros (Comercios, Compraventas, Mercados)';
+        }
         if (hashTarget) {
           window.location.hash = hashTarget;
         }
