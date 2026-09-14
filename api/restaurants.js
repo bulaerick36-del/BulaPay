@@ -3,10 +3,13 @@ const { Pool } = require('pg');
 
 const connectionString = process.env.DATABASE_URL || 
                          process.env.NEON_DATABASE_URL || 
-                         'postgresql://neondb_owner:npg_79zJpZqT6xfa@ep-falling-pond-ayeyaxml-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
+                         process.env.POSTGRES_URL;
 
 let pool;
 function getPool() {
+  if (!connectionString) {
+    throw new Error('Falta la variable de entorno DATABASE_URL o NEON_DATABASE_URL en el panel de Vercel.');
+  }
   if (!pool) {
     pool = new Pool({
       connectionString: connectionString,
