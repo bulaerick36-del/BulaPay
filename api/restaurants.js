@@ -33,16 +33,23 @@ async function ensureTableExists(client) {
       rating NUMERIC DEFAULT 5.0,
       reviews_count INTEGER DEFAULT 0,
       image TEXT,
+      category TEXT DEFAULT 'Restaurante',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
   await client.query(createTableQuery);
 
-  // Asegurar que columnas adicionales existan si la tabla fue creada previamente
+  // Asegurar que todas las columnas existan si la tabla fue creada previamente sin alguna de ellas
   try {
     await client.query(`
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS name TEXT;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS delivery_time TEXT DEFAULT '20-30 min';
       ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS delivery_price NUMERIC DEFAULT 0;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS rating NUMERIC DEFAULT 5.0;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS reviews_count INTEGER DEFAULT 0;
       ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS image TEXT;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Restaurante';
     `);
   } catch (e) {
     console.warn('Aviso agregando columnas a restaurants:', e.message);
@@ -118,14 +125,15 @@ module.exports = async (req, res) => {
       const reviews_count = rawReviewsCount !== undefined ? Number(rawReviewsCount) || 0 : 0;
 
       const image = String(body.image || body.logo_url || body.logo || body.logoUrl || body.cover_url || '').trim();
+      const category = String(body.category || body.categoria || body.product_category || 'Restaurante').trim();
 
       const insertQuery = `
-        INSERT INTO restaurants (name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, created_at;
+        INSERT INTO restaurants (name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, category)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, category, created_at;
       `;
 
-      const values = [name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image];
+      const values = [name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, category];
 
       const result = await client.query(insertQuery, values);
       const savedRestaurant = result.rows[0] || {};
@@ -138,8 +146,8 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Consulta por defecto GET: Obtener todos los restaurantes (sin columna category)
-    const result = await client.query('SELECT id, name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, created_at FROM restaurants ORDER BY created_at DESC');
+    // Consulta por defecto GET: Obtener todos los restaurantes
+    const result = await client.query('SELECT id, name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, category, created_at FROM restaurants ORDER BY created_at DESC');
     return res.status(200).json(result.rows || []);
 
   } catch (err) {
