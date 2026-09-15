@@ -122,7 +122,7 @@ module.exports = async (req, res) => {
       const insertQuery = `
         INSERT INTO restaurants (name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING *;
+        RETURNING id, name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, created_at;
       `;
 
       const values = [name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image];
@@ -138,8 +138,8 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Consulta por defecto GET: Obtener todos los restaurantes
-    const result = await client.query('SELECT * FROM restaurants ORDER BY created_at DESC');
+    // Consulta por defecto GET: Obtener todos los restaurantes (sin columna category)
+    const result = await client.query('SELECT id, name, whatsapp, delivery_time, delivery_price, rating, reviews_count, image, created_at FROM restaurants ORDER BY created_at DESC');
     return res.status(200).json(result.rows || []);
 
   } catch (err) {
