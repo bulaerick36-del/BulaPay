@@ -101,9 +101,17 @@ const authModule = {
       });
     }
 
+    // Limpiar mensajes de error de login al escribir
+    ['login-username', 'login-password', 'agent-login-username', 'agent-login-password'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => this.clearLoginErrors());
+    });
+
     // Submit Iniciar Sesión
     this.formLogin.addEventListener('submit', async (e) => {
       e.preventDefault();
+      this.clearLoginErrors();
+
       const usernameInput = document.getElementById('login-username').value.trim();
       const passwordInput = document.getElementById('login-password').value;
 
@@ -119,8 +127,14 @@ const authModule = {
       try {
         const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-        if (user && user.bloqueado_por_mora === true) {
-          alert('⛔ ACCESO SUSPENDIDO POR MORA / IMPAGO\n\nEstimado usuario, su cuenta ha sido suspendida temporalmente por impago. Por favor comuníquese con el Administrador para regularizar su suscripción.');
+        const isSuspended = user && (
+          user.bloqueado_por_mora === true ||
+          user.bloqueado_por_mora === 'true' ||
+          (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
+        );
+
+        if (isSuspended) {
+          await this.showSuspensionError(this.formLogin, user);
           return;
         }
 
@@ -139,14 +153,22 @@ const authModule = {
     if (this.formAgentLogin) {
       this.formAgentLogin.addEventListener('submit', async (e) => {
         e.preventDefault();
+        this.clearLoginErrors();
+
         const usernameInput = document.getElementById('agent-login-username').value.trim();
         const passwordInput = document.getElementById('agent-login-password').value;
 
         try {
           const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-          if (user && user.bloqueado_por_mora === true) {
-            alert('⛔ ACCESO SUSPENDIDO POR MORA / IMPAGO\n\nEstimado usuario, su cuenta ha sido suspendida temporalmente por impago. Por favor comuníquese con el Administrador para regularizar su suscripción.');
+          const isSuspended = user && (
+            user.bloqueado_por_mora === true ||
+            user.bloqueado_por_mora === 'true' ||
+            (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
+          );
+
+          if (isSuspended) {
+            await this.showSuspensionError(this.formAgentLogin, user);
             return;
           }
 
@@ -276,6 +298,7 @@ const authModule = {
   },
 
   switchTab(tab) {
+    this.clearLoginErrors();
     if (tab === 'login') {
       this.tabLogin.classList.add('active');
       this.tabRegister.classList.remove('active');
@@ -433,10 +456,18 @@ const authModule = {
 
   checkCurrentSession() {
     const user = window.BulaPayDB.getCurrentUser();
-    if (user && user.bloqueado_por_mora === true) {
-      alert('⛔ ACCESO SUSPENDIDO POR MORA / IMPAGO\n\nSu cuenta se encuentra suspendida. La sesión se cerrará automáticamente.');
-      this.logout();
-      return;
+    if (user) {
+      const isSuspended = (
+        user.bloqueado_por_mora === true ||
+        user.bloqueado_por_mora === 'true' ||
+        (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
+      );
+      if (isSuspended) {
+        console.warn("🔒 Sesión finalizada silenciosamente: cuenta suspendida por mora.");
+        window.BulaPayDB.logout();
+        this.updateNavBar(null);
+        return;
+      }
     }
     if (user) {
       this.updateNavBar(user);
@@ -615,6 +646,45 @@ const authModule = {
 
     alert('✅ ¡Mensaje de soporte enviado exitosamente! El equipo de administración revisará tu inquietud en breve.');
     this.closeSupportModal();
+  },
+
+  clearLoginErrors() {
+    const errorContainers = document.querySelectorAll('.login-error-container');
+    errorContainers.forEach(container => {
+      container.style.display = 'none';
+      container.innerHTML = '';
+    });
+  },
+
+  async showSuspensionError(formElement, user) {
+    if (!formElement) return;
+
+    let container = formElement.querySelector('.login-error-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.className = 'login-error-container';
+      const submitBtn = formElement.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        formElement.insertBefore(container, submitBtn);
+      } else {
+        formElement.appendChild(container);
+      }
+    }
+
+    container.style.cssText = 'display: block; margin-top: 1rem; margin-bottom: 0.5rem; text-align: center; animation: fadeIn 0.3s ease;';
+    container.innerHTML = `
+      <div style="background: rgba(239, 68, 68, 0.12); border: 1.5px solid #ef4444; border-radius: 12px; padding: 1.1rem; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2);">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: #ef4444; font-weight: 800; font-size: 0.95rem; margin-bottom: 0.4rem;">
+          <span style="font-size: 1.2rem;">⛔</span> ACCESO DENEGADO POR IMPAGO / MORA
+        </div>
+        <p style="color: #f87171; font-size: 0.85rem; margin: 0 0 0.9rem 0; line-height: 1.45; font-weight: 600;">
+          Estimado usuario, su cuenta ha sido suspendida temporalmente por mora en la suscripción. El acceso ha sido denegado hasta regularizar el pago.
+        </p>
+        <button type="button" onclick="if(window.authModule && typeof window.authModule.openSupportModal === 'function'){ window.authModule.openSupportModal(event); } else if(typeof window.abrirContactoMailto === 'function'){ window.abrirContactoMailto(event); }" style="display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.7rem 1rem; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; font-weight: 800; font-size: 0.9rem; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35); box-sizing: border-box; transition: transform 0.15s ease;">
+          💬 Contáctanos
+        </button>
+      </div>
+    `;
   }
 };
 
