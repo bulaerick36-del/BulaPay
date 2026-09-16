@@ -25,25 +25,33 @@ const adsModule = {
     return true;
   },
 
-  // Evaluar si una fecha cae dentro del rango de forma permisiva (tolerante a husos horarios y fechas recién creadas)
+  // Evaluar si una fecha cae dentro del rango (comprobando fecha_inicio y fecha_fin estricta)
   isDateInRange(todayStr, startDateStr, endDateStr) {
-    if (!startDateStr && !endDateStr) return true;
     if (!todayStr) return true;
-
     try {
       const cleanToday = String(todayStr).split('T')[0].trim();
-      const cleanStart = String(startDateStr || '').split('T')[0].trim();
 
-      if (!cleanStart) return true;
-
-      // Convertir a timestamps permisivos con tolerancia de 24 horas por huso horario (UTC vs local)
-      const dateToday = new Date(cleanToday).getTime();
-      const dateStart = new Date(cleanStart).getTime();
-
-      if (!isNaN(dateToday) && !isNaN(dateStart)) {
-        // Solo descartar si la fecha de inicio es estrictamente más de 24h (86,400,000 ms) en el futuro
-        if (dateStart - dateToday > 86400000) {
+      // 1. REGLA ESTRICTA DE FECHA DE FIN (Expiración):
+      // Si la fecha actual sobrepasa la fecha_fin, el anuncio expiró y NO debe mostrarse al público
+      if (endDateStr) {
+        const cleanEnd = String(endDateStr).split('T')[0].trim();
+        if (cleanEnd && cleanToday > cleanEnd) {
           return false;
+        }
+      }
+
+      // 2. REGLA DE FECHA DE INICIO:
+      if (startDateStr) {
+        const cleanStart = String(startDateStr).split('T')[0].trim();
+        if (cleanStart) {
+          const dateToday = new Date(cleanToday).getTime();
+          const dateStart = new Date(cleanStart).getTime();
+          if (!isNaN(dateToday) && !isNaN(dateStart)) {
+            // Descartar si la fecha de inicio es más de 24h en el futuro
+            if (dateStart - dateToday > 86400000) {
+              return false;
+            }
+          }
         }
       }
 
@@ -162,14 +170,20 @@ const adsModule = {
         return passes;
       });
 
-      // Fallback de seguridad: Si no hubo coincidencia por franja/detonante, tomar cualquier anuncio marcado como Activo
+      // Fallback de seguridad: Si no hubo coincidencia por franja/detonante, tomar cualquier anuncio activo QUE NO HAYA VENCIDO
       if (!matchingAds || matchingAds.length === 0) {
-        const activeFallback = (allAds || []).filter(a => a && a.active !== false && a.active !== 'false' && a.active !== 0 && a.active !== '0');
+        const activeFallback = (allAds || []).filter(a => {
+          if (!a) return false;
+          const isActive = a.active !== false && a.active !== 'false' && a.active !== 0 && a.active !== '0';
+          const endDate = String(a.fecha_fin || a.end_date || '').split('T')[0].trim();
+          const isNotExpired = !endDate || todayStr <= endDate;
+          return isActive && isNotExpired;
+        });
         if (activeFallback.length > 0) {
-          console.log(`💡 [BulaPay Anuncios bulapay-v356] Tomando anuncio activo mediante fallback permisivo PWA.`);
+          console.log(`💡 [BulaPay Anuncios] Tomando anuncio activo y no vencido mediante fallback PWA.`);
           matchingAds = activeFallback;
         } else {
-          console.log(`ℹ️ [BulaPay Anuncios] No hay anuncios activos coincidentes en el sistema.`);
+          console.log(`ℹ️ [BulaPay Anuncios] No hay anuncios activos y vigentes en el sistema.`);
           safeCallback();
           return;
         }

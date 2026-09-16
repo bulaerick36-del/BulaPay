@@ -2386,10 +2386,14 @@ const superadminModule = {
         return;
       }
 
-      let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
-      
+      const todayObj = new Date();
+      const yyyy = todayObj.getFullYear();
+      const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(todayObj.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+
       ads.forEach(ad => {
-        const isActive = ad.active !== false && ad.active !== 'false';
+        const isActive = ad.active !== false && ad.active !== 'false' && ad.active !== 0 && ad.active !== '0';
         const cat = ad.categoria || ad.category || 'Comercial';
         const startDate = ad.fecha_inicio || ad.start_date || 'N/A';
         const endDate = ad.fecha_fin || ad.end_date || 'N/A';
@@ -2411,8 +2415,26 @@ const superadminModule = {
           (isClient ? '💳 Consulta Cédula' : null)
         ].filter(Boolean).join(' | ') || 'Ninguno';
 
+        // VALIDACIÓN DINÁMICA DE VENCIMIENTO (FECHA DE FIN):
+        // Compara la fecha actual con su fecha de fin. Si ya está vencido, ignora el estado de la base de datos y muestra la etiqueta roja 'Vencido'
+        const cleanEnd = String(endDate).split('T')[0].trim();
+        const isExpired = cleanEnd && cleanEnd !== 'N/A' && todayStr > cleanEnd;
+
+        let statusBadgeHtml = '';
+        let cardBorderColor = 'rgba(255,255,255,0.1)';
+
+        if (isExpired) {
+          statusBadgeHtml = `<span style="padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 800; background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5);">🔴 Vencido</span>`;
+          cardBorderColor = 'rgba(239, 68, 68, 0.35)';
+        } else if (isActive) {
+          statusBadgeHtml = `<span style="padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 800; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">● Activo</span>`;
+          cardBorderColor = 'rgba(52, 211, 153, 0.3)';
+        } else {
+          statusBadgeHtml = `<span style="padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 800; background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);">○ Inactivo</span>`;
+        }
+
         html += `
-          <div style="background: #0f172a; border: 1px solid ${isActive ? 'rgba(52, 211, 153, 0.3)' : 'rgba(255,255,255,0.1)'}; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="background: #0f172a; border: 1px solid ${cardBorderColor}; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
             
             <!-- REQUISITO: Métricas e Impresiones en la Zona Superior de cada Tarjeta -->
             <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; width: 100%;">
@@ -2430,12 +2452,10 @@ const superadminModule = {
                   <span style="padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; ${catBadgeStyle}">
                     ${cat}
                   </span>
-                  <span style="font-size: 0.78rem; color: #94a3b8;">
+                  <span style="font-size: 0.78rem; color: ${isExpired ? '#fca5a5' : '#94a3b8'};">
                     📅 ${startDate} al ${endDate} (⏰ ${startTime} - ${endTime})
                   </span>
-                  <span style="padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: ${isActive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${isActive ? '#34d399' : '#fca5a5'};">
-                    ${isActive ? '● Activo' : '○ Inactivo'}
-                  </span>
+                  ${statusBadgeHtml}
                 </div>
 
                 <p style="color: #f8fafc; font-size: 0.9rem; margin: 0 0 0.5rem 0; white-space: pre-line;">
