@@ -4570,40 +4570,41 @@ const db = {
   },
 
   // ----------------------------------------------------
-  // CÁLCULO DINÁMICO DE DÍAS RESTANTES DE VIGENCIA (CUENTA REGRESIVA DE 30 DÍAS)
+  // CÁLCULO DINÁMICO DE DÍAS RESTANTES DE VIGENCIA (EN TIEMPO REAL)
   // ----------------------------------------------------
   getDiasRestantes(user) {
     if (!user) return { dias: 0, diasExactos: 0, fechaCorteStr: 'N/A', status: 'expirado' };
 
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    // 1. Capturar la fecha actual en tiempo real al vuelo (sin usar localStorage)
+    const ahora = new Date();
 
-    let fechaCorte;
+    // 2. Determinar la fecha de vencimiento (fecha_corte/fecha_vencimiento o created_at + 30 días)
+    let fechaVencimiento;
     if (user.fecha_corte || user.fecha_vencimiento) {
       const rawDateStr = String(user.fecha_corte || user.fecha_vencimiento).trim();
       if (rawDateStr.includes('T')) {
-        fechaCorte = new Date(rawDateStr);
+        fechaVencimiento = new Date(rawDateStr);
       } else {
         const parts = rawDateStr.split('-');
         if (parts.length === 3) {
-          fechaCorte = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          fechaVencimiento = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
         } else {
-          fechaCorte = new Date(rawDateStr);
+          fechaVencimiento = new Date(rawDateStr);
         }
       }
     } else {
-      const baseDate = user.subscription_start_date ? new Date(user.subscription_start_date) : (user.created_at ? new Date(user.created_at) : new Date());
-      fechaCorte = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const baseDate = user.created_at ? new Date(user.created_at) : (user.subscription_start_date ? new Date(user.subscription_start_date) : ahora);
+      fechaVencimiento = new Date(baseDate.getTime() + (30 * 24 * 60 * 60 * 1000));
     }
-    fechaCorte.setHours(0, 0, 0, 0);
 
-    const diffMs = fechaCorte.getTime() - hoy.getTime();
+    // 3. Restar la fecha actual de la fecha de vencimiento y convertir la diferencia a días enteros usando Math.ceil()
+    const diffMs = fechaVencimiento.getTime() - ahora.getTime();
     const diasCalculados = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
     const diasRestantes = diasCalculados > 0 ? diasCalculados : 0;
 
-    const yyyy = fechaCorte.getFullYear();
-    const mm = String(fechaCorte.getMonth() + 1).padStart(2, '0');
-    const dd = String(fechaCorte.getDate()).padStart(2, '0');
+    const yyyy = fechaVencimiento.getFullYear();
+    const mm = String(fechaVencimiento.getMonth() + 1).padStart(2, '0');
+    const dd = String(fechaVencimiento.getDate()).padStart(2, '0');
     const fechaCorteStr = `${yyyy}-${mm}-${dd}`;
 
     let status = 'activo';
@@ -4619,6 +4620,23 @@ const db = {
       fechaCorteStr: fechaCorteStr,
       status: status
     };
+  },
+
+  /**
+   * Inyecta dinámicamente el contador de días restantes en el elemento del DOM indicado.
+   * Sin depender de localStorage, calculando siempre en tiempo real.
+   */
+  inyectarDiasRestantesEnDOM(user, targetElement) {
+    const el = typeof targetElement === 'string' ? document.getElementById(targetElement) : targetElement;
+    if (!el) return;
+
+    const info = this.getDiasRestantes(user);
+
+    el.textContent = `⏳ Vigencia: Faltan ${info.dias} días`;
+    el.style.color = info.dias <= 5 ? '#fca5a5' : '#38bdf8';
+    el.style.background = info.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)';
+    el.style.border = info.dias <= 5 ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(56, 189, 248, 0.35)';
+    el.title = `Fecha de corte: ${info.fechaCorteStr}`;
   },
 
   // ----------------------------------------------------
