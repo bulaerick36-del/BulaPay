@@ -4825,8 +4825,8 @@ const db = {
             console.warn("⚠️ Aviso al guardar notificación en BD (continuando ejecución hacia SweetAlert2):", saveErr);
           }
 
-          // Disparar Alerta Visual (Popup / Modal con SweetAlert2) para la Cadena Progresiva (Días 5 o 4)
-          if (diasRestantes === 5 || diasRestantes === 4) {
+          // Disparar Alerta Visual Invasiva (Popup / Modal con SweetAlert2) para la Cadena Progresiva (Días 1 a 5)
+          if (diasRestantes >= 1 && diasRestantes <= 5) {
             const sessionKey = `bula_cobro_alerted_${dbUser.username}_${diasRestantes}d`;
             if (!sessionStorage.getItem(sessionKey)) {
               sessionStorage.setItem(sessionKey, 'true');
@@ -4834,15 +4834,35 @@ const db = {
                 if (typeof Swal !== 'undefined') {
                   Swal.fire({
                     title: regla.titulo || `📢 Recordatorio de Pago - Faltan ${diasRestantes} Días`,
-                    text: regla.mensaje || `Le recordamos que restan ${diasRestantes} días para el vencimiento de su cuenta BulaPay.`,
+                    text: regla.mensaje || `Le recordamos que restan ${diasRestantes} días para el vencimiento de su suscripción.`,
                     icon: 'warning',
-                    confirmButtonText: 'Entendido, realizar pago',
-                    confirmButtonColor: '#f59e0b',
+                    showCancelButton: true,
+                    confirmButtonText: 'Pagar',
+                    confirmButtonColor: '#10b981', // Verde
+                    cancelButtonText: 'Continuar',
+                    cancelButtonColor: '#6b7280', // Gris
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
                     background: '#0f172a',
                     color: '#ffffff'
+                  }).then((result) => {
+                    if (result.isConfirmed) {
+                      // Redirigir a la sección de cobros o pagos de la app
+                      if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
+                        window.app.router.navigate('cobros');
+                      } else {
+                        window.location.hash = '#cobros';
+                      }
+                    }
                   });
                 } else {
-                  alert(`${regla.titulo}\n\n${regla.mensaje}`);
+                  if (confirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ir a la sección de cobros/pagos?`)) {
+                    if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
+                      window.app.router.navigate('cobros');
+                    } else {
+                      window.location.hash = '#cobros';
+                    }
+                  }
                 }
               }, 500);
             }
