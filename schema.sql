@@ -536,7 +536,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS "fecha_corte" DATE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "subscription_start_date" TIMESTAMPTZ DEFAULT NOW();
 
 ALTER TABLE bulapay_notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
+ALTER TABLE bulapay_notificaciones ADD COLUMN IF NOT EXISTS "username" TEXT;
 ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
+ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS "username" TEXT;
 
 CREATE TABLE IF NOT EXISTS bulapay_programacion_cobros (
   "id" TEXT PRIMARY KEY,

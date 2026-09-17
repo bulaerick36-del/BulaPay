@@ -4242,7 +4242,8 @@ const db = {
         titulo: String(rawTitle).trim(),
         mensaje: String(rawMsg).trim(),
         categoria: String(n.categoria || n.category || 'Institucional'),
-        target_username: n.target_username || n.targetUsername || null,
+        target_username: n.target_username || n.targetUsername || n.username || null,
+        username: n.username || n.target_username || n.targetUsername || null,
         created_at: n.created_at || n.createdAt || new Date().toISOString()
       };
     };
@@ -4278,9 +4279,9 @@ const db = {
               .filter(n => {
                 if (!n || (!n.id && !n.titulo) || n.id === 'notif_welcome' || n.id === 'notif_welcome_clean' || String(n.id).includes('actualizacion')) return false;
 
-                const targetUser = n.target_username ? String(n.target_username).toLowerCase().trim() : null;
+                const targetUser = (n.target_username || n.username) ? String(n.target_username || n.username).toLowerCase().trim() : null;
 
-                // Filtrar notificaciones privadas: si tienen un destinatario específico (target_username)
+                // Filtrar notificaciones privadas: si tienen un destinatario específico (target_username / username)
                 if (targetUser && targetUser !== 'todos') {
                   // Solo mostrar si el usuario está logueado y coincide con el destinatario
                   if (!currentUsername || targetUser !== currentUsername) {
@@ -4309,12 +4310,17 @@ const db = {
   async saveNotificacion(notifData) {
     const numericId = Date.now();
     const stringId = 'notif_' + numericId + '_' + Math.random().toString(36).substring(2, 6);
+    const userVal = (notifData && (notifData.target_username || notifData.targetUsername || notifData.username))
+      ? String(notifData.target_username || notifData.targetUsername || notifData.username).trim()
+      : null;
+
     const payload = {
       id: stringId,
       titulo: String((notifData && (notifData.titulo || notifData.title)) || 'Comunicado Oficial').trim(),
       mensaje: String((notifData && (notifData.mensaje || notifData.message)) || '').trim(),
       categoria: String((notifData && (notifData.categoria || notifData.category)) || 'Institucional').trim(),
-      target_username: (notifData && (notifData.target_username || notifData.targetUsername)) ? String(notifData.target_username || notifData.targetUsername).trim() : null,
+      target_username: userVal,
+      username: userVal,
       created_at: new Date().toISOString()
     };
 
@@ -4328,49 +4334,78 @@ const db = {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          // Intento 1: Objeto estricto con id Texto (si la columna id en Supabase es TEXT)
+          // Intento 1: Objeto estricto con id Texto, username y target_username
           let { error } = await supabase.from('bulapay_notificaciones').insert([{
             id: payload.id,
             titulo: payload.titulo,
             mensaje: payload.mensaje,
             categoria: payload.categoria,
+            username: payload.username,
             target_username: payload.target_username
           }]);
 
-          // Intento 2: Objeto estricto con id Numérico
+          // Intento 2: Objeto estricto con id Numérico, username y target_username
           if (error) {
-            console.warn("⚠️ Intento 1 (id texto) falló. Probando id numérico...");
+            console.warn("⚠️ Intento 1 (id texto) falló. Probando id numérico con username...");
             const res2 = await supabase.from('bulapay_notificaciones').insert([{
               id: numericId,
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
+              username: payload.username,
               target_username: payload.target_username
             }]);
             error = res2.error;
           }
 
-          // Intento 3: Inserción estricta sin campo id
+          // Intento 3: Inserción sin campo id (con username y target_username)
           if (error) {
             console.warn("⚠️ Intento 2 falló. Probando inserción sin campo id...");
             const res3 = await supabase.from('bulapay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
+              username: payload.username,
               target_username: payload.target_username
             }]);
             error = res3.error;
           }
 
-          // Intento 4: Fallback si la columna target_username u otra no existe en la tabla de Supabase
+          // Intento 4: Fallback con columna username (si target_username no existe en la tabla de Supabase)
           if (error) {
-            console.warn("⚠️ Intento 3 falló (posiblemente la columna target_username no existe en Supabase). Intentando inserción básica...");
+            console.warn("⚠️ Intento 3 falló. Intentando inserción de fallback con columna 'username'...");
             const res4 = await supabase.from('bulapay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
-              categoria: payload.categoria
+              categoria: payload.categoria,
+              username: payload.username
             }]);
             error = res4.error;
+          }
+
+          // Intento 5: Fallback con columna target_username (si username no existe en la tabla de Supabase)
+          if (error) {
+            console.warn("⚠️ Intento 4 falló. Intentando inserción de fallback con columna 'target_username'...");
+            const res5 = await supabase.from('bulapay_notificaciones').insert([{
+              titulo: payload.titulo,
+              mensaje: payload.mensaje,
+              categoria: payload.categoria,
+              target_username: payload.target_username
+            }]);
+            error = res5.error;
+          }
+
+          // Intento 6: Fallback con id texto y solo username
+          if (error) {
+            console.warn("⚠️ Intento 5 falló. Intentando id texto con username...");
+            const res6 = await supabase.from('bulapay_notificaciones').insert([{
+              id: payload.id,
+              titulo: payload.titulo,
+              mensaje: payload.mensaje,
+              categoria: payload.categoria,
+              username: payload.username
+            }]);
+            error = res6.error;
           }
 
           if (!error) {
