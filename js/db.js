@@ -4739,6 +4739,16 @@ const db = {
 
   async evaluateUserCobroNotifications(user) {
     if (!user || !user.username) return;
+
+    // Candado en memoria (Concurrency Lock) para prevenir ejecuciones duplicadas en paralelo
+    if (this._isEvaluatingCobro || window.isEvaluatingCobro) {
+      console.log("🔒 [Evaluador de Cobro] Evaluación omitida: ya existe una ejecución activa en curso.");
+      return;
+    }
+
+    this._isEvaluatingCobro = true;
+    window.isEvaluatingCobro = true;
+
     try {
       const dbUser = (await this.getUserByUsername(user.username)) || user;
       if (dbUser.bloqueado_por_mora === true) return;
@@ -4806,6 +4816,9 @@ const db = {
       }
     } catch(e) {
       console.warn("⚠️ Error en evaluación automática interna de cobros:", e);
+    } finally {
+      this._isEvaluatingCobro = false;
+      window.isEvaluatingCobro = false;
     }
   }
 };
