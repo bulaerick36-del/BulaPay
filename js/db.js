@@ -4758,6 +4758,7 @@ const db = {
         const progs = await this.getProgramacionCobros();
         const regla = progs.find(p => p.dias_previos === diasRestantes && p.activo !== false);
 
+        if (regla) {
           try {
             const userNotifs = await this.getNotificaciones(dbUser);
             const alreadyHasThisNotif = userNotifs.some(n => 
