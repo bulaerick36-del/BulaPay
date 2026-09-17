@@ -4762,6 +4762,29 @@ const db = {
               target_username: dbUser.username
             });
           }
+
+          // Disparar Alerta Visual (Popup / Modal con SweetAlert2) para la Cadena Progresiva (Días 5 o 4)
+          if (diasRestantes === 5 || diasRestantes === 4) {
+            const sessionKey = `bula_cobro_alerted_${dbUser.username}_${diasRestantes}d`;
+            if (!sessionStorage.getItem(sessionKey)) {
+              sessionStorage.setItem(sessionKey, 'true');
+              setTimeout(() => {
+                if (typeof Swal !== 'undefined') {
+                  Swal.fire({
+                    title: regla.titulo || `📢 Recordatorio de Pago - Faltan ${diasRestantes} Días`,
+                    text: regla.mensaje || `Le recordamos que restan ${diasRestantes} días para el vencimiento de su cuenta BulaPay.`,
+                    icon: 'warning',
+                    confirmButtonText: 'Entendido, realizar pago',
+                    confirmButtonColor: '#f59e0b',
+                    background: '#0f172a',
+                    color: '#ffffff'
+                  });
+                } else {
+                  alert(`${regla.titulo}\n\n${regla.mensaje}`);
+                }
+              }, 500);
+            }
+          }
         }
       }
     } catch(e) {
