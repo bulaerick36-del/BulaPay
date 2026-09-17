@@ -4362,6 +4362,17 @@ const db = {
             error = res3.error;
           }
 
+          // Intento 4: Fallback si la columna target_username u otra no existe en la tabla de Supabase
+          if (error) {
+            console.warn("⚠️ Intento 3 falló (posiblemente la columna target_username no existe en Supabase). Intentando inserción básica...");
+            const res4 = await supabase.from('bulapay_notificaciones').insert([{
+              titulo: payload.titulo,
+              mensaje: payload.mensaje,
+              categoria: payload.categoria
+            }]);
+            error = res4.error;
+          }
+
           if (!error) {
             console.log(`✅ [BulaPay Comunicados Cloud-Only bulapay-v351] Publicado exitosamente en Supabase Cloud ("bulapay_notificaciones"):`, payload);
           } else {
@@ -4747,20 +4758,25 @@ const db = {
         const progs = await this.getProgramacionCobros();
         const regla = progs.find(p => p.dias_previos === diasRestantes && p.activo !== false);
 
-        if (regla) {
-          const userNotifs = await this.getNotificaciones(dbUser);
-          const alreadyHasThisNotif = userNotifs.some(n => 
-            n.categoria && n.categoria.includes(`Cobro Preventivo (${diasRestantes}d)`)
-          );
+          try {
+            const userNotifs = await this.getNotificaciones(dbUser);
+            const alreadyHasThisNotif = userNotifs.some(n => 
+              n.categoria && n.categoria.includes(`Cobro Preventivo (${diasRestantes}d)`)
+            );
 
-          if (!alreadyHasThisNotif) {
-            console.log(`🔔 [Evaluador Interno de Cobro] Publicando aviso privado de ${diasRestantes} día(s) para usuario ${dbUser.username}`);
-            await this.saveNotificacion({
-              titulo: regla.titulo,
-              mensaje: regla.mensaje,
-              categoria: `Cobro Preventivo (${diasRestantes}d)`,
-              target_username: dbUser.username
-            });
+            if (!alreadyHasThisNotif) {
+              console.log(`🔔 [Evaluador Interno de Cobro] Publicando aviso privado de ${diasRestantes} día(s) para usuario ${dbUser.username}`);
+              await this.saveNotificacion({
+                titulo: regla.titulo,
+                mensaje: regla.mensaje,
+                categoria: `Cobro Preventivo (${diasRestantes}d)`,
+                target_username: dbUser.username,
+                username: dbUser.username,
+                user_id: dbUser.id || dbUser.username
+              });
+            }
+          } catch(saveErr) {
+            console.warn("⚠️ Aviso al guardar notificación en BD (continuando ejecución hacia SweetAlert2):", saveErr);
           }
 
           // Disparar Alerta Visual (Popup / Modal con SweetAlert2) para la Cadena Progresiva (Días 5 o 4)
