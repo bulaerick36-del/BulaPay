@@ -247,7 +247,7 @@ CREATE POLICY "Permitir todo a anonimos en password_reset_tokens" ON password_re
 GRANT ALL ON TABLE password_reset_tokens TO anon, authenticated;
 
 -- 8. Tablas de Anuncios y Publicidad (Módulo credipay-v327)
-CREATE TABLE IF NOT EXISTS credipay_anuncios (
+CREATE TABLE IF NOT EXISTS bulapay_anuncios (
   "id" TEXT PRIMARY KEY,
   "categoria" TEXT NOT NULL,
   "fecha_inicio" DATE NOT NULL,
@@ -260,10 +260,10 @@ CREATE TABLE IF NOT EXISTS credipay_anuncios (
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE credipay_anuncios ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir todo a anonimos en credipay_anuncios" ON credipay_anuncios;
-CREATE POLICY "Permitir todo a anonimos en credipay_anuncios" ON credipay_anuncios FOR ALL TO anon USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE credipay_anuncios TO anon, authenticated;
+ALTER TABLE bulapay_anuncios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_anuncios" ON bulapay_anuncios;
+CREATE POLICY "Permitir todo a anonimos en bulapay_anuncios" ON bulapay_anuncios FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_anuncios TO anon, authenticated;
 
 CREATE TABLE IF NOT EXISTS anuncios (
   "id" TEXT PRIMARY KEY,
@@ -302,7 +302,7 @@ CREATE POLICY "Permitir todo a anonimos en announcements" ON announcements FOR A
 GRANT ALL ON TABLE announcements TO anon, authenticated;
 
 -- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo credipay-v349)
-CREATE TABLE IF NOT EXISTS credipay_notificaciones (
+CREATE TABLE IF NOT EXISTS bulapay_notificaciones (
   "id" TEXT PRIMARY KEY,
   "titulo" TEXT NOT NULL,
   "mensaje" TEXT NOT NULL,
@@ -311,12 +311,12 @@ CREATE TABLE IF NOT EXISTS credipay_notificaciones (
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE credipay_notificaciones ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir lectura publica en credipay_notificaciones" ON credipay_notificaciones;
-DROP POLICY IF EXISTS "Permitir todo a anonimos en credipay_notificaciones" ON credipay_notificaciones;
-DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en credipay_notificaciones" ON credipay_notificaciones;
-CREATE POLICY "Permitir todo a anonimos y autenticados en credipay_notificaciones" ON credipay_notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE credipay_notificaciones TO anon, authenticated;
+ALTER TABLE bulapay_notificaciones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura publica en bulapay_notificaciones" ON bulapay_notificaciones;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_notificaciones" ON bulapay_notificaciones;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones;
+CREATE POLICY "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_notificaciones TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
 CREATE TABLE IF NOT EXISTS notificaciones (
@@ -441,8 +441,8 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en password_reset_tokens" ON pas
 CREATE POLICY "Permitir todo a anonimos en password_reset_tokens" ON password_reset_tokens FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE password_reset_tokens TO anon, authenticated;
 
--- 8. Tablas de Anuncios y Publicidad (Módulo credipay_anuncios)
-CREATE TABLE IF NOT EXISTS credipay_anuncios (
+-- 8. Tablas de Anuncios y Publicidad (Módulo bulapay_anuncios)
+CREATE TABLE IF NOT EXISTS bulapay_anuncios (
   "id" TEXT PRIMARY KEY,
   "categoria" TEXT NOT NULL DEFAULT 'Comercial',
   "fecha_inicio" DATE NOT NULL,
@@ -459,27 +459,27 @@ CREATE TABLE IF NOT EXISTS credipay_anuncios (
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE credipay_anuncios ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir todo a anonimos en credipay_anuncios" ON credipay_anuncios;
-CREATE POLICY "Permitir todo a anonimos en credipay_anuncios" ON credipay_anuncios FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE credipay_anuncios TO anon, authenticated;
+ALTER TABLE bulapay_anuncios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_anuncios" ON bulapay_anuncios;
+CREATE POLICY "Permitir todo a anonimos en bulapay_anuncios" ON bulapay_anuncios FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_anuncios TO anon, authenticated;
 
--- Bucket de Supabase Storage para Multimedia ('credipay-multimedia')
+-- Bucket de Supabase Storage para Multimedia ('bulapay-multimedia')
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('credipay-multimedia', 'credipay-multimedia', true)
+VALUES ('bulapay-multimedia', 'bulapay-multimedia', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
-DROP POLICY IF EXISTS "Acceso publico lectura credipay-multimedia" ON storage.objects;
-CREATE POLICY "Acceso publico lectura credipay-multimedia" ON storage.objects FOR SELECT TO public USING (bucket_id = 'credipay-multimedia');
-DROP POLICY IF EXISTS "Acceso publico insercion credipay-multimedia" ON storage.objects;
-CREATE POLICY "Acceso publico insercion credipay-multimedia" ON storage.objects FOR INSERT TO public WITH CHECK (bucket_id = 'credipay-multimedia');
-DROP POLICY IF EXISTS "Acceso publico actualizacion credipay-multimedia" ON storage.objects;
-CREATE POLICY "Acceso publico actualizacion credipay-multimedia" ON storage.objects FOR UPDATE TO public USING (bucket_id = 'credipay-multimedia');
-DROP POLICY IF EXISTS "Acceso publico eliminacion credipay-multimedia" ON storage.objects;
-CREATE POLICY "Acceso publico eliminacion credipay-multimedia" ON storage.objects FOR DELETE TO public USING (bucket_id = 'credipay-multimedia');
+DROP POLICY IF EXISTS "Acceso publico lectura bulapay-multimedia" ON storage.objects;
+CREATE POLICY "Acceso publico lectura bulapay-multimedia" ON storage.objects FOR SELECT TO public USING (bucket_id = 'bulapay-multimedia');
+DROP POLICY IF EXISTS "Acceso publico insercion bulapay-multimedia" ON storage.objects;
+CREATE POLICY "Acceso publico insercion bulapay-multimedia" ON storage.objects FOR INSERT TO public WITH CHECK (bucket_id = 'bulapay-multimedia');
+DROP POLICY IF EXISTS "Acceso publico actualizacion bulapay-multimedia" ON storage.objects;
+CREATE POLICY "Acceso publico actualizacion bulapay-multimedia" ON storage.objects FOR UPDATE TO public USING (bucket_id = 'bulapay-multimedia');
+DROP POLICY IF EXISTS "Acceso publico eliminacion bulapay-multimedia" ON storage.objects;
+CREATE POLICY "Acceso publico eliminacion bulapay-multimedia" ON storage.objects FOR DELETE TO public USING (bucket_id = 'bulapay-multimedia');
 
 -- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo credipay-v349)
-CREATE TABLE IF NOT EXISTS credipay_notificaciones (
+CREATE TABLE IF NOT EXISTS bulapay_notificaciones (
   "id" TEXT PRIMARY KEY,
   "titulo" TEXT NOT NULL,
   "mensaje" TEXT NOT NULL,
@@ -488,12 +488,12 @@ CREATE TABLE IF NOT EXISTS credipay_notificaciones (
   "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE credipay_notificaciones ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir lectura publica en credipay_notificaciones" ON credipay_notificaciones;
-DROP POLICY IF EXISTS "Permitir todo a anonimos en credipay_notificaciones" ON credipay_notificaciones;
-DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en credipay_notificaciones" ON credipay_notificaciones;
-CREATE POLICY "Permitir todo a anonimos y autenticados en credipay_notificaciones" ON credipay_notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE credipay_notificaciones TO anon, authenticated;
+ALTER TABLE bulapay_notificaciones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura publica en bulapay_notificaciones" ON bulapay_notificaciones;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en bulapay_notificaciones" ON bulapay_notificaciones;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones;
+CREATE POLICY "Permitir todo a anonimos y autenticados en bulapay_notificaciones" ON bulapay_notificaciones FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_notificaciones TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
 CREATE TABLE IF NOT EXISTS notificaciones (
@@ -517,12 +517,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS "bloqueado_por_mora" BOOLEAN DEFAULT 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "fecha_corte" DATE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS "subscription_start_date" TIMESTAMPTZ DEFAULT NOW();
 
-ALTER TABLE credipay_notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
-ALTER TABLE credipay_notificaciones ADD COLUMN IF NOT EXISTS "username" TEXT;
+ALTER TABLE bulapay_notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
+ALTER TABLE bulapay_notificaciones ADD COLUMN IF NOT EXISTS "username" TEXT;
 ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS "target_username" TEXT;
 ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS "username" TEXT;
 
-CREATE TABLE IF NOT EXISTS credipay_programacion_cobros (
+CREATE TABLE IF NOT EXISTS bulapay_programacion_cobros (
   "id" TEXT PRIMARY KEY,
   "dias_previos" INTEGER NOT NULL,
   "titulo" TEXT NOT NULL,
@@ -534,7 +534,7 @@ CREATE TABLE IF NOT EXISTS credipay_programacion_cobros (
   "updated_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE credipay_programacion_cobros ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en credipay_programacion_cobros" ON credipay_programacion_cobros;
-CREATE POLICY "Permitir todo a anonimos y autenticados en credipay_programacion_cobros" ON credipay_programacion_cobros FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-GRANT ALL ON TABLE credipay_programacion_cobros TO anon, authenticated;
+ALTER TABLE bulapay_programacion_cobros ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en bulapay_programacion_cobros" ON bulapay_programacion_cobros;
+CREATE POLICY "Permitir todo a anonimos y autenticados en bulapay_programacion_cobros" ON bulapay_programacion_cobros FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE bulapay_programacion_cobros TO anon, authenticated;

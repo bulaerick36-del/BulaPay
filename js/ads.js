@@ -497,9 +497,9 @@ const adsModule = {
         if (window.CrediPayDB && typeof window.CrediPayDB.initSupabase === 'function') {
           const supabase = await window.CrediPayDB.initSupabase();
           if (supabase && typeof supabase.channel === 'function') {
-            supabase.channel('public:credipay_notificaciones')
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'credipay_notificaciones' }, async (payload) => {
-                console.log('⚡ [Supabase Realtime credipay-v350] Cambio detectado en credipay_notificaciones:', payload);
+            supabase.channel('public:bulapay_notificaciones')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'bulapay_notificaciones' }, async (payload) => {
+                console.log('⚡ [Supabase Realtime credipay-v350] Cambio detectado en bulapay_notificaciones:', payload);
                 await this.updateComunicadosBadge();
                 const modal = document.getElementById('modal-pwa-comunicados');
                 if (modal && (modal.style.display === 'flex' || modal.classList.contains('active'))) {

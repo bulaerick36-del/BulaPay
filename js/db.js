@@ -3891,7 +3891,7 @@ const db = {
       }
 
       const { data, error, status } = await supabase
-        .from('credipay_anuncios')
+        .from('bulapay_anuncios')
         .upsert([normalized])
         .select();
 
@@ -3912,7 +3912,7 @@ const db = {
       const supabase = await initSupabase();
       if (supabase) {
         const { data, error } = await supabase
-          .from('credipay_anuncios')
+          .from('bulapay_anuncios')
           .select('*')
           .order('created_at', { ascending: false });
 
@@ -3947,7 +3947,7 @@ const db = {
         }
       }
     } catch(topErr) {
-      console.warn("Excepción al consultar credipay_anuncios:", topErr);
+      console.warn("Excepción al consultar bulapay_anuncios:", topErr);
     }
     return [];
   },
@@ -3957,10 +3957,10 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { data } = await supabase.from('credipay_anuncios').select('impresiones').eq('id', adId).maybeSingle();
+        const { data } = await supabase.from('bulapay_anuncios').select('impresiones').eq('id', adId).maybeSingle();
         const current = (data && data.impresiones) || 0;
         const nextVal = Number(current) + 1;
-        await supabase.from('credipay_anuncios').update({ impresiones: nextVal }).eq('id', adId);
+        await supabase.from('bulapay_anuncios').update({ impresiones: nextVal }).eq('id', adId);
         window.dispatchEvent(new CustomEvent('credi_ad_metrics_updated', { detail: { adId, impresiones: nextVal } }));
       }
     } catch(e) {
@@ -3973,10 +3973,10 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { data } = await supabase.from('credipay_anuncios').select('clics').eq('id', adId).maybeSingle();
+        const { data } = await supabase.from('bulapay_anuncios').select('clics').eq('id', adId).maybeSingle();
         const current = (data && data.clics) || 0;
         const nextVal = Number(current) + 1;
-        await supabase.from('credipay_anuncios').update({ clics: nextVal }).eq('id', adId);
+        await supabase.from('bulapay_anuncios').update({ clics: nextVal }).eq('id', adId);
         window.dispatchEvent(new CustomEvent('credi_ad_metrics_updated', { detail: { adId, clics: nextVal } }));
       }
     } catch(e) {
@@ -4024,19 +4024,19 @@ const db = {
       ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // Consulta directa y exclusiva a Supabase Cloud (credipay_notificaciones)
+    // Consulta directa y exclusiva a Supabase Cloud (bulapay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
           let { data, error } = await supabase
-            .from('credipay_notificaciones')
+            .from('bulapay_notificaciones')
             .select('*')
             .order('created_at', { ascending: false });
 
           if (error) {
-            console.warn("⚠️ Error consultando tabla credipay_notificaciones en Supabase Cloud:", error);
-            const fallbackRes = await supabase.from('credipay_notificaciones').select('*');
+            console.warn("⚠️ Error consultando tabla bulapay_notificaciones en Supabase Cloud:", error);
+            const fallbackRes = await supabase.from('bulapay_notificaciones').select('*');
             if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
               data = fallbackRes.data;
               error = null;
@@ -4100,13 +4100,13 @@ const db = {
       ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // Publicación estricta y directa en Supabase Cloud (credipay_notificaciones)
+    // Publicación estricta y directa en Supabase Cloud (bulapay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
           // Intento 1: Objeto estricto con id Texto, username y target_username
-          let { error } = await supabase.from('credipay_notificaciones').insert([{
+          let { error } = await supabase.from('bulapay_notificaciones').insert([{
             id: payload.id,
             titulo: payload.titulo,
             mensaje: payload.mensaje,
@@ -4118,7 +4118,7 @@ const db = {
           // Intento 2: Objeto estricto con id Numérico, username y target_username
           if (error) {
             console.warn("⚠️ Intento 1 (id texto) falló. Probando id numérico con username...");
-            const res2 = await supabase.from('credipay_notificaciones').insert([{
+            const res2 = await supabase.from('bulapay_notificaciones').insert([{
               id: numericId,
               titulo: payload.titulo,
               mensaje: payload.mensaje,
@@ -4132,7 +4132,7 @@ const db = {
           // Intento 3: Inserción sin campo id (con username y target_username)
           if (error) {
             console.warn("⚠️ Intento 2 falló. Probando inserción sin campo id...");
-            const res3 = await supabase.from('credipay_notificaciones').insert([{
+            const res3 = await supabase.from('bulapay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
@@ -4145,7 +4145,7 @@ const db = {
           // Intento 4: Fallback con columna username (si target_username no existe en la tabla de Supabase)
           if (error) {
             console.warn("⚠️ Intento 3 falló. Intentando inserción de fallback con columna 'username'...");
-            const res4 = await supabase.from('credipay_notificaciones').insert([{
+            const res4 = await supabase.from('bulapay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
@@ -4157,7 +4157,7 @@ const db = {
           // Intento 5: Fallback con columna target_username (si username no existe en la tabla de Supabase)
           if (error) {
             console.warn("⚠️ Intento 4 falló. Intentando inserción de fallback con columna 'target_username'...");
-            const res5 = await supabase.from('credipay_notificaciones').insert([{
+            const res5 = await supabase.from('bulapay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
@@ -4169,7 +4169,7 @@ const db = {
           // Intento 6: Fallback con id texto y solo username
           if (error) {
             console.warn("⚠️ Intento 5 falló. Intentando id texto con username...");
-            const res6 = await supabase.from('credipay_notificaciones').insert([{
+            const res6 = await supabase.from('bulapay_notificaciones').insert([{
               id: payload.id,
               titulo: payload.titulo,
               mensaje: payload.mensaje,
@@ -4180,9 +4180,9 @@ const db = {
           }
 
           if (!error) {
-            console.log(`✅ [CrediPay Comunicados Cloud-Only credipay-v351] Publicado exitosamente en Supabase Cloud ("credipay_notificaciones"):`, payload);
+            console.log(`✅ [CrediPay Comunicados Cloud-Only credipay-v351] Publicado exitosamente en Supabase Cloud ("bulapay_notificaciones"):`, payload);
           } else {
-            console.error("❌ Error guardando en Supabase Cloud credipay_notificaciones:", error);
+            console.error("❌ Error guardando en Supabase Cloud bulapay_notificaciones:", error);
             throw new Error((error && (error.message || error.details || error.hint)) || "Error al insertar en Supabase Cloud.");
           }
         } else {
@@ -4203,13 +4203,13 @@ const db = {
       ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // Eliminación directa en Supabase Cloud (credipay_notificaciones)
+    // Eliminación directa en Supabase Cloud (bulapay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const { error } = await supabase.from('credipay_notificaciones').delete().eq('id', notifId);
-          if (error) console.warn("⚠️ Error eliminando en Supabase Cloud credipay_notificaciones:", error);
+          const { error } = await supabase.from('bulapay_notificaciones').delete().eq('id', notifId);
+          if (error) console.warn("⚠️ Error eliminando en Supabase Cloud bulapay_notificaciones:", error);
           else console.log(`🗑️ [CrediPay Comunicados Cloud-Only] Registro ${notifId} eliminado en Supabase Cloud.`);
         }
       } catch(e) {
@@ -4222,10 +4222,10 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        await supabase.from('credipay_anuncios').update({ active: Boolean(active) }).eq('id', adId);
+        await supabase.from('bulapay_anuncios').update({ active: Boolean(active) }).eq('id', adId);
       }
     } catch(e) {
-      console.error("Error al actualizar estado en credipay_anuncios:", e);
+      console.error("Error al actualizar estado en bulapay_anuncios:", e);
     }
   },
 
@@ -4233,10 +4233,10 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        await supabase.from('credipay_anuncios').delete().eq('id', adId);
+        await supabase.from('bulapay_anuncios').delete().eq('id', adId);
       }
     } catch(e) {
-      console.error("Error al eliminar anuncio en credipay_anuncios:", e);
+      console.error("Error al eliminar anuncio en bulapay_anuncios:", e);
     }
   },
 
@@ -4441,7 +4441,7 @@ const db = {
       const supabase = await initSupabase();
       if (supabase) {
         const { data, error } = await supabase
-          .from('credipay_programacion_cobros')
+          .from('bulapay_programacion_cobros')
           .select('*')
           .order('dias_previos', { ascending: false });
         if (!error && Array.isArray(data) && data.length > 0) {
@@ -4449,7 +4449,7 @@ const db = {
         }
       }
     } catch(e) {
-      console.warn("⚠️ Error obteniendo credipay_programacion_cobros de Supabase:", e);
+      console.warn("⚠️ Error obteniendo bulapay_programacion_cobros de Supabase:", e);
     }
 
     try {
@@ -4482,9 +4482,9 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { error } = await supabase.from('credipay_programacion_cobros').upsert([payload]);
+        const { error } = await supabase.from('bulapay_programacion_cobros').upsert([payload]);
         if (error) {
-          console.warn("⚠️ Upsert en credipay_programacion_cobros falló:", error);
+          console.warn("⚠️ Upsert en bulapay_programacion_cobros falló:", error);
         }
       }
     } catch(e) {
@@ -4506,7 +4506,7 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        await supabase.from('credipay_programacion_cobros').delete().eq('id', cobroId);
+        await supabase.from('bulapay_programacion_cobros').delete().eq('id', cobroId);
       }
     } catch(e) {}
 

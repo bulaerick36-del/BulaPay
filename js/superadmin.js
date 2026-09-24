@@ -528,10 +528,7 @@ const superadminModule = {
   },
 
   getFallbackUsers() {
-    return [
-      { username: 'admin', name: 'Administrador General', role: 'Usuario Supervisor', phone: '3000000000', email: 'admin@credipay.com', documentType: 'CC', documentNumber: '1121338578', aceptacion_terminos: true, fecha_aceptacion_terminos: '2026-06-01T10:00:00Z', hash_firma_digital: 'CREDIPAY-SIG-ADMIN-STAMP' },
-      { username: 'agente1', name: 'Carlos Mendoza', role: 'Agente Independiente', phone: '3101234567', email: 'carlos@credipay.com', documentType: 'CC', documentNumber: '1098765432', aceptacion_terminos: true, fecha_aceptacion_terminos: '2026-06-15T14:30:00Z', hash_firma_digital: 'CREDIPAY-SIG-AGENTE1-STAMP' }
-    ];
+    return [];
   },
 
   async renderCurrentTab() {
@@ -2251,13 +2248,13 @@ const superadminModule = {
 
     let mediaUrl = '';
 
-    // Subida de Multimedia a Supabase Storage Bucket ('credipay-multimedia')
+    // Subida de Multimedia a Supabase Storage Bucket ('bulapay-multimedia')
     if (this._selectedAdFile) {
       try {
         if (typeof Swal !== 'undefined') {
           Swal.fire({
             title: 'Subiendo Multimedia...',
-            text: 'Cargando archivo en Supabase Storage (credipay-multimedia)...',
+            text: 'Cargando archivo en Supabase Storage (bulapay-multimedia)...',
             allowOutsideClick: false,
             didOpen: () => { Swal.showLoading(); }
           });
@@ -2268,7 +2265,7 @@ const superadminModule = {
         const filePath = `ad_media_${Date.now()}_${cleanName}.${fileExt}`;
 
         const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from('credipay-multimedia')
+          .from('bulapay-multimedia')
           .upload(filePath, this._selectedAdFile, { cacheControl: '3600', upsert: true });
 
         if (uploadErr) {
@@ -2277,7 +2274,7 @@ const superadminModule = {
             Swal.fire({
               icon: 'error',
               title: 'Error de Almacenamiento',
-              text: `No se pudo subir la imagen/video al Bucket (credipay-multimedia): ${uploadErr.message}`,
+              text: `No se pudo subir la imagen/video al Bucket (bulapay-multimedia): ${uploadErr.message}`,
               confirmButtonColor: '#ef4444'
             });
           } else {
@@ -2287,7 +2284,7 @@ const superadminModule = {
         }
 
         const { data: publicUrlData } = supabase.storage
-          .from('credipay-multimedia')
+          .from('bulapay-multimedia')
           .getPublicUrl(filePath);
 
         mediaUrl = publicUrlData ? publicUrlData.publicUrl : '';
@@ -2326,13 +2323,13 @@ const superadminModule = {
 
     try {
       const { data, error, status } = await supabase
-        .from('credipay_anuncios')
+        .from('bulapay_anuncios')
         .insert([newAd])
         .select();
 
       // REQUISITO ESTRICTO DE PROMESAS: SweetAlert de éxito SOLO si status es 200 o 201
       if (error || (status !== 200 && status !== 201)) {
-        console.error("❌ Error de inserción en Supabase credipay_anuncios:", status, error);
+        console.error("❌ Error de inserción en Supabase bulapay_anuncios:", status, error);
         if (typeof Swal !== 'undefined') {
           Swal.fire({
             icon: 'error',
