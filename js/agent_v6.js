@@ -3388,7 +3388,7 @@ const agentModule = {
     }
   },
 
-  showMandatorySmsPrompt(client, type) {
+  async showMandatorySmsPrompt(client, type) {
     const currentUser = window.CrediPayDB.getCurrentUser() || {};
     const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
     const cleanCedula = String(client.cedula).replace(/[\s-]/g, '');

@@ -4581,7 +4581,7 @@ const db = {
             const sessionKey = `credi_cobro_alerted_${dbUser.username}_${diasRestantes}d`;
             if (!sessionStorage.getItem(sessionKey)) {
               sessionStorage.setItem(sessionKey, 'true');
-              setTimeout(() => {
+              setTimeout(async () => {
                 if (typeof Swal !== 'undefined') {
                   Swal.fire({
                     title: regla.titulo || `📢 Recordatorio de Pago - Faltan ${diasRestantes} Días`,
