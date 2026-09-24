@@ -337,7 +337,7 @@ const agentModule = {
         const saldoRealRemanente = Math.max(0, saldoTotalInicial - totalPagadoReal);
 
         const confirmMsg = `¿Estás seguro de liquidar para renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nSaldo real a refinanciar: $${saldoRealRemanente.toLocaleString('es-CO')}.\nEsto marcará las cuotas y liquidará el cartón sin alterar la caja.`;
-        if (!confirm(confirmMsg)) return;
+        if (!(await window.showCrediConfirm(confirmMsg, "CrediPay"))) return;
 
         try {
           // Liquidar cartón anterior con estado 'liquidado_por_renovacion' y marcar cuotas restantes (v160)
@@ -482,7 +482,7 @@ const agentModule = {
             `Deuda Total a Lista Negra: $${saldoPendienteReal.toLocaleString('es-CO')}.\n` +
             `Esta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
 
-          if (!confirm(confirmMsg)) {
+          if (!(await window.showCrediConfirm(confirmMsg, "CrediPay"))) {
             if (btn) {
               btn.disabled = false;
               btn.textContent = '⛔ Liquidar / Lista Negra';
@@ -585,7 +585,7 @@ const agentModule = {
       this.btnLiquidarCarton.addEventListener('click', async () => {
         if (!this.currentClient) return;
 
-        if (!confirm('¿Estás seguro de liquidar este cartón? Esta acción es irreversible.')) return;
+        if (!(await window.showCrediConfirm('¿Estás seguro de liquidar este cartón? Esta acción es irreversible.', "CrediPay"))) return;
 
         this.btnLiquidarCarton.disabled = true;
         this.btnLiquidarCarton.textContent = 'Liquidando...';
@@ -1431,7 +1431,7 @@ const agentModule = {
               const debtVal = Number(btn.dataset.debt || 0);
               const cartonId = btn.dataset.cartonId;
 
-              const inputVal = prompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000");
+              const inputVal = await window.showCrediPrompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000", "CrediPay");
               if (!inputVal) return;
 
               const amountToPay = Number(inputVal);
@@ -2655,7 +2655,7 @@ const agentModule = {
 
     // Confirmación nativa
     const dateLabel = status.dateStr.slice(5);
-    const isConfirmed = confirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`);
+    const isConfirmed = await window.showCrediConfirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`, "CrediPay");
     if (!isConfirmed) return;
 
     // Regla de Seguridad 2: Descontar el valor de la cuota
@@ -2960,7 +2960,7 @@ const agentModule = {
     }
     if (!this.currentClient) return;
 
-    if (!confirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`)) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`, "CrediPay"))) {
       return;
     }
 
@@ -3131,7 +3131,7 @@ const agentModule = {
             });
             proceed = result.isConfirmed;
           } else {
-            proceed = confirm(warningMsg);
+            proceed = await window.showCrediConfirm(warningMsg, "CrediPay");
           }
         }
 
@@ -3340,7 +3340,7 @@ const agentModule = {
             }
           });
         } else {
-          if (confirm(warningMsg)) {
+          if (await window.showCrediConfirm(warningMsg, "CrediPay")) {
             window.CrediPayDB.registerCreditToExistingClient(payload).then((updatedPayload) => {
               this.currentClient = updatedPayload;
               if (typeof this.updateRouteTracking === 'function') {
@@ -3431,7 +3431,7 @@ const agentModule = {
         }
       });
     } else {
-      if (confirm(`El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?`)) {
+      if (await window.showCrediConfirm(`El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?`, "CrediPay")) {
         window.open(urlWa, '_blank');
       }
       if (this.formRegisterClient) {

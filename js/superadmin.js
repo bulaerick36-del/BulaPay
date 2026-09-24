@@ -727,7 +727,7 @@ const superadminModule = {
     const docNum = user ? (user.documentNumber || user.username || username) : username;
     const defaultPwd = 'credi56';
 
-    const newPwdInput = prompt(`🔑 Restablecer Contraseña para el usuario "${displayName}" (Cédula: ${docNum}):\n\nConfirma o ingresa la clave asignada:`, defaultPwd);
+    const newPwdInput = await window.showCrediPrompt(`🔑 Restablecer Contraseña para el usuario "${displayName}" (Cédula: ${docNum}):\n\nConfirma o ingresa la clave asignada:`, defaultPwd, "CrediPay");
     if (newPwdInput === null) return;
 
     const assignedPassword = newPwdInput.trim() || defaultPwd;
@@ -1540,8 +1540,8 @@ const superadminModule = {
     });
   },
 
-  openChangeSuperadminPwdModal() {
-    const currentPwd = prompt('🔐 Ingresa la contraseña actual de Superadministrador:');
+  async openChangeSuperadminPwdModal() {
+    const currentPwd = await window.showCrediPrompt('🔐 Ingresa la contraseña actual de Superadministrador:', '', "CrediPay");
     if (currentPwd === null) return;
 
     if (currentPwd !== this.getSuperadminPassword()) {
@@ -1549,7 +1549,7 @@ const superadminModule = {
       return;
     }
 
-    const newPwd = prompt('🔑 Ingresa la NUEVA contraseña para Superadministrador:');
+    const newPwd = await window.showCrediPrompt('🔑 Ingresa la NUEVA contraseña para Superadministrador:', '', "CrediPay");
     if (!newPwd || newPwd.trim() === '') {
       alert('⚠️ La contraseña no puede estar vacía.');
       return;
@@ -1850,7 +1850,7 @@ const superadminModule = {
   },
 
   async deleteTicket(id) {
-    if (!confirm('¿Estás seguro de eliminar este registro de soporte?')) return;
+    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este registro de soporte?', "CrediPay"))) return;
 
     try {
       const raw = localStorage.getItem('credi_support_tickets') || localStorage.getItem('credi_local_tickets') || '[]';
@@ -2476,7 +2476,7 @@ const superadminModule = {
   },
 
   async deleteNotificacion(notifId) {
-    if (!confirm('¿Estás seguro de eliminar este comunicado gerencial?')) return;
+    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este comunicado gerencial?', "CrediPay"))) return;
     try {
       if (window.CrediPayDB && typeof window.CrediPayDB.deleteNotificacion === 'function') {
         await window.CrediPayDB.deleteNotificacion(notifId);
@@ -2640,7 +2640,7 @@ const superadminModule = {
   },
 
   async deleteAd(adId) {
-    if (!confirm('¿Estás seguro de eliminar este anuncio publicitario?')) return;
+    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este anuncio publicitario?', "CrediPay"))) return;
     try {
       await window.CrediPayDB.deleteAnnouncement(adId);
       await this.loadAdsList();
@@ -2854,7 +2854,7 @@ const superadminModule = {
     const confirmMsg = `¿Confirma cambiar el estado del usuario "${username}"?\n\nAcción: ${actionText}\n\n` +
       (targetStatus ? 'El usuario quedará impedido de iniciar sesión de forma inmediata.' : 'El usuario podrá volver a ingresar normalmente a la aplicación.');
 
-    if (!confirm(confirmMsg)) return;
+    if (!(await window.showCrediConfirm(confirmMsg, "CrediPay"))) return;
 
     try {
       if (window.CrediPayDB && typeof window.CrediPayDB.toggleUserBloqueoMora === 'function') {
@@ -3053,7 +3053,7 @@ const superadminModule = {
   },
 
   async cargarPlantillaProgresivaCobros() {
-    if (!confirm('¿Confirma cargar la cadena progresiva estándar de recordatorios de cobro (5 a 1 días)?')) return;
+    if (!(await window.showCrediConfirm('¿Confirma cargar la cadena progresiva estándar de recordatorios de cobro (5 a 1 días)?', 'CrediPay'))) return;
 
     const plantillas = [
       { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio CrediPay. Realice su pago a tiempo para evitar suspensiones.', activo: true },
@@ -3087,7 +3087,7 @@ const superadminModule = {
   },
 
   async eliminarCobroProgramado(id) {
-    if (!confirm('¿Confirma eliminar este recordatorio programado?')) return;
+    if (!(await window.showCrediConfirm('¿Confirma eliminar este recordatorio programado?', "CrediPay"))) return;
     try {
       await window.CrediPayDB.deleteProgramacionCobro(id);
       await this.renderProgramarCobroModalContent();
@@ -3215,7 +3215,7 @@ const superadminModule = {
     const inputEl = document.getElementById('sa-quick-cedula-input') || document.getElementById('sa-modal-cedula-input');
     const currentQuery = (inputEl && inputEl.value ? inputEl.value.trim() : '') || username;
 
-    if (!confirm(`¿Confirma SUSPENDER Y BLOQUEAR inmediatamente el acceso del usuario "${username}" en Supabase?`)) return;
+    if (!(await window.showCrediConfirm(`¿Confirma SUSPENDER Y BLOQUEAR inmediatamente el acceso del usuario "${username}" en Supabase?`, "CrediPay"))) return;
     try {
       if (window.CrediPayDB && typeof window.CrediPayDB.toggleUserBloqueoMora === 'function') {
         await window.CrediPayDB.toggleUserBloqueoMora(username, true);
@@ -3233,7 +3233,7 @@ const superadminModule = {
     const inputEl = document.getElementById('sa-quick-cedula-input') || document.getElementById('sa-modal-cedula-input');
     const currentQuery = (inputEl && inputEl.value ? inputEl.value.trim() : '') || username;
 
-    if (!confirm(`¿Confirma LIBERAR Y REACTIVAR el servicio de inmediato para el usuario "${username}"?`)) return;
+    if (!(await window.showCrediConfirm(`¿Confirma LIBERAR Y REACTIVAR el servicio de inmediato para el usuario "${username}"?`, "CrediPay"))) return;
     try {
       if (window.CrediPayDB && typeof window.CrediPayDB.toggleUserBloqueoMora === 'function') {
         await window.CrediPayDB.toggleUserBloqueoMora(username, false);

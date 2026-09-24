@@ -4604,7 +4604,7 @@ const db = {
                     }
                   });
                 } else {
-                  if (confirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ir a la sección de cobros/pagos?`)) {
+                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ir a la sección de cobros/pagos?`, "CrediPay")) {
                     if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
                       window.app.router.navigate('cobros');
                     } else {

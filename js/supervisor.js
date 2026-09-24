@@ -1937,7 +1937,7 @@ const supervisorModule = {
   },
 
   async handleDeleteRoute(routeId, routeName) {
-    if (!confirm(`¿Está seguro de que desea eliminar la ruta "${routeName}"?\nEsta acción también eliminará permanentemente todos los agentes de ruta asociados y desvinculará a los clientes de esta ruta.`)) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea eliminar la ruta "${routeName}"?\nEsta acción también eliminará permanentemente todos los agentes de ruta asociados y desvinculará a los clientes de esta ruta.`, "CrediPay"))) {
       return;
     }
 
@@ -2031,7 +2031,7 @@ const supervisorModule = {
   },
 
   async removeAgentFromRoute(username, routeId) {
-    if (!confirm(`¿Está seguro de que desea desvincular y eliminar al agente "${username}" de esta ruta?`)) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea desvincular y eliminar al agente "${username}" de esta ruta?`, "CrediPay"))) {
       return;
     }
 
@@ -2523,7 +2523,7 @@ const supervisorModule = {
         cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
         
         cell.addEventListener('click', async () => {
-          if (confirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
+          if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPay")) {
             await this.payCommerceInstallment(client, i, installmentAmount);
             await this.renderCommerceLedgerGrid(client, container);
           }
@@ -2867,7 +2867,7 @@ const supervisorModule = {
           
           cell.addEventListener('click', async () => {
             try {
-              if (confirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`)) {
+              if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPay")) {
                 await this.payCommerceInstallment(client, i, installmentAmount);
                 // Recargar el cartón
                 await this.showCommerceClientCarton(client.cedula);

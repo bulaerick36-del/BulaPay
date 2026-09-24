@@ -52,6 +52,189 @@
   <!-- Estilos Globales -->
   <link rel="stylesheet" href="css/style.css?v=9000">
 
+  <!-- SweetAlert2 CDN + Sistema Global de Modales Personalizados CrediPay -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    /* Estilos personalizados para Modales SweetAlert2 de CrediPay */
+    .credipay-swal-popup {
+      background: #0b132b !important;
+      border: 1px solid rgba(16, 185, 129, 0.3) !important;
+      border-radius: 16px !important;
+      color: #ffffff !important;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6) !important;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+    }
+    .credipay-swal-title {
+      color: #ffffff !important;
+      font-weight: 800 !important;
+      font-size: 1.35rem !important;
+    }
+    .credipay-swal-confirm {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+      color: #ffffff !important;
+      border-radius: 8px !important;
+      font-weight: 700 !important;
+      padding: 0.6rem 1.4rem !important;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4) !important;
+    }
+    .credipay-swal-cancel {
+      background: #334155 !important;
+      color: #cbd5e1 !important;
+      border-radius: 8px !important;
+      font-weight: 600 !important;
+      padding: 0.6rem 1.4rem !important;
+    }
+    .swal2-input, .swal2-textarea, .swal2-select {
+      background: #0f172a !important;
+      border: 1px solid #334155 !important;
+      color: #ffffff !important;
+      border-radius: 8px !important;
+    }
+    .swal2-input:focus, .swal2-textarea:focus, .swal2-select:focus {
+      border-color: #10b981 !important;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
+    }
+  </style>
+  <script>
+    (function() {
+      const _origAlert = window.alert;
+      const _origConfirm = window.confirm;
+      const _origPrompt = window.prompt;
+
+      function getCrediIcon(textMsg) {
+        if (!textMsg) return 'info';
+        const lower = String(textMsg).toLowerCase();
+        if (lower.includes('❌') || lower.includes('error') || lower.includes('falló') || lower.includes('incorrect') || lower.includes('invalid') || lower.includes('denegad')) {
+          return 'error';
+        }
+        if (lower.includes('⚠️') || lower.includes('atención') || lower.includes('advertencia') || lower.includes('requerid') || lower.includes('incompleto') || lower.includes('seguro')) {
+          return 'warning';
+        }
+        if (lower.includes('✅') || lower.includes('🚀') || lower.includes('éxito') || lower.includes('exitos') || lower.includes('guardad') || lower.includes('registrad') || lower.includes('actualizad') || lower.includes('completad')) {
+          return 'success';
+        }
+        return 'info';
+      }
+
+      // Interceptor de alert() nativo
+      window.alert = function(message, customTitle) {
+        if (window.Swal) {
+          const textMsg = (typeof message === 'object' && message !== null) ? JSON.stringify(message) : String(message || '');
+          const icon = getCrediIcon(textMsg);
+          return Swal.fire({
+            title: customTitle || 'CrediPay',
+            html: textMsg.replace(/\n/g, '<br>'),
+            icon: icon,
+            background: '#0b132b',
+            color: '#ffffff',
+            confirmButtonColor: '#10b981',
+            confirmButtonText: 'Entendido',
+            customClass: {
+              popup: 'credipay-swal-popup',
+              title: 'credipay-swal-title',
+              confirmButton: 'credipay-swal-confirm'
+            }
+          });
+        }
+        return _origAlert(message);
+      };
+
+      // Modal helper para alertas explícitas
+      window.showCrediAlert = function(title, text, icon = 'info') {
+        if (window.Swal) {
+          return Swal.fire({
+            title: title || 'CrediPay',
+            html: String(text || '').replace(/\n/g, '<br>'),
+            icon: icon,
+            background: '#0b132b',
+            color: '#ffffff',
+            confirmButtonColor: '#10b981',
+            confirmButtonText: 'Entendido',
+            customClass: {
+              popup: 'credipay-swal-popup',
+              title: 'credipay-swal-title',
+              confirmButton: 'credipay-swal-confirm'
+            }
+          });
+        }
+        return _origAlert(`${title ? title + ': ' : ''}${text}`);
+      };
+
+      // Modal helper para confirmaciones asíncronas
+      window.showCrediConfirm = async function(message, title = 'CrediPay', confirmText = 'Sí, continuar', cancelText = 'Cancelar', icon = 'warning') {
+        if (window.Swal) {
+          const res = await Swal.fire({
+            title: title || 'CrediPay',
+            html: String(message || '').replace(/\n/g, '<br>'),
+            icon: icon,
+            showCancelButton: true,
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#475569',
+            confirmButtonText: confirmText,
+            cancelButtonText: cancelText,
+            reverseButtons: true,
+            background: '#0b132b',
+            color: '#ffffff',
+            customClass: {
+              popup: 'credipay-swal-popup',
+              title: 'credipay-swal-title',
+              confirmButton: 'credipay-swal-confirm',
+              cancelButton: 'credipay-swal-cancel'
+            }
+          });
+          return res.isConfirmed;
+        }
+        return _origConfirm(message);
+      };
+
+      // Modal helper para entradas/prompts asíncronos
+      window.showCrediPrompt = async function(message, defaultValue = '', title = 'CrediPay', inputType = 'text') {
+        if (window.Swal) {
+          const res = await Swal.fire({
+            title: title || 'CrediPay',
+            html: String(message || '').replace(/\n/g, '<br>'),
+            input: inputType,
+            inputValue: defaultValue,
+            showCancelButton: true,
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#475569',
+            confirmButtonText: 'Aceptar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            background: '#0b132b',
+            color: '#ffffff',
+            customClass: {
+              popup: 'credipay-swal-popup',
+              title: 'credipay-swal-title',
+              confirmButton: 'credipay-swal-confirm',
+              cancelButton: 'credipay-swal-cancel'
+            }
+          });
+          return res.isConfirmed ? res.value : null;
+        }
+        return _origPrompt(message, defaultValue);
+      };
+
+      // Interceptor de confirm() nativo para llamadas no-async
+      window.confirm = function(message, title) {
+        if (window.Swal) {
+          window.showCrediConfirm(message, title || 'CrediPay');
+          return true;
+        }
+        return _origConfirm(message);
+      };
+
+      // Interceptor de prompt() nativo para llamadas no-async
+      window.prompt = function(message, defaultValue, title) {
+        if (window.Swal) {
+          window.showCrediPrompt(message, defaultValue, title || 'CrediPay');
+          return defaultValue || '';
+        }
+        return _origPrompt(message, defaultValue);
+      };
+    })();
+  </script>
+
   <!-- Leaflet CSS & JS para Mapa GPS Real -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
