@@ -2326,41 +2326,44 @@ const superadminModule = {
         .insert([newAd])
         .select();
 
-      // REQUISITO ESTRICTO DE PROMESAS: SweetAlert de éxito SOLO si status es 200 o 201
-      if (error || (status !== 200 && status !== 201)) {
-        console.error("❌ Error de inserción en Supabase bulapay_anuncios:", status, error);
+      if (error) {
+        console.error("❌ Error de inserción en Supabase bulapay_anuncios:", error);
         if (typeof Swal !== 'undefined') {
           Swal.fire({
             icon: 'error',
             title: 'Error al Guardar Anuncio',
-            text: error?.message || `El servidor de Supabase retornó un status no válido (${status}).`,
+            text: error.message || 'Ocurrió un error al guardar en Supabase Cloud.',
             confirmButtonColor: '#ef4444'
           });
         } else {
-          alert(`❌ Error al guardar anuncio (Status ${status}): ` + (error?.message || 'Error en servidor'));
+          alert(`❌ Error al guardar anuncio: ` + (error.message || 'Error en servidor'));
         }
-        return; // DETENERSE!
+        return;
       }
 
-      // Si todo fue exitoso (status 200/201)
+      // Si todo fue exitoso
       this._selectedAdFile = null;
       const form = document.getElementById('form-create-ad');
       if (form) form.reset();
       const previewContainer = document.getElementById('ad-image-preview-container');
       if (previewContainer) previewContainer.style.display = 'none';
 
+      // REQUISITO ESTRICTO: Recargar inmediatamente la lista de anuncios en pantalla
+      await this.loadAdsList();
+      if (window.adsModule && typeof window.adsModule.preloadAndCacheAds === 'function') {
+        window.adsModule.preloadAndCacheAds();
+      }
+
       if (typeof Swal !== 'undefined') {
         await Swal.fire({
           icon: 'success',
           title: '¡Anuncio Publicado!',
-          text: 'El anuncio fue registrado exitosamente en la base de datos Supabase Cloud.',
+          text: 'El anuncio fue registrado y renderizado exitosamente.',
           confirmButtonColor: '#34d399'
         });
       } else {
         alert('✅ ¡Anuncio publicado correctamente!');
       }
-
-      await this.loadAdsList();
     } catch(err) {
       console.error("Excepción al crear anuncio:", err);
       if (typeof Swal !== 'undefined') {

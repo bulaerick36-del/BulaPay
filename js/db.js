@@ -4027,11 +4027,20 @@ const db = {
       ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
+    const nowMs = Date.now();
+    const FortyEightHoursMs = 48 * 60 * 60 * 1000; // 48 horas en milisegundos
+
     // Consulta directa y exclusiva a Supabase Cloud (bulapay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
+          // Limpieza automática en segundo plano de comunicados con más de 48 horas en Supabase
+          try {
+            const cutoffIso = new Date(nowMs - FortyEightHoursMs).toISOString();
+            supabase.from('bulapay_notificaciones').delete().lt('created_at', cutoffIso).then(() => {}).catch(() => {});
+          } catch(eClean) {}
+
           let { data, error } = await supabase
             .from('bulapay_notificaciones')
             .select('*')
@@ -4052,6 +4061,12 @@ const db = {
               .map(normalize)
               .filter(n => {
                 if (!n || (!n.id && !n.titulo) || n.id === 'notif_welcome' || n.id === 'notif_welcome_clean' || String(n.id).includes('actualizacion')) return false;
+
+                // REQUISITO ESTRICTO: Filtrar comunicados con más de 48 horas de antigüedad
+                const createdAtMs = new Date(n.created_at || 0).getTime();
+                if (createdAtMs && (nowMs - createdAtMs > FortyEightHoursMs)) {
+                  return false;
+                }
 
                 const targetUser = (n.target_username || n.username) ? String(n.target_username || n.username).toLowerCase().trim() : null;
 
