@@ -203,9 +203,12 @@ const db = {
     const currentUser = this.getCurrentUser();
     if (!currentUser) return [];
 
-    if (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin') {
+    if (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin' || currentUser.role === 'Usuario Supervisor') {
       const { data, error } = await supabase.from('users').select('*');
-      if (error) return [];
+      if (error) {
+        console.error('Error de Supabase al cargar usuarios:', error);
+        return [];
+      }
       return data || [];
     }
 
@@ -225,7 +228,7 @@ const db = {
       .select('*')
       .or(`supervisor_id.eq."${supId}",username.eq."${supId}"`);
     if (error) {
-      console.error("Error al obtener usuarios en Supabase:", error);
+      console.error('Error de Supabase al cargar usuarios:', error);
       return [];
     }
     return data || [];
@@ -462,12 +465,12 @@ const db = {
 
   async getAllUsers() {
     const supabase = await initSupabase();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('users')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
     if (error) {
-      console.error("Error al obtener todos los usuarios de Supabase:", error);
+      console.error('Error de Supabase al cargar usuarios:', error);
       return [];
     }
     return data || [];

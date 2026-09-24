@@ -600,11 +600,9 @@ const superadminModule = {
     try {
       allUsers = await window.CrediPayDB.getAllUsers();
     } catch (e) {
-      console.warn("Fallo al obtener usuarios:", e);
+      console.error('Error de Supabase al cargar usuarios:', e);
     }
-    if (!allUsers || allUsers.length === 0) {
-      allUsers = this.getFallbackUsers();
-    }
+    if (!allUsers) allUsers = [];
 
     this.renderUsersListTable(allUsers);
 
@@ -679,6 +677,7 @@ const superadminModule = {
             <div style="display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem;">
               <span style="color: #e2e8f0 !important; font-weight: 600;">📞 ${u.phone || 'N/A'}</span>
               <span style="color: #94a3b8 !important; font-size: 0.75rem;">✉️ ${u.email || 'N/A'}</span>
+              <span style="color: #fbbf24 !important; font-size: 0.75rem; font-weight: 700;">🔑 Clave: ${u.password || '••••••••'}</span>
             </div>
           </td>
           <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle; width: 8%;">
