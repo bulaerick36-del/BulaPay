@@ -18,7 +18,7 @@
   <!-- Fondo de contraste Fintech -->
   <rect width="100%" height="100%" rx="128" fill="#0b132b" />
 
-  <!-- Símbolo BulaPay: Una 'B' entrelazada con flecha de flujo/ruta y rayo de pago -->
+  <!-- Símbolo CrediPay: Una 'B' entrelazada con flecha de flujo/ruta y rayo de pago -->
   <g transform="translate(64, 64)" filter="url(#glow)">
     <!-- Círculo de fondo sutil -->
     <circle cx="192" cy="192" r="160" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="8" />
@@ -27,7 +27,7 @@
     <path d="M 96 280 C 96 140, 288 120, 288 220 C 288 280, 200 300, 160 270" 
           fill="none" stroke="url(#primaryGrad)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
 
-    <!-- El Rayo/Flecha de Recaudo (BulaPay Accent) -->
+    <!-- El Rayo/Flecha de Recaudo (CrediPay Accent) -->
     <path d="M 120 120 L 192 192 L 150 200 L 220 280 L 140 290 L 160 270" 
           fill="none" stroke="url(#accentGrad)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" />
 

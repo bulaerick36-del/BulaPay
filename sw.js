@@ -1,17 +1,21 @@
-const CACHE_NAME = 'bulapay-v356';
+const CACHE_NAME = 'credipay-v357';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=356',
-  './js/db.js?v=356',
-  './js/ads.js?v=356',
-  './js/auth.js?v=356',
-  './js/supervisor.js?v=356',
-  './js/agent_v6.js?v=356',
-  './js/customer.js?v=356',
-  './js/superadmin.js?v=356',
-  './js/app.js?v=356',
+  './css/style.css?v=357',
+  './js/db.js?v=357',
+  './js/ads.js?v=357',
+  './js/auth.js?v=357',
+  './js/supervisor.js?v=357',
+  './js/agent_v6.js?v=357',
+  './js/customer.js?v=357',
+  './js/superadmin.js?v=357',
+  './js/app.js?v=357',
+  './assets/logo.png',
+  './assets/favicon.png',
+  './assets/icon-192.png',
+  './assets/icon-512.png',
   './assets/logo.svg'
 ];
 
@@ -20,7 +24,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell bulapay-v356');
+      console.log('[Service Worker] Caching app shell credipay-v357');
       return cache.addAll(ASSETS);
     })
   );
@@ -33,13 +37,13 @@ self.addEventListener('activate', (e) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker bulapay-v356] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker credipay-v357] Purgando y auto-destruyendo caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
     }).then(() => {
-      console.log('[Service Worker bulapay-v356] Reclamando clientes para control inmediato');
+      console.log('[Service Worker credipay-v357] Reclamando clientes para control inmediato');
       return self.clients.claim();
     })
   );

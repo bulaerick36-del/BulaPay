@@ -1,6 +1,6 @@
 {
-  "short_name": "BulaPay",
-  "name": "BulaPay - Gestión de Cartera y Rutas",
+  "short_name": "CrediPay",
+  "name": "CrediPay - Gestión de Cartera y Rutas",
   "description": "SaaS de gestión de cartera comercial, control de ventas a plazos y logística de rutas.",
   "start_url": "./index.html",
   "display": "standalone",
@@ -9,6 +9,26 @@
   "orientation": "any",
   "scope": "./",
   "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "assets/logo.png",
+      "type": "image/png",
+      "sizes": "1024x559"
+    },
+    {
+      "src": "assets/favicon.png",
+      "type": "image/png",
+      "sizes": "128x128"
+    },
     {
       "src": "assets/logo.svg",
       "type": "image/svg+xml",

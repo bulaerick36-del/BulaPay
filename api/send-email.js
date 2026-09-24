@@ -43,11 +43,11 @@ module.exports = async (req, res) => {
 
   // Reconstruir la URL de origen de manera dinámica
   const protocol = req.headers['x-forwarded-proto'] || 'https';
-  const host = req.headers['host'] || 'bulapay.co';
+  const host = req.headers['host'] || 'credipay.co';
   const appUrl = `${protocol}://${host}?view=customer&id=${clientData.cedula}`;
 
   const emailHtml = "¡Hola, " + clientData.name + "!<br><br>" +
-    "Le damos la bienvenida a BulaPay.<br><br>" +
+    "Le damos la bienvenida a CrediPay.<br><br>" +
     "Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado haciendo clic en el siguiente enlace:<br><br>" +
     "<a href=\"" + appUrl + "\" style=\"background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;\">Ver mi Cartón Digital</a>";
 
@@ -70,7 +70,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         from: {
           email: "MS_QpWXYt@test-65qngkdzj8jlwr12.mlsender.net",
-          name: "BulaPay"
+          name: "CrediPay"
         },
         to: [
           {
@@ -78,7 +78,7 @@ module.exports = async (req, res) => {
             name: clientData.name
           }
         ],
-        subject: "Bienvenido a BulaPay - Tu Cartón Digital",
+        subject: "Bienvenido a CrediPay - Tu Cartón Digital",
         html: emailHtml
       })
     });

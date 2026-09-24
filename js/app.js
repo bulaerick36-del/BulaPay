@@ -1,4 +1,4 @@
-// Controlador Principal y Enrutador SPA de BulaPay PWA
+// Controlador Principal y Enrutador SPA de CrediPay PWA
 
 const app = {
   // Configuración del Enrutador SPA
@@ -62,13 +62,13 @@ const app = {
       }
 
       // 3. Fallback: Evaluar sesión de usuario para redirigir
-      let user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
+      let user = (window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function') ? window.CrediPayDB.getCurrentUser() : null;
 
-      if (!user && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+      if (!user && window.CrediPayDB && typeof window.CrediPayDB.getUserByUsername === 'function') {
         try {
-          user = await window.BulaPayDB.getUserByUsername('admin');
+          user = await window.CrediPayDB.getUserByUsername('admin');
           if (user) {
-            window.BulaPayDB.setCurrentUser(user);
+            window.CrediPayDB.setCurrentUser(user);
             if (window.authModule && typeof window.authModule.updateNavBar === 'function') {
               window.authModule.updateNavBar(user);
             }
@@ -90,13 +90,13 @@ const app = {
 
       if (user) {
         if (isMasterSuperadmin) {
-          sessionStorage.setItem('bula_superadmin_active', 'true');
+          sessionStorage.setItem('credi_superadmin_active', 'true');
           this.navigate('superadmin');
         } else if (isSupervisor) {
-          sessionStorage.removeItem('bula_superadmin_active');
+          sessionStorage.removeItem('credi_superadmin_active');
           this.navigate('supervisor');
         } else if (isAgent) {
-          sessionStorage.removeItem('bula_superadmin_active');
+          sessionStorage.removeItem('credi_superadmin_active');
           this.navigate('agent');
         } else {
           this.navigate('auth');
@@ -140,7 +140,7 @@ const app = {
 
       const devLinks = document.getElementById('demo-quick-links');
       if (devLinks) {
-        const currentUser = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
+        const currentUser = (window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function') ? window.CrediPayDB.getCurrentUser() : null;
         devLinks.style.display = currentUser ? 'none' : 'flex';
       }
 
@@ -153,7 +153,7 @@ const app = {
         route = 'auth';
       }
 
-      const user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
+      const user = (window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function') ? window.CrediPayDB.getCurrentUser() : null;
       const curName = user ? String(user.username || '').toLowerCase() : '';
       const curDoc = user ? String(user.documentNumber || '').trim() : '';
       const curRole = user ? String(user.role || '').trim() : '';
@@ -166,7 +166,7 @@ const app = {
       // 1. Si Usuario Supervisor estándar intenta entrar a Superadmin Maestro, redirigir a #supervisor
       if (isUserSupervisor && route === 'superadmin') {
         console.warn('⛔ Usuario Supervisor intentando acceder a Superadmin Maestro. Redirigiendo a panel de supervisor.');
-        sessionStorage.removeItem('bula_superadmin_active');
+        sessionStorage.removeItem('credi_superadmin_active');
         this.navigate('supervisor');
         return;
       }
@@ -175,10 +175,10 @@ const app = {
       if ((isUserSupervisor || isUserMasterAdmin) && (route === 'agent' || route === 'agent-login')) {
         console.warn('⛔ Acceso restringido: Usuario administrativo no puede abrir interfaz de agentes.');
         if (isUserMasterAdmin) {
-          sessionStorage.setItem('bula_superadmin_active', 'true');
+          sessionStorage.setItem('credi_superadmin_active', 'true');
           this.navigate('superadmin');
         } else {
-          sessionStorage.removeItem('bula_superadmin_active');
+          sessionStorage.removeItem('credi_superadmin_active');
           this.navigate('supervisor');
         }
         return;
@@ -273,9 +273,9 @@ const app = {
             this.deferredPrompt.prompt();
             this.deferredPrompt.userChoice.then((choiceResult) => {
               if (choiceResult.outcome === 'accepted') {
-                console.log('El usuario aceptó la instalación de BulaPay PWA');
+                console.log('El usuario aceptó la instalación de CrediPay PWA');
               } else {
-                console.log('El usuario rechazó la instalación de BulaPay PWA');
+                console.log('El usuario rechazó la instalación de CrediPay PWA');
               }
               this.deferredPrompt = null;
             });
@@ -285,7 +285,7 @@ const app = {
 
       // App instalada exitosamente
       window.addEventListener('appinstalled', () => {
-        console.log('BulaPay PWA instalada en el dispositivo.');
+        console.log('CrediPay PWA instalada en el dispositivo.');
         if (installBtn) installBtn.style.display = 'none';
       });
     }
@@ -444,7 +444,7 @@ const app = {
 
       // 2. Actualizar Temporizador de Ruta (Sincronizado con Supabase en tiempo real)
       if (routeStatusElement) {
-        const currentUser = window.BulaPayDB.getCurrentUser();
+        const currentUser = window.CrediPayDB.getCurrentUser();
         
         if (currentUser && currentUser.role === 'Agente Independiente') {
           // Los Agentes Independientes no tienen indicador de ruta ni restricciones horarias
@@ -545,7 +545,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Utilidad Global: Mostrar Recibo Digital de Pago
-window.showBulaPayReceipt = function(payment, client) {
+window.showCrediPayReceipt = function(payment, client) {
   const modal = document.getElementById('receipt-modal');
   if (!modal) return;
 
@@ -624,7 +624,7 @@ window.setCurrentView = function(view) {
 
 // Función para aplicar el tema de color dinámico según el rol seleccionado
 window.applyDynamicTheme = function() {
-  const role = localStorage.getItem('bulaRole') || 'supervisor';
+  const role = localStorage.getItem('crediRole') || 'supervisor';
   
   // Paleta de colores por rol
   let primaryColor = '#10b981'; // supervisor: verde esmeralda original
@@ -684,24 +684,24 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers y comunicados obsoletos en caché local (bulapay-v350)
+// Purga automática de Service Workers y comunicados obsoletos en caché local (credipay-v350)
 window.forcePurgeAndRegisterServiceWorker = async function() {
   // Purga total de comunicados locales obsoletos (Modo Cloud-Only Estricto)
   try {
-    ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(key => {
+    ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(key => {
       localStorage.removeItem(key);
     });
 
-    const rawAds = localStorage.getItem('bula_announcements');
+    const rawAds = localStorage.getItem('credi_announcements');
     if (rawAds) {
       const parsedAds = JSON.parse(rawAds);
       if (Array.isArray(parsedAds)) {
         const cleanedAds = parsedAds.filter(a => a && a.id !== 'ad_demo_initial');
         if (cleanedAds.length !== parsedAds.length) {
           if (cleanedAds.length > 0) {
-            localStorage.setItem('bula_announcements', JSON.stringify(cleanedAds));
+            localStorage.setItem('credi_announcements', JSON.stringify(cleanedAds));
           } else {
-            localStorage.removeItem('bula_announcements');
+            localStorage.removeItem('credi_announcements');
           }
         }
       }
@@ -720,8 +720,8 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
           const unregistered = await registration.unregister();
           if (unregistered) {
             console.log('🧹 [PWA Purga] SW antiguo desregistrado:', registration.scope);
-            if (window.bulaMobileDebugLog) {
-              window.bulaMobileDebugLog('SW Antiguo Desregistrado: ' + registration.scope, 'warning');
+            if (window.crediMobileDebugLog) {
+              window.crediMobileDebugLog('SW Antiguo Desregistrado: ' + registration.scope, 'warning');
             }
           }
         }
@@ -732,11 +732,11 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     if ('caches' in window) {
       const cacheKeys = await caches.keys();
       for (const key of cacheKeys) {
-        if (key !== 'bulapay-v356') {
+        if (key !== 'credipay-v356') {
           await caches.delete(key);
           console.log('🧹 [PWA Purga] Caché obsoleta eliminada:', key);
-          if (window.bulaMobileDebugLog) {
-            window.bulaMobileDebugLog('Caché obsoleta eliminada: ' + key, 'warning');
+          if (window.crediMobileDebugLog) {
+            window.crediMobileDebugLog('Caché obsoleta eliminada: ' + key, 'warning');
           }
         }
       }
@@ -746,23 +746,23 @@ window.forcePurgeAndRegisterServiceWorker = async function() {
     const swUrl = './sw.js?v=356&t=' + Date.now();
     const newReg = await navigator.serviceWorker.register(swUrl);
     await newReg.update();
-    console.log('✔ Service Worker bulapay-v356 registrado con éxito (Fresh Register). Scope:', newReg.scope);
+    console.log('✔ Service Worker credipay-v356 registrado con éxito (Fresh Register). Scope:', newReg.scope);
 
-    if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('¡SW bulapay-v356 Registrado y Purgado con Éxito!', 'success');
+    if (window.crediMobileDebugLog) {
+      window.crediMobileDebugLog('¡SW credipay-v356 Registrado y Purgado con Éxito!', 'success');
     }
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (bulapay-v356)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (credipay-v356)';
   } catch (err) {
     console.error('❌ Error durante la purga/registro del Service Worker:', err);
-    if (window.bulaMobileDebugLog) {
-      window.bulaMobileDebugLog('Error en purga/registro SW: ' + (err.message || err), 'error');
+    if (window.crediMobileDebugLog) {
+      window.crediMobileDebugLog('Error en purga/registro SW: ' + (err.message || err), 'error');
     }
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (bulapay-v356)
+// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (credipay-v356)
 if ('serviceWorker' in navigator) {
   const triggerPurge = () => {
     window.forcePurgeAndRegisterServiceWorker();
@@ -775,4 +775,4 @@ if ('serviceWorker' in navigator) {
   }
 }
 
-// Fin de Controlador Principal BulaPay PWA
+// Fin de Controlador Principal CrediPay PWA

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   BulaPay - Estilo Fintech Premium (CSS Global)
+   CrediPay - Estilo Fintech Premium (CSS Global)
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -1345,7 +1345,7 @@ form .btn:not([style*="width: auto"]):not([style*="width:auto"]) {
 }
 
 /* ==========================================================================
-   BulaPay - Estilos Adicionales Premium
+   CrediPay - Estilos Adicionales Premium
    ========================================================================== */
 
 /* Sub-pestañas del Supervisor */
@@ -1848,7 +1848,7 @@ form .btn:not([style*="width: auto"]):not([style*="width:auto"]) {
 }
 
 /* ==========================================================================
-   BulaPay - Estilos Adicionales para Detalle de Comercios
+   CrediPay - Estilos Adicionales para Detalle de Comercios
    ========================================================================== */
 
 .commerce-list {
@@ -2450,7 +2450,7 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
 }
 
-/* Botón Circular Minimalista de Campanita en Header Top-Bar (bulapay-v337) */
+/* Botón Circular Minimalista de Campanita en Header Top-Bar (credipay-v337) */
 .btn-comunicados-nav {
   position: relative;
   width: 40px;
@@ -2540,7 +2540,7 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (bulapay-v339) */
+/* ESTILOS DEL MODAL FLOTANTE DE ANUNCIOS Y PUBLICIDAD (credipay-v339) */
 .pwa-ad-modal-overlay {
   position: fixed;
   inset: 0;

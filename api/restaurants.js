@@ -1,4 +1,4 @@
-// Vercel Serverless Function: /api/restaurants (BulaFoodboT / Neon PostgreSQL)
+// Vercel Serverless Function: /api/restaurants (CrediFoodbot / Neon PostgreSQL)
 const { Pool } = require('pg');
 
 const connectionString = process.env.DATABASE_URL || 

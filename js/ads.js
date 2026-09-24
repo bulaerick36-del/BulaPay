@@ -1,4 +1,4 @@
-// Módulo Interceptor de Anuncios y Publicidad BulaPay (bulapay-v337)
+// Módulo Interceptor de Anuncios y Publicidad CrediPay (credipay-v337)
 
 const adsModule = {
   isShowing: false,
@@ -117,16 +117,16 @@ const adsModule = {
     };
 
     try {
-      if (typeof window.BulaPayDB === 'undefined' || typeof window.BulaPayDB.getAnnouncements !== 'function') {
-        console.warn("⚠️ [BulaPay Anuncios] BulaPayDB.getAnnouncements no está disponible.");
+      if (typeof window.CrediPayDB === 'undefined' || typeof window.CrediPayDB.getAnnouncements !== 'function') {
+        console.warn("⚠️ [CrediPay Anuncios] CrediPayDB.getAnnouncements no está disponible.");
         safeCallback();
         return;
       }
 
-      const allAds = await window.BulaPayDB.getAnnouncements();
+      const allAds = await window.CrediPayDB.getAnnouncements();
       const todayStr = this.getTodayString();
 
-      console.log(`📢 [BulaPay Anuncios bulapay-v356] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
+      console.log(`📢 [CrediPay Anuncios credipay-v356] Evaluando evento: "${triggerType}". Fecha actual local: "${todayStr}". Total anuncios en sistema:`, (allAds || []).length);
 
       const now = new Date();
       const currentHours = String(now.getHours()).padStart(2, '0');
@@ -180,10 +180,10 @@ const adsModule = {
           return isActive && isNotExpired;
         });
         if (activeFallback.length > 0) {
-          console.log(`💡 [BulaPay Anuncios] Tomando anuncio activo y no vencido mediante fallback PWA.`);
+          console.log(`💡 [CrediPay Anuncios] Tomando anuncio activo y no vencido mediante fallback PWA.`);
           matchingAds = activeFallback;
         } else {
-          console.log(`ℹ️ [BulaPay Anuncios] No hay anuncios activos y vigentes en el sistema.`);
+          console.log(`ℹ️ [CrediPay Anuncios] No hay anuncios activos y vigentes en el sistema.`);
           safeCallback();
           return;
         }
@@ -203,7 +203,7 @@ const adsModule = {
 
       let lastInfo = {};
       try {
-        const rawLast = localStorage.getItem('bula_last_ad_info');
+        const rawLast = localStorage.getItem('credi_last_ad_info');
         if (rawLast) lastInfo = JSON.parse(rawLast);
       } catch(e) {}
 
@@ -241,7 +241,7 @@ const adsModule = {
       const isSelectedVid = this.isVideoUrl(selectedAd.multimedia_url || selectedAd.media_url || selectedAd.imagen || selectedAd.image);
       const newIndex = matchingAds.findIndex(a => a.id === selectedAd.id);
       try {
-        localStorage.setItem('bula_last_ad_info', JSON.stringify({
+        localStorage.setItem('credi_last_ad_info', JSON.stringify({
           id: selectedAd.id,
           type: isSelectedVid ? 'video' : 'image',
           index: newIndex >= 0 ? newIndex : 0,
@@ -249,7 +249,7 @@ const adsModule = {
         }));
       } catch(e) {}
 
-      console.log(`🎯 [BulaPay Anuncios bulapay-v356] ¡Anuncio seleccionado para mostrar en PWA (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
+      console.log(`🎯 [CrediPay Anuncios credipay-v356] ¡Anuncio seleccionado para mostrar en PWA (${isSelectedVid ? 'VIDEO' : 'IMAGEN'})!`, selectedAd);
 
       this.displayAdModal(selectedAd, safeCallback);
 
@@ -266,13 +266,13 @@ const adsModule = {
       this.currentAd = ad;
 
       // Incrementar impresiones dinámicamente en Supabase/Local DB
-      if (ad && ad.id && window.BulaPayDB && typeof window.BulaPayDB.incrementAdImpression === 'function') {
-        window.BulaPayDB.incrementAdImpression(ad.id);
+      if (ad && ad.id && window.CrediPayDB && typeof window.CrediPayDB.incrementAdImpression === 'function') {
+        window.CrediPayDB.incrementAdImpression(ad.id);
       }
 
       const modal = document.getElementById('pwa-ad-modal');
       if (!modal) {
-        console.warn("⚠️ [BulaPay Anuncios] Elemento #pwa-ad-modal no existe en el DOM.");
+        console.warn("⚠️ [CrediPay Anuncios] Elemento #pwa-ad-modal no existe en el DOM.");
         if (typeof callback === 'function') callback();
         return;
       }
@@ -282,7 +282,7 @@ const adsModule = {
         document.body.appendChild(modal);
       }
 
-      console.log("🚀 [BulaPay Anuncios bulapay-v337] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
+      console.log("🚀 [CrediPay Anuncios credipay-v337] Inyectando datos y mostrando #pwa-ad-modal en pantalla...");
 
       const badgeEl = document.getElementById('pwa-ad-badge');
       const categoryEl = document.getElementById('pwa-ad-category');
@@ -354,7 +354,7 @@ const adsModule = {
         if (cleanMediaUrl !== '') {
           mediaContainer.style.display = 'flex';
           if (isVideo) {
-            console.log("🎬 [BulaPay Anuncios bulapay-v355] Detectado archivo de video. Renderizando <video> único:", cleanMediaUrl.substring(0, 60));
+            console.log("🎬 [CrediPay Anuncios credipay-v355] Detectado archivo de video. Renderizando <video> único:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <video 
                 id="pwa-ad-video" 
@@ -380,7 +380,7 @@ const adsModule = {
                     continueBtn.style.pointerEvents = 'auto';
                     continueBtn.style.cursor = 'pointer';
                     continueBtn.innerHTML = 'Continuar ➔';
-                    console.log("✅ [BulaPay Anuncios bulapay-v355] Video finalizado (ended/60s). Botón 'Continuar' desbloqueado.");
+                    console.log("✅ [CrediPay Anuncios credipay-v355] Video finalizado (ended/60s). Botón 'Continuar' desbloqueado.");
                   }
                 };
 
@@ -405,7 +405,7 @@ const adsModule = {
             }, 100);
 
           } else {
-            console.log("🖼️ [BulaPay Anuncios bulapay-v355] Detectada imagen. Renderizando <img> única:", cleanMediaUrl.substring(0, 60));
+            console.log("🖼️ [CrediPay Anuncios credipay-v355] Detectada imagen. Renderizando <img> única:", cleanMediaUrl.substring(0, 60));
             mediaContainer.innerHTML = `
               <img 
                 id="pwa-ad-image" 
@@ -445,7 +445,7 @@ const adsModule = {
       modal.style.cssText = 'display: flex !important; z-index: 1000000 !important; opacity: 1 !important; visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; background: rgba(11, 19, 43, 0.92) !important; align-items: center !important; justify-content: center !important;';
       modal.classList.add('active');
 
-      console.log("✅ [BulaPay Anuncios bulapay-v337] Modal publicitario visible en pantalla.");
+      console.log("✅ [CrediPay Anuncios credipay-v337] Modal publicitario visible en pantalla.");
 
     } catch (e) {
       console.error("❌ Error mostrando modal de anuncio:", e);
@@ -456,8 +456,8 @@ const adsModule = {
   closeAdModal() {
     try {
       // Incrementar clics / interacciones al cerrar o continuar
-      if (this.currentAd && this.currentAd.id && window.BulaPayDB && typeof window.BulaPayDB.incrementAdClick === 'function') {
-        window.BulaPayDB.incrementAdClick(this.currentAd.id);
+      if (this.currentAd && this.currentAd.id && window.CrediPayDB && typeof window.CrediPayDB.incrementAdClick === 'function') {
+        window.CrediPayDB.incrementAdClick(this.currentAd.id);
       }
 
       const modal = document.getElementById('pwa-ad-modal');
@@ -494,12 +494,12 @@ const adsModule = {
     this._realtimeSubscribed = true;
     setTimeout(async () => {
       try {
-        if (window.BulaPayDB && typeof window.BulaPayDB.initSupabase === 'function') {
-          const supabase = await window.BulaPayDB.initSupabase();
+        if (window.CrediPayDB && typeof window.CrediPayDB.initSupabase === 'function') {
+          const supabase = await window.CrediPayDB.initSupabase();
           if (supabase && typeof supabase.channel === 'function') {
-            supabase.channel('public:bulapay_notificaciones')
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'bulapay_notificaciones' }, async (payload) => {
-                console.log('⚡ [Supabase Realtime bulapay-v350] Cambio detectado en bulapay_notificaciones:', payload);
+            supabase.channel('public:credipay_notificaciones')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'credipay_notificaciones' }, async (payload) => {
+                console.log('⚡ [Supabase Realtime credipay-v350] Cambio detectado en credipay_notificaciones:', payload);
                 await this.updateComunicadosBadge();
                 const modal = document.getElementById('modal-pwa-comunicados');
                 if (modal && (modal.style.display === 'flex' || modal.classList.contains('active'))) {
@@ -507,7 +507,7 @@ const adsModule = {
                 }
               })
               .subscribe();
-            console.log('📡 [Supabase Realtime bulapay-v350] Canal de notificaciones activado con éxito.');
+            console.log('📡 [Supabase Realtime credipay-v350] Canal de notificaciones activado con éxito.');
           }
         }
       } catch(e) {
@@ -522,13 +522,13 @@ const adsModule = {
     const badgeList = document.querySelectorAll('.comunicados-badge, #pwa-comunicados-count');
 
     try {
-      const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
-        ? await window.BulaPayDB.getNotificaciones()
+      const notifs = (window.CrediPayDB && typeof window.CrediPayDB.getNotificaciones === 'function')
+        ? await window.CrediPayDB.getNotificaciones()
         : [];
 
       let readIds = new Set();
       try {
-        const rawRead = localStorage.getItem('bula_read_notif_ids');
+        const rawRead = localStorage.getItem('credi_read_notif_ids');
         if (rawRead) readIds = new Set(JSON.parse(rawRead));
       } catch(e) {}
 
@@ -574,11 +574,11 @@ const adsModule = {
       content.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1.5rem;">⏳ Cargando comunicados oficiales en tiempo real...</p>';
       try {
         // Purga de llaves obsoletas en local storage para enfoque Cloud-Only
-        ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
+        ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
 
         let notifs = [];
-        if (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function') {
-          notifs = await window.BulaPayDB.getNotificaciones();
+        if (window.CrediPayDB && typeof window.CrediPayDB.getNotificaciones === 'function') {
+          notifs = await window.CrediPayDB.getNotificaciones();
         }
 
         if (Array.isArray(notifs)) {
@@ -591,11 +591,11 @@ const adsModule = {
           try {
             let readIds = new Set();
             try {
-              const rawRead = localStorage.getItem('bula_read_notif_ids');
+              const rawRead = localStorage.getItem('credi_read_notif_ids');
               if (rawRead) readIds = new Set(JSON.parse(rawRead));
             } catch(e) {}
             notifs.forEach(n => { if (n && n.id) readIds.add(String(n.id)); });
-            localStorage.setItem('bula_read_notif_ids', JSON.stringify(Array.from(readIds)));
+            localStorage.setItem('credi_read_notif_ids', JSON.stringify(Array.from(readIds)));
           } catch(e) {}
         }
 
@@ -664,23 +664,23 @@ const adsModule = {
 
 // Función global de diagnóstico del sistema de anuncios
 window.diagnoseAds = async function() {
-  console.group("🔍 === DIAGNÓSTICO COMPLETO DEL MÓDULO DE ANUNCIOS BULAPAY ===");
+  console.group("🔍 === DIAGNÓSTICO COMPLETO DEL MÓDULO DE ANUNCIOS CREDIPAY ===");
   
   const modal = document.getElementById('pwa-ad-modal');
   console.log("1️⃣ Elemento #pwa-ad-modal en DOM:", modal ? "✅ ENCONTRADO EN DOM" : "❌ NO EXISTE EN DOM");
 
-  const rawLocal = localStorage.getItem('bula_announcements');
+  const rawLocal = localStorage.getItem('credi_announcements');
   const localList = rawLocal ? JSON.parse(rawLocal) : [];
-  console.log("2️⃣ Anuncios guardados en localStorage ('bula_announcements'):", localList.length, localList);
+  console.log("2️⃣ Anuncios guardados en localStorage ('credi_announcements'):", localList.length, localList);
 
   let dbAds = [];
   try {
-    if (window.BulaPayDB && typeof window.BulaPayDB.getAnnouncements === 'function') {
-      dbAds = await window.BulaPayDB.getAnnouncements();
-      console.log("3️⃣ Anuncios leídos desde Supabase/DB (BulaPayDB.getAnnouncements):", dbAds.length, dbAds);
+    if (window.CrediPayDB && typeof window.CrediPayDB.getAnnouncements === 'function') {
+      dbAds = await window.CrediPayDB.getAnnouncements();
+      console.log("3️⃣ Anuncios leídos desde Supabase/DB (CrediPayDB.getAnnouncements):", dbAds.length, dbAds);
     }
   } catch(e) {
-    console.error("❌ Error consultando BulaPayDB.getAnnouncements:", e);
+    console.error("❌ Error consultando CrediPayDB.getAnnouncements:", e);
   }
 
   const allAds = (dbAds && dbAds.length > 0) ? dbAds : localList;
@@ -712,7 +712,7 @@ window.diagnoseAds = async function() {
 
 window.adsModule = adsModule;
 
-// Auto-ejecución inicial para lectura y actualización dinámica del badge de comunicados (bulapay-v339)
+// Auto-ejecución inicial para lectura y actualización dinámica del badge de comunicados (credipay-v339)
 const triggerBadgeUpdate = () => {
   if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
     window.adsModule.updateComunicadosBadge();
@@ -731,6 +731,6 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') triggerBadgeUpdate();
 });
 
-// Actualización periódica cada 15s y ante cambios de visibilidad en PWA (bulapay-v350)
+// Actualización periódica cada 15s y ante cambios de visibilidad en PWA (credipay-v350)
 setInterval(triggerBadgeUpdate, 15000);
 

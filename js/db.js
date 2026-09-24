@@ -1,7 +1,7 @@
-// Módulo de Base de Datos Real de Supabase (BulaPay DB)
+// Módulo de Base de Datos Real de Supabase (CrediPay DB)
 
 const DB_KEYS = {
-  CURRENT_USER: 'bulapay_current_user'
+  CURRENT_USER: 'credipay_current_user'
 };
 
 const SUPABASE_URL = 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
@@ -27,7 +27,7 @@ async function initSupabase() {
 
   // 2. Fallback opcional a /api/config sólo en entornos Node/Vercel
   const host = window.location.hostname || '';
-  if (!host.includes('bulapay.online') && !host.includes('github.io')) {
+  if (!host.includes('credipay.online') && !host.includes('github.io')) {
     try {
       const res = await fetch('/api/config');
       if (res.ok) {
@@ -184,13 +184,13 @@ const db = {
     
     // Insertar Pagos Semilla
     const { error: paymentsErr } = await supabase.from('payments').insert([
-      { id: 'pay_1', clientCedula: '12345', installmentNumber: 1, amount: 100000, date: '2026-06-01', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-01', supervisor_id: 'admin' },
-      { id: 'pay_2', clientCedula: '12345', installmentNumber: 2, amount: 100000, date: '2026-06-08', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-02', supervisor_id: 'admin' },
-      { id: 'pay_3', clientCedula: '12345', installmentNumber: 3, amount: 150000, date: '2026-06-15', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-03', supervisor_id: 'admin' },
-      { id: 'pay_4', clientCedula: '67890', installmentNumber: 1, amount: 80000, date: '2026-06-02', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-01', supervisor_id: 'admin' },
-      { id: 'pay_5', clientCedula: '67890', installmentNumber: 2, amount: 80000, date: '2026-06-12', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-02', supervisor_id: 'admin' },
-      { id: 'pay_6', clientCedula: '11223', installmentNumber: 1, amount: 100000, date: '2026-05-20', agentName: 'María López', status: 'Pagado', signature: 'BulaPay-SIG-11223-01', supervisor_id: 'admin' },
-      { id: 'pay_7', clientCedula: '11223', installmentNumber: 2, amount: 50000, date: '2026-05-30', agentName: 'María López', status: 'Abonado', signature: 'BulaPay-SIG-11223-02', supervisor_id: 'admin' }
+      { id: 'pay_1', clientCedula: '12345', installmentNumber: 1, amount: 100000, date: '2026-06-01', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-12345-01', supervisor_id: 'admin' },
+      { id: 'pay_2', clientCedula: '12345', installmentNumber: 2, amount: 100000, date: '2026-06-08', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-12345-02', supervisor_id: 'admin' },
+      { id: 'pay_3', clientCedula: '12345', installmentNumber: 3, amount: 150000, date: '2026-06-15', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-12345-03', supervisor_id: 'admin' },
+      { id: 'pay_4', clientCedula: '67890', installmentNumber: 1, amount: 80000, date: '2026-06-02', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-67890-01', supervisor_id: 'admin' },
+      { id: 'pay_5', clientCedula: '67890', installmentNumber: 2, amount: 80000, date: '2026-06-12', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-67890-02', supervisor_id: 'admin' },
+      { id: 'pay_6', clientCedula: '11223', installmentNumber: 1, amount: 100000, date: '2026-05-20', agentName: 'María López', status: 'Pagado', signature: 'CrediPay-SIG-11223-01', supervisor_id: 'admin' },
+      { id: 'pay_7', clientCedula: '11223', installmentNumber: 2, amount: 50000, date: '2026-05-30', agentName: 'María López', status: 'Abonado', signature: 'CrediPay-SIG-11223-02', supervisor_id: 'admin' }
     ]);
     if (paymentsErr) console.error("Error al sembrar pagos semilla:", paymentsErr);
 
@@ -233,7 +233,7 @@ const db = {
 
   async saveUser(user) {
     const supabase = await initSupabase();
-    console.log('💾 [BulaPay DB saveUser] Recibido usuario para inserción con rol:', user.role);
+    console.log('💾 [CrediPay DB saveUser] Recibido usuario para inserción con rol:', user.role);
     const supId = this.getSupervisorId();
     if (supId && !user.supervisor_id) {
       user.supervisor_id = supId;
@@ -400,7 +400,7 @@ const db = {
       image: String(restaurantData.image || restaurantData.logo_url || restaurantData.logo || restaurantData.logoUrl || restaurantData.cover_url || '').trim()
     };
 
-    console.log('📡 [BulaPay DB saveRestaurant] Enviando vitrina a /api/restaurants (Neon PostgreSQL):', payload);
+    console.log('📡 [CrediPay DB saveRestaurant] Enviando vitrina a /api/restaurants (Neon PostgreSQL):', payload);
 
     try {
       const response = await fetch('/api/restaurants', {
@@ -411,10 +411,10 @@ const db = {
         body: JSON.stringify(payload)
       });
       const resData = await response.json();
-      console.log('✅ [BulaPay DB saveRestaurant] Respuesta de /api/restaurants:', resData);
+      console.log('✅ [CrediPay DB saveRestaurant] Respuesta de /api/restaurants:', resData);
       return resData;
     } catch (err) {
-      console.error('❌ [BulaPay DB saveRestaurant] Error en fetch /api/restaurants:', err);
+      console.error('❌ [CrediPay DB saveRestaurant] Error en fetch /api/restaurants:', err);
       throw err;
     }
   },
@@ -959,7 +959,7 @@ const db = {
         });
       });
 
-      console.log('✅ [BulaPay DB] Cartones activos re-mapeados con clients (loadActiveCredits):', activeCreditsList);
+      console.log('✅ [CrediPay DB] Cartones activos re-mapeados con clients (loadActiveCredits):', activeCreditsList);
       return activeCreditsList;
     } catch (err) {
       console.error("Excepción en loadActiveCredits:", err);
@@ -1729,7 +1729,7 @@ const db = {
     const outstanding = Math.round(Number(client.outstanding || 0));
     if (outstanding <= 0) {
       const clientName = client.name || client.nombre || 'Cliente';
-      const message = `¡Felicitaciones por pagar las cuotas exitosamente! BulaPay te invita a obtener un nuevo crédito.`;
+      const message = `¡Felicitaciones por pagar las cuotas exitosamente! CrediPay te invita a obtener un nuevo crédito.`;
 
       const executeLiquidation = async () => {
         try {
@@ -1748,8 +1748,8 @@ const db = {
         }
       };
 
-      if (typeof window.BulaPayAgent !== 'undefined' && typeof window.BulaPayAgent.showSuccessLiquidationModal === 'function') {
-        window.BulaPayAgent.showSuccessLiquidationModal(client, onCompleteCallback);
+      if (typeof window.CrediPayAgent !== 'undefined' && typeof window.CrediPayAgent.showSuccessLiquidationModal === 'function') {
+        window.CrediPayAgent.showSuccessLiquidationModal(client, onCompleteCallback);
         return true;
       }
 
@@ -1953,7 +1953,7 @@ const db = {
 
     const installmentNumber = payment.installmentNumber || (activeCartonPayments.length + 1);
     
-    const signature = `BulaPay-SIG-${payment.clientCedula}-${Date.now().toString().slice(-4)}`;
+    const signature = `CrediPay-SIG-${payment.clientCedula}-${Date.now().toString().slice(-4)}`;
     const id = 'pay_' + installmentNumber + '_' + Date.now();
     
     const supId = this.getSupervisorId();
@@ -2009,7 +2009,7 @@ const db = {
     }
     
     // Dispatch custom event to notify supervisor SPA & agent UI in real-time
-    window.dispatchEvent(new CustomEvent('bulapay-payment-registered', { detail: newPayment }));
+    window.dispatchEvent(new CustomEvent('credipay-payment-registered', { detail: newPayment }));
 
     return newPayment;
   },
@@ -2046,9 +2046,9 @@ const db = {
       this.setCurrentUser(currentUser);
       if (updatedData.role) {
         if (updatedData.role === 'Usuario Supervisor' || updatedData.role === 'Supervisor' || updatedData.role === 'Administrador') {
-          localStorage.setItem('bulaRole', 'supervisor');
+          localStorage.setItem('crediRole', 'supervisor');
         } else if (updatedData.role === 'Agente Independiente') {
-          localStorage.setItem('bulaRole', 'independent');
+          localStorage.setItem('crediRole', 'independent');
         }
       }
     }
@@ -2091,7 +2091,7 @@ const db = {
 
     // 3. Sincronización inmediata en todas las llaves de localStorage
     try {
-      const keys = ['bula_users', 'users', 'bulapay_users', 'bula_users_db', 'bula_local_users'];
+      const keys = ['credipay_users', 'users', 'credipay_users', 'credipay_users_db', 'credi_local_users'];
       for (const k of keys) {
         const raw = localStorage.getItem(k);
         if (raw) {
@@ -2935,7 +2935,7 @@ const db = {
               agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
               agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
               status: 'Pagado',
-              signature: `BulaPay-SIG-${cedula}-LIQ-${i}`,
+              signature: `CrediPay-SIG-${cedula}-LIQ-${i}`,
               supervisor_id: supId
             });
           }
@@ -3749,7 +3749,7 @@ const db = {
 
   _saveSupportTicketLocal(ticket) {
     try {
-      const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets');
+      const raw = localStorage.getItem('credi_support_tickets') || localStorage.getItem('credi_local_tickets');
       const tickets = raw ? JSON.parse(raw) : [];
       const existsIndex = tickets.findIndex(t => t.id === ticket.id);
       if (existsIndex >= 0) {
@@ -3757,8 +3757,8 @@ const db = {
       } else {
         tickets.unshift(ticket);
       }
-      localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
-      localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
+      localStorage.setItem('credi_support_tickets', JSON.stringify(tickets));
+      localStorage.setItem('credi_local_tickets', JSON.stringify(tickets));
     } catch(e) {
       console.warn("Error guardando ticket en localStorage:", e);
     }
@@ -3767,7 +3767,7 @@ const db = {
   async getSupportTickets() {
     let localTickets = [];
     try {
-      const raw = localStorage.getItem('bula_support_tickets') || localStorage.getItem('bula_local_tickets');
+      const raw = localStorage.getItem('credi_support_tickets') || localStorage.getItem('credi_local_tickets');
       if (raw) localTickets = JSON.parse(raw);
     } catch(e) {}
 
@@ -3777,14 +3777,14 @@ const db = {
 
   async updateSupportTicketStatus(ticketId, newStatus) {
     try {
-      const raw = localStorage.getItem('bula_support_tickets');
+      const raw = localStorage.getItem('credi_support_tickets');
       if (raw) {
         const tickets = JSON.parse(raw);
         const target = tickets.find(t => t.id === ticketId);
         if (target) {
           target.status = newStatus;
-          localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
-          localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
+          localStorage.setItem('credi_support_tickets', JSON.stringify(tickets));
+          localStorage.setItem('credi_local_tickets', JSON.stringify(tickets));
         }
       }
     } catch(e) {}
@@ -3792,12 +3792,12 @@ const db = {
 
   async deleteSupportTicket(ticketId) {
     try {
-      const raw = localStorage.getItem('bula_support_tickets');
+      const raw = localStorage.getItem('credi_support_tickets');
       if (raw) {
         let tickets = JSON.parse(raw);
         tickets = tickets.filter(t => t.id !== ticketId);
-        localStorage.setItem('bula_support_tickets', JSON.stringify(tickets));
-        localStorage.setItem('bula_local_tickets', JSON.stringify(tickets));
+        localStorage.setItem('credi_support_tickets', JSON.stringify(tickets));
+        localStorage.setItem('credi_local_tickets', JSON.stringify(tickets));
       }
     } catch(e) {}
   },
@@ -3838,7 +3838,7 @@ const db = {
 
     // 2. Actualizar en localStorage fallback
     try {
-      const keys = ['bula_users', 'users', 'bulapay_users'];
+      const keys = ['credipay_users', 'users', 'credipay_users'];
       for (const k of keys) {
         const raw = localStorage.getItem(k);
         if (raw) {
@@ -3866,350 +3866,121 @@ const db = {
   },
 
   async saveAnnouncement(ad) {
-    if (!ad) return;
+    if (!ad) return { success: false, error: 'Sin datos de anuncio' };
     const normalized = {
       id: String(ad.id || 'ad_' + Date.now()),
-      category: ad.category || ad.categoria || 'Comercial',
       categoria: ad.categoria || ad.category || 'Comercial',
-      start_date: ad.start_date || ad.fecha_inicio || '',
       fecha_inicio: ad.fecha_inicio || ad.start_date || '',
-      end_date: ad.end_date || ad.fecha_fin || '',
       fecha_fin: ad.fecha_fin || ad.end_date || '',
-      start_time: ad.start_time || ad.hora_inicio || '00:00',
       hora_inicio: ad.hora_inicio || ad.start_time || '00:00',
-      end_time: ad.end_time || ad.hora_fin || '23:59',
       hora_fin: ad.hora_fin || ad.end_time || '23:59',
-      trigger_navigation: ad.trigger_navigation ?? ad.detonante_general ?? false,
-      detonante_general: ad.detonante_general ?? ad.trigger_navigation ?? false,
-      trigger_client_search: ad.trigger_client_search ?? ad.detonante_cliente ?? false,
-      detonante_cliente: ad.detonante_cliente ?? ad.trigger_client_search ?? false,
-      title_description: ad.descripcion || ad.mensaje || ad.message || ad.title_description || ad.description || ad.titulo || ad.title || '',
-      descripcion: ad.descripcion || ad.mensaje || ad.message || ad.title_description || ad.description || ad.titulo || ad.title || '',
-      mensaje: ad.mensaje || ad.message || ad.descripcion || ad.title_description || ad.description || ad.titulo || ad.title || '',
-      titulo: ad.titulo || ad.title || ad.descripcion || ad.mensaje || ad.message || '',
-      media_url: ad.media_url || ad.multimedia_url || ad.imagen || ad.image || '',
-      multimedia_url: ad.multimedia_url || ad.media_url || ad.imagen || ad.image || '',
-      imagen: ad.imagen || ad.image || ad.multimedia_url || ad.media_url || '',
-      impresiones: parseInt(ad.impresiones || ad.impressions || ad.views || 0, 10) || 0,
-      impressions: parseInt(ad.impressions || ad.impresiones || ad.views || 0, 10) || 0,
+      detonante_general: Boolean(ad.detonante_general ?? ad.trigger_navigation ?? false),
+      detonante_cliente: Boolean(ad.detonante_cliente ?? ad.trigger_client_search ?? false),
+      descripcion: ad.descripcion || ad.title_description || ad.mensaje || '',
+      multimedia_url: ad.multimedia_url || ad.media_url || ad.imagen || '',
+      impresiones: parseInt(ad.impresiones || ad.impressions || 0, 10) || 0,
       clics: parseInt(ad.clics || ad.clicks || 0, 10) || 0,
-      clicks: parseInt(ad.clicks || ad.clics || 0, 10) || 0,
       active: ad.active !== false && ad.active !== 'false',
       created_at: ad.created_at || new Date().toISOString()
     };
 
     try {
-      const raw = localStorage.getItem('bula_announcements');
-      const list = raw ? JSON.parse(raw) : [];
-      const index = list.findIndex(a => a && a.id === normalized.id);
-      if (index >= 0) {
-        list[index] = normalized;
-      } else {
-        list.unshift(normalized);
+      const supabase = await initSupabase();
+      if (!supabase) {
+        throw new Error("No se pudo conectar con Supabase Cloud.");
       }
-      localStorage.setItem('bula_announcements', JSON.stringify(list));
+
+      const { data, error, status } = await supabase
+        .from('credipay_anuncios')
+        .upsert([normalized])
+        .select();
+
+      if (error || (status !== 200 && status !== 201)) {
+        console.error("❌ Error Supabase al guardar anuncio:", error || `Status ${status}`);
+        return { success: false, error, status };
+      }
+
+      return { success: true, data, status };
     } catch(e) {
-      console.warn("Error guardando anuncio localmente:", e);
-    }
-
-    if (!window._supabase_ads_disabled) {
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          const verifiedTable = window._active_ads_table || 'bulapay_anuncios';
-          
-          // Construir payload base estricto sin enviar propiedades sobrantes que causen error 400 en REST Supabase
-          const basePayload = {
-            id: normalized.id,
-            categoria: normalized.categoria,
-            fecha_inicio: normalized.fecha_inicio,
-            fecha_fin: normalized.fecha_fin,
-            detonante_general: normalized.detonante_general,
-            detonante_cliente: normalized.detonante_cliente,
-            descripcion: normalized.descripcion,
-            multimedia_url: normalized.multimedia_url,
-            active: normalized.active,
-            created_at: normalized.created_at
-          };
-
-          let { error } = await supabase.from(verifiedTable).upsert([basePayload]);
-          if (error) {
-            console.warn("Upsert base payload falló, intentando mapeo alternativo (titulo/mensaje/imagen):", error.message);
-            const altPayload = {
-              id: normalized.id,
-              categoria: normalized.categoria,
-              titulo: normalized.titulo || normalized.descripcion,
-              mensaje: normalized.mensaje || normalized.descripcion,
-              imagen: normalized.multimedia_url,
-              fecha_inicio: normalized.fecha_inicio,
-              fecha_fin: normalized.fecha_fin,
-              active: normalized.active
-            };
-            await supabase.from(verifiedTable).upsert([altPayload]);
-          }
-        }
-      } catch(e) {
-        console.warn("Error upsert anuncio Supabase:", e);
-      }
+      console.error("Excepción en saveAnnouncement:", e);
+      return { success: false, error: e };
     }
   },
 
   async getAnnouncements() {
     try {
-      let localAds = [];
-      try {
-        const raw = localStorage.getItem('bula_announcements');
-        if (raw) {
-          localAds = JSON.parse(raw);
-          if (Array.isArray(localAds)) {
-            localAds = localAds.filter(a => a && a.id !== 'ad_demo_initial' && !String(a.descripcion || '').includes('v327'));
-          }
-        }
-      } catch(e) {}
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('credipay_anuncios')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      let supabaseAds = [];
-
-      const candidateTables = window._active_ads_table 
-        ? [window._active_ads_table, 'bulapay_anuncios', 'anuncios', 'ads', 'announcements']
-        : ['bulapay_anuncios', 'anuncios', 'ads', 'announcements'];
-
-      const tried = new Set();
-
-      if (!window._supabase_ads_disabled) {
-        try {
-          const supabase = await initSupabase();
-          if (supabase) {
-            for (const table of candidateTables) {
-              if (tried.has(table)) continue;
-              tried.add(table);
-
-              let { data, error } = await supabase
-                .from(table)
-                .select('*')
-                .order('created_at', { ascending: false });
-
-              if (error) {
-                const fallbackRes = await supabase
-                  .from(table)
-                  .select('*');
-                if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
-                  data = fallbackRes.data;
-                  error = null;
-                }
-              }
-
-              if (!error && Array.isArray(data) && data.length > 0) {
-                window._active_ads_table = table;
-                try { localStorage.setItem('bula_active_ads_table', table); } catch(e) {}
-                supabaseAds = data.map(item => {
-                  const cat = item.categoria || item.category || 'Comercial';
-                  const textMsg = item.descripcion || item.mensaje || item.message || item.title_description || item.description || item.titulo || item.title || '';
-                  const media = item.multimedia_url || item.media_url || item.imagen || item.image || '';
-                  const imp = parseInt(item.impresiones || item.impressions || item.views || 0, 10) || 0;
-                  const clk = parseInt(item.clics || item.clicks || 0, 10) || 0;
-
-                  return {
-                    id: String(item.id || item.ad_id || Date.now()),
-                    category: cat,
-                    categoria: cat,
-                    start_date: item.fecha_inicio || item.start_date || '',
-                    fecha_inicio: item.fecha_inicio || item.start_date || '',
-                    end_date: item.fecha_fin || item.end_date || '',
-                    fecha_fin: item.fecha_fin || item.end_date || '',
-                    start_time: item.hora_inicio || item.start_time || '00:00',
-                    hora_inicio: item.hora_inicio || item.start_time || '00:00',
-                    end_time: item.hora_fin || item.end_time || '23:59',
-                    hora_fin: item.hora_fin || item.end_time || '23:59',
-                    trigger_navigation: item.detonante_general ?? item.trigger_navigation ?? false,
-                    detonante_general: item.detonante_general ?? item.trigger_navigation ?? false,
-                    trigger_client_search: item.detonante_cliente ?? item.trigger_client_search ?? false,
-                    detonante_cliente: item.detonante_cliente ?? item.trigger_client_search ?? false,
-                    title_description: textMsg,
-                    descripcion: textMsg,
-                    mensaje: textMsg,
-                    titulo: item.titulo || item.title || textMsg,
-                    title: item.title || item.titulo || textMsg,
-                    media_url: media,
-                    multimedia_url: media,
-                    imagen: media,
-                    image: media,
-                    impresiones: imp,
-                    impressions: imp,
-                    clics: clk,
-                    clicks: clk,
-                    active: item.active !== false && item.active !== 'false',
-                    created_at: item.created_at || new Date().toISOString()
-                  };
-                });
-                break;
-              }
-            }
-          }
-        } catch(e) {
-          console.warn("Error consultando Supabase anuncios:", e);
+        if (!error && Array.isArray(data)) {
+          return data.map(item => ({
+            id: String(item.id || Date.now()),
+            categoria: item.categoria || 'Comercial',
+            category: item.categoria || 'Comercial',
+            fecha_inicio: item.fecha_inicio || '',
+            start_date: item.fecha_inicio || '',
+            fecha_fin: item.fecha_fin || '',
+            end_date: item.fecha_fin || '',
+            hora_inicio: item.hora_inicio || '00:00',
+            start_time: item.hora_inicio || '00:00',
+            hora_fin: item.hora_fin || '23:59',
+            end_time: item.hora_fin || '23:59',
+            detonante_general: Boolean(item.detonante_general),
+            trigger_navigation: Boolean(item.detonante_general),
+            detonante_cliente: Boolean(item.detonante_cliente),
+            trigger_client_search: Boolean(item.detonante_cliente),
+            descripcion: item.descripcion || '',
+            title_description: item.descripcion || '',
+            multimedia_url: item.multimedia_url || '',
+            media_url: item.multimedia_url || '',
+            impresiones: parseInt(item.impresiones || 0, 10) || 0,
+            impressions: parseInt(item.impresiones || 0, 10) || 0,
+            clics: parseInt(item.clics || 0, 10) || 0,
+            clicks: parseInt(item.clics || 0, 10) || 0,
+            active: item.active !== false && item.active !== 'false',
+            created_at: item.created_at || new Date().toISOString()
+          }));
         }
       }
-
-      const adsMap = new Map();
-      supabaseAds.forEach(a => { if (a && a.id) adsMap.set(a.id, a); });
-      localAds.forEach(a => {
-        if (a && a.id && !adsMap.has(a.id) && a.id !== 'ad_demo_initial' && !String(a.descripcion || '').includes('v327')) {
-          adsMap.set(a.id, a);
-        }
-      });
-
-      let allAds = Array.from(adsMap.values());
-
-      const realAds = allAds.filter(a => a && a.id !== 'ad_demo_initial' && !String(a.descripcion || '').includes('v327'));
-      if (realAds.length > 0) {
-        allAds = realAds;
-        try {
-          localStorage.setItem('bula_announcements', JSON.stringify(realAds));
-        } catch(e) {}
-      } else {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const sampleAd = {
-          id: 'ad_demo_initial',
-          categoria: 'Comercial',
-          category: 'Comercial',
-          fecha_inicio: todayStr,
-          start_date: todayStr,
-          fecha_fin: '2099-12-31',
-          end_date: '2099-12-31',
-          hora_inicio: '00:00',
-          start_time: '00:00',
-          hora_fin: '23:59',
-          end_time: '23:59',
-          detonante_general: true,
-          trigger_navigation: true,
-          detonante_cliente: true,
-          trigger_client_search: true,
-          descripcion: '📢 Módulo de Anuncios BulaPay v336: Publicidad y comunicados institucionales activos.',
-          title_description: '📢 Módulo de Anuncios BulaPay v336: Publicidad y comunicados institucionales activos.',
-          multimedia_url: '',
-          media_url: '',
-          impresiones: 0,
-          impressions: 0,
-          clics: 0,
-          clicks: 0,
-          active: true,
-          created_at: '2020-01-01T00:00:00.000Z'
-        };
-        allAds = [sampleAd];
-      }
-
-      allAds.sort((a, b) => {
-        const timeA = new Date(a.created_at || a.fecha_inicio || a.start_date || 0).getTime();
-        const timeB = new Date(b.created_at || b.fecha_inicio || b.start_date || 0).getTime();
-        if (timeB !== timeA) return timeB - timeA;
-        return String(b.id || '').localeCompare(String(a.id || ''));
-      });
-
-      return allAds;
     } catch(topErr) {
-      console.warn("Excepción atrapada en getAnnouncements, usando fallback:", topErr);
-      return [];
+      console.warn("Excepción al consultar credipay_anuncios:", topErr);
     }
+    return [];
   },
 
   async incrementAdImpression(adId) {
     if (!adId) return;
     try {
-      const raw = localStorage.getItem('bula_announcements');
-      if (raw) {
-        const ads = JSON.parse(raw);
-        const target = ads.find(a => a && String(a.id) === String(adId));
-        if (target) {
-          target.impresiones = (parseInt(target.impresiones || 0, 10) || 0) + 1;
-          target.impressions = target.impresiones;
-          localStorage.setItem('bula_announcements', JSON.stringify(ads));
-        }
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data } = await supabase.from('credipay_anuncios').select('impresiones').eq('id', adId).maybeSingle();
+        const current = (data && data.impresiones) || 0;
+        const nextVal = Number(current) + 1;
+        await supabase.from('credipay_anuncios').update({ impresiones: nextVal }).eq('id', adId);
+        window.dispatchEvent(new CustomEvent('credi_ad_metrics_updated', { detail: { adId, impresiones: nextVal } }));
       }
-    } catch(e) {}
-
-    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table') || 'bulapay_anuncios';
-    if (verifiedTable && !window._supabase_ads_disabled) {
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          const { data } = await supabase.from(verifiedTable).select('*').eq('id', adId).maybeSingle();
-          const current = (data && (data.impresiones || data.impressions || data.views || 0)) || 0;
-          const nextVal = Number(current) + 1;
-
-          // Intentar actualizar de forma totalmente aislada evitando responder con error 400
-          const possibleCols = ['impresiones', 'impressions', 'views'];
-          let updated = false;
-          for (const col of possibleCols) {
-            try {
-              const payload = {};
-              payload[col] = nextVal;
-              const { error } = await supabase.from(verifiedTable).update(payload).eq('id', adId);
-              if (!error) {
-                updated = true;
-                break;
-              }
-            } catch(colErr) {}
-          }
-
-          if (updated) {
-            console.log(`👁️ [Supabase Cloud bulapay-v355] Impresión incrementada exitosamente a ${nextVal} para anuncio ID: "${adId}".`);
-          }
-          
-          window.dispatchEvent(new CustomEvent('bula_ad_metrics_updated', { detail: { adId, impresiones: nextVal } }));
-        }
-      } catch(e) {
-        console.warn("Error silencioso incrementando impresión en Supabase:", e);
-      }
+    } catch(e) {
+      console.warn("Error incrementando impresión en Supabase:", e);
     }
   },
 
   async incrementAdClick(adId) {
     if (!adId) return;
     try {
-      const raw = localStorage.getItem('bula_announcements');
-      if (raw) {
-        const ads = JSON.parse(raw);
-        const target = ads.find(a => a && String(a.id) === String(adId));
-        if (target) {
-          target.clics = (parseInt(target.clics || 0, 10) || 0) + 1;
-          target.clicks = target.clics;
-          localStorage.setItem('bula_announcements', JSON.stringify(ads));
-        }
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data } = await supabase.from('credipay_anuncios').select('clics').eq('id', adId).maybeSingle();
+        const current = (data && data.clics) || 0;
+        const nextVal = Number(current) + 1;
+        await supabase.from('credipay_anuncios').update({ clics: nextVal }).eq('id', adId);
+        window.dispatchEvent(new CustomEvent('credi_ad_metrics_updated', { detail: { adId, clics: nextVal } }));
       }
-    } catch(e) {}
-
-    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table') || 'bulapay_anuncios';
-    if (verifiedTable && !window._supabase_ads_disabled) {
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          const { data } = await supabase.from(verifiedTable).select('*').eq('id', adId).maybeSingle();
-          const current = (data && (data.clics || data.clicks || 0)) || 0;
-          const nextVal = Number(current) + 1;
-
-          const possibleCols = ['clics', 'clicks'];
-          let updated = false;
-          for (const col of possibleCols) {
-            try {
-              const payload = {};
-              payload[col] = nextVal;
-              const { error } = await supabase.from(verifiedTable).update(payload).eq('id', adId);
-              if (!error) {
-                updated = true;
-                break;
-              }
-            } catch(colErr) {}
-          }
-
-          if (updated) {
-            console.log(`🖱️ [Supabase Cloud bulapay-v355] Clic incrementado exitosamente a ${nextVal} para anuncio ID: "${adId}".`);
-          }
-
-          window.dispatchEvent(new CustomEvent('bula_ad_metrics_updated', { detail: { adId, clics: nextVal } }));
-        }
-      } catch(e) {
-        console.warn("Error silencioso incrementando clic en Supabase:", e);
-      }
+    } catch(e) {
+      console.warn("Error incrementando clic en Supabase:", e);
     }
   },
 
@@ -4250,22 +4021,22 @@ const db = {
 
     // Limpieza de almacenamiento local para evitar estados desincronizados
     try {
-      ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
+      ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // Consulta directa y exclusiva a Supabase Cloud (bulapay_notificaciones)
+    // Consulta directa y exclusiva a Supabase Cloud (credipay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
           let { data, error } = await supabase
-            .from('bulapay_notificaciones')
+            .from('credipay_notificaciones')
             .select('*')
             .order('created_at', { ascending: false });
 
           if (error) {
-            console.warn("⚠️ Error consultando tabla bulapay_notificaciones en Supabase Cloud:", error);
-            const fallbackRes = await supabase.from('bulapay_notificaciones').select('*');
+            console.warn("⚠️ Error consultando tabla credipay_notificaciones en Supabase Cloud:", error);
+            const fallbackRes = await supabase.from('credipay_notificaciones').select('*');
             if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
               data = fallbackRes.data;
               error = null;
@@ -4295,7 +4066,7 @@ const db = {
               });
 
             supabaseList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-            console.log(`🔔 [BulaPay Comunicados Cloud-Only Supabase] Obtención exitosa para ${currentUsername || 'anónimo'} (${supabaseList.length}):`, supabaseList);
+            console.log(`🔔 [CrediPay Comunicados Cloud-Only Supabase] Obtención exitosa para ${currentUsername || 'anónimo'} (${supabaseList.length}):`, supabaseList);
             return supabaseList;
           }
         }
@@ -4326,16 +4097,16 @@ const db = {
 
     // Purga de almacenamiento local
     try {
-      ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
+      ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // Publicación estricta y directa en Supabase Cloud (bulapay_notificaciones)
+    // Publicación estricta y directa en Supabase Cloud (credipay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
           // Intento 1: Objeto estricto con id Texto, username y target_username
-          let { error } = await supabase.from('bulapay_notificaciones').insert([{
+          let { error } = await supabase.from('credipay_notificaciones').insert([{
             id: payload.id,
             titulo: payload.titulo,
             mensaje: payload.mensaje,
@@ -4347,7 +4118,7 @@ const db = {
           // Intento 2: Objeto estricto con id Numérico, username y target_username
           if (error) {
             console.warn("⚠️ Intento 1 (id texto) falló. Probando id numérico con username...");
-            const res2 = await supabase.from('bulapay_notificaciones').insert([{
+            const res2 = await supabase.from('credipay_notificaciones').insert([{
               id: numericId,
               titulo: payload.titulo,
               mensaje: payload.mensaje,
@@ -4361,7 +4132,7 @@ const db = {
           // Intento 3: Inserción sin campo id (con username y target_username)
           if (error) {
             console.warn("⚠️ Intento 2 falló. Probando inserción sin campo id...");
-            const res3 = await supabase.from('bulapay_notificaciones').insert([{
+            const res3 = await supabase.from('credipay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
@@ -4374,7 +4145,7 @@ const db = {
           // Intento 4: Fallback con columna username (si target_username no existe en la tabla de Supabase)
           if (error) {
             console.warn("⚠️ Intento 3 falló. Intentando inserción de fallback con columna 'username'...");
-            const res4 = await supabase.from('bulapay_notificaciones').insert([{
+            const res4 = await supabase.from('credipay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
@@ -4386,7 +4157,7 @@ const db = {
           // Intento 5: Fallback con columna target_username (si username no existe en la tabla de Supabase)
           if (error) {
             console.warn("⚠️ Intento 4 falló. Intentando inserción de fallback con columna 'target_username'...");
-            const res5 = await supabase.from('bulapay_notificaciones').insert([{
+            const res5 = await supabase.from('credipay_notificaciones').insert([{
               titulo: payload.titulo,
               mensaje: payload.mensaje,
               categoria: payload.categoria,
@@ -4398,7 +4169,7 @@ const db = {
           // Intento 6: Fallback con id texto y solo username
           if (error) {
             console.warn("⚠️ Intento 5 falló. Intentando id texto con username...");
-            const res6 = await supabase.from('bulapay_notificaciones').insert([{
+            const res6 = await supabase.from('credipay_notificaciones').insert([{
               id: payload.id,
               titulo: payload.titulo,
               mensaje: payload.mensaje,
@@ -4409,9 +4180,9 @@ const db = {
           }
 
           if (!error) {
-            console.log(`✅ [BulaPay Comunicados Cloud-Only bulapay-v351] Publicado exitosamente en Supabase Cloud ("bulapay_notificaciones"):`, payload);
+            console.log(`✅ [CrediPay Comunicados Cloud-Only credipay-v351] Publicado exitosamente en Supabase Cloud ("credipay_notificaciones"):`, payload);
           } else {
-            console.error("❌ Error guardando en Supabase Cloud bulapay_notificaciones:", error);
+            console.error("❌ Error guardando en Supabase Cloud credipay_notificaciones:", error);
             throw new Error((error && (error.message || error.details || error.hint)) || "Error al insertar en Supabase Cloud.");
           }
         } else {
@@ -4429,17 +4200,17 @@ const db = {
   async deleteNotificacion(notifId) {
     // Purga de almacenamiento local
     try {
-      ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'bula_notificaciones'].forEach(k => localStorage.removeItem(k));
+      ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // Eliminación directa en Supabase Cloud (bulapay_notificaciones)
+    // Eliminación directa en Supabase Cloud (credipay_notificaciones)
     if (!window._supabase_notif_disabled) {
       try {
         const supabase = await initSupabase();
         if (supabase) {
-          const { error } = await supabase.from('bulapay_notificaciones').delete().eq('id', notifId);
-          if (error) console.warn("⚠️ Error eliminando en Supabase Cloud bulapay_notificaciones:", error);
-          else console.log(`🗑️ [BulaPay Comunicados Cloud-Only] Registro ${notifId} eliminado en Supabase Cloud.`);
+          const { error } = await supabase.from('credipay_notificaciones').delete().eq('id', notifId);
+          if (error) console.warn("⚠️ Error eliminando en Supabase Cloud credipay_notificaciones:", error);
+          else console.log(`🗑️ [CrediPay Comunicados Cloud-Only] Registro ${notifId} eliminado en Supabase Cloud.`);
         }
       } catch(e) {
         console.warn("Fallo eliminando de Supabase Nube:", e);
@@ -4448,48 +4219,25 @@ const db = {
   },
 
   async toggleAnnouncementStatus(adId, active) {
-    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table');
-    if (verifiedTable && !window._supabase_ads_disabled) {
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          await supabase.from(verifiedTable).update({ active: active }).eq('id', adId);
-        }
-      } catch(e) {}
-    }
-
     try {
-      const raw = localStorage.getItem('bula_announcements');
-      if (raw) {
-        const ads = JSON.parse(raw);
-        const target = ads.find(a => a.id === adId);
-        if (target) {
-          target.active = active;
-          localStorage.setItem('bula_announcements', JSON.stringify(ads));
-        }
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('credipay_anuncios').update({ active: Boolean(active) }).eq('id', adId);
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error("Error al actualizar estado en credipay_anuncios:", e);
+    }
   },
 
   async deleteAnnouncement(adId) {
-    const verifiedTable = window._active_ads_table || localStorage.getItem('bula_active_ads_table');
-    if (verifiedTable && !window._supabase_ads_disabled) {
-      try {
-        const supabase = await initSupabase();
-        if (supabase) {
-          await supabase.from(verifiedTable).delete().eq('id', adId);
-        }
-      } catch(e) {}
-    }
-
     try {
-      const raw = localStorage.getItem('bula_announcements');
-      if (raw) {
-        let ads = JSON.parse(raw);
-        ads = ads.filter(a => a.id !== adId);
-        localStorage.setItem('bula_announcements', JSON.stringify(ads));
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('credipay_anuncios').delete().eq('id', adId);
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error("Error al eliminar anuncio en credipay_anuncios:", e);
+    }
   },
 
   // ----------------------------------------------------
@@ -4693,7 +4441,7 @@ const db = {
       const supabase = await initSupabase();
       if (supabase) {
         const { data, error } = await supabase
-          .from('bulapay_programacion_cobros')
+          .from('credipay_programacion_cobros')
           .select('*')
           .order('dias_previos', { ascending: false });
         if (!error && Array.isArray(data) && data.length > 0) {
@@ -4701,16 +4449,16 @@ const db = {
         }
       }
     } catch(e) {
-      console.warn("⚠️ Error obteniendo bulapay_programacion_cobros de Supabase:", e);
+      console.warn("⚠️ Error obteniendo credipay_programacion_cobros de Supabase:", e);
     }
 
     try {
-      const raw = localStorage.getItem('bula_programacion_cobros');
+      const raw = localStorage.getItem('credi_programacion_cobros');
       if (raw) return JSON.parse(raw);
     } catch(e) {}
 
     return [
-      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio BulaPay. Realice su pago a tiempo para evitar suspensiones.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
+      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio CrediPay. Realice su pago a tiempo para evitar suspensiones.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
       { id: 'prog_4d', dias_previos: 4, titulo: '⚠️ Recordatorio Preventivo - 4 Días', mensaje: 'Faltan 4 días para el corte de su suscripción. Por favor efectúe el pago para mantener sus rutas y cobros activos.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
       { id: 'prog_3d', dias_previos: 3, titulo: '🚨 Advertencia Preventiva - 3 Días', mensaje: 'Atención: Solo restan 3 días antes de la suspensión del servicio por impago. Evite la interrupción de su acceso.', activo: true, prioridad: 'Alta', created_at: new Date().toISOString() },
       { id: 'prog_2d', dias_previos: 2, titulo: '🔥 URGENTE: Corte Próximo - 2 Días', mensaje: 'Faltan 2 días para el bloqueo por mora de su cuenta. Por favor reporte su pago inmediatamente a administración.', activo: true, prioridad: 'Alta', created_at: new Date().toISOString() },
@@ -4734,9 +4482,9 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { error } = await supabase.from('bulapay_programacion_cobros').upsert([payload]);
+        const { error } = await supabase.from('credipay_programacion_cobros').upsert([payload]);
         if (error) {
-          console.warn("⚠️ Upsert en bulapay_programacion_cobros falló:", error);
+          console.warn("⚠️ Upsert en credipay_programacion_cobros falló:", error);
         }
       }
     } catch(e) {
@@ -4748,7 +4496,7 @@ const db = {
       const idx = current.findIndex(c => c.id === id || c.dias_previos === payload.dias_previos);
       if (idx >= 0) current[idx] = { ...current[idx], ...payload };
       else current.push(payload);
-      localStorage.setItem('bula_programacion_cobros', JSON.stringify(current));
+      localStorage.setItem('credi_programacion_cobros', JSON.stringify(current));
     } catch(e) {}
 
     return payload;
@@ -4758,16 +4506,16 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        await supabase.from('bulapay_programacion_cobros').delete().eq('id', cobroId);
+        await supabase.from('credipay_programacion_cobros').delete().eq('id', cobroId);
       }
     } catch(e) {}
 
     try {
-      const raw = localStorage.getItem('bula_programacion_cobros');
+      const raw = localStorage.getItem('credi_programacion_cobros');
       if (raw) {
         let list = JSON.parse(raw);
         list = list.filter(item => item.id !== cobroId);
-        localStorage.setItem('bula_programacion_cobros', JSON.stringify(list));
+        localStorage.setItem('credi_programacion_cobros', JSON.stringify(list));
       }
     } catch(e) {}
   },
@@ -4827,7 +4575,7 @@ const db = {
 
           // Disparar Alerta Visual Invasiva (Popup / Modal con SweetAlert2) para la Cadena Progresiva (Días 1 a 5)
           if (diasRestantes >= 1 && diasRestantes <= 5) {
-            const sessionKey = `bula_cobro_alerted_${dbUser.username}_${diasRestantes}d`;
+            const sessionKey = `credi_cobro_alerted_${dbUser.username}_${diasRestantes}d`;
             if (!sessionStorage.getItem(sessionKey)) {
               sessionStorage.setItem(sessionKey, 'true');
               setTimeout(() => {
@@ -4882,4 +4630,5 @@ const db = {
 db.init();
 
 // Exportar globalmente
+window.CrediPayDB = db;
 window.BulaPayDB = db;
