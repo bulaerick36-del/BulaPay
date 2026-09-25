@@ -3883,8 +3883,7 @@ const db = {
       multimedia_url: ad.multimedia_url || ad.media_url || ad.imagen || '',
       impresiones: parseInt(ad.impresiones || ad.impressions || 0, 10) || 0,
       clics: parseInt(ad.clics || ad.clicks || 0, 10) || 0,
-      active: ad.active !== false && ad.active !== 'false',
-      created_at: ad.created_at || new Date().toISOString()
+      active: ad.active !== false && ad.active !== 'false'
     };
 
     try {
@@ -3914,10 +3913,28 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('bulapay_anuncios')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('fecha_inicio', { ascending: false });
+
+        if (error) {
+          console.warn("⚠️ Error consultando bulapay_anuncios ordenado por fecha_inicio, reintentando por id:", error);
+          const fallback = await supabase
+            .from('bulapay_anuncios')
+            .select('*')
+            .order('id', { ascending: false });
+          if (!fallback.error && Array.isArray(fallback.data)) {
+            data = fallback.data;
+            error = null;
+          } else {
+            const raw = await supabase.from('bulapay_anuncios').select('*');
+            if (!raw.error && Array.isArray(raw.data)) {
+              data = raw.data;
+              error = null;
+            }
+          }
+        }
 
         if (!error && Array.isArray(data)) {
           return data.map(item => ({
@@ -3945,7 +3962,7 @@ const db = {
             clics: parseInt(item.clics || 0, 10) || 0,
             clicks: parseInt(item.clics || 0, 10) || 0,
             active: item.active !== false && item.active !== 'false',
-            created_at: item.created_at || new Date().toISOString()
+            created_at: item.created_at || item.fecha_inicio || new Date().toISOString()
           }));
         }
       }

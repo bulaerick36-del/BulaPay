@@ -2316,8 +2316,7 @@ const superadminModule = {
       multimedia_url: mediaUrl,
       impresiones: 0,
       clics: 0,
-      active: true,
-      created_at: new Date().toISOString()
+      active: true
     };
 
     try {
