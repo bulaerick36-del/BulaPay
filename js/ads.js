@@ -25,17 +25,50 @@ const adsModule = {
     return true;
   },
 
+  // Evaluar en tiempo real si un anuncio está expirado combinando fecha_fin y hora_fin vs Date actual
+  isAdExpired(ad) {
+    if (!ad) return false;
+    const endDateStr = ad.fecha_fin || ad.end_date;
+    if (!endDateStr || endDateStr === 'N/A' || endDateStr === 'undefined') return false;
+
+    try {
+      const cleanEnd = String(endDateStr).split('T')[0].trim();
+      if (!cleanEnd) return false;
+
+      const dateParts = cleanEnd.split('-').map(Number);
+      if (dateParts.length !== 3 || dateParts.some(isNaN)) return false;
+
+      const year = dateParts[0];
+      const month = dateParts[1] - 1; // Month 0-indexed en JavaScript
+      const day = dateParts[2];
+
+      const endTimeStr = String(ad.hora_fin || ad.end_time || '23:59').trim();
+      const timeParts = endTimeStr.split(':').map(Number);
+      const hours = isNaN(timeParts[0]) ? 23 : timeParts[0];
+      const minutes = isNaN(timeParts[1]) ? 59 : timeParts[1];
+      const seconds = isNaN(timeParts[2]) ? 59 : timeParts[2];
+
+      const endDateTime = new Date(year, month, day, hours, minutes, seconds, 999);
+      if (isNaN(endDateTime.getTime())) return false;
+
+      const now = new Date();
+      return now.getTime() > endDateTime.getTime();
+    } catch(e) {
+      console.warn("Excepción comprobando expiración de anuncio:", e);
+      return false;
+    }
+  },
+
   // Evaluar si una fecha cae dentro del rango (comprobando fecha_inicio y fecha_fin estricta)
-  isDateInRange(todayStr, startDateStr, endDateStr) {
+  isDateInRange(todayStr, startDateStr, endDateStr, startTimeStr = '00:00', endTimeStr = '23:59') {
     if (!todayStr) return true;
     try {
       const cleanToday = String(todayStr).split('T')[0].trim();
 
-      // 1. REGLA ESTRICTA DE FECHA DE FIN (Expiración):
-      // Si la fecha actual sobrepasa la fecha_fin, el anuncio expiró y NO debe mostrarse al público
+      // 1. REGLA ESTRICTA DE FECHA DE FIN (Expiración en tiempo real):
       if (endDateStr) {
-        const cleanEnd = String(endDateStr).split('T')[0].trim();
-        if (cleanEnd && cleanToday > cleanEnd) {
+        const adObj = { fecha_fin: endDateStr, hora_fin: endTimeStr };
+        if (this.isAdExpired(adObj)) {
           return false;
         }
       }
@@ -140,12 +173,18 @@ const adsModule = {
         const isActive = ad.active !== false && ad.active !== 'false' && ad.active !== 0 && ad.active !== '0';
         if (!isActive) return false;
 
+        // Descartar inmediatamente si el anuncio expiró en tiempo real por fecha_fin + hora_fin
+        if (this.isAdExpired(ad)) {
+          console.log(`⏰ [Anuncio #${idx + 1} - ${ad.id}] Expiró en tiempo real (Fin: ${ad.fecha_fin || ad.end_date} ${ad.hora_fin || ad.end_time}). Excluido.`);
+          return false;
+        }
+
         const startDate = String(ad.fecha_inicio || ad.start_date || '').split('T')[0].trim();
         const endDate = String(ad.fecha_fin || ad.end_date || '').split('T')[0].trim();
         const startTime = String(ad.hora_inicio || ad.start_time || '00:00').trim();
         const endTime = String(ad.hora_fin || ad.end_time || '23:59').trim();
 
-        const inRange = this.isDateInRange(todayStr, startDate, endDate);
+        const inRange = this.isDateInRange(todayStr, startDate, endDate, startTime, endTime);
         const inTimeRange = this.isTimeInRange(currentTimeStr, startTime, endTime);
 
         const hasNavConfig = ad.detonante_general !== undefined || ad.trigger_navigation !== undefined;
@@ -175,9 +214,8 @@ const adsModule = {
         const activeFallback = (allAds || []).filter(a => {
           if (!a) return false;
           const isActive = a.active !== false && a.active !== 'false' && a.active !== 0 && a.active !== '0';
-          const endDate = String(a.fecha_fin || a.end_date || '').split('T')[0].trim();
-          const isNotExpired = !endDate || todayStr <= endDate;
-          return isActive && isNotExpired;
+          const isExpired = this.isAdExpired(a);
+          return isActive && !isExpired;
         });
         if (activeFallback.length > 0) {
           console.log(`💡 [CrediPay Anuncios] Tomando anuncio activo y no vencido mediante fallback PWA.`);

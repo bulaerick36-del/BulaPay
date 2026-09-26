@@ -2488,6 +2488,42 @@ const superadminModule = {
     }
   },
 
+  // Helper de validación de expiración en tiempo real (combina fecha_fin y hora_fin vs Date())
+  isAdExpired(ad) {
+    if (window.adsModule && typeof window.adsModule.isAdExpired === 'function') {
+      return window.adsModule.isAdExpired(ad);
+    }
+    if (!ad) return false;
+    const endDateStr = ad.fecha_fin || ad.end_date;
+    if (!endDateStr || endDateStr === 'N/A' || endDateStr === 'undefined') return false;
+
+    try {
+      const cleanEnd = String(endDateStr).split('T')[0].trim();
+      if (!cleanEnd) return false;
+
+      const dateParts = cleanEnd.split('-').map(Number);
+      if (dateParts.length !== 3 || dateParts.some(isNaN)) return false;
+
+      const year = dateParts[0];
+      const month = dateParts[1] - 1;
+      const day = dateParts[2];
+
+      const endTimeStr = String(ad.hora_fin || ad.end_time || '23:59').trim();
+      const timeParts = endTimeStr.split(':').map(Number);
+      const hours = isNaN(timeParts[0]) ? 23 : timeParts[0];
+      const minutes = isNaN(timeParts[1]) ? 59 : timeParts[1];
+      const seconds = isNaN(timeParts[2]) ? 59 : timeParts[2];
+
+      const endDateTime = new Date(year, month, day, hours, minutes, seconds, 999);
+      if (isNaN(endDateTime.getTime())) return false;
+
+      const now = new Date();
+      return now.getTime() > endDateTime.getTime();
+    } catch(e) {
+      return false;
+    }
+  },
+
   async loadAdsList() {
     const listContainer = document.getElementById('sa-ads-list-container');
     if (!listContainer) return;
@@ -2543,14 +2579,14 @@ const superadminModule = {
           (isClient ? '💳 Consulta Cédula' : null)
         ].filter(Boolean).join(' | ') || 'Ninguno';
 
-        const cleanEnd = String(endDate).split('T')[0].trim();
-        const isExpired = cleanEnd && cleanEnd !== 'N/A' && todayStr > cleanEnd;
+        // Validación en tiempo real combinando fecha_fin y hora_fin con Date() actual
+        const isExpired = this.isAdExpired(ad);
 
         let statusBadgeHtml = '';
         let cardBorderColor = 'rgba(255,255,255,0.1)';
 
         if (isExpired) {
-          statusBadgeHtml = `<span style="padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 800; background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5);">🔴 Vencido</span>`;
+          statusBadgeHtml = `<span style="padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 800; background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5);">🔴 Expirado</span>`;
           cardBorderColor = 'rgba(239, 68, 68, 0.35)';
         } else if (isActive) {
           statusBadgeHtml = `<span style="padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 800; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">● Activo</span>`;
@@ -2683,7 +2719,11 @@ const superadminModule = {
       }
 
       this._cachedAnnouncements = ads || [];
-      const activeAds = (ads || []).filter(ad => ad.active !== false && ad.active !== 'false');
+      const activeAds = (ads || []).filter(ad => {
+        const isActive = ad.active !== false && ad.active !== 'false' && ad.active !== 0 && ad.active !== '0';
+        const isExpired = this.isAdExpired(ad);
+        return isActive && !isExpired;
+      });
 
       if (!activeAds || activeAds.length === 0) {
         selectEl.innerHTML = '<option value="">⚠️ No hay anuncios activos / en línea</option>';
@@ -2691,7 +2731,7 @@ const superadminModule = {
           <div style="background: rgba(15, 23, 42, 0.7); border: 1px dashed rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 2rem; text-align: center; color: #94a3b8;">
             <span style="font-size: 2.5rem;">📭</span>
             <h4 style="color: #f8fafc; margin: 0.75rem 0 0.25rem 0; font-size: 1.05rem;">Sin Anuncios Activos en Línea</h4>
-            <p style="font-size: 0.83rem; margin: 0; color: #94a3b8;">Todos los anuncios en Supabase se encuentran desactivados o no hay anuncios registrados. Activa un anuncio en la lista para ver su reporte analítico.</p>
+            <p style="font-size: 0.83rem; margin: 0; color: #94a3b8;">Todos los anuncios en Supabase se encuentran desactivados, expirados o no hay anuncios registrados. Activa un anuncio en la lista para ver su reporte analítico.</p>
           </div>
         `;
         return;
@@ -2728,6 +2768,7 @@ const superadminModule = {
     }
 
     const isActive = ad.active !== false && ad.active !== 'false';
+    const isExpired = this.isAdExpired(ad);
     const cat = ad.categoria || ad.category || 'Comercial';
     const startDate = ad.fecha_inicio || ad.start_date || 'N/A';
     const endDate = ad.fecha_fin || ad.end_date || 'N/A';
@@ -2747,6 +2788,17 @@ const superadminModule = {
 
     const isVideo = (window.adsModule && typeof window.adsModule.isVideoUrl === 'function' && window.adsModule.isVideoUrl(imgUrl));
 
+    let statusLabel = 'Inactivo';
+    let statusBadgeStyle = 'background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);';
+
+    if (isExpired) {
+      statusLabel = 'Expirado';
+      statusBadgeStyle = 'background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5);';
+    } else if (isActive) {
+      statusLabel = 'Activo / En Línea';
+      statusBadgeStyle = 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);';
+    }
+
     cardEl.innerHTML = `
       <!-- Tarjeta Principal de Información Profunda -->
       <div style="background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 14px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem;">
@@ -2757,8 +2809,8 @@ const superadminModule = {
             <span style="padding: 0.25rem 0.75rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; ${catBadgeStyle}">
               ${cat}
             </span>
-            <span style="padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">
-              ● ${isActive ? 'Activo / En Línea' : 'Inactivo'}
+            <span style="padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; ${statusBadgeStyle}">
+              ● ${statusLabel}
             </span>
           </div>
           <div style="font-size: 0.8rem; color: #94a3b8; font-weight: 600; display: flex; align-items: center; gap: 0.3rem;">
