@@ -4105,12 +4105,67 @@ const db = {
     }
   },
 
+  async getWhatsAppRecaudo() {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('credipay_config')
+          .select('valor')
+          .eq('clave', 'whatsapp_recaudo')
+          .maybeSingle();
+
+        if (!error && data && data.valor) {
+          return String(data.valor).trim();
+        }
+      }
+    } catch(e) {
+      console.warn("Error leyendo whatsapp_recaudo de Supabase:", e);
+    }
+
+    try {
+      const localNum = localStorage.getItem('credipay_whatsapp_recaudo');
+      if (localNum) return String(localNum).trim();
+    } catch(e) {}
+
+    return '3044191522';
+  },
+
+  async saveWhatsAppRecaudo(numero) {
+    if (!numero) return { success: false, error: 'Número no válido' };
+    const cleanNum = String(numero).replace(/\D/g, '').trim();
+    if (!cleanNum) return { success: false, error: 'Número vacío' };
+
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { error } = await supabase
+          .from('credipay_config')
+          .upsert([{ clave: 'whatsapp_recaudo', valor: cleanNum, updated_at: new Date().toISOString() }]);
+
+        if (error) {
+          console.error("❌ Error guardando whatsapp_recaudo en Supabase:", error);
+        }
+      }
+    } catch(e) {
+      console.error("Excepción guardando whatsapp_recaudo:", e);
+    }
+
+    try {
+      localStorage.setItem('credipay_whatsapp_recaudo', cleanNum);
+    } catch(e) {}
+
+    return { success: true, valor: cleanNum };
+  },
+
   async showCuentasRecaudoModal() {
     let cuentas = [];
+    let waNumber = '3044191522';
     try {
       cuentas = await this.getCuentas();
+      waNumber = await this.getWhatsAppRecaudo();
     } catch(e) {
-      console.warn("Error obteniendo cuentas para modal cliente:", e);
+      console.warn("Error obteniendo datos para modal cliente:", e);
     }
 
     let cuentasHtml = '';
@@ -4148,8 +4203,16 @@ const db = {
       cuentasHtml += '</div>';
     }
 
+    let digitsOnly = String(waNumber || '3044191522').replace(/\D/g, '');
+    if (digitsOnly.length === 10) {
+      digitsOnly = '57' + digitsOnly;
+    } else if (!digitsOnly.startsWith('57') && digitsOnly.length > 0) {
+      digitsOnly = '57' + digitsOnly;
+    }
+    if (!digitsOnly) digitsOnly = '573044191522';
+
     const waMsg = encodeURIComponent('Hola, adjunto el comprobante de pago de mi mensualidad de CrediPay');
-    const waUrl = `https://wa.me/?text=${waMsg}`;
+    const waUrl = `https://wa.me/${digitsOnly}?text=${waMsg}`;
 
     if (typeof Swal !== 'undefined') {
       Swal.fire({
@@ -4167,7 +4230,9 @@ const db = {
         cancelButtonColor: '#64748b',
         background: '#0f172a',
         color: '#ffffff',
-        width: '520px'
+        width: '520px',
+        heightAuto: false,
+        target: document.body
       }).then((res) => {
         if (res.isConfirmed) {
           window.open(waUrl, '_blank');

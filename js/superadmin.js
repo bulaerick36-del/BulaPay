@@ -3377,60 +3377,63 @@ const superadminModule = {
 
     const { value: password, isConfirmed } = await Swal.fire({
       title: '🔐 Verificación de Seguridad',
-      text: 'Ingresa la contraseña de autorización para gestionar las Cuentas de Recaudo:',
+      text: 'Ingresa la contraseña de Superadmin para acceder a Cuentas de Recaudo:',
       input: 'password',
-      inputPlaceholder: 'Ingresa la contraseña',
-      inputAttributes: {
-        maxlength: '30',
-        autocapitalize: 'off',
-        autocorrect: 'off'
-      },
+      inputPlaceholder: 'Contraseña de seguridad',
       showCancelButton: true,
-      confirmButtonColor: '#10b981',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: '🔓 Verificar y Entrar',
+      confirmButtonText: 'Acceder',
       cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981',
       background: '#0f172a',
       color: '#ffffff',
-      heightAuto: false,
-      target: document.body
+      customClass: {
+        container: 'swal2-top-layer'
+      },
+      inputValidator: (value) => {
+        if (!value) {
+          return '¡Debes ingresar la contraseña!';
+        }
+      }
     });
 
     if (!isConfirmed) return;
 
     if (password !== '25081998') {
-      await Swal.fire({
+      Swal.fire({
         icon: 'error',
         title: 'Acceso Denegado',
-        text: 'Contraseña incorrecta',
+        text: 'Contraseña incorrecta. No tienes permisos para gestionar las cuentas de recaudo.',
         confirmButtonColor: '#ef4444',
         background: '#0f172a',
-        color: '#ffffff',
-        heightAuto: false,
-        target: document.body
+        color: '#ffffff'
       });
       return;
     }
 
-    // Contraseña correcta (25081998) -> Abrir modal de gestión real
     this.openCuentasRecaudoModal();
   },
 
   async openCuentasRecaudoModal() {
     let cuentas = [];
+    let waNumber = '3044191522';
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getCuentas === 'function') {
-        cuentas = await window.CrediPayDB.getCuentas();
+      if (window.CrediPayDB) {
+        if (typeof window.CrediPayDB.getCuentas === 'function') {
+          cuentas = await window.CrediPayDB.getCuentas();
+        }
+        if (typeof window.CrediPayDB.getWhatsAppRecaudo === 'function') {
+          waNumber = await window.CrediPayDB.getWhatsAppRecaudo();
+        }
       }
     } catch(err) {
       console.error("Error cargando cuentas de recaudo:", err);
       cuentas = [];
     }
 
-    this.renderCuentasRecaudoSA(cuentas);
+    this.renderCuentasRecaudoSA(cuentas, waNumber);
   },
 
-  renderCuentasRecaudoSA(cuentas) {
+  renderCuentasRecaudoSA(cuentas, waNumber) {
     let modalEl = document.getElementById('modal-cuentas-recaudo-sa');
     if (!modalEl) {
       modalEl = document.createElement('div');
@@ -3448,7 +3451,7 @@ const superadminModule = {
         </div>
       `;
     } else {
-      cuentasListHtml = '<div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 250px; overflow-y: auto; padding-right: 0.25rem;">';
+      cuentasListHtml = '<div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 220px; overflow-y: auto; padding-right: 0.25rem;">';
       cuentas.forEach(c => {
         cuentasListHtml += `
           <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
@@ -3476,7 +3479,7 @@ const superadminModule = {
     }
 
     modalEl.innerHTML = `
-      <div style="background: #0f172a; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 16px; padding: 1.5rem; max-width: 520px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); display: flex; flex-direction: column; gap: 1.25rem;">
+      <div style="background: #0f172a; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 16px; padding: 1.5rem; max-width: 540px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); display: flex; flex-direction: column; gap: 1.15rem; max-height: 90vh; overflow-y: auto;">
         
         <!-- Cabecera -->
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem;">
@@ -3484,6 +3487,20 @@ const superadminModule = {
             <span>🏦</span> Cuentas de Recaudo CrediPay
           </h3>
           <button onclick="document.getElementById('modal-cuentas-recaudo-sa').style.display='none'" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-weight: bold;">✕</button>
+        </div>
+
+        <!-- Configuración Dinámica de WhatsApp Receptor -->
+        <div style="background: rgba(37, 211, 102, 0.1); border: 1px solid rgba(37, 211, 102, 0.3); border-radius: 12px; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem;">
+          <h4 style="margin: 0; font-size: 0.83rem; color: #25d366; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; display: flex; align-items: center; gap: 0.4rem;">
+            <span>📲</span> Configurar WhatsApp de Recaudo
+          </h4>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <input id="sa-input-whatsapp-recaudo" type="text" placeholder="Ej: 3044191522" value="${waNumber || '3044191522'}" style="flex: 1; min-width: 180px; background: #0b132b; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.85rem; font-weight: 700;">
+            <button type="button" onclick="superadminModule.saveWhatsAppRecaudo()" style="background: #25d366; border: none; color: #0b132b; padding: 0.45rem 0.85rem; border-radius: 6px; font-weight: 800; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 0.3rem; box-shadow: 0 2px 8px rgba(37, 211, 102, 0.3);">
+              💾 Guardar WhatsApp
+            </button>
+          </div>
+          <span style="font-size: 0.72rem; color: #94a3b8;">Los clientes y agentes serán redirigidos a este número al presionar 'Enviar Comprobante'.</span>
         </div>
 
         <!-- Formulario para Agregar Nueva Cuenta -->
@@ -3540,6 +3557,40 @@ const superadminModule = {
     `;
 
     modalEl.style.display = 'flex';
+  },
+
+  async saveWhatsAppRecaudo() {
+    const input = document.getElementById('sa-input-whatsapp-recaudo');
+    const val = input ? input.value.trim() : '';
+
+    if (!val) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({ icon: 'warning', title: 'Número Requerido', text: 'Por favor ingresa un número de WhatsApp válido.', confirmButtonColor: '#f59e0b', background: '#0f172a', color: '#fff' });
+      } else {
+        alert('⚠️ Por favor ingresa un número de WhatsApp válido.');
+      }
+      return;
+    }
+
+    try {
+      const res = await window.CrediPayDB.saveWhatsAppRecaudo(val);
+      if (res && res.success !== false) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({ icon: 'success', title: '¡WhatsApp Guardado!', text: `Los comprobantes serán enviados a: +57 ${res.valor}`, timer: 2000, showConfirmButton: false, background: '#0f172a', color: '#fff' });
+        } else {
+          alert(`✅ WhatsApp configurado con éxito: ${res.valor}`);
+        }
+      } else {
+        throw new Error(res?.error?.message || 'Error guardando en Supabase');
+      }
+    } catch(e) {
+      console.error("Error guardando WhatsApp de recaudo:", e);
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar el número: ' + e.message, confirmButtonColor: '#ef4444', background: '#0f172a', color: '#fff' });
+      } else {
+        alert('❌ Error guardando WhatsApp: ' + e.message);
+      }
+    }
   },
 
   async saveNuevaCuentaRecaudo() {
