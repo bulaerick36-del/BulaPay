@@ -263,6 +263,9 @@ const superadminModule = {
               <button id="sa-btn-programar-cobro" onclick="superadminModule.openProgramarCobroModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" title="Programar mensajes de cobro preventivo">
                 📅 Programar mensaje de cobro
               </button>
+              <button id="sa-btn-cuentas-recaudo" onclick="superadminModule.openCuentasRecaudoWithSecurity(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);" title="Gestionar Cuentas Bancarias de Recaudo">
+                🏦 Cuentas de Recaudo
+              </button>
               <button id="sa-bell-btn" onclick="superadminModule.switchSuperadminTab('support', event)" style="position: relative; padding: 0.55rem 0.85rem; font-size: 1.1rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Notificaciones de Mensajes de Soporte">
                 🔔
                 <span id="sa-bell-badge" style="display: none; position: absolute; top: -6px; right: -6px; background: #ef4444; color: #ffffff; font-size: 0.72rem; font-weight: 900; padding: 0.15rem 0.45rem; border-radius: 9999px; border: 2px solid #1c2541; box-shadow: 0 0 10px rgba(239, 68, 68, 0.9);">0</span>
@@ -3350,6 +3353,248 @@ const superadminModule = {
     `;
 
     document.body.appendChild(modal);
+  },
+
+  // -------------------------------------------------------------
+  // MÓDULO DE GESTIÓN Y SEGURIDAD DE CUENTAS DE RECAUDO (25081998)
+  // -------------------------------------------------------------
+  async openCuentasRecaudoWithSecurity(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+
+    if (typeof Swal === 'undefined') {
+      const pwd = prompt("🔐 Contraseña de seguridad Superadmin:");
+      if (pwd === null) return;
+      if (pwd !== '25081998') {
+        alert("❌ Contraseña incorrecta");
+        return;
+      }
+      this.openCuentasRecaudoModal();
+      return;
+    }
+
+    const { value: password, isConfirmed } = await Swal.fire({
+      title: '🔐 Verificación de Seguridad',
+      text: 'Ingresa la contraseña de autorización para gestionar las Cuentas de Recaudo:',
+      input: 'password',
+      inputPlaceholder: 'Ingresa la contraseña',
+      inputAttributes: {
+        maxlength: '30',
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: '🔓 Verificar y Entrar',
+      cancelButtonText: 'Cancelar',
+      background: '#0f172a',
+      color: '#ffffff'
+    });
+
+    if (!isConfirmed) return;
+
+    if (password !== '25081998') {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Acceso Denegado',
+        text: 'Contraseña incorrecta',
+        confirmButtonColor: '#ef4444',
+        background: '#0f172a',
+        color: '#ffffff'
+      });
+      return;
+    }
+
+    // Contraseña correcta (25081998) -> Abrir modal de gestión real
+    this.openCuentasRecaudoModal();
+  },
+
+  async openCuentasRecaudoModal() {
+    let cuentas = [];
+    try {
+      if (window.CrediPayDB && typeof window.CrediPayDB.getCuentas === 'function') {
+        cuentas = await window.CrediPayDB.getCuentas();
+      }
+    } catch(err) {
+      console.error("Error cargando cuentas de recaudo:", err);
+      cuentas = [];
+    }
+
+    this.renderCuentasRecaudoSA(cuentas);
+  },
+
+  renderCuentasRecaudoSA(cuentas) {
+    let modalEl = document.getElementById('modal-cuentas-recaudo-sa');
+    if (!modalEl) {
+      modalEl = document.createElement('div');
+      modalEl.id = 'modal-cuentas-recaudo-sa';
+      modalEl.style.cssText = 'display: flex; position: fixed; inset: 0; z-index: 1000000; background: rgba(11, 19, 43, 0.88); align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(4px);';
+      document.body.appendChild(modalEl);
+    }
+
+    let cuentasListHtml = '';
+    if (!cuentas || cuentas.length === 0) {
+      cuentasListHtml = `
+        <div style="background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); border-radius: 10px; padding: 1.5rem; text-align: center; color: #94a3b8;">
+          <span style="font-size: 1.8rem;">📭</span>
+          <p style="margin-top: 0.4rem; font-weight: 600; font-size: 0.85rem;">No hay cuentas de recaudo registradas.</p>
+        </div>
+      `;
+    } else {
+      cuentasListHtml = '<div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 250px; overflow-y: auto; padding-right: 0.25rem;">';
+      cuentas.forEach(c => {
+        cuentasListHtml += `
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
+                <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 800; font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 4px;">
+                  🏦 ${c.banco || 'Banco'}
+                </span>
+                <span style="color: #94a3b8; font-size: 0.75rem; font-weight: 600;">(${c.tipo_cuenta || 'Ahorros'})</span>
+              </div>
+              <div style="font-size: 0.95rem; font-weight: 800; color: #ffffff; letter-spacing: 0.5px;">
+                💳 ${c.numero_cuenta}
+              </div>
+              <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 0.15rem;">
+                👤 Titular: <strong>${c.titular || 'N/A'}</strong>
+              </div>
+            </div>
+            <button onclick="superadminModule.deleteCuentaRecaudo('${c.id}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-size: 0.75rem; font-weight: 700; padding: 0.4rem 0.65rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+              🗑️ Eliminar
+            </button>
+          </div>
+        `;
+      });
+      cuentasListHtml += '</div>';
+    }
+
+    modalEl.innerHTML = `
+      <div style="background: #0f172a; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 16px; padding: 1.5rem; max-width: 520px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); display: flex; flex-direction: column; gap: 1.25rem;">
+        
+        <!-- Cabecera -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem;">
+          <h3 style="margin: 0; color: #34d399; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+            <span>🏦</span> Cuentas de Recaudo CrediPay
+          </h3>
+          <button onclick="document.getElementById('modal-cuentas-recaudo-sa').style.display='none'" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-weight: bold;">✕</button>
+        </div>
+
+        <!-- Formulario para Agregar Nueva Cuenta -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+          <h4 style="margin: 0; font-size: 0.85rem; color: #fbbf24; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">➕ Registrar Nueva Cuenta</h4>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 0.2rem;">Banco / Plataforma:</label>
+              <input id="sa-input-cuenta-banco" type="text" placeholder="Ej: Bancolombia, Nequi" style="width: 100%; background: #0b132b; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 0.2rem;">Tipo de Cuenta:</label>
+              <select id="sa-input-cuenta-tipo" style="width: 100%; background: #0b132b; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">
+                <option value="Ahorros">Ahorros</option>
+                <option value="Corriente">Corriente</option>
+                <option value="Nequi / Monedero">Nequi / Monedero</option>
+                <option value="Daviplata">Daviplata</option>
+                <option value="Transfiya">Transfiya</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 0.2rem;">Número de Cuenta / Teléfono:</label>
+              <input id="sa-input-cuenta-numero" type="text" placeholder="Ej: 1234567890" style="width: 100%; background: #0b132b; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 0.2rem;">Nombre Titular:</label>
+              <input id="sa-input-cuenta-titular" type="text" placeholder="Ej: CrediPay S.A.S." style="width: 100%; background: #0b132b; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">
+            </div>
+          </div>
+
+          <button onclick="superadminModule.saveNuevaCuentaRecaudo()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #fff; padding: 0.5rem; border-radius: 6px; font-weight: 800; font-size: 0.82rem; cursor: pointer; margin-top: 0.25rem;">
+            💾 Guardar Cuenta
+          </button>
+        </div>
+
+        <!-- Lista de Cuentas Existentes -->
+        <div>
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #94a3b8; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">📋 Cuentas Activas Registradas</h4>
+          ${cuentasListHtml}
+        </div>
+
+        <!-- Footer -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.75rem; text-align: right;">
+          <button onclick="document.getElementById('modal-cuentas-recaudo-sa').style.display='none'" style="padding: 0.45rem 1rem; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 6px; cursor: pointer; font-weight: 600;">
+            Cerrar
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    modalEl.style.display = 'flex';
+  },
+
+  async saveNuevaCuentaRecaudo() {
+    const banco = document.getElementById('sa-input-cuenta-banco')?.value?.trim();
+    const tipo = document.getElementById('sa-input-cuenta-tipo')?.value?.trim() || 'Ahorros';
+    const numero = document.getElementById('sa-input-cuenta-numero')?.value?.trim();
+    const titular = document.getElementById('sa-input-cuenta-titular')?.value?.trim();
+
+    if (!banco || !numero || !titular) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({ icon: 'warning', title: 'Campos requeridos', text: 'Por favor completa Banco, Número de cuenta y Titular.', confirmButtonColor: '#f59e0b', background: '#0f172a', color: '#fff' });
+      } else {
+        alert('⚠️ Por favor completa Banco, Número de cuenta y Titular.');
+      }
+      return;
+    }
+
+    try {
+      const res = await window.CrediPayDB.saveCuenta({
+        banco,
+        tipo_cuenta: tipo,
+        numero_cuenta: numero,
+        titular
+      });
+
+      if (res && res.success !== false) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({ icon: 'success', title: '¡Cuenta Guardada!', text: 'La cuenta de recaudo fue registrada exitosamente.', timer: 1800, showConfirmButton: false, background: '#0f172a', color: '#fff' });
+        }
+        await this.openCuentasRecaudoModal();
+      } else {
+        throw new Error(res?.error?.message || 'Error guardando en Supabase');
+      }
+    } catch(e) {
+      console.error("Error guardando cuenta de recaudo:", e);
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar la cuenta de recaudo: ' + e.message, confirmButtonColor: '#ef4444', background: '#0f172a', color: '#fff' });
+      } else {
+        alert('❌ Error al guardar cuenta: ' + e.message);
+      }
+    }
+  },
+
+  async deleteCuentaRecaudo(id) {
+    let confirmDel = true;
+    if (typeof window.showCrediConfirm === 'function') {
+      confirmDel = await window.showCrediConfirm('¿Estás seguro de eliminar esta cuenta de recaudo?', "CrediPay");
+    } else if (typeof Swal !== 'undefined') {
+      const res = await Swal.fire({ title: '¿Eliminar cuenta?', text: 'Esta acción no se puede deshacer.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Sí, eliminar', background: '#0f172a', color: '#fff' });
+      confirmDel = res.isConfirmed;
+    }
+    if (!confirmDel) return;
+
+    try {
+      await window.CrediPayDB.deleteCuenta(id);
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({ icon: 'success', title: 'Eliminada', text: 'La cuenta fue eliminada correctamente.', timer: 1500, showConfirmButton: false, background: '#0f172a', color: '#fff' });
+      }
+      await this.openCuentasRecaudoModal();
+    } catch(e) {
+      console.error("Error eliminando cuenta de recaudo:", e);
+    }
   }
 };
 

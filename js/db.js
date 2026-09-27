@@ -4004,6 +4004,180 @@ const db = {
     }
   },
 
+  // -------------------------------------------------------------
+  // MÓDULO DE CUENTAS DE RECAUDO (credipay_cuentas)
+  // -------------------------------------------------------------
+  async getCuentas() {
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('credipay_cuentas')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          return data;
+        }
+      }
+    } catch(e) {
+      console.warn("Error consultando credipay_cuentas en Supabase:", e);
+    }
+    try {
+      const raw = localStorage.getItem('credipay_cuentas');
+      return raw ? JSON.parse(raw) : [];
+    } catch(e) {
+      return [];
+    }
+  },
+
+  async saveCuenta(cuentaData) {
+    if (!cuentaData) return { success: false, error: 'Sin datos' };
+    const normalized = {
+      id: String(cuentaData.id || 'cta_' + Date.now()),
+      banco: String(cuentaData.banco || '').trim(),
+      tipo_cuenta: String(cuentaData.tipo_cuenta || 'Ahorros').trim(),
+      numero_cuenta: String(cuentaData.numero_cuenta || '').trim(),
+      titular: String(cuentaData.titular || '').trim(),
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('credipay_cuentas')
+          .upsert([normalized])
+          .select();
+
+        if (error) {
+          console.error("❌ Error de inserción en credipay_cuentas:", error);
+          return { success: false, error };
+        }
+        
+        let local = [];
+        try {
+          const raw = localStorage.getItem('credipay_cuentas');
+          local = raw ? JSON.parse(raw) : [];
+        } catch(e) {}
+        local = local.filter(c => c.id !== normalized.id);
+        local.unshift(normalized);
+        localStorage.setItem('credipay_cuentas', JSON.stringify(local));
+
+        return { success: true, data };
+      }
+    } catch(e) {
+      console.error("Excepción en saveCuenta:", e);
+    }
+
+    try {
+      let local = [];
+      const raw = localStorage.getItem('credipay_cuentas');
+      local = raw ? JSON.parse(raw) : [];
+      local = local.filter(c => c.id !== normalized.id);
+      local.unshift(normalized);
+      localStorage.setItem('credipay_cuentas', JSON.stringify(local));
+      return { success: true, data: [normalized] };
+    } catch(e) {
+      return { success: false, error: e };
+    }
+  },
+
+  async deleteCuenta(cuentaId) {
+    if (!cuentaId) return false;
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase.from('credipay_cuentas').delete().eq('id', cuentaId);
+      }
+    } catch(e) {
+      console.warn("Error eliminando cuenta en Supabase:", e);
+    }
+
+    try {
+      const raw = localStorage.getItem('credipay_cuentas');
+      let local = raw ? JSON.parse(raw) : [];
+      local = local.filter(c => String(c.id) !== String(cuentaId));
+      localStorage.setItem('credipay_cuentas', JSON.stringify(local));
+      return true;
+    } catch(e) {
+      return false;
+    }
+  },
+
+  async showCuentasRecaudoModal() {
+    let cuentas = [];
+    try {
+      cuentas = await this.getCuentas();
+    } catch(e) {
+      console.warn("Error obteniendo cuentas para modal cliente:", e);
+    }
+
+    let cuentasHtml = '';
+    if (!cuentas || cuentas.length === 0) {
+      cuentasHtml = `
+        <div style="background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.15); border-radius: 12px; padding: 1.5rem; text-align: center; color: #94a3b8; margin: 1rem 0;">
+          <span style="font-size: 2rem;">📭</span>
+          <p style="margin-top: 0.5rem; font-weight: 600; font-size: 0.88rem; color: #e2e8f0;">No hay cuentas de recaudo registradas en este momento.</p>
+          <p style="font-size: 0.78rem; color: #94a3b8; margin: 0;">Puedes hacer clic en "Enviar Comprobante" para contactar a soporte técnico o administración.</p>
+        </div>
+      `;
+    } else {
+      cuentasHtml = '<div style="display: flex; flex-direction: column; gap: 0.85rem; margin: 1rem 0; text-align: left; max-height: 280px; overflow-y: auto; padding-right: 0.25rem;">';
+      cuentas.forEach((c) => {
+        const cleanNumber = String(c.numero_cuenta || '').trim();
+        cuentasHtml += `
+          <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 1rem; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 800; font-size: 0.78rem; padding: 0.2rem 0.6rem; border-radius: 6px; text-transform: uppercase;">
+                🏦 ${c.banco || 'Banco'} (${c.tipo_cuenta || 'Ahorros'})
+              </span>
+              <button type="button" onclick="window.copyToClipboard('${cleanNumber}', this)" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; font-weight: 700; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+                📋 Copiar
+              </button>
+            </div>
+            <div style="font-size: 1.1rem; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; margin: 0.3rem 0;">
+              ${cleanNumber}
+            </div>
+            <div style="font-size: 0.78rem; color: #cbd5e1;">
+              👤 Titular: <strong style="color: #f8fafc;">${c.titular || 'N/A'}</strong>
+            </div>
+          </div>
+        `;
+      });
+      cuentasHtml += '</div>';
+    }
+
+    const waMsg = encodeURIComponent('Hola, adjunto el comprobante de pago de mi mensualidad de CrediPay');
+    const waUrl = `https://wa.me/?text=${waMsg}`;
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: '💳 Cuentas de Recaudo Oficiales',
+        html: `
+          <p style="color: #94a3b8; font-size: 0.85rem; margin-top: 0; margin-bottom: 0.5rem;">
+            Realiza tu transferencia o depósito a cualquiera de nuestras cuentas autorizadas y envía tu comprobante:
+          </p>
+          ${cuentasHtml}
+        `,
+        showCancelButton: true,
+        confirmButtonText: '📲 Enviar Comprobante',
+        confirmButtonColor: '#25d366',
+        cancelButtonText: 'Cerrar',
+        cancelButtonColor: '#64748b',
+        background: '#0f172a',
+        color: '#ffffff',
+        width: '520px'
+      }).then((res) => {
+        if (res.isConfirmed) {
+          window.open(waUrl, '_blank');
+        }
+      });
+    } else {
+      window.open(waUrl, '_blank');
+    }
+  },
+
   async getNotificaciones(user) {
     const currentUser = user || this.getCurrentUser();
     const currentUsername = currentUser ? String(currentUser.username || currentUser.documentNumber || '').toLowerCase().trim() : null;
@@ -4630,17 +4804,25 @@ const db = {
                     color: '#ffffff'
                   }).then((result) => {
                     if (result.isConfirmed) {
-                      // Redirigir a la sección de cobros o pagos de la app
-                      if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
-                        window.app.router.navigate('cobros');
+                      // Disparar modal estilizado de Cuentas de Recaudo con opción de copiar y WhatsApp
+                      if (typeof window.showCuentasRecaudoModal === 'function') {
+                        window.showCuentasRecaudoModal();
+                      } else if (window.CrediPayDB && typeof window.CrediPayDB.showCuentasRecaudoModal === 'function') {
+                        window.CrediPayDB.showCuentasRecaudoModal();
                       } else {
-                        window.location.hash = '#cobros';
+                        if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
+                          window.app.router.navigate('cobros');
+                        } else {
+                          window.location.hash = '#cobros';
+                        }
                       }
                     }
                   });
                 } else {
-                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ir a la sección de cobros/pagos?`, "CrediPay")) {
-                    if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
+                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ver las cuentas de recaudo para realizar su pago?`, "CrediPay")) {
+                    if (typeof window.showCuentasRecaudoModal === 'function') {
+                      window.showCuentasRecaudoModal();
+                    } else if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
                       window.app.router.navigate('cobros');
                     } else {
                       window.location.hash = '#cobros';
@@ -4666,4 +4848,67 @@ db.init();
 
 // Exportar globalmente
 window.CrediPayDB = db;
+
+window.showCuentasRecaudoModal = function() {
+  if (window.CrediPayDB && typeof window.CrediPayDB.showCuentasRecaudoModal === 'function') {
+    window.CrediPayDB.showCuentasRecaudoModal();
+  }
+};
+
+window.copyToClipboard = function(text, btnElement) {
+  if (!text) return;
+  const doToast = () => {
+    if (btnElement) {
+      const origText = btnElement.innerHTML;
+      btnElement.innerHTML = '✅ ¡Copiado!';
+      btnElement.style.background = 'rgba(16, 185, 129, 0.3)';
+      btnElement.style.color = '#34d399';
+      setTimeout(() => {
+        btnElement.innerHTML = origText;
+        btnElement.style.background = 'rgba(59, 130, 246, 0.2)';
+        btnElement.style.color = '#60a5fa';
+      }, 1800);
+    }
+    if (typeof Swal !== 'undefined') {
+      const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2000,
+        timerProgressBar: true,
+        background: '#1e293b',
+        color: '#fff'
+      });
+      Toast.fire({ icon: 'success', title: '¡Número de cuenta copiado!' });
+    }
+  };
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(text).then(doToast).catch(() => {
+      try {
+        const tempInput = document.createElement('input');
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        doToast();
+      } catch(e) {
+        alert('Número de cuenta: ' + text);
+      }
+    });
+  } else {
+    try {
+      const tempInput = document.createElement('input');
+      tempInput.value = text;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempInput);
+      doToast();
+    } catch(e) {
+      alert('Número de cuenta: ' + text);
+    }
+  }
+};
 window.BulaPayDB = db;
