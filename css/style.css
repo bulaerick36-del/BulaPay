@@ -2754,5 +2754,10 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   background: rgba(245, 158, 11, 0.04);
 }
 
+/* ASEGURAR QUE SWEETALERT2 SIEMPRE SE RENDERICE POR ENCIMA DEL OVERLAY SUPERADMIN */
+.swal2-container {
+  z-index: 9999999 !important;
+}
+
 
 

@@ -260,18 +260,18 @@ const superadminModule = {
               <p style="color: #94a3b8; margin: 0; font-size: 0.85rem;">Acceso Total Exclusivo - Cédula: 1121338578</p>
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-              <button id="sa-btn-programar-cobro" onclick="superadminModule.openProgramarCobroModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" title="Programar mensajes de cobro preventivo">
+              <button type="button" id="sa-btn-programar-cobro" onclick="superadminModule.openProgramarCobroModal(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; color: #0b132b; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);" title="Programar mensajes de cobro preventivo">
                 📅 Programar mensaje de cobro
               </button>
-              <button id="sa-btn-cuentas-recaudo" onclick="superadminModule.openCuentasRecaudoWithSecurity(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);" title="Gestionar Cuentas Bancarias de Recaudo">
+              <button type="button" id="sa-btn-cuentas-recaudo" onclick="superadminModule.openCuentasRecaudoWithSecurity(event)" style="position: relative; padding: 0.55rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; color: #ffffff; font-weight: 800; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);" title="Gestionar Cuentas Bancarias de Recaudo">
                 🏦 Cuentas de Recaudo
               </button>
-              <button id="sa-bell-btn" onclick="superadminModule.switchSuperadminTab('support', event)" style="position: relative; padding: 0.55rem 0.85rem; font-size: 1.1rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Notificaciones de Mensajes de Soporte">
+              <button type="button" id="sa-bell-btn" onclick="superadminModule.switchSuperadminTab('support', event)" style="position: relative; padding: 0.55rem 0.85rem; font-size: 1.1rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-weight: 700; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Notificaciones de Mensajes de Soporte">
                 🔔
                 <span id="sa-bell-badge" style="display: none; position: absolute; top: -6px; right: -6px; background: #ef4444; color: #ffffff; font-size: 0.72rem; font-weight: 900; padding: 0.15rem 0.45rem; border-radius: 9999px; border: 2px solid #1c2541; box-shadow: 0 0 10px rgba(239, 68, 68, 0.9);">0</span>
               </button>
-              <button onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
-              <button onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
+              <button type="button" onclick="superadminModule.openChangeSuperadminPwdModal()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; font-weight: 600; border-radius: 8px; cursor: pointer;">🔑 Cambiar Clave</button>
+              <button type="button" onclick="superadminModule.logout()" style="padding: 0.55rem 1rem; font-size: 0.85rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-weight: 700; border-radius: 8px; cursor: pointer;">🚪 Salir</button>
             </div>
           </div>
 
@@ -3359,7 +3359,10 @@ const superadminModule = {
   // MÓDULO DE GESTIÓN Y SEGURIDAD DE CUENTAS DE RECAUDO (25081998)
   // -------------------------------------------------------------
   async openCuentasRecaudoWithSecurity(e) {
-    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
 
     if (typeof Swal === 'undefined') {
       const pwd = prompt("🔐 Contraseña de seguridad Superadmin:");
@@ -3388,7 +3391,9 @@ const superadminModule = {
       confirmButtonText: '🔓 Verificar y Entrar',
       cancelButtonText: 'Cancelar',
       background: '#0f172a',
-      color: '#ffffff'
+      color: '#ffffff',
+      heightAuto: false,
+      target: document.body
     });
 
     if (!isConfirmed) return;
@@ -3400,7 +3405,9 @@ const superadminModule = {
         text: 'Contraseña incorrecta',
         confirmButtonColor: '#ef4444',
         background: '#0f172a',
-        color: '#ffffff'
+        color: '#ffffff',
+        heightAuto: false,
+        target: document.body
       });
       return;
     }
