@@ -653,15 +653,33 @@ const adsModule = {
         notifs.forEach(n => {
           const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
           const cat = n.categoria || n.category || 'Institucional';
+          const title = n.titulo || n.title || 'Comunicado Oficial';
+
+          const catUpper = String(cat).toUpperCase();
+          const titleUpper = String(title).toUpperCase();
+
+          const isCobroOrRecordatorio = catUpper.includes('COBRO PREVENTIVO') || catUpper.includes('COBRO') || titleUpper.includes('RECORDATORIO DE PAGO') || titleUpper.includes('RECORDATORIO');
+
           let badgeColor = 'rgba(59, 130, 246, 0.2)';
           let textColor = '#60a5fa';
-          if (cat.includes('Gerencial') || cat.includes('Aviso') || cat.includes('Urgente')) {
+          if (isCobroOrRecordatorio) {
+            badgeColor = 'rgba(239, 68, 68, 0.2)';
+            textColor = '#fca5a5';
+          } else if (cat.includes('Gerencial') || cat.includes('Aviso') || cat.includes('Urgente')) {
             badgeColor = 'rgba(245, 158, 11, 0.2)';
             textColor = '#fbbf24';
           } else if (cat.includes('Institucional')) {
             badgeColor = 'rgba(16, 185, 129, 0.2)';
             textColor = '#34d399';
           }
+
+          const payButtonHtml = isCobroOrRecordatorio ? `
+            <div style="margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid rgba(255, 255, 255, 0.08); text-align: right;">
+              <button type="button" onclick="if(window.showCuentasRecaudoModal) window.showCuentasRecaudoModal();" style="padding: 0.35rem 0.85rem; font-size: 0.78rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);" title="Ver Cuentas Bancarias de Recaudo">
+                💵 Pagar
+              </button>
+            </div>
+          ` : '';
 
           html += `
             <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px; padding: 1rem;">
@@ -672,11 +690,12 @@ const adsModule = {
                 <span style="font-size: 0.72rem; color: #94a3b8;">${dateStr}</span>
               </div>
               <h4 style="color: #ffffff; margin: 0 0 0.4rem 0; font-size: 0.95rem; font-weight: 700;">
-                ${n.titulo || n.title || 'Comunicado Oficial'}
+                ${title}
               </h4>
               <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.45; margin: 0; white-space: pre-line;">
                 ${n.mensaje || n.message || n.content || ''}
               </p>
+              ${payButtonHtml}
             </div>
           `;
         });
