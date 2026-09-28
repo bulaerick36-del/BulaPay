@@ -434,14 +434,8 @@ const authModule = {
       if (this.userNavInfo) {
         this.userNavInfo.style.display = 'flex';
         let badge = document.getElementById('nav-user-vigencia-badge');
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.id = 'nav-user-vigencia-badge';
-          badge.style.cssText = "font-size: 0.76rem; font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 9999px; display: inline-flex; align-items: center; gap: 0.3rem;";
-          this.userNavInfo.insertBefore(badge, this.userNavInfo.firstChild);
-        }
-        if (window.CrediPayDB && typeof window.CrediPayDB.inyectarDiasRestantesEnDOM === 'function') {
-          window.CrediPayDB.inyectarDiasRestantesEnDOM(user, badge);
+        if (badge) {
+          badge.style.display = 'none';
         }
       }
     } else {

@@ -2759,5 +2759,78 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   z-index: 9999999 !important;
 }
 
+/* ==========================================================================
+   Ajustes Optimización Cabecera (Header) Vista Móvil & Alineación
+   ========================================================================== */
+
+/* 1. Eliminar el indicador de Vigencia en la cabecera */
+#nav-user-vigencia-badge,
+.badge-vigencia-header,
+.vigencia-badge,
+header span[id*="vigencia"] {
+  display: none !important;
+}
+
+/* 2. Alineación del contenedor derecho del header */
+.header-right-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  flex-wrap: nowrap !important;
+}
+
+/* 3. Ajustes de tamaño, padding y alineación para móviles (@media max-width: 768px) */
+@media (max-width: 768px) {
+  header .nav-container {
+    padding: 0.65rem 0.85rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .header-right-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  /* Reducir y alinear botón Contáctanos */
+  #btn-contactanos,
+  .btn-contactanos,
+  .btn-contact-card {
+    padding: 0.35rem 0.65rem !important;
+    font-size: 0.75rem !important;
+    border-radius: 8px !important;
+    gap: 0.35rem !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25) !important;
+  }
+
+  #btn-contactanos .contact-card-icon,
+  .btn-contact-card .contact-card-icon {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  #btn-contactanos .contact-card-text,
+  .btn-contact-card .contact-card-text {
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+  }
+
+  /* Ajuste de campanita en mobile */
+  .btn-comunicados-nav {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .btn-comunicados-bell-icon {
+    font-size: 1rem !important;
+  }
+}
+
 
 
