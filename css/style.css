@@ -2759,6 +2759,16 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   z-index: 9999999 !important;
 }
 
+/* Logo Unificado del Header */
+.header-main-logo {
+  width: 130px;
+  max-width: 100%;
+  height: auto;
+  max-height: 42px;
+  object-fit: contain;
+  display: block;
+}
+
 /* ==========================================================================
    Ajustes Optimización Cabecera (Header) Vista Móvil & Alineación
    ========================================================================== */
@@ -2780,7 +2790,7 @@ header span[id*="vigencia"] {
   flex-wrap: nowrap !important;
 }
 
-/* 3. Ajustes de tamaño, padding y alineación para móviles (@media max-width: 768px) */
+/* 3. Ajustes para móviles (@media max-width: 768px) */
 @media (max-width: 768px) {
   header .nav-container {
     padding: 0.65rem 0.85rem !important;
@@ -2794,41 +2804,60 @@ header span[id*="vigencia"] {
     flex-wrap: nowrap !important;
   }
 
-  /* Reducir y alinear botón Contáctanos */
+  /* Logo principal unificado en móvil (115px para encajar limpiamente) */
+  .header-main-logo {
+    width: 115px !important;
+    max-height: 36px !important;
+  }
+
+  /* Ocultar la palabra 'Contáctanos' exclusivamente en móviles */
+  #btn-contactanos .contact-card-text,
+  .btn-contact-card .contact-card-text {
+    display: none !important;
+  }
+
+  /* Minimizar botón 'Contáctanos' a botón de ícono compacto y circular */
   #btn-contactanos,
   .btn-contactanos,
   .btn-contact-card {
-    padding: 0.35rem 0.65rem !important;
-    font-size: 0.75rem !important;
-    border-radius: 8px !important;
-    gap: 0.35rem !important;
-    white-space: nowrap !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0 !important;
     flex-shrink: 0 !important;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25) !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+  }
+
+  .contact-card-icon-wrapper {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   #btn-contactanos .contact-card-icon,
   .btn-contact-card .contact-card-icon {
-    width: 14px !important;
-    height: 14px !important;
+    width: 18px !important;
+    height: 18px !important;
   }
 
-  #btn-contactanos .contact-card-text,
-  .btn-contact-card .contact-card-text {
-    font-size: 0.75rem !important;
-    font-weight: 700 !important;
-  }
-
-  /* Ajuste de campanita en mobile */
+  /* Ajuste simétrico de la campana de notificaciones (38px circular) */
   .btn-comunicados-nav {
-    width: 36px !important;
-    height: 36px !important;
-    min-width: 36px !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 50% !important;
     flex-shrink: 0 !important;
   }
 
   .btn-comunicados-bell-icon {
-    font-size: 1rem !important;
+    font-size: 1.05rem !important;
   }
 }
 
