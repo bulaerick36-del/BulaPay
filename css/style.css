@@ -2759,33 +2759,34 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   z-index: 9999999 !important;
 }
 
-/* Logo Unificado del Header (Escritorio) */
+/* Logo Unificado del Header */
 .header-main-logo {
-  width: 140px;
+  width: 130px;
   max-width: 100%;
   height: auto;
-  max-height: 48px;
+  max-height: 42px;
   object-fit: contain;
   display: block;
   margin: 0 !important;
 }
 
-/* Grupo Izquierdo (Hamburguesa + Logo) */
+/* Bloques Flexbox del Header */
+.header-left,
 .header-left-group {
   display: flex !important;
   align-items: center !important;
-  gap: 10px !important;
+  gap: 15px !important;
   margin: 0 !important;
   padding: 0 !important;
 }
 
-.header-left-group .brand,
-#brand-link {
+.header-right,
+.header-right-actions {
   display: flex !important;
   align-items: center !important;
-  margin: 0 !important;
-  margin-left: 0 !important;
-  padding: 0 !important;
+  justify-content: flex-end !important;
+  gap: 20px !important;
+  flex-wrap: nowrap !important;
 }
 
 /* ==========================================================================
@@ -2800,64 +2801,65 @@ header span[id*="vigencia"] {
   display: none !important;
 }
 
-/* 2. Alineación del contenedor derecho del header */
-.header-right-actions {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  gap: 10px !important;
-  flex-wrap: nowrap !important;
-}
-
-/* 3. Ajustes para móviles (@media max-width: 768px) */
+/* 2. Ajustes de Distribución y Limpieza para móviles (@media max-width: 768px) */
 @media (max-width: 768px) {
-  header .nav-container {
-    padding: 0.65rem 0.85rem !important;
-    gap: 0.5rem !important;
+  /* Distribución del Header principal */
+  header .nav-container,
+  .nav-container {
+    display: flex !important;
     justify-content: space-between !important;
+    align-items: center !important;
+    padding: 10px 15px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  /* Grupo izquierdo alineado pegado a la izquierda */
+  /* Bloque Izquierdo (header-left): Hamburguesa + Logo */
+  .header-left,
   .header-left-group {
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 15px !important;
     margin: 0 !important;
     padding: 0 !important;
   }
 
+  .header-left .brand,
   .header-left-group .brand,
   #brand-link {
     margin: 0 !important;
-    margin-left: 0 !important;
     padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
   }
 
-  /* Logo principal resaltado en móvil (140px de ancho y hasta 46px de alto) */
   .header-main-logo {
-    width: 140px !important;
-    max-width: 145px !important;
+    width: 120px !important;
+    max-width: 130px !important;
     height: auto !important;
-    max-height: 46px !important;
+    max-height: 40px !important;
     object-fit: contain !important;
     margin: 0 !important;
-    margin-left: 0 !important;
   }
 
+  /* Bloque Derecho (header-right): Campana + Contacto */
+  .header-right,
   .header-right-actions {
     display: flex !important;
     align-items: center !important;
-    gap: 10px !important;
+    gap: 20px !important;
     flex-wrap: nowrap !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  /* Ocultar la palabra 'Contáctanos' exclusivamente en móviles */
+  /* Ocultar texto 'Contáctanos' dejando solo el icono del sobre */
   #btn-contactanos .contact-card-text,
   .btn-contact-card .contact-card-text {
     display: none !important;
   }
 
-  /* Minimizar botón 'Contáctanos' a botón de ícono compacto y circular */
+  /* Minimizar botón 'Contáctanos' a botón de ícono compacto */
   #btn-contactanos,
   .btn-contactanos,
   .btn-contact-card {
@@ -2888,7 +2890,7 @@ header span[id*="vigencia"] {
     height: 18px !important;
   }
 
-  /* Ajuste simétrico de la campana de notificaciones (38px circular) */
+  /* Campana de Notificaciones */
   .btn-comunicados-nav {
     width: 38px !important;
     height: 38px !important;
@@ -2899,6 +2901,14 @@ header span[id*="vigencia"] {
 
   .btn-comunicados-bell-icon {
     font-size: 1.05rem !important;
+  }
+
+  /* Limpieza estricta: Ocultar botón 'Cerrar Sesión' e información de usuario en móviles del header */
+  .user-nav-info,
+  #user-nav-info,
+  header .btn-logout,
+  header #btn-logout {
+    display: none !important;
   }
 }
 
