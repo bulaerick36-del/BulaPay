@@ -1,17 +1,17 @@
-const CACHE_NAME = 'credipay-v357';
+const CACHE_NAME = 'credipay-v358';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=357',
-  './js/db.js?v=357',
-  './js/ads.js?v=357',
-  './js/auth.js?v=357',
-  './js/supervisor.js?v=357',
-  './js/agent_v6.js?v=357',
-  './js/customer.js?v=357',
-  './js/superadmin.js?v=357',
-  './js/app.js?v=357',
+  './css/style.css?v=358',
+  './js/db.js?v=358',
+  './js/ads.js?v=358',
+  './js/auth.js?v=358',
+  './js/supervisor.js?v=358',
+  './js/agent_v6.js?v=358',
+  './js/customer.js?v=358',
+  './js/superadmin.js?v=358',
+  './js/app.js?v=358',
   './assets/logo.png',
   './assets/favicon.png',
   './assets/icon-192.png',
@@ -24,7 +24,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell credipay-v357');
+      console.log('[Service Worker] Caching app shell credipay-v358');
       return cache.addAll(ASSETS);
     })
   );
