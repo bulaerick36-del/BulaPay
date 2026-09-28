@@ -486,7 +486,8 @@
           <img src="assets/logo.png" alt="CrediPay Logo" style="max-height: 36px; object-fit: contain;">
           <span class="title-gradient" style="font-weight: 700; font-size: 1.1rem;">CrediPay</span>
         </div>
-        <button class="btn btn-secondary" onclick="document.getElementById('drawer-main-menu').classList.remove('active');" style="padding: 0.25rem 0.5rem; font-size: 0.9rem;">✕</button>
+        <!-- Botón de Cerrar (X) del Menú Desplegable -->
+        <button type="button" class="btn-drawer-close" onclick="document.getElementById('drawer-main-menu').classList.remove('active');" title="Cerrar Menú" aria-label="Cerrar Menú">✕</button>
       </div>
 
       <!-- Secciones de Portales -->
@@ -498,8 +499,8 @@
         <a href="#customer" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'client', '#customer')">💳 Portal Cliente</a>
         <a href="#auth" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'commerce', '#auth')">🏪 Otro Comercio o Tienda</a>
         
-        <!-- Botón Cerrar Sesión en Menú Lateral Desplegable -->
-        <button type="button" class="drawer-menu-item btn-logout" id="drawer-btn-logout" onclick="if(window.CrediPayDB) window.CrediPayDB.logout(); localStorage.removeItem('crediRole'); window.location.hash=''; window.location.reload();" style="width: 100%; text-align: left; background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 0.65rem 0.85rem; font-weight: 700; margin-top: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+        <!-- Botón Cerrar Sesión Reubicado y Destacado en el Menú Lateral -->
+        <button type="button" class="btn-logout drawer-btn-logout" id="drawer-btn-logout" onclick="if(window.CrediPayDB) window.CrediPayDB.logout(); localStorage.removeItem('crediRole'); window.location.hash=''; window.location.reload();">
           🚪 Cerrar Sesión
         </button>
       </div>

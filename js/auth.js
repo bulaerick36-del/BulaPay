@@ -268,16 +268,14 @@ const authModule = {
       }
     });
 
-    // Cerrar Sesión
-    this.btnLogout.addEventListener('click', () => {
-      window.CrediPayDB.logout();
-      
-      // Limpiar datos temporales de la sesión
-      localStorage.removeItem('crediRole');
-      
-      // Forzar recarga completa de la página para limpiar TODO el estado del DOM (inputs, variables en memoria)
-      window.location.hash = '';
-      window.location.reload();
+    // Cerrar Sesión (escucha a todos los botones con clase .btn-logout, incluyendo el del drawer)
+    document.querySelectorAll('.btn-logout').forEach(btn => {
+      btn.addEventListener('click', () => {
+        window.CrediPayDB.logout();
+        localStorage.removeItem('crediRole');
+        window.location.hash = '';
+        window.location.reload();
+      });
     });
 
     // Listener de Tipo de Cuenta en Registro
@@ -428,6 +426,7 @@ const authModule = {
   },
 
   updateNavBar(user) {
+    const drawerLogout = document.getElementById('drawer-btn-logout');
     if (user) {
       if (this.navUserName) this.navUserName.textContent = user.name;
       if (this.navUserRole) this.navUserRole.textContent = user.role;
@@ -438,8 +437,10 @@ const authModule = {
           badge.style.display = 'none';
         }
       }
+      if (drawerLogout) drawerLogout.style.display = 'flex';
     } else {
       if (this.userNavInfo) this.userNavInfo.style.display = 'none';
+      if (drawerLogout) drawerLogout.style.display = 'none';
     }
   },
 
