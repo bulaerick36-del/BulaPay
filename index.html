@@ -437,13 +437,14 @@
   <!-- Navegación Principal (SPA) -->
   <header>
     <div class="nav-container" style="display: flex; align-items: center; justify-content: space-between;">
-      <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <!-- Grupo Izquierdo del Header: Menú Hamburguesa + Logo Unificado -->
+      <div class="header-left-group" style="display: flex; align-items: center; gap: 10px; margin: 0; padding: 0;">
         <!-- Botón Menú Hamburguesa -->
         <button id="btn-hamburger-menu" class="btn-hamburger" title="Menú Principal CrediPay" onclick="document.getElementById('drawer-main-menu').classList.add('active'); if(window.superadminModule) superadminModule.clearDrawerInputs();">
           <span style="font-size: 1.25rem;">☰</span>
         </button>
         
-        <a href="#" class="brand" id="brand-link" style="display: flex; align-items: center; text-decoration: none;">
+        <a href="#" class="brand" id="brand-link" style="display: flex; align-items: center; text-decoration: none; margin: 0; padding: 0;">
           <!-- Logo Principal Unificado CrediPay -->
           <img src="assets/logo.png" alt="CrediPay Logo" class="header-main-logo">
         </a>
