@@ -500,8 +500,13 @@
         <a href="#auth" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'commerce', '#auth')">🏪 Otro Comercio o Tienda</a>
         
         <!-- Botón Cerrar Sesión Reubicado y Destacado en el Menú Lateral -->
-        <button type="button" class="btn-logout drawer-btn-logout" id="drawer-btn-logout" onclick="if(window.CrediPayDB) window.CrediPayDB.logout(); localStorage.removeItem('crediRole'); window.location.hash=''; window.location.reload();">
-          🚪 Cerrar Sesión
+        <button type="button" class="btn-logout drawer-btn-logout" id="drawer-btn-logout" onclick="if(window.CrediPayDB) window.CrediPayDB.logout(); localStorage.removeItem('crediRole'); window.location.hash=''; window.location.reload();" aria-label="Cerrar Sesión">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="drawer-logout-icon">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Cerrar Sesión</span>
         </button>
       </div>
 
