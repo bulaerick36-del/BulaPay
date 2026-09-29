@@ -2168,6 +2168,15 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   transform: scale(1.05) !important;
 }
 
+/* Utilidades Responsivas para Ocultar/Mostrar en Móvil vs PC */
+.d-none {
+  display: none !important;
+}
+
+.d-block {
+  display: block;
+}
+
 .drawer-btn-logout {
   width: 100% !important;
   text-align: left !important;
@@ -2180,7 +2189,6 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   font-weight: 600 !important;
   margin-top: 0.75rem !important;
   cursor: pointer !important;
-  display: flex !important;
   align-items: center !important;
   gap: 0.65rem !important;
   transition: all 0.22s ease !important;
@@ -2201,6 +2209,21 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
 .drawer-btn-logout:hover .drawer-logout-icon {
   stroke: #f87171;
   transform: translateX(2px);
+}
+
+/* Reglas de Visibilidad Responsiva: Ocultar en PC (>=769px) y mostrar en Móvil (<=768px) */
+@media (min-width: 769px) {
+  .d-md-none,
+  .drawer-btn-logout,
+  #drawer-btn-logout {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .drawer-btn-logout:not(.d-none) {
+    display: flex !important;
+  }
 }
 
 .drawer-menu-list {

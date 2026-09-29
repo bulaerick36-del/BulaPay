@@ -437,10 +437,16 @@ const authModule = {
           badge.style.display = 'none';
         }
       }
-      if (drawerLogout) drawerLogout.style.display = 'flex';
+      if (drawerLogout) {
+        drawerLogout.style.display = '';
+        drawerLogout.classList.remove('d-none');
+      }
     } else {
       if (this.userNavInfo) this.userNavInfo.style.display = 'none';
-      if (drawerLogout) drawerLogout.style.display = 'none';
+      if (drawerLogout) {
+        drawerLogout.style.display = '';
+        drawerLogout.classList.add('d-none');
+      }
     }
   },
 
