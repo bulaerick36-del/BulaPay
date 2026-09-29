@@ -540,3 +540,45 @@ ALTER TABLE bulapay_programacion_cobros ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en bulapay_programacion_cobros" ON bulapay_programacion_cobros;
 CREATE POLICY "Permitir todo a anonimos y autenticados en bulapay_programacion_cobros" ON bulapay_programacion_cobros FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE bulapay_programacion_cobros TO anon, authenticated;
+
+-- 11. Tabla para Registro de Transacciones de Pasarela y Reactivaciones Automáticas
+CREATE TABLE IF NOT EXISTS historial_pagos_suscripcion (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "username" TEXT NOT NULL REFERENCES users("username") ON DELETE CASCADE,
+  "transaction_id" TEXT,
+  "reference" TEXT UNIQUE,
+  "monto" NUMERIC NOT NULL,
+  "metodo_pago" TEXT,
+  "estado" TEXT NOT NULL DEFAULT 'APROBADO',
+  "fecha_pago" TIMESTAMPTZ DEFAULT NOW(),
+  "nueva_fecha_vencimiento" TIMESTAMPTZ,
+  "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE historial_pagos_suscripcion ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en historial_pagos_suscripcion" ON historial_pagos_suscripcion;
+CREATE POLICY "Permitir todo a anonimos y autenticados en historial_pagos_suscripcion" ON historial_pagos_suscripcion FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE historial_pagos_suscripcion TO anon, authenticated;
+
+-- 12. Función Almacenada y Programación pg_cron para Suspensión Automática por Mora
+CREATE OR REPLACE FUNCTION evaluar_suspension_usuarios_por_mora()
+RETURNS void AS $$
+BEGIN
+  UPDATE users
+  SET 
+    bloqueado_por_mora = true,
+    estado_suscripcion = 'suspendido_impago',
+    updated_at = NOW()
+  WHERE 
+    bloqueado_por_mora = false
+    AND (role IS NULL OR role NOT IN ('Superadmin', 'Superadministrador'))
+    AND (
+      (fecha_vencimiento IS NOT NULL AND fecha_vencimiento < NOW())
+      OR (fecha_corte IS NOT NULL AND fecha_corte < CURRENT_DATE)
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+-- Para activar la ejecución automática a medianoche en Supabase PostgreSQL:
+-- SELECT cron.schedule('suspension-nocturna-credipay', '0 0 * * *', 'SELECT evaluar_suspension_usuarios_por_mora();');
+

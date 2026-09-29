@@ -4208,82 +4208,58 @@ const db = {
   },
 
   async showCuentasRecaudoModal() {
-    let cuentas = [];
+    const user = this.getCurrentUser();
+    if (window.CrediPayCheckout && typeof window.CrediPayCheckout.iniciarPagoSuscripcion === 'function') {
+      await window.CrediPayCheckout.iniciarPagoSuscripcion(user);
+      return;
+    }
+
     let waNumber = '3044191522';
     try {
-      cuentas = await this.getCuentas();
       waNumber = await this.getWhatsAppRecaudo();
-    } catch(e) {
-      console.warn("Error obteniendo datos para modal cliente:", e);
-    }
-
-    let cuentasHtml = '';
-    if (!cuentas || cuentas.length === 0) {
-      cuentasHtml = `
-        <div style="background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.15); border-radius: 12px; padding: 1.5rem; text-align: center; color: #94a3b8; margin: 1rem 0;">
-          <span style="font-size: 2rem;">📭</span>
-          <p style="margin-top: 0.5rem; font-weight: 600; font-size: 0.88rem; color: #e2e8f0;">No hay cuentas de recaudo registradas en este momento.</p>
-          <p style="font-size: 0.78rem; color: #94a3b8; margin: 0;">Puedes hacer clic en "Enviar Comprobante" para contactar a soporte técnico o administración.</p>
-        </div>
-      `;
-    } else {
-      cuentasHtml = '<div style="display: flex; flex-direction: column; gap: 0.85rem; margin: 1rem 0; text-align: left; max-height: 280px; overflow-y: auto; padding-right: 0.25rem;">';
-      cuentas.forEach((c) => {
-        const cleanNumber = String(c.numero_cuenta || '').trim();
-        cuentasHtml += `
-          <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 1rem; position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-              <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 800; font-size: 0.78rem; padding: 0.2rem 0.6rem; border-radius: 6px; text-transform: uppercase;">
-                🏦 ${c.banco || 'Banco'} (${c.tipo_cuenta || 'Ahorros'})
-              </span>
-              <button type="button" onclick="window.copyToClipboard('${cleanNumber}', this)" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; font-weight: 700; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
-                📋 Copiar
-              </button>
-            </div>
-            <div style="font-size: 1.1rem; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; margin: 0.3rem 0;">
-              ${cleanNumber}
-            </div>
-            <div style="font-size: 0.78rem; color: #cbd5e1;">
-              👤 Titular: <strong style="color: #f8fafc;">${c.titular || 'N/A'}</strong>
-            </div>
-          </div>
-        `;
-      });
-      cuentasHtml += '</div>';
-    }
+    } catch(e) {}
 
     let digitsOnly = String(waNumber || '3044191522').replace(/\D/g, '');
-    if (digitsOnly.length === 10) {
-      digitsOnly = '57' + digitsOnly;
-    } else if (!digitsOnly.startsWith('57') && digitsOnly.length > 0) {
-      digitsOnly = '57' + digitsOnly;
-    }
-    if (!digitsOnly) digitsOnly = '573044191522';
-
-    const waMsg = encodeURIComponent('Hola, adjunto el comprobante de pago de mi mensualidad de CrediPay');
+    if (digitsOnly.length === 10) digitsOnly = '57' + digitsOnly;
+    const waMsg = encodeURIComponent('Hola, requiero asistencia para renovar mi mensualidad en CrediPay');
     const waUrl = `https://wa.me/${digitsOnly}?text=${waMsg}`;
 
     if (typeof Swal !== 'undefined') {
       Swal.fire({
-        title: '💳 Cuentas de Recaudo Oficiales',
+        title: '💳 Pagar Mensualidad CrediPay',
         html: `
-          <p style="color: #94a3b8; font-size: 0.85rem; margin-top: 0; margin-bottom: 0.5rem;">
-            Realiza tu transferencia o depósito a cualquiera de nuestras cuentas autorizadas y envía tu comprobante:
-          </p>
-          ${cuentasHtml}
+          <div style="text-align: left; font-size: 0.9rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.85rem;">
+            <div style="background: rgba(16, 185, 129, 0.15); padding: 1rem; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.35);">
+              <h4 style="margin: 0 0 0.3rem 0; color: #34d399; font-size: 1.05rem; font-weight: 800;">⚡ Pago Seguro & Reactivación 24/7</h4>
+              <p style="margin: 0; color: #94a3b8; font-size: 0.82rem;">
+                Conecta instantáneamente con tu banco o billetera digital favorita. Tu suscripción se ampliará automáticamente por +30 Días al instante de confirmar la transacción.
+              </p>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; text-align: center; font-size: 0.8rem; font-weight: 700;">
+              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3);">📱 Nequi</div>
+              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);">🔴 Daviplata</div>
+              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3);">🏦 PSE Bancos</div>
+              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">💳 Tarjetas</div>
+            </div>
+          </div>
         `,
         showCancelButton: true,
-        confirmButtonText: '📲 Enviar Comprobante',
-        confirmButtonColor: '#25d366',
-        cancelButtonText: 'Cerrar',
+        confirmButtonText: '🚀 Pagar Mensualidad',
+        confirmButtonColor: '#10b981',
+        cancelButtonText: 'Soporte WhatsApp',
         cancelButtonColor: '#64748b',
         background: '#0f172a',
         color: '#ffffff',
         width: '520px',
-        heightAuto: false,
         target: document.body
       }).then((res) => {
         if (res.isConfirmed) {
+          if (window.CrediPayCheckout && typeof window.CrediPayCheckout.iniciarPagoSuscripcion === 'function') {
+            window.CrediPayCheckout.iniciarPagoSuscripcion(user);
+          } else {
+            window.open(waUrl, '_blank');
+          }
+        } else if (res.dismiss === Swal.DismissReason.cancel) {
           window.open(waUrl, '_blank');
         }
       });
