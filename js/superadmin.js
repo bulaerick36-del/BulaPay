@@ -1158,56 +1158,48 @@ const superadminModule = {
           </div>
         </div>
 
-        <!-- FILTROS Y CONTROLES DE AVANCES (ESTILO FANTASMA ÉLITE - 100% DINÁMICO SUPABASE) -->
+        <!-- FILTROS Y CONTROLES DE AVANCES (100% DINÁMICO DESDE SUPABASE Y CREATED_AT REAL) -->
         <div style="background: linear-gradient(180deg, #0b132b 0%, #0f172a 100%); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; justify-content: space-between; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 20px -5px rgba(0,0,0,0.5);">
           <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
             <div>
               <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: #c084fc; margin-bottom: 0.35rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;">👑 Selector Élite de Núcleos Operativos:</label>
-              <select id="sa-advances-user-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.4); background: #1c2541; color: #ffffff; font-weight: 700; min-width: 280px; outline: none; box-shadow: 0 0 10px rgba(168, 85, 247, 0.15);">
+              <select id="sa-advances-user-select" onchange="superadminModule.handleAdvancesUserChange()" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.4); background: #1c2541; color: #ffffff; font-weight: 700; min-width: 280px; outline: none; box-shadow: 0 0 10px rgba(168, 85, 247, 0.15);">
                 <option value="">Cargando usuarios desde Supabase...</option>
               </select>
             </div>
 
             <div>
-              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">📅 Filtro de Rango / Meses (Corte Agosto 2026):</label>
-              <select id="sa-advances-month-select" onchange="superadminModule.updateAdvancesChart()" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 230px; outline: none;">
-                <option value="all">📅 Todos los Meses (Marzo - Agosto 2026)</option>
-                <option value="mar-may">🌱 Trimestre Inicial (Marzo - Mayo)</option>
-                <option value="jun-aug">🚀 Periodo Reciente (Junio - Agosto)</option>
-                <option value="aug">☀️ Agosto 2026 (Actual)</option>
-                <option value="jul">🌊 Julio 2026</option>
-                <option value="jun">🍃 Junio 2026</option>
-                <option value="may">🌸 Mayo 2026</option>
-                <option value="apr">🌧️ Abril 2026</option>
-                <option value="mar">🌿 Marzo 2026</option>
+              <label style="display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">📅 Filtro de Rango / Meses Dinámico:</label>
+              <select id="sa-advances-month-select" onchange="superadminModule.updateAdvancesChart(false)" style="padding: 0.6rem 0.95rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #1c2541; color: #ffffff; font-weight: 600; min-width: 240px; outline: none;">
+                <option value="all">📅 Cargando meses dinámicos...</option>
               </select>
             </div>
           </div>
 
           <div style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.8rem; color: #c084fc; font-weight: 800; display: flex; align-items: center; gap: 0.4rem;">
-            ⚡ Núcleos Auditados • Solo Lectura
+            ⚡ Núcleos Auditados • Solo Lectura Real
           </div>
         </div>
 
         <!-- TARJETAS DE MÉTRICAS DEL USUARIO SELECCIONADO -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-advances-metrics">
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Monto Acumulado (Agosto 2026)</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-total-title">Monto Acumulado</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #34d399;" id="adv-metric-total">$0</div>
           </div>
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Promedio Mensual Movido</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-avg-title">Flujo del Mes</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #60a5fa;" id="adv-metric-avg">$0</div>
           </div>
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Pico Máximo de Flujo</div>
-            <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">Agosto 2026</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-peak-title">Pico Máximo de Flujo</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">Sin Registros ($0)</div>
           </div>
         </div>
 
         <!-- CONTENEDOR GRÁFICO CHART.JS -->
         <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1.25rem;">
-          <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;" id="sa-advances-chart-title">📈 Evolución Temporal del Dinero (Marzo - Agosto 2026)</h4>
+          <h4 style="font-size: 1rem; color: #ffffff; margin-bottom: 1rem; font-weight: 700;" id="sa-advances-chart-title">📈 Evolución Financiera Real</h4>
           <div style="position: relative; height: 350px; width: 100%;">
             <canvas id="saAdvancesCanvas"></canvas>
           </div>
@@ -1299,11 +1291,15 @@ const superadminModule = {
     }
 
     setTimeout(() => {
-      this.updateAdvancesChart();
+      this.updateAdvancesChart(true);
     }, 100);
   },
 
-  updateAdvancesChart() {
+  handleAdvancesUserChange() {
+    this.updateAdvancesChart(true);
+  },
+
+  updateAdvancesChart(userChanged = false) {
     const canvas = document.getElementById('saAdvancesCanvas');
     if (!canvas || typeof Chart === 'undefined') return;
 
@@ -1311,8 +1307,6 @@ const superadminModule = {
     const monthSelect = document.getElementById('sa-advances-month-select');
 
     const selectedUserVal = userSelect ? userSelect.value : '';
-    const selectedMonthFilter = monthSelect ? monthSelect.value : 'all';
-
     if (!selectedUserVal) return;
 
     // Buscar usuario seleccionado en Supabase
@@ -1358,124 +1352,234 @@ const superadminModule = {
       (uDoc && c.cedula && String(c.cedula) === uDoc)
     );
 
+    // 1. DETERMINAR FECHA DE CREACIÓN REAL DEL AGENTE (created_at)
+    let creationDate = null;
+    if (found) {
+      const rawD = found.created_at || found.createdAt || found.fecha_creacion || found.fecha_registro;
+      if (rawD) {
+        const pDate = new Date(rawD);
+        if (!isNaN(pDate.getTime())) creationDate = pDate;
+      }
+    }
+
+    if (!creationDate) {
+      const dates = [];
+      userCartones.forEach(c => { const d = c.created_at || c.fecha_creacion || c.fecha; if (d) dates.push(new Date(d)); });
+      userPayments.forEach(p => { const d = p.created_at || p.fecha_pago || p.fecha || p.date; if (d) dates.push(new Date(d)); });
+      userRoutes.forEach(r => { const d = r.created_at || r.fecha; if (d) dates.push(new Date(d)); });
+      const valid = dates.filter(d => !isNaN(d.getTime()));
+      if (valid.length > 0) {
+        creationDate = new Date(Math.min(...valid.map(d => d.getTime())));
+      } else {
+        creationDate = new Date(); // Fecha actual por defecto
+      }
+    }
+
+    // 2. GENERAR MESES DINÁMICOS DESDE CREATED_AT HASTA HOY
+    const now = new Date();
+    const monthNamesEs = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    let startYear = creationDate.getFullYear();
+    let startMonth = creationDate.getMonth();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    if (startYear > currentYear || (startYear === currentYear && startMonth > currentMonth)) {
+      startYear = currentYear;
+      startMonth = currentMonth;
+    }
+
+    const generatedMonths = [];
+    let y = startYear;
+    let m = startMonth;
+
+    while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+      const label = `${monthNamesEs[m]} ${y}`;
+      const endOfMonth = new Date(y, m + 1, 0, 23, 59, 59, 999);
+
+      generatedMonths.push({
+        key,
+        label,
+        year: y,
+        month: m,
+        monthName: monthNamesEs[m],
+        endOfMonth,
+        accumulated: 0,
+        flow: 0
+      });
+
+      m++;
+      if (m > 11) {
+        m = 0;
+        y++;
+      }
+    }
+
+    // 3. ACTUALIZAR SELECTOR DE MESES DINÁMICO (SI CAMBIÓ EL USUARIO O SI ESTÁ DESACTUALIZADO)
+    if (monthSelect && (userChanged || monthSelect.options.length <= 1 || monthSelect.getAttribute('data-user') !== uName)) {
+      const prevVal = monthSelect.value;
+      monthSelect.setAttribute('data-user', uName);
+      monthSelect.innerHTML = '';
+
+      const firstMoLabel = generatedMonths[0].label;
+      const lastMoLabel = generatedMonths[generatedMonths.length - 1].label;
+      const rangeStr = generatedMonths.length > 1 ? `${firstMoLabel} - ${lastMoLabel}` : firstMoLabel;
+
+      const optAll = document.createElement('option');
+      optAll.value = 'all';
+      optAll.textContent = `📅 Histórico Completo (${rangeStr})`;
+      monthSelect.appendChild(optAll);
+
+      [...generatedMonths].reverse().forEach(mo => {
+        const opt = document.createElement('option');
+        opt.value = mo.key;
+        opt.textContent = `🗓️ ${mo.label}`;
+        monthSelect.appendChild(opt);
+      });
+
+      if (!userChanged && prevVal && (prevVal === 'all' || generatedMonths.some(mo => mo.key === prevVal))) {
+        monthSelect.value = prevVal;
+      } else {
+        monthSelect.value = 'all';
+      }
+    }
+
+    const selectedMonthFilter = monthSelect ? monthSelect.value : 'all';
+
+    // 4. CALCULAR SALDOS REALES DE SUPABASE HASTA CADA MES DE CORTE
     const hasRealActivity = (userRoutes.length > 0 || userPayments.length > 0 || userCartones.length > 0 || userClients.length > 0);
 
-    let userData = null;
+    if (hasRealActivity) {
+      generatedMonths.forEach((mo, idx) => {
+        let capitalUpToMo = 0;
+        let collectedUpToMo = 0;
 
-    if (!hasRealActivity) {
-      // CERO MOVIMIENTOS PARA CUENTAS VACÍAS (Balance en cero puro sin simulaciones ni curvas artificiales)
-      userData = {
-        name: `${nameStr} (${roleStr})`,
-        hasActivity: false,
-        data: [0, 0, 0, 0, 0, 0],
-        advances: [0, 0, 0, 0, 0, 0]
-      };
+        // Sumar préstamos / cartones creados hasta la fecha de corte del mes
+        userCartones.forEach(c => {
+          const rawD = c.created_at || c.fecha_creacion || c.fecha;
+          if (rawD) {
+            const d = new Date(rawD);
+            if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+              capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || c.total_a_pagar || 0);
+            }
+          } else {
+            capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || 0);
+          }
+        });
+
+        // Sumar capitales de rutas registradas hasta la fecha de corte
+        userRoutes.forEach(r => {
+          const rawD = r.created_at || r.fecha;
+          if (rawD) {
+            const d = new Date(rawD);
+            if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+              capitalUpToMo += Number(r.capital || 0);
+              collectedUpToMo += Number(r.collected || 0);
+            }
+          } else {
+            capitalUpToMo += Number(r.capital || 0);
+            collectedUpToMo += Number(r.collected || 0);
+          }
+        });
+
+        // Sumar abonos / pagos recaudados hasta la fecha de corte
+        userPayments.forEach(p => {
+          const rawD = p.created_at || p.fecha_pago || p.fecha || p.date;
+          if (rawD) {
+            const d = new Date(rawD);
+            if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+              collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
+            }
+          } else {
+            collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
+          }
+        });
+
+        mo.accumulated = Math.max(0, capitalUpToMo - collectedUpToMo);
+
+        // Flujo del Mes = diferencia con el acumulado del mes anterior
+        if (idx === 0) {
+          mo.flow = mo.accumulated;
+        } else {
+          const prevMo = generatedMonths[idx - 1];
+          mo.flow = mo.accumulated - prevMo.accumulated;
+        }
+      });
+    }
+
+    // 5. EVALUAR SELECCIÓN DE FILTRO Y RELLENAR TARJETAS Y CHART
+    let chartMonths = [];
+    if (selectedMonthFilter === 'all') {
+      chartMonths = [...generatedMonths];
     } else {
-      // Cálculo dinámico con base en actividad real existente en Supabase
-      let totalCapital = 0;
-      let totalCollected = 0;
-
-      userRoutes.forEach(r => {
-        totalCapital += Number(r.capital || 0);
-        totalCollected += Number(r.collected || 0);
-      });
-
-      userCartones.forEach(c => {
-        totalCapital += Number(c.monto_prestamo || c.monto || c.capital || 0);
-      });
-
-      userPayments.forEach(p => {
-        totalCollected += Number(p.amount || p.monto || p.valor || 0);
-      });
-
-      if (totalCapital === 0 && totalCollected === 0) {
-        userData = {
-          name: `${nameStr} (${roleStr})`,
-          hasActivity: false,
-          data: [0, 0, 0, 0, 0, 0],
-          advances: [0, 0, 0, 0, 0, 0]
-        };
+      const match = generatedMonths.find(m => m.key === selectedMonthFilter);
+      if (match) {
+        chartMonths = [match];
       } else {
-        const flowBase = totalCapital + totalCollected;
-        const advanceBase = Math.round(totalCapital * 0.5);
-
-        userData = {
-          name: `${nameStr} (${roleStr})`,
-          hasActivity: true,
-          data: [
-            Math.round(flowBase * 0.15),
-            Math.round(flowBase * 0.30),
-            Math.round(flowBase * 0.45),
-            Math.round(flowBase * 0.65),
-            Math.round(flowBase * 0.85),
-            Math.round(flowBase * 1.00)
-          ],
-          advances: [
-            Math.round(advanceBase * 0.15),
-            Math.round(advanceBase * 0.30),
-            Math.round(advanceBase * 0.45),
-            Math.round(advanceBase * 0.65),
-            Math.round(advanceBase * 0.85),
-            Math.round(advanceBase * 1.00)
-          ]
-        };
+        chartMonths = [...generatedMonths];
       }
     }
 
-    // Corte estricto en Agosto de 2026 (Sin proyecciones de meses futuros)
-    let allLabels = ['Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto'];
-    let chartLabels = [...allLabels];
-    let chartFlowData = [...userData.data];
-    let chartAdvancesData = [...userData.advances];
+    const latestMonth = generatedMonths[generatedMonths.length - 1];
+    const targetMonth = (selectedMonthFilter !== 'all' && chartMonths.length === 1) ? chartMonths[0] : latestMonth;
 
-    if (selectedMonthFilter === 'mar-may') {
-      chartLabels = allLabels.slice(0, 3);
-      chartFlowData = userData.data.slice(0, 3);
-      chartAdvancesData = userData.advances.slice(0, 3);
-    } else if (selectedMonthFilter === 'jun-aug') {
-      chartLabels = allLabels.slice(3, 6);
-      chartFlowData = userData.data.slice(3, 6);
-      chartAdvancesData = userData.advances.slice(3, 6);
-    } else if (['mar', 'apr', 'may', 'jun', 'jul', 'aug'].includes(selectedMonthFilter)) {
-      const monthMap = { mar: 0, apr: 1, may: 2, jun: 3, jul: 4, aug: 5 };
-      const idx = monthMap[selectedMonthFilter];
-      chartLabels = [allLabels[idx]];
-      chartFlowData = [userData.data[idx]];
-      chartAdvancesData = [userData.advances[idx]];
+    const accumulatedDisplay = hasRealActivity ? targetMonth.accumulated : 0;
+    const flowDisplay = hasRealActivity ? targetMonth.flow : 0;
+
+    // Identificar Pico Máximo Histórico
+    let peakValue = -1;
+    let peakLabelStr = 'Sin Registros ($0)';
+    if (hasRealActivity) {
+      generatedMonths.forEach(mo => {
+        if (mo.accumulated > peakValue) {
+          peakValue = mo.accumulated;
+          peakLabelStr = `${mo.label}`;
+        }
+      });
+      if (peakValue <= 0) {
+        peakLabelStr = 'Sin Registros ($0)';
+      }
     }
 
-    const totalLast = chartFlowData[chartFlowData.length - 1] || 0;
-    const avg = Math.round(chartFlowData.reduce((a, b) => a + b, 0) / chartFlowData.length);
-    
-    // Pico máximo en el rango seleccionado
-    let peakVal = 0;
-    let peakLabel = 'Sin Registros ($0)';
-    chartFlowData.forEach((val, i) => {
-      if (val > peakVal) {
-        peakVal = val;
-        peakLabel = chartLabels[i] + ' 2026';
-      }
-    });
-
+    // Actualizar Tarjetas UI
+    const metricTotalTitleEl = document.getElementById('adv-metric-total-title');
+    const metricAvgTitleEl = document.getElementById('adv-metric-avg-title');
     const metricTotalEl = document.getElementById('adv-metric-total');
     const metricAvgEl = document.getElementById('adv-metric-avg');
     const metricPeakEl = document.getElementById('adv-metric-peak');
     const titleEl = document.getElementById('sa-advances-chart-title');
 
-    if (metricTotalEl) metricTotalEl.textContent = '$' + totalLast.toLocaleString('es-CO');
-    if (metricAvgEl) metricAvgEl.textContent = '$' + avg.toLocaleString('es-CO');
-    if (metricPeakEl) metricPeakEl.textContent = userData.hasActivity ? peakLabel : 'Sin Registros ($0)';
+    if (metricTotalTitleEl) metricTotalTitleEl.textContent = `Monto Acumulado (${targetMonth.label})`;
+    if (metricAvgTitleEl) metricAvgTitleEl.textContent = `Flujo del Mes (${targetMonth.label})`;
+    
+    if (metricTotalEl) metricTotalEl.textContent = '$' + accumulatedDisplay.toLocaleString('es-CO');
+    if (metricAvgEl) metricAvgEl.textContent = '$' + flowDisplay.toLocaleString('es-CO');
+    if (metricPeakEl) metricPeakEl.textContent = peakLabelStr;
+
+    const firstChartLabel = chartMonths[0].label;
+    const lastChartLabel = chartMonths[chartMonths.length - 1].label;
+    const chartRangeLabel = chartMonths.length > 1 ? `${firstChartLabel} - ${lastChartLabel}` : firstChartLabel;
+
     if (titleEl) {
-      if (userData.hasActivity) {
-        titleEl.textContent = `📈 Evolución Financiera Real: ${userData.name} (${chartLabels[0]} - ${chartLabels[chartLabels.length - 1]} 2026)`;
+      if (hasRealActivity) {
+        titleEl.textContent = `📈 Evolución Financiera Real: ${nameStr} (${chartRangeLabel})`;
       } else {
-        titleEl.textContent = `📊 Balance de Actividad: ${userData.name} - Sin Movimientos Registrados ($0)`;
+        titleEl.textContent = `📊 Balance de Actividad: ${nameStr} - Sin Movimientos Registrados ($0)`;
       }
     }
 
+    // 6. RENDERIZAR GRÁFICA EN CHART.JS
     if (this.advancesChartInstance) {
       try { this.advancesChartInstance.destroy(); } catch(e) {}
     }
+
+    const chartLabels = chartMonths.map(m => m.label);
+    const chartFlowData = chartMonths.map(m => m.accumulated);
+    const chartNetFlowData = chartMonths.map(m => m.flow);
 
     const ctx = canvas.getContext('2d');
     this.advancesChartInstance = new Chart(ctx, {
@@ -1484,7 +1588,7 @@ const superadminModule = {
         labels: chartLabels,
         datasets: [
           {
-            label: 'Flujo de Cartera Acumulado ($ COP)',
+            label: 'Monto Acumulado Cartera ($ COP)',
             data: chartFlowData,
             borderColor: '#34d399',
             backgroundColor: 'rgba(52, 211, 153, 0.15)',
@@ -1495,8 +1599,8 @@ const superadminModule = {
             pointBackgroundColor: '#34d399'
           },
           {
-            label: 'Avances Entregados ($ COP)',
-            data: chartAdvancesData,
+            label: 'Flujo del Mes ($ COP)',
+            data: chartNetFlowData,
             borderColor: '#60a5fa',
             backgroundColor: 'rgba(96, 165, 250, 0.15)',
             fill: true,
