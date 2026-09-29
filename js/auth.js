@@ -355,6 +355,13 @@ const authModule = {
     window.CrediPayDB.setCurrentUser(user);
     this.updateNavBar(user);
 
+    if (user && user.username) {
+      user.last_sign_in_at = new Date().toISOString();
+      if (window.CrediPayDB && typeof window.CrediPayDB.updateUserLastSignIn === 'function') {
+        window.CrediPayDB.updateUserLastSignIn(user.username);
+      }
+    }
+
     const role = String(user.role || '').trim();
     const roleLower = role.toLowerCase();
     const username = String(user.username || '').trim().toLowerCase();

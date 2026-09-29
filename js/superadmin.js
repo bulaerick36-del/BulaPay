@@ -631,6 +631,78 @@ const superadminModule = {
     }
   },
 
+  formatUltimoAcceso(user) {
+    if (!user) return { text: 'Sin registro', inactivoAlert: false, badgeHtml: `<span style="color: #94a3b8; font-size: 0.78rem;">Sin registro</span>` };
+
+    const rawDate = user.last_sign_in_at || user.updated_at || user.last_location_time || user.created_at;
+    if (!rawDate) {
+      return { 
+        text: 'Sin registro', 
+        inactivoAlert: false, 
+        badgeHtml: `<span style="color: #94a3b8; font-size: 0.78rem;">Sin registro</span>` 
+      };
+    }
+
+    const fecha = new Date(rawDate);
+    if (isNaN(fecha.getTime())) {
+      return { 
+        text: 'Sin registro', 
+        inactivoAlert: false, 
+        badgeHtml: `<span style="color: #94a3b8; font-size: 0.78rem;">Sin registro</span>` 
+      };
+    }
+
+    const ahora = new Date();
+    const diffMs = ahora - fecha;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    const esHoy = fecha.getDate() === ahora.getDate() &&
+                  fecha.getMonth() === ahora.getMonth() &&
+                  fecha.getFullYear() === ahora.getFullYear();
+
+    let text = '';
+    if (esHoy) {
+      if (diffMinutes < 1) {
+        text = 'Hace instantes';
+      } else if (diffMinutes < 60) {
+        text = `Hace ${diffMinutes} min${diffMinutes > 1 ? 's' : ''}`;
+      } else {
+        text = `Hace ${diffHours} hr${diffHours > 1 ? 's' : ''}`;
+      }
+    } else {
+      const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sept', 'Oct', 'Nov', 'Dic'];
+      const dia = fecha.getDate();
+      const mes = meses[fecha.getMonth()];
+      
+      let hor = fecha.getHours();
+      const min = String(fecha.getMinutes()).padStart(2, '0');
+      const ampm = hor >= 12 ? 'PM' : 'AM';
+      hor = hor % 12;
+      if (hor === 0) hor = 12;
+      const horaStr = `${String(hor).padStart(2, '0')}:${min} ${ampm}`;
+
+      text = `${dia} ${mes}, ${horaStr}`;
+    }
+
+    // Alerta de Inactividad Visual: Si el usuario está 'Activo' (!bloqueado_por_mora) y lleva más de 3 días sin registrar conexión
+    const isUserActive = user.bloqueado_por_mora !== true;
+    const inactivoAlert = isUserActive && (diffDays >= 3 || diffMs > (3 * 24 * 60 * 60 * 1000));
+
+    let badgeHtml = '';
+    if (inactivoAlert) {
+      // Color de advertencia (Rojo / Naranja) indicando que el agente no está reportando
+      badgeHtml = `<span style="font-size: 0.78rem; font-weight: 800; color: #fca5a5 !important; background: rgba(239, 68, 68, 0.22); border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.25rem 0.6rem; border-radius: 6px; display: inline-block; white-space: nowrap;" title="⚠️ ¡Advertencia de inactividad! Más de 3 días sin reportar conexión">⚠️ ${text}</span>`;
+    } else if (esHoy) {
+      badgeHtml = `<span style="font-size: 0.78rem; font-weight: 800; color: #34d399 !important; background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(16, 185, 129, 0.35); padding: 0.25rem 0.6rem; border-radius: 6px; display: inline-block; white-space: nowrap;">⚡ ${text}</span>`;
+    } else {
+      badgeHtml = `<span style="font-size: 0.78rem; font-weight: 700; color: #38bdf8 !important; background: rgba(56, 189, 248, 0.14); border: 1px solid rgba(56, 189, 248, 0.3); padding: 0.25rem 0.6rem; border-radius: 6px; display: inline-block; white-space: nowrap;">📅 ${text}</span>`;
+    }
+
+    return { text, inactivoAlert, diffDays, esHoy, badgeHtml };
+  },
+
   renderUsersListTable(users) {
     try {
       const wrapper = document.getElementById('sa-users-list-wrapper');
@@ -642,15 +714,16 @@ const superadminModule = {
       }
 
       let html = `
-        <table class="sa-users-table" style="width: 100%; min-width: 950px; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; text-align: left; background: #0b132b; border-radius: 10px; overflow: hidden;">
+        <table class="sa-users-table" style="width: 100%; min-width: 1050px; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; text-align: left; background: #0b132b; border-radius: 10px; overflow: hidden;">
           <thead>
             <tr style="background: #1e293b; color: #34d399; text-transform: uppercase; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; border-bottom: 2px solid rgba(52, 211, 153, 0.3);">
-              <th class="sa-user-col-username" style="padding: 0.9rem 1rem; width: 22%; min-width: 180px;">Usuario / Cédula</th>
-              <th class="sa-user-col-name" style="padding: 0.9rem 1rem; width: 24%; min-width: 190px;">Nombre Completo</th>
-              <th class="sa-user-col-role" style="padding: 0.9rem 1rem; width: 16%; min-width: 140px;">Rol</th>
-              <th class="sa-user-col-contact" style="padding: 0.9rem 1rem; width: 18%; min-width: 170px;">Teléfono / Correo</th>
+              <th class="sa-user-col-username" style="padding: 0.9rem 1rem; width: 18%; min-width: 160px;">Usuario / Cédula</th>
+              <th class="sa-user-col-name" style="padding: 0.9rem 1rem; width: 20%; min-width: 170px;">Nombre Completo</th>
+              <th class="sa-user-col-role" style="padding: 0.9rem 1rem; width: 13%; min-width: 130px;">Rol</th>
+              <th class="sa-user-col-contact" style="padding: 0.9rem 1rem; width: 15%; min-width: 140px;">Teléfono / Correo</th>
+              <th class="sa-user-col-lastaccess" style="padding: 0.9rem 1rem; width: 16%; min-width: 150px;">Último Acceso</th>
               <th class="sa-user-col-status" style="padding: 0.9rem 1rem; width: 8%; min-width: 80px;">Estado</th>
-              <th class="sa-user-col-actions" style="padding: 0.9rem 1rem; width: 12%; min-width: 190px; text-align: right;">Acciones de Gestión</th>
+              <th class="sa-user-col-actions" style="padding: 0.9rem 1rem; width: 10%; min-width: 180px; text-align: right;">Acciones de Gestión</th>
             </tr>
           </thead>
           <tbody>
@@ -664,25 +737,29 @@ const superadminModule = {
           : `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa !important; border: 1px solid rgba(59, 130, 246, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">👔 ${u.role || 'Usuario'}</span>`;
         
         const rowBg = (idx % 2 === 0) ? '#0f172a' : '#1e293b';
+        const ultimoAccesoInfo = this.formatUltimoAcceso(u);
 
         html += `
           <tr class="sa-user-row" style="background: ${rowBg}; border-bottom: 1px solid rgba(255,255,255,0.07);">
-            <td class="sa-user-col-username" style="padding: 0.85rem 1rem; vertical-align: middle; width: 22%;">
+            <td class="sa-user-col-username" style="padding: 0.85rem 1rem; vertical-align: middle; width: 18%;">
               <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;">
                 <span class="sa-user-title" style="color: #ffffff !important; font-weight: 800; font-size: 0.92rem; display: block; line-height: 1.2;">${u.username || 'N/A'}</span>
                 <span class="sa-user-doc-badge" style="font-size: 0.75rem; color: #38bdf8 !important; font-weight: 600; display: inline-block; background: rgba(56, 189, 248, 0.14); padding: 0.2rem 0.55rem; border-radius: 5px; border: 1px solid rgba(56, 189, 248, 0.3); white-space: nowrap;">💳 ${doc}</span>
               </div>
             </td>
-            <td class="sa-user-col-name" style="padding: 0.85rem 1rem; vertical-align: middle; width: 24%;">
+            <td class="sa-user-col-name" style="padding: 0.85rem 1rem; vertical-align: middle; width: 20%;">
               <span class="sa-user-fullname" style="color: #f8fafc !important; font-weight: 700; font-size: 0.9rem; display: block; line-height: 1.3;">${u.name || u.nombre_firmante || 'Sin Nombre'}</span>
             </td>
-            <td class="sa-user-col-role" style="padding: 0.85rem 1rem; vertical-align: middle; width: 16%;">${roleBadge}</td>
-            <td class="sa-user-col-contact" style="padding: 0.85rem 1rem; vertical-align: middle; width: 18%;">
+            <td class="sa-user-col-role" style="padding: 0.85rem 1rem; vertical-align: middle; width: 13%;">${roleBadge}</td>
+            <td class="sa-user-col-contact" style="padding: 0.85rem 1rem; vertical-align: middle; width: 15%;">
               <div style="display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem;">
                 <span style="color: #e2e8f0 !important; font-weight: 600;">📞 ${u.phone || 'N/A'}</span>
                 <span style="color: #94a3b8 !important; font-size: 0.75rem;">✉️ ${u.email || 'N/A'}</span>
                 <span style="color: #fbbf24 !important; font-size: 0.75rem; font-weight: 700;">🔑 Clave: ${u.password || '••••••••'}</span>
               </div>
+            </td>
+            <td class="sa-user-col-lastaccess" style="padding: 0.85rem 1rem; vertical-align: middle; width: 16%;">
+              ${ultimoAccesoInfo.badgeHtml}
             </td>
             <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle; width: 8%;">
               ${(() => {
@@ -3212,6 +3289,10 @@ const superadminModule = {
           <div>
             <span style="color: #94a3b8; display: block; font-weight: 600;">⏳ Vigencia Restante:</span>
             <span style="color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; font-weight: 800; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.5rem; border-radius: 6px; display: inline-block;">Faltan ${diasInfo.dias} días</span>
+          </div>
+          <div>
+            <span style="color: #94a3b8; display: block; font-weight: 600;">🕒 Último Acceso:</span>
+            ${this.formatUltimoAcceso(matchedUser).badgeHtml}
           </div>
         </div>
 

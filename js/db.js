@@ -476,6 +476,24 @@ const db = {
     return data || [];
   },
 
+  async updateUserLastSignIn(username) {
+    if (!username) return;
+    try {
+      const supabase = await initSupabase();
+      const nowIso = new Date().toISOString();
+      await supabase
+        .from('users')
+        .update({ 
+          last_sign_in_at: nowIso, 
+          updated_at: nowIso 
+        })
+        .eq('username', String(username).toLowerCase());
+      console.log(`⏱️ [CrediPay DB] Último acceso registrado para '${username}': ${nowIso}`);
+    } catch (e) {
+      console.warn("Error actualizando fecha de último acceso en Supabase:", e);
+    }
+  },
+
   async getAllRoutes() {
     const supabase = await initSupabase();
     const { data, error } = await supabase

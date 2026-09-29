@@ -51,7 +51,9 @@ CREATE TABLE users (
   "nombre_firmante" TEXT,
   "documento_firmante" TEXT,
   "tipo_documento_firmante" TEXT,
-  "hash_firma_digital" TEXT
+  "hash_firma_digital" TEXT,
+  "last_sign_in_at" TIMESTAMPTZ DEFAULT NOW(),
+  "updated_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 3. Tabla de Clientes
