@@ -21,9 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // Módulo de Superadministrador Maestro de CrediPay
 
 const superadminModule = {
-  activeTab: 'users', // 'users' | 'contracts' | 'performance'
-  selectedUserForChart: null,
-  performanceChartInstance: null,
+  activeTab: 'users', // 'users' | 'contracts' | 'advances' | 'support' | 'ads'
 
   // Credenciales por defecto
   DEFAULT_SUPERADMIN_ID: '1121338578',
@@ -279,20 +277,18 @@ const superadminModule = {
           <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; overflow-x: auto;">
             <button id="sa-tab-users" class="sa-floating-tab active" onclick="superadminModule.switchSuperadminTab('users', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #34d399; font-weight: 700; cursor: pointer; border-bottom: 3px solid #34d399;">👥 1. Usuarios y Clientes</button>
             <button id="sa-tab-contracts" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('contracts', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📜 2. Contratos y Términos</button>
-            <button id="sa-tab-performance" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('resources', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📊 3. Recurso Movido &amp; Gráficas</button>
-            <button id="sa-tab-advances" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('advances', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📈 4. Avances y Movimientos</button>
+            <button id="sa-tab-advances" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('advances', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📈 3. Avances y Movimientos</button>
             <button id="sa-tab-support" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('support', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none; display: inline-flex; align-items: center; gap: 0.45rem;">
-              💬 5. Soporte y Mensajes
+              💬 4. Soporte y Mensajes
               <span id="sa-tab-support-badge" style="display: none; background: #ef4444; color: #ffffff; font-size: 0.72rem; font-weight: 900; padding: 0.15rem 0.5rem; border-radius: 9999px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);">0</span>
             </button>
-            <button id="sa-tab-ads" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('ads', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📢 6. Anuncios y Publicidad</button>
+            <button id="sa-tab-ads" class="sa-floating-tab" onclick="superadminModule.switchSuperadminTab('ads', event)" style="padding: 0.75rem 1.25rem; background: none; border: none; color: #94a3b8; font-weight: 700; cursor: pointer; border-bottom: none;">📢 5. Anuncios y Publicidad</button>
           </div>
 
           <!-- Contenedores Independientes por Pestaña -->
           <div id="superadmin-tab-content" style="margin-bottom: 1rem;">
             <div id="tab-content-users" class="sa-tab-pane" style="display: block;"></div>
             <div id="tab-content-contracts" class="sa-tab-pane" style="display: none;"></div>
-            <div id="tab-content-resources" class="sa-tab-pane" style="display: none;"></div>
             <div id="tab-content-advances" class="sa-tab-pane" style="display: none;"></div>
             <div id="tab-content-support" class="sa-tab-pane" style="display: none;"></div>
             <div id="tab-content-ads" class="sa-tab-pane" style="display: none;"></div>
@@ -410,18 +406,16 @@ const superadminModule = {
     let key = 'users';
     if (target === 1 || target === '1' || target === 'users') key = 'users';
     else if (target === 2 || target === '2' || target === 'contracts') key = 'contracts';
-    else if (target === 3 || target === '3' || target === 'resources' || target === 'performance') key = 'resources';
-    else if (target === 4 || target === '4' || target === 'advances') key = 'advances';
-    else if (target === 5 || target === '5' || target === 'support') key = 'support';
-    else if (target === 6 || target === '6' || target === 'ads') key = 'ads';
+    else if (target === 3 || target === '3' || target === 'advances') key = 'advances';
+    else if (target === 4 || target === '4' || target === 'support') key = 'support';
+    else if (target === 5 || target === '5' || target === 'ads') key = 'ads';
 
-    this.activeTab = key === 'resources' ? 'performance' : key;
+    this.activeTab = key;
 
     // 1. Ocultar todos los contenedores de pestañas y mostrar sólo el seleccionado
     const panes = [
       { id: 'tab-content-users', key: 'users' },
       { id: 'tab-content-contracts', key: 'contracts' },
-      { id: 'tab-content-resources', key: 'resources' },
       { id: 'tab-content-advances', key: 'advances' },
       { id: 'tab-content-support', key: 'support' },
       { id: 'tab-content-ads', key: 'ads' }
@@ -442,7 +436,6 @@ const superadminModule = {
     const btnMap = {
       users: 'sa-tab-users',
       contracts: 'sa-tab-contracts',
-      resources: 'sa-tab-performance',
       advances: 'sa-tab-advances',
       support: 'sa-tab-support',
       ads: 'sa-tab-ads'
@@ -468,9 +461,6 @@ const superadminModule = {
       } else if (key === 'contracts') {
         const c = document.getElementById('tab-content-contracts');
         if (c) await this.renderContractsTab(c);
-      } else if (key === 'resources') {
-        const c = document.getElementById('tab-content-resources');
-        if (c) await this.renderPerformanceTab(c);
       } else if (key === 'advances') {
         const c = document.getElementById('tab-content-advances');
         if (c) await this.renderAdvancesTab(c);
@@ -543,8 +533,6 @@ const superadminModule = {
         await this.renderUsersTab(container);
       } else if (this.activeTab === 'contracts') {
         await this.renderContractsTab(container);
-      } else if (this.activeTab === 'performance') {
-        await this.renderPerformanceTab(container);
       } else if (this.activeTab === 'advances') {
         await this.renderAdvancesTab(container);
       }
@@ -943,305 +931,7 @@ const superadminModule = {
   },
 
   // ----------------------------------------------------
-  // OPCIÓN 3: MÓDULO RECURSO MOVIDO & GRÁFICA DE RENDIMIENTO
-  // ----------------------------------------------------
-  cachedUserFinancialData: null,
-  selectedUserFinancialItem: null,
-
-  async renderPerformanceTab(container) {
-    try {
-      if (!container) return;
-
-      const now = new Date();
-      const monthNamesEs = [
-        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-      ];
-      const currentMonthYearStr = `${monthNamesEs[now.getMonth()]} ${now.getFullYear()}`;
-
-      container.innerHTML = `
-        <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(255,255,255,0.12) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc;">
-          <div style="margin-bottom: 1.5rem;">
-            <h3 style="font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-bottom: 0.25rem; background: linear-gradient(135deg, #34d399 0%, #10b981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">📊 Recurso Movido en Plataforma & Gráfica de Rendimiento</h3>
-            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Comparativa de Cartera Inicial (Corte a ${currentMonthYearStr}) vs. Monto Administrado Actual en Tiempo Real desde Supabase.</p>
-          </div>
-
-          <!-- Contenedor Principal: Lista a la izquierda, Gráfica a la derecha -->
-          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem; align-items: stretch;">
-            <!-- Lista de Agentes / Supervisores -->
-            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column;">
-              <h4 style="font-size: 0.95rem; margin-bottom: 0.85rem; color: #34d399; font-weight: 800;">📋 Seleccionar Agente o Comercio:</h4>
-              <div id="sa-agent-selection-list" style="max-height: 480px; overflow-y: auto; flex: 1;">
-                <p style="color: #94a3b8; text-align: center; padding: 1rem;">Cargando usuarios y saldos reales desde Supabase...</p>
-              </div>
-            </div>
-
-            <!-- Contenedor de la Gráfica Chart.js -->
-            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column;" id="sa-chart-container">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-                <h4 style="font-size: 0.95rem; color: #ffffff; font-weight: 800;" id="sa-chart-title">📈 Comparativa de Rendimiento Financiero</h4>
-                <div style="display: flex; gap: 0.4rem;">
-                  <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; cursor: pointer;" onclick="superadminModule.setChartType('bar')">📊 Barras</button>
-                  <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; cursor: pointer;" onclick="superadminModule.setChartType('line')">📈 Líneas</button>
-                </div>
-              </div>
-
-              <div style="position: relative; height: 400px; width: 100%; flex: 1;">
-                <canvas id="superadminChart"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-
-      let allUsers = [];
-      let allRoutes = [];
-      let allClients = [];
-
-      try {
-        if (window.CrediPayDB) {
-          if (typeof window.CrediPayDB.getAllUsers === 'function') allUsers = await window.CrediPayDB.getAllUsers();
-          if (typeof window.CrediPayDB.getAllRoutes === 'function') allRoutes = await window.CrediPayDB.getAllRoutes();
-          if (typeof window.CrediPayDB.getClients === 'function') allClients = await window.CrediPayDB.getClients();
-        }
-      } catch (e) {
-        console.warn("Fallo al obtener datos desde Supabase:", e);
-      }
-
-      if (!allUsers || !Array.isArray(allUsers) || allUsers.length === 0) {
-        allUsers = this.getFallbackUsers();
-      }
-
-      // 1. Obtener métricas financieras reales (Caja + Cartera en Calle) por usuario
-      const userFinancialPromises = allUsers.map(async (u) => {
-        let cajaLiquid = 0;
-        let carteraEnCalle = 0;
-        let interesesActivos = 0;
-        let targetRouteId = u.routeId || u.route_id || null;
-
-        if (window.CrediPayDB) {
-          if (typeof window.CrediPayDB.getLiquidCash === 'function') {
-            try {
-              cajaLiquid = Math.round(Number(await window.CrediPayDB.getLiquidCash(targetRouteId, u)) || 0);
-            } catch (e) {}
-          }
-          if (typeof window.CrediPayDB.getDashboardFinancialMetrics === 'function') {
-            try {
-              const m = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId, u);
-              if (m) {
-                carteraEnCalle = Math.round(Number(m.carteraEnCalle) || 0);
-                interesesActivos = Math.round(Number(m.interesesActivos) || 0);
-              }
-            } catch (e) {}
-          }
-        }
-
-        const safeCaja = isNaN(cajaLiquid) ? 0 : Math.max(0, cajaLiquid);
-        const safeCartera = isNaN(carteraEnCalle) ? 0 : Math.max(0, carteraEnCalle);
-        const safeIntereses = isNaN(interesesActivos) ? 0 : Math.max(0, interesesActivos);
-        const patrimonioTotal = safeCaja + safeCartera + safeIntereses;
-
-        return {
-          user: u,
-          cajaLiquid: safeCaja,
-          carteraEnCalle: safeCartera,
-          interesesActivos: safeIntereses,
-          patrimonioTotal: patrimonioTotal
-        };
-      });
-
-      const userFinancialData = await Promise.all(userFinancialPromises);
-      this.cachedUserFinancialData = userFinancialData;
-
-      // 2. Renderizar Lista de Selección en el Panel Izquierdo con los saldos reales
-      this.renderAgentSelectionList(userFinancialData);
-
-      // 3. Renderizar Gráfica Inicial con el primer usuario disponible
-      if (userFinancialData.length > 0) {
-        this.renderUserChartData(userFinancialData[0]);
-      }
-    } catch(err) {
-      console.error("Error al renderizar pestaña de recurso movido:", err);
-      if (container) {
-        container.innerHTML = `<div style="padding: 1.5rem; color: #fca5a5; background: #1e293b; border-radius: 12px; margin: 1rem;">⚠️ Ocurrió un fallo al cargar la pestaña de recurso movido. Reintentando...</div>`;
-      }
-    }
-  },
-
-  renderAgentSelectionList(userFinancialData) {
-    try {
-      const container = document.getElementById('sa-agent-selection-list');
-      if (!container) return;
-
-      if (!userFinancialData || !Array.isArray(userFinancialData) || userFinancialData.length === 0) {
-        container.innerHTML = `<p style="color: #94a3b8; padding: 1rem; text-align: center;">No hay usuarios registrados.</p>`;
-        return;
-      }
-
-      let html = '';
-      userFinancialData.forEach((item) => {
-        const u = item.user;
-        const currentCapital = item.patrimonioTotal;
-        const displayName = u.name || u.nombre_firmante || u.username;
-        const roleName = u.role || 'Usuario';
-        const docStr = u.documentNumber ? ` (${u.documentNumber})` : '';
-
-        html += `
-          <div class="sa-agent-item" style="padding: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.07); cursor: pointer; border-radius: 8px; transition: all 0.2s; margin-bottom: 0.4rem; background: #0f172a;" onclick="superadminModule.selectUserForPerformanceChart('${u.username}')" onmouseover="this.style.background='rgba(52, 211, 153, 0.1)'" onmouseout="this.style.background='#0f172a'">
-            <div style="font-weight: 700; color: #ffffff; font-size: 0.88rem; display: flex; align-items: center; justify-content: space-between;">
-              <span>💼 ${displayName}${docStr}</span>
-            </div>
-            <div style="font-size: 0.75rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 0.25rem;">
-              <span>Rol: ${roleName}</span>
-              <span style="color: #34d399; font-weight: 800;">$${currentCapital.toLocaleString('es-CO')}</span>
-            </div>
-          </div>
-        `;
-      });
-
-      container.innerHTML = html;
-    } catch(err) {
-      console.error("Error al renderizar lista de selección de agentes:", err);
-    }
-  },
-
-  selectUserForPerformanceChart(username) {
-    try {
-      if (!this.cachedUserFinancialData || !Array.isArray(this.cachedUserFinancialData)) return;
-
-      const found = this.cachedUserFinancialData.find(item => 
-        String(item.user.username || '').toLowerCase() === String(username || '').toLowerCase() ||
-        String(item.user.documentNumber || '') === String(username) ||
-        String(item.user.id || '') === String(username)
-      );
-
-      if (found) {
-        this.renderUserChartData(found);
-      }
-    } catch(err) {
-      console.error("Error al seleccionar usuario para la gráfica:", err);
-    }
-  },
-
-  selectUserForChart(username) {
-    this.selectUserForPerformanceChart(username);
-  },
-
-  chartType: 'bar',
-  setChartType(type) {
-    this.chartType = type;
-    if (this.selectedUserFinancialItem) {
-      this.renderUserChartData(this.selectedUserFinancialItem);
-    }
-  },
-
-  renderUserChartData(financialItem) {
-    try {
-      const canvas = document.getElementById('superadminChart') || document.getElementById('saPerformanceCanvas');
-      if (!canvas) return;
-
-      this.selectedUserFinancialItem = financialItem;
-      const u = financialItem.user;
-      const displayName = u.name || u.nombre_firmante || u.username;
-      const roleName = u.role || 'Usuario';
-
-      const now = new Date();
-      const monthNamesEs = [
-        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-      ];
-      const currentMonthYearStr = `${monthNamesEs[now.getMonth()]} ${now.getFullYear()}`;
-
-      // Monto Administrado Actual (Patrimonio Total en Tiempo Real)
-      const montoActualEnTiempoReal = financialItem.patrimonioTotal;
-      // Cartera Base (Base de Cartera en Calle o Base Registrada)
-      const capitalInicialBase = financialItem.carteraEnCalle > 0 ? financialItem.carteraEnCalle : Math.round(montoActualEnTiempoReal * 0.8);
-
-      const chartTitle = document.getElementById('sa-chart-title');
-      if (chartTitle) {
-        chartTitle.textContent = `📈 Rendimiento Real: ${displayName} (${roleName}) - Total: $${montoActualEnTiempoReal.toLocaleString('es-CO')}`;
-      }
-
-      if (this.performanceChartInstance) {
-        try { this.performanceChartInstance.destroy(); } catch(e) {}
-      }
-
-      if (typeof Chart === 'undefined') {
-        console.warn("Chart.js no está cargado aún en el navegador.");
-        return;
-      }
-
-      const ctx = canvas.getContext('2d');
-      this.performanceChartInstance = new Chart(ctx, {
-        type: this.chartType,
-        data: {
-          labels: [`Cartera Base (${currentMonthYearStr})`, 'Patrimonio Total Actual (Tiempo Real)'],
-          datasets: [{
-            label: 'Monto Financiero ($ COP)',
-            data: [capitalInicialBase, montoActualEnTiempoReal],
-            backgroundColor: [
-              'rgba(59, 130, 246, 0.65)',
-              'rgba(52, 211, 153, 0.75)'
-            ],
-            borderColor: [
-              '#3b82f6',
-              '#34d399'
-            ],
-            borderWidth: 2,
-            borderRadius: 8
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: true,
-              labels: { color: '#f8fafc', font: { weight: 'bold' } }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return ' ' + context.dataset.label + ': $' + Number(context.raw || 0).toLocaleString('es-CO');
-                }
-              }
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                color: '#94a3b8',
-                callback: function(value) {
-                  return '$' + Number(value || 0).toLocaleString('es-CO');
-                }
-              },
-              grid: { color: '#334155' }
-            },
-            x: {
-              ticks: { color: '#f8fafc', font: { weight: 'bold' } },
-              grid: { color: '#334155' }
-            }
-          }
-        }
-      });
-    } catch(err) {
-      console.error("Error al renderizar gráfica de usuario:", err);
-    }
-  },
-
-  renderUserChart(user, routes, clients) {
-    if (this.cachedUserFinancialData && Array.isArray(this.cachedUserFinancialData)) {
-      const found = this.cachedUserFinancialData.find(item => item.user.username === user.username || item.user.documentNumber === user.username);
-      if (found) {
-        this.renderUserChartData(found);
-        return;
-      }
-    }
-  },
-
-  // ----------------------------------------------------
-  // OPCIÓN 4: MÓDULO DE AVANCES Y MOVIMIENTOS (GRÁFICAS POR USUARIO)
+  // OPCIÓN 3: MÓDULO DE AVANCES Y MOVIMIENTOS (GRÁFICAS POR USUARIO)
   // ----------------------------------------------------
   advancesChartInstance: null,
 
