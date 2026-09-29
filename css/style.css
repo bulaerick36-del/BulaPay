@@ -2187,7 +2187,8 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   padding: 0.8rem 1rem !important;
   font-size: 0.9rem !important;
   font-weight: 600 !important;
-  margin-top: 0.75rem !important;
+  margin-top: 1rem !important;
+  margin-bottom: 1.5rem !important;
   cursor: pointer !important;
   align-items: center !important;
   gap: 0.65rem !important;

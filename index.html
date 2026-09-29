@@ -50,7 +50,7 @@
   <link rel="apple-touch-icon" href="assets/logo.png">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=9003">
+  <link rel="stylesheet" href="css/style.css?v=9004">
 
   <!-- SweetAlert2 CDN + Sistema Global de Modales Personalizados CrediPay -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -498,20 +498,10 @@
         <a href="#agent-login" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'route', '#agent-login')">📱 Portal de Agentes de Ruta</a>
         <a href="#customer" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'client', '#customer')">💳 Portal Cliente</a>
         <a href="#auth" class="drawer-menu-item" onclick="window.handleRoleNavigation(event, 'commerce', '#auth')">🏪 Otro Comercio o Tienda</a>
-        
-        <!-- Botón Cerrar Sesión Reubicado y Destacado en el Menú Lateral (Exclusivo Móviles d-block d-md-none) -->
-        <button type="button" class="btn-logout drawer-btn-logout d-block d-md-none" id="drawer-btn-logout" onclick="if(window.CrediPayDB) window.CrediPayDB.logout(); localStorage.removeItem('crediRole'); window.location.hash=''; window.location.reload();" aria-label="Cerrar Sesión">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="drawer-logout-icon">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-          <span>Cerrar Sesión</span>
-        </button>
       </div>
 
       <!-- Sección Exclusiva: Administración Master (Incrustada en el Drawer) -->
-      <div style="margin-top: 1.5rem; margin-bottom: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; flex-shrink: 0;" id="drawer-superadmin-container">
+      <div style="margin-top: 1.5rem; margin-bottom: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem; flex-shrink: 0;" id="drawer-superadmin-container">
         <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
           <span>Administración Master</span>
           <span style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">Exclusivo</span>
@@ -534,6 +524,16 @@
           </button>
         </form>
       </div>
+
+      <!-- Botón Cerrar Sesión Ubicado al Absoluto Final del Menú Lateral (Debajo de Administración Master) -->
+      <button type="button" class="btn-logout drawer-btn-logout d-block d-md-none" id="drawer-btn-logout" onclick="if(window.CrediPayDB) window.CrediPayDB.logout(); localStorage.removeItem('crediRole'); window.location.hash=''; window.location.reload();" aria-label="Cerrar Sesión">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="drawer-logout-icon">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <polyline points="16 17 21 12 16 7"></polyline>
+          <line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg>
+        <span>Cerrar Sesión</span>
+      </button>
     </div>
   </div>
 
