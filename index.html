@@ -50,7 +50,7 @@
   <link rel="apple-touch-icon" href="assets/logo.png">
 
   <!-- Estilos Globales -->
-  <link rel="stylesheet" href="css/style.css?v=9004">
+  <link rel="stylesheet" href="css/style.css?v=9005">
 
   <!-- SweetAlert2 CDN + Sistema Global de Modales Personalizados CrediPay -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -3018,9 +3018,65 @@
   </div>
 
   <script>
-    // Manejador global de navegación entre portales/roles interceptada por anuncios
+    // Función auxiliar de seguridad: Verificar si existe sesión activa de usuario o admin
+    window.checkActiveUserSession = function() {
+      try {
+        // 1. Verificar vía CrediPayDB.getCurrentUser()
+        if (window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function') {
+          const user = window.CrediPayDB.getCurrentUser();
+          if (user && (user.id || user.cedula || user.email || user.role || user.name)) {
+            return true;
+          }
+        }
+        // 2. Verificar claves directas de usuario en localStorage
+        const userKeys = ['credipay_user', 'bulapay_user', 'credi_user', 'crediCurrentUser', 'bulaCurrentUser'];
+        for (const key of userKeys) {
+          const val = localStorage.getItem(key);
+          if (val && val !== 'null' && val !== '{}' && val !== 'undefined') {
+            return true;
+          }
+        }
+        // 3. Verificar sesión activa de Superadmin en sessionStorage
+        if (sessionStorage.getItem('credi_superadmin_active') === 'true') {
+          return true;
+        }
+        // 4. Verificar token de Supabase en localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.includes('sb-') && k.includes('-auth-token')) {
+            const tokenVal = localStorage.getItem(k);
+            if (tokenVal && tokenVal.includes('access_token')) {
+              return true;
+            }
+          }
+        }
+      } catch(e) {
+        console.warn("Error evaluando sesión activa:", e);
+      }
+      return false;
+    };
+
+    // Manejador global de navegación entre portales/roles interceptada por seguridad y anuncios
     window.handleRoleNavigation = function(event, role, hashTarget) {
       if (event) event.preventDefault();
+
+      // Bloquear navegación e informar si existe sesión activa
+      if (window.checkActiveUserSession()) {
+        const msg = '⚠️ Por favor, cierra sesión antes de cambiar de portal o rol.';
+        if (typeof Swal !== 'undefined' && typeof Swal.fire === 'function') {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Sesión Activa Detectada',
+            text: msg,
+            confirmButtonColor: '#ef4444',
+            customClass: { popup: 'credipay-swal-popup' }
+          });
+        } else {
+          alert(msg);
+        }
+        return false;
+      }
+
       const drawer = document.getElementById('drawer-main-menu');
       if (drawer) drawer.classList.remove('active');
 
