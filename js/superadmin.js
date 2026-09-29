@@ -1184,7 +1184,7 @@ const superadminModule = {
         <!-- TARJETAS DE MÉTRICAS DEL USUARIO SELECCIONADO -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-advances-metrics">
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-total-title">Capital Total Acumulado</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-total-title">Patrimonio Total</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #34d399;" id="adv-metric-total">$0</div>
           </div>
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
@@ -1269,7 +1269,9 @@ const superadminModule = {
       } else {
         allowedUsers.forEach(u => {
           const opt = document.createElement('option');
-          opt.value = u.username;
+          opt.value = u.id || u.username;
+          opt.setAttribute('data-id', u.id || '');
+          opt.setAttribute('data-username', u.username || '');
           
           const roleLower = (u.role || '').toLowerCase();
           let icon = '💼';
@@ -1309,17 +1311,21 @@ const superadminModule = {
     const selectedUserVal = userSelect ? userSelect.value : '';
     if (!selectedUserVal) return;
 
-    // Buscar usuario seleccionado en Supabase
+    // 1. REPARAR EL FILTRO POR USUARIO (BÚSQUEDA EXACTA EN SUPABASE CACHED USERS)
     let found = null;
     if (this.cachedUsersForAdvances && this.cachedUsersForAdvances.length > 0) {
-      found = this.cachedUsersForAdvances.find(u => (u.username || '').toLowerCase() === selectedUserVal.toLowerCase());
+      found = this.cachedUsersForAdvances.find(u => 
+        String(u.id || '').toLowerCase() === selectedUserVal.toLowerCase() ||
+        String(u.username || '').toLowerCase() === selectedUserVal.toLowerCase() ||
+        String(u.user_id || '').toLowerCase() === selectedUserVal.toLowerCase()
+      );
     }
 
     const nameStr = found ? (found.name || found.nombre_completo || found.nombre_firmante || found.username) : selectedUserVal;
     const roleStr = found ? (found.role || 'Núcleo Operativo') : 'Usuario';
-    const uName = selectedUserVal.toLowerCase();
+    const uName = found ? String(found.username || selectedUserVal).toLowerCase() : selectedUserVal.toLowerCase();
     const uDoc = found ? (found.documentNumber || found.document_number || '').toString().trim() : '';
-    const uId = found ? (found.id || '').toString().trim() : '';
+    const uId = found ? String(found.id || found.user_id || '').toString().trim() : '';
 
     const routes = this.cachedRoutesForAdvances || [];
     const payments = this.cachedPaymentsForAdvances || [];
@@ -1328,19 +1334,19 @@ const superadminModule = {
 
     // Resolver la ruta asignada al agente (routeId)
     let targetRouteId = found ? (found.routeId || found.route_id) : null;
-    if (!targetRouteId) {
+    if (!targetRouteId && routes.length > 0) {
       const matchingRoute = routes.find(r => 
         (r.agentUsername && r.agentUsername.toLowerCase() === uName) ||
         (r.username && r.username.toLowerCase() === uName) ||
-        (r.agent_id && String(r.agent_id) === uId) ||
-        (r.supervisor_id && r.supervisor_id.toLowerCase() === uName)
+        (r.agent_id && (String(r.agent_id) === uId || String(r.agent_id).toLowerCase() === uName)) ||
+        (r.supervisor_id && (String(r.supervisor_id).toLowerCase() === uName || String(r.supervisor_id) === uId))
       );
       if (matchingRoute) {
         targetRouteId = matchingRoute.id || matchingRoute.routeId || matchingRoute.route_id;
       }
     }
 
-    // CONSULTAR CAJA Y CARTERA/INTERESES REALES DESDE SUPABASE VIA CrediPayDB
+    // CONSULTAR CAJA Y CARTERA/INTERESES REALES DESDE SUPABASE VIA CrediPayDB PASANDO EL USUARIO SELECCIONADO
     let cajaLiquid = 0;
     let carteraEnCalle = 0;
     let interesesActivos = 0;
@@ -1348,14 +1354,14 @@ const superadminModule = {
     if (window.CrediPayDB) {
       if (typeof window.CrediPayDB.getLiquidCash === 'function') {
         try {
-          cajaLiquid = Math.round(await window.CrediPayDB.getLiquidCash(targetRouteId) || 0);
+          cajaLiquid = Math.round(await window.CrediPayDB.getLiquidCash(targetRouteId, found) || 0);
         } catch (e) {
           console.warn("Error consultando getLiquidCash en updateAdvancesChart:", e);
         }
       }
       if (typeof window.CrediPayDB.getDashboardFinancialMetrics === 'function') {
         try {
-          const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId);
+          const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId, found);
           if (metrics) {
             carteraEnCalle = Math.round(metrics.carteraEnCalle || 0);
             interesesActivos = Math.round(metrics.interesesActivos || 0);
@@ -1366,12 +1372,12 @@ const superadminModule = {
       }
     }
 
-    // Validar Actividad Real en Supabase (Rutas, Pagos, Cartones, Clientes)
+    // Validar Actividad Real en Supabase (Rutas, Pagos, Cartones, Clientes) para el usuario seleccionado
     const userRoutes = routes.filter(r => 
       (r.agentUsername && r.agentUsername.toLowerCase() === uName) ||
-      (r.supervisor_id && r.supervisor_id.toLowerCase() === uName) ||
+      (r.supervisor_id && (r.supervisor_id.toLowerCase() === uName || String(r.supervisor_id) === uId)) ||
       (r.username && r.username.toLowerCase() === uName) ||
-      (r.agent_id && String(r.agent_id) === uId)
+      (r.agent_id && (String(r.agent_id) === uId || String(r.agent_id).toLowerCase() === uName))
     );
 
     const userPayments = payments.filter(p => 
@@ -1388,13 +1394,13 @@ const superadminModule = {
 
     const userClients = clients.filter(c => 
       (c.agentUsername && c.agentUsername.toLowerCase() === uName) ||
-      (c.supervisor_id && c.supervisor_id.toLowerCase() === uName) ||
+      (c.supervisor_id && (c.supervisor_id.toLowerCase() === uName || String(c.supervisor_id) === uId)) ||
       (uDoc && c.cedula && String(c.cedula) === uDoc)
     );
 
     const hasRealActivity = (cajaLiquid > 0 || carteraEnCalle > 0 || interesesActivos > 0 || userRoutes.length > 0 || userPayments.length > 0 || userCartones.length > 0 || userClients.length > 0);
 
-    // 1. DETERMINAR FECHA DE CREACIÓN REAL DEL AGENTE (created_at)
+    // 2. DETERMINAR FECHA DE CREACIÓN REAL DEL AGENTE (created_at)
     let creationDate = null;
     if (found) {
       const rawD = found.created_at || found.createdAt || found.fecha_creacion || found.fecha_registro;
@@ -1417,7 +1423,7 @@ const superadminModule = {
       }
     }
 
-    // 2. GENERAR MESES DINÁMICOS DESDE CREATED_AT HASTA HOY
+    // 3. GENERAR MESES DINÁMICOS DESDE CREATED_AT HASTA HOY
     const now = new Date();
     const monthNamesEs = [
       'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -1461,7 +1467,7 @@ const superadminModule = {
       }
     }
 
-    // 3. ACTUALIZAR SELECTOR DE MESES DINÁMICO
+    // 4. ACTUALIZAR SELECTOR DE MESES DINÁMICO
     if (monthSelect && (userChanged || monthSelect.options.length <= 1 || monthSelect.getAttribute('data-user') !== uName)) {
       const prevVal = monthSelect.value;
       monthSelect.setAttribute('data-user', uName);
@@ -1492,29 +1498,27 @@ const superadminModule = {
 
     const selectedMonthFilter = monthSelect ? monthSelect.value : 'all';
 
-    // 4. MATEMÁTICA DE NEGOCIO Y CÁLCULOS EXACTOS
-    // Tarjeta 1 ('Capital Total Acumulado'): Capital en Caja + Cartera en Calle (Sin intereses)
-    const capitalTotalAcumuladoActual = cajaLiquid + carteraEnCalle;
+    // 5. MATEMÁTICA DE NEGOCIO EXACTA Y CÁLCULO DE LAS TARJETAS SOLICITADAS
+    // Tarjeta 1 ('Patrimonio Total'): Caja + Cartera en Calle + Intereses Activos ($816k + $200k + $40k = $1.056.000 para King Enrique)
+    const patrimonioTotalActual = cajaLiquid + carteraEnCalle + interesesActivos;
 
-    // Tarjeta 2 ('Intereses y Ganancias'): Total de Intereses Activos en la calle
+    // Tarjeta 2 ('Intereses y Ganancias'): Total de Intereses Activos ($40.000)
     const interesesActivosActual = interesesActivos;
 
-    // Tarjeta 3 ('Crecimiento Promedio Mensual'):
-    // (Capital Total Acumulado actual - Capital Inicial) / Cantidad de Meses desde created_at (mínimo 1 mes)
+    // Tarjeta 3 ('Crecimiento Promedio Mensual'): Patrimonio Total / Meses Trabajados (desde created_at)
     let monthsCount = (currentYear - creationDate.getFullYear()) * 12 + (currentMonth - creationDate.getMonth()) + 1;
     if (monthsCount < 1) monthsCount = 1;
 
-    const capitalInicial = Number(found ? (found.capital_inicial || found.initial_capital || 0) : 0);
-    const crecimientoPromedioMensual = Math.round(Math.max(0, capitalTotalAcumuladoActual - capitalInicial) / monthsCount);
+    const crecimientoPromedioMensual = Math.round((hasRealActivity ? patrimonioTotalActual : 0) / monthsCount);
 
     // Calcular montos dinámicos por mes para la gráfica
     if (hasRealActivity && generatedMonths.length > 0) {
       generatedMonths.forEach((mo, idx) => {
         if (idx === generatedMonths.length - 1) {
-          // Último mes (mes actual) refleja el Capital Total Acumulado exacto
-          mo.accumulated = capitalTotalAcumuladoActual;
+          // Último mes refleja el Patrimonio Total exacto actual
+          mo.accumulated = patrimonioTotalActual;
         } else {
-          // Meses pasados: calcular acumulado basado en transacciones hasta la fecha de corte del mes
+          // Meses pasados: calcular patrimonio acumulado hasta fecha de corte
           let capitalUpToMo = 0;
           let collectedUpToMo = 0;
 
@@ -1523,24 +1527,10 @@ const superadminModule = {
             if (rawD) {
               const d = new Date(rawD);
               if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
-                capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || c.total_a_pagar || 0);
+                capitalUpToMo += Number(c.monto_prestamo || c.amount || c.total_a_pagar || 0);
               }
             } else {
-              capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || 0);
-            }
-          });
-
-          userRoutes.forEach(r => {
-            const rawD = r.created_at || r.fecha;
-            if (rawD) {
-              const d = new Date(rawD);
-              if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
-                capitalUpToMo += Number(r.capital || 0);
-                collectedUpToMo += Number(r.collected || 0);
-              }
-            } else {
-              capitalUpToMo += Number(r.capital || 0);
-              collectedUpToMo += Number(r.collected || 0);
+              capitalUpToMo += Number(c.monto_prestamo || c.amount || 0);
             }
           });
 
@@ -1556,7 +1546,7 @@ const superadminModule = {
             }
           });
 
-          mo.accumulated = Math.max(0, capitalUpToMo - collectedUpToMo);
+          mo.accumulated = Math.max(0, capitalUpToMo - collectedUpToMo + cajaLiquid);
         }
 
         if (idx === 0) {
@@ -1568,7 +1558,7 @@ const superadminModule = {
       });
     }
 
-    // 5. EVALUAR SELECCIÓN DE FILTRO Y ACTUALIZAR TARJETAS Y CHART
+    // 6. EVALUAR SELECCIÓN DE FILTRO Y ACTUALIZAR TARJETAS Y DOM
     let chartMonths = [];
     if (selectedMonthFilter === 'all') {
       chartMonths = [...generatedMonths];
@@ -1584,7 +1574,7 @@ const superadminModule = {
     const latestMonth = generatedMonths[generatedMonths.length - 1];
     const targetMonth = (selectedMonthFilter !== 'all' && chartMonths.length === 1) ? chartMonths[0] : latestMonth;
 
-    // Actualizar Tarjetas UI con las 3 Reglas del Usuario
+    // Actualizar Tarjetas UI con los nombres y valores exactos solicitados
     const metricTotalTitleEl = document.getElementById('adv-metric-total-title');
     const metricAvgTitleEl = document.getElementById('adv-metric-avg-title');
     const metricPeakTitleEl = document.getElementById('adv-metric-peak-title');
@@ -1594,16 +1584,16 @@ const superadminModule = {
     const metricPeakEl = document.getElementById('adv-metric-peak');
     const titleEl = document.getElementById('sa-advances-chart-title');
 
-    // Nombres exactos solicitados
-    if (metricTotalTitleEl) metricTotalTitleEl.textContent = 'Capital Total Acumulado';
+    // Nombres exactos solicitados por el usuario
+    if (metricTotalTitleEl) metricTotalTitleEl.textContent = 'Patrimonio Total';
     if (metricAvgTitleEl) metricAvgTitleEl.textContent = 'Intereses y Ganancias';
     if (metricPeakTitleEl) metricPeakTitleEl.textContent = 'Crecimiento Promedio Mensual';
 
     // Valores exactos según requerimiento:
-    // Tarjeta 1: Suma exacta de (Capital en Caja + Cartera en Calle) -> $1.016.000
-    // Tarjeta 2: Total de Intereses Activos en la calle -> $40.000
-    // Tarjeta 3: (Capital Total Acumulado - Capital Inicial) / meses desde created_at -> $1.016.000 / mes (si es mes 1)
-    if (metricTotalEl) metricTotalEl.textContent = '$' + (hasRealActivity ? capitalTotalAcumuladoActual : 0).toLocaleString('es-CO');
+    // Tarjeta 1 ('Patrimonio Total'): Caja + Cartera + Intereses -> $1.056.000 (King Enrique)
+    // Tarjeta 2 ('Intereses y Ganancias'): Intereses activos -> $40.000
+    // Tarjeta 3 ('Crecimiento Promedio Mensual'): Patrimonio Total / Meses -> $1.056.000 / mes (si mes 1)
+    if (metricTotalEl) metricTotalEl.textContent = '$' + (hasRealActivity ? patrimonioTotalActual : 0).toLocaleString('es-CO');
     if (metricAvgEl) metricAvgEl.textContent = '$' + (hasRealActivity ? interesesActivosActual : 0).toLocaleString('es-CO');
     if (metricPeakEl) metricPeakEl.textContent = '$' + (hasRealActivity ? crecimientoPromedioMensual : 0).toLocaleString('es-CO') + ' / mes';
 
@@ -1619,7 +1609,7 @@ const superadminModule = {
       }
     }
 
-    // 6. RENDERIZAR GRÁFICA EN CHART.JS
+    // 7. RENDERIZAR GRÁFICA EN CHART.JS (SINCRONIZACIÓN CON PATRIMONIO TOTAL)
     if (this.advancesChartInstance) {
       try { this.advancesChartInstance.destroy(); } catch(e) {}
     }
@@ -1635,9 +1625,60 @@ const superadminModule = {
         labels: chartLabels,
         datasets: [
           {
-            label: 'Capital Total Acumulado ($ COP)',
+            label: 'Patrimonio Total ($ COP)',
             data: chartFlowData,
             borderColor: '#34d399',
+            backgroundColor: 'rgba(52, 211, 153, 0.15)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 3,
+            pointRadius: 5,
+            pointBackgroundColor: '#34d399'
+          },
+          {
+            label: 'Crecimiento del Mes ($ COP)',
+            data: chartNetFlowData,
+            borderColor: '#60a5fa',
+            backgroundColor: 'rgba(96, 165, 250, 0.15)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: '#60a5fa'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: true, labels: { color: '#f8fafc', font: { weight: 'bold' } } },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return ' ' + context.dataset.label + ': $' + Number(context.raw).toLocaleString('es-CO');
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              color: '#94a3b8',
+              callback: function(v) { return '$' + Number(v).toLocaleString('es-CO'); }
+            },
+            grid: { color: '#334155' }
+          },
+          x: {
+            ticks: { color: '#f8fafc', font: { weight: 'bold' } },
+            grid: { color: '#334155' }
+          }
+        }
+      }
+    });
+  },
             backgroundColor: 'rgba(52, 211, 153, 0.15)',
             fill: true,
             tension: 0.35,

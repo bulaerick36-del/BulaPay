@@ -2700,7 +2700,7 @@ const db = {
     }
   },
 
-  async getDashboardFinancialMetrics(routeId) {
+  async getDashboardFinancialMetrics(routeId, targetUser) {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
@@ -2710,6 +2710,25 @@ const db = {
       if (!assignedRouteId && currentUser && typeof this.getActiveRouteIdForUser === 'function') {
         assignedRouteId = await this.getActiveRouteIdForUser(currentUser);
       }
+
+      const targetUserObj = (targetUser && typeof targetUser === 'object') ? targetUser : null;
+      const targetUserIdStr = targetUserObj ? String(targetUserObj.id || targetUserObj.user_id || '').toLowerCase() : '';
+      const targetUsernameStr = targetUserObj ? String(targetUserObj.username || targetUserObj.agentUsername || '').toLowerCase() : '';
+      const targetRouteIdStr = assignedRouteId ? String(assignedRouteId) : (targetUserObj ? String(targetUserObj.routeId || targetUserObj.route_id || '') : '');
+
+      const isForSelectedAgent = (item) => {
+        if (!targetRouteIdStr && !targetUserIdStr && !targetUsernameStr) return true;
+
+        const iRoute = String(item.route_id || item.routeId || '');
+        const iAgent = String(item.agent_id || item.agentId || item.agent_username || item.agentUsername || item.user_id || item.supervisor_id || '').toLowerCase();
+
+        if (targetRouteIdStr && iRoute && iRoute === targetRouteIdStr) return true;
+        if (targetUserIdStr && iAgent && iAgent === targetUserIdStr) return true;
+        if (targetUsernameStr && iAgent && iAgent === targetUsernameStr) return true;
+        if (targetRouteIdStr && (!iRoute || iRoute === 'undefined' || iRoute === 'null') && (iAgent === targetUserIdStr || iAgent === targetUsernameStr)) return true;
+
+        return false;
+      };
 
       // 1. Obtener cedulas en Lista Negra / Mora desde las tablas 'clients' y 'cartones' (v118)
       const blacklistedCedulas = new Set();
@@ -2758,6 +2777,8 @@ const db = {
         const activeMap = new Map();
 
         cartonesActivos.forEach(c => {
+          if (!isForSelectedAgent(c)) return;
+
           const ced = String(c.cliente_id || c.client_id || c.cedula || '').trim();
           const rawEstado = String(c.estado || '').trim().toUpperCase();
           const rawStatus = String(c.status || '').trim().toUpperCase();
@@ -3278,19 +3299,35 @@ const db = {
     }
   },
 
-  async getLiquidCash(routeId) {
+  async getLiquidCash(routeId, targetUser) {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
       const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
 
+      const targetUserObj = (targetUser && typeof targetUser === 'object') ? targetUser : null;
+      const targetUserIdStr = targetUserObj ? String(targetUserObj.id || targetUserObj.user_id || '').toLowerCase() : (agentId ? String(agentId).toLowerCase() : '');
+      const targetUsernameStr = targetUserObj ? String(targetUserObj.username || targetUserObj.agentUsername || '').toLowerCase() : '';
+      const targetRouteIdStr = targetRouteId ? String(targetRouteId) : (targetUserObj ? String(targetUserObj.routeId || targetUserObj.route_id || '') : '');
+
+      const isForSelectedAgent = (item) => {
+        if (!targetRouteIdStr && !targetUserIdStr && !targetUsernameStr) return true;
+
+        const iRoute = String(item.route_id || item.routeId || '');
+        const iAgent = String(item.agent_id || item.agentId || item.agent_username || item.agentUsername || item.user_id || item.supervisor_id || '').toLowerCase();
+
+        if (targetRouteIdStr && iRoute && iRoute === targetRouteIdStr) return true;
+        if (targetUserIdStr && iAgent && iAgent === targetUserIdStr) return true;
+        if (targetUsernameStr && iAgent && iAgent === targetUsernameStr) return true;
+        if (targetRouteIdStr && (!iRoute || iRoute === 'undefined' || iRoute === 'null') && (iAgent === targetUserIdStr || iAgent === targetUsernameStr)) return true;
+
+        return false;
+      };
+
       // ============================================================
       // FÓRMULA MAESTRA CAJA v115 (RELOJ SUIZO):
       // Capital en Caja = Total Inyectado - Total Prestado (Salida de Caja) + Total Abonos Reales
-      // 1. Salida al prestar: al crear cualquier cartón/préstamo, el dinero sale de caja de inmediato.
-      // 2. Entrada al abonar: cada abono/pago suma de inmediato a la caja.
-      // 3. Baja por Lista Negra: la caja se mantiene ESTABLE (el dinero salió físicamente al prestarse y no se suma de vuelta).
       // ============================================================
 
       // 1. Suma total de inyecciones de la tabla 'capital_injections'
@@ -3307,10 +3344,7 @@ const db = {
 
       let totalInjected = 0;
       for (const inj of uniqueInjectionsMap.values()) {
-        const belongsToUser = targetRouteId 
-          ? (String(inj.routeId || inj.route_id) === String(targetRouteId)) 
-          : (String(inj.agent_id) === String(agentId));
-        if (belongsToUser || !targetRouteId) {
+        if (isForSelectedAgent(inj)) {
           totalInjected += Math.round(parseFloat(inj.amount) || 0);
         }
       }
@@ -3321,9 +3355,10 @@ const db = {
         const { data: cartonesData } = await supabase.from('cartones').select('*');
         if (cartonesData && cartonesData.length > 0) {
           cartonesData.forEach(c => {
+            if (!isForSelectedAgent(c)) return;
+
             const rawEstado = String(c.estado || c.status || '').trim().toLowerCase();
             const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
-            // Ignorar únicamente cartones cancelados/rechazados sin desembolso
             const isCanceled = rawEstado.includes('cancelad') || rawStatus.includes('CANCELAD') || rawStatus.includes('RECHAZAD');
 
             if (!isCanceled) {
@@ -3342,6 +3377,8 @@ const db = {
           const clientsData = await this.getClients();
           if (clientsData && clientsData.length > 0) {
             clientsData.forEach(c => {
+              if (!isForSelectedAgent(c)) return;
+
               const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
               const isCanceled = rawStatus.includes('CANCEL') || rawStatus.includes('RECHAZ');
               if (!isCanceled) {
@@ -3364,6 +3401,8 @@ const db = {
       const payments = await this.getPayments();
       let totalAbonosReales = 0;
       for (const p of payments) {
+        if (!isForSelectedAgent(p)) continue;
+
         const pStatus = String(p.status || '').toUpperCase();
         const isCanceled = pStatus.includes('CANCEL') || pStatus.includes('RECHAZ') || pStatus === 'NO PAGO' || pStatus === 'PENDIENTE';
         const isMoraLoss = pStatus.includes('LIQUIDADO_MORA') || pStatus.includes('MORA');
@@ -3379,15 +3418,8 @@ const db = {
       let totalMovimientosSalida = 0;
       try {
         const movements = await this.getCashMovements();
-        const currentUser = this.getCurrentUser();
-        const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
         movements.forEach(m => {
-          const mRoute = m.route_id || m.routeId;
-          const mAgent = m.agent_id || m.agentId;
-          const belongsToUser = targetRouteId 
-            ? (!mRoute || String(mRoute) === String(targetRouteId) || (agentId && String(mAgent) === String(agentId))) 
-            : (!agentId || String(mAgent) === String(agentId));
-          if (belongsToUser || !targetRouteId) {
+          if (isForSelectedAgent(m)) {
             const typeStr = String(m.type || m.tipo || '').toLowerCase();
             const isEntrada = typeStr === 'entrada' || typeStr === 'ingreso' || typeStr === 'inyeccion' || typeStr === 'inyección' || typeStr === 'in';
             const isSalida = typeStr === 'salida' || typeStr === 'egreso' || typeStr === 'retiro' || typeStr === 'out';
@@ -3398,7 +3430,6 @@ const db = {
             if (isEntrada) {
               const isInjection = concept.includes('inyecc') || concept.includes('inyección') || concept.includes('inyeccion') || concept.includes('capital') || String(m.id || '').startsWith('inj_') || (!concept && !m.description && !m.concepto);
               
-              // Omitir cualquier entrada manual duplicada de renovación
               if (!isRenov && !isInjection) {
                 totalMovimientosEntrada += amount;
               }
