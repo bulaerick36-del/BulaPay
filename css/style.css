@@ -2211,7 +2211,7 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   transform: translateX(2px);
 }
 
-/* Reglas de Visibilidad Responsiva: Ocultar en PC (>=769px) y mostrar en Móvil (<=768px) */
+/* Reglas de Visibilidad Responsiva: Ocultar en PC (>=769px) y mostrar siempre en menú lateral de Móvil (<=768px) */
 @media (min-width: 769px) {
   .d-md-none,
   .drawer-btn-logout,
@@ -2221,7 +2221,9 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
 }
 
 @media (max-width: 768px) {
-  .drawer-btn-logout:not(.d-none) {
+  .drawer-btn-logout,
+  #drawer-btn-logout,
+  .d-block.d-md-none {
     display: flex !important;
   }
 }

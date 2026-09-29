@@ -426,7 +426,6 @@ const authModule = {
   },
 
   updateNavBar(user) {
-    const drawerLogout = document.getElementById('drawer-btn-logout');
     if (user) {
       if (this.navUserName) this.navUserName.textContent = user.name;
       if (this.navUserRole) this.navUserRole.textContent = user.role;
@@ -437,16 +436,8 @@ const authModule = {
           badge.style.display = 'none';
         }
       }
-      if (drawerLogout) {
-        drawerLogout.style.display = '';
-        drawerLogout.classList.remove('d-none');
-      }
     } else {
       if (this.userNavInfo) this.userNavInfo.style.display = 'none';
-      if (drawerLogout) {
-        drawerLogout.style.display = '';
-        drawerLogout.classList.add('d-none');
-      }
     }
   },
 
