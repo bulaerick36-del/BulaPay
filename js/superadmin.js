@@ -1184,16 +1184,16 @@ const superadminModule = {
         <!-- TARJETAS DE MÉTRICAS DEL USUARIO SELECCIONADO -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-advances-metrics">
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-total-title">Monto Acumulado</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-total-title">Capital Total Acumulado</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #34d399;" id="adv-metric-total">$0</div>
           </div>
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-avg-title">Flujo del Mes</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-avg-title">Intereses y Ganancias</div>
             <div style="font-size: 1.5rem; font-weight: 800; color: #60a5fa;" id="adv-metric-avg">$0</div>
           </div>
           <div style="background: #0b132b; border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 1rem;">
-            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-peak-title">Pico Máximo de Flujo</div>
-            <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">Sin Registros ($0)</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;" id="adv-metric-peak-title">Crecimiento Promedio Mensual</div>
+            <div style="font-size: 1.5rem; font-weight: 800; color: #fbbf24;" id="adv-metric-peak">$0 / mes</div>
           </div>
         </div>
 
@@ -1299,7 +1299,7 @@ const superadminModule = {
     this.updateAdvancesChart(true);
   },
 
-  updateAdvancesChart(userChanged = false) {
+  async updateAdvancesChart(userChanged = false) {
     const canvas = document.getElementById('saAdvancesCanvas');
     if (!canvas || typeof Chart === 'undefined') return;
 
@@ -1325,6 +1325,46 @@ const superadminModule = {
     const payments = this.cachedPaymentsForAdvances || [];
     const cartones = this.cachedCartonesForAdvances || [];
     const clients = this.cachedClientsForAdvances || [];
+
+    // Resolver la ruta asignada al agente (routeId)
+    let targetRouteId = found ? (found.routeId || found.route_id) : null;
+    if (!targetRouteId) {
+      const matchingRoute = routes.find(r => 
+        (r.agentUsername && r.agentUsername.toLowerCase() === uName) ||
+        (r.username && r.username.toLowerCase() === uName) ||
+        (r.agent_id && String(r.agent_id) === uId) ||
+        (r.supervisor_id && r.supervisor_id.toLowerCase() === uName)
+      );
+      if (matchingRoute) {
+        targetRouteId = matchingRoute.id || matchingRoute.routeId || matchingRoute.route_id;
+      }
+    }
+
+    // CONSULTAR CAJA Y CARTERA/INTERESES REALES DESDE SUPABASE VIA CrediPayDB
+    let cajaLiquid = 0;
+    let carteraEnCalle = 0;
+    let interesesActivos = 0;
+
+    if (window.CrediPayDB) {
+      if (typeof window.CrediPayDB.getLiquidCash === 'function') {
+        try {
+          cajaLiquid = Math.round(await window.CrediPayDB.getLiquidCash(targetRouteId) || 0);
+        } catch (e) {
+          console.warn("Error consultando getLiquidCash en updateAdvancesChart:", e);
+        }
+      }
+      if (typeof window.CrediPayDB.getDashboardFinancialMetrics === 'function') {
+        try {
+          const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId);
+          if (metrics) {
+            carteraEnCalle = Math.round(metrics.carteraEnCalle || 0);
+            interesesActivos = Math.round(metrics.interesesActivos || 0);
+          }
+        } catch (e) {
+          console.warn("Error consultando getDashboardFinancialMetrics en updateAdvancesChart:", e);
+        }
+      }
+    }
 
     // Validar Actividad Real en Supabase (Rutas, Pagos, Cartones, Clientes)
     const userRoutes = routes.filter(r => 
@@ -1352,6 +1392,8 @@ const superadminModule = {
       (uDoc && c.cedula && String(c.cedula) === uDoc)
     );
 
+    const hasRealActivity = (cajaLiquid > 0 || carteraEnCalle > 0 || interesesActivos > 0 || userRoutes.length > 0 || userPayments.length > 0 || userCartones.length > 0 || userClients.length > 0);
+
     // 1. DETERMINAR FECHA DE CREACIÓN REAL DEL AGENTE (created_at)
     let creationDate = null;
     if (found) {
@@ -1371,7 +1413,7 @@ const superadminModule = {
       if (valid.length > 0) {
         creationDate = new Date(Math.min(...valid.map(d => d.getTime())));
       } else {
-        creationDate = new Date(); // Fecha actual por defecto
+        creationDate = new Date();
       }
     }
 
@@ -1419,7 +1461,7 @@ const superadminModule = {
       }
     }
 
-    // 3. ACTUALIZAR SELECTOR DE MESES DINÁMICO (SI CAMBIÓ EL USUARIO O SI ESTÁ DESACTUALIZADO)
+    // 3. ACTUALIZAR SELECTOR DE MESES DINÁMICO
     if (monthSelect && (userChanged || monthSelect.options.length <= 1 || monthSelect.getAttribute('data-user') !== uName)) {
       const prevVal = monthSelect.value;
       monthSelect.setAttribute('data-user', uName);
@@ -1450,58 +1492,73 @@ const superadminModule = {
 
     const selectedMonthFilter = monthSelect ? monthSelect.value : 'all';
 
-    // 4. CALCULAR SALDOS REALES DE SUPABASE HASTA CADA MES DE CORTE
-    const hasRealActivity = (userRoutes.length > 0 || userPayments.length > 0 || userCartones.length > 0 || userClients.length > 0);
+    // 4. MATEMÁTICA DE NEGOCIO Y CÁLCULOS EXACTOS
+    // Tarjeta 1 ('Capital Total Acumulado'): Capital en Caja + Cartera en Calle (Sin intereses)
+    const capitalTotalAcumuladoActual = cajaLiquid + carteraEnCalle;
 
-    if (hasRealActivity) {
+    // Tarjeta 2 ('Intereses y Ganancias'): Total de Intereses Activos en la calle
+    const interesesActivosActual = interesesActivos;
+
+    // Tarjeta 3 ('Crecimiento Promedio Mensual'):
+    // (Capital Total Acumulado actual - Capital Inicial) / Cantidad de Meses desde created_at (mínimo 1 mes)
+    let monthsCount = (currentYear - creationDate.getFullYear()) * 12 + (currentMonth - creationDate.getMonth()) + 1;
+    if (monthsCount < 1) monthsCount = 1;
+
+    const capitalInicial = Number(found ? (found.capital_inicial || found.initial_capital || 0) : 0);
+    const crecimientoPromedioMensual = Math.round(Math.max(0, capitalTotalAcumuladoActual - capitalInicial) / monthsCount);
+
+    // Calcular montos dinámicos por mes para la gráfica
+    if (hasRealActivity && generatedMonths.length > 0) {
       generatedMonths.forEach((mo, idx) => {
-        let capitalUpToMo = 0;
-        let collectedUpToMo = 0;
+        if (idx === generatedMonths.length - 1) {
+          // Último mes (mes actual) refleja el Capital Total Acumulado exacto
+          mo.accumulated = capitalTotalAcumuladoActual;
+        } else {
+          // Meses pasados: calcular acumulado basado en transacciones hasta la fecha de corte del mes
+          let capitalUpToMo = 0;
+          let collectedUpToMo = 0;
 
-        // Sumar préstamos / cartones creados hasta la fecha de corte del mes
-        userCartones.forEach(c => {
-          const rawD = c.created_at || c.fecha_creacion || c.fecha;
-          if (rawD) {
-            const d = new Date(rawD);
-            if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
-              capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || c.total_a_pagar || 0);
+          userCartones.forEach(c => {
+            const rawD = c.created_at || c.fecha_creacion || c.fecha;
+            if (rawD) {
+              const d = new Date(rawD);
+              if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+                capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || c.total_a_pagar || 0);
+              }
+            } else {
+              capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || 0);
             }
-          } else {
-            capitalUpToMo += Number(c.monto_prestamo || c.monto || c.capital || 0);
-          }
-        });
+          });
 
-        // Sumar capitales de rutas registradas hasta la fecha de corte
-        userRoutes.forEach(r => {
-          const rawD = r.created_at || r.fecha;
-          if (rawD) {
-            const d = new Date(rawD);
-            if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+          userRoutes.forEach(r => {
+            const rawD = r.created_at || r.fecha;
+            if (rawD) {
+              const d = new Date(rawD);
+              if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+                capitalUpToMo += Number(r.capital || 0);
+                collectedUpToMo += Number(r.collected || 0);
+              }
+            } else {
               capitalUpToMo += Number(r.capital || 0);
               collectedUpToMo += Number(r.collected || 0);
             }
-          } else {
-            capitalUpToMo += Number(r.capital || 0);
-            collectedUpToMo += Number(r.collected || 0);
-          }
-        });
+          });
 
-        // Sumar abonos / pagos recaudados hasta la fecha de corte
-        userPayments.forEach(p => {
-          const rawD = p.created_at || p.fecha_pago || p.fecha || p.date;
-          if (rawD) {
-            const d = new Date(rawD);
-            if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+          userPayments.forEach(p => {
+            const rawD = p.created_at || p.fecha_pago || p.fecha || p.date;
+            if (rawD) {
+              const d = new Date(rawD);
+              if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+                collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
+              }
+            } else {
               collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
             }
-          } else {
-            collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
-          }
-        });
+          });
 
-        mo.accumulated = Math.max(0, capitalUpToMo - collectedUpToMo);
+          mo.accumulated = Math.max(0, capitalUpToMo - collectedUpToMo);
+        }
 
-        // Flujo del Mes = diferencia con el acumulado del mes anterior
         if (idx === 0) {
           mo.flow = mo.accumulated;
         } else {
@@ -1511,7 +1568,7 @@ const superadminModule = {
       });
     }
 
-    // 5. EVALUAR SELECCIÓN DE FILTRO Y RELLENAR TARJETAS Y CHART
+    // 5. EVALUAR SELECCIÓN DE FILTRO Y ACTUALIZAR TARJETAS Y CHART
     let chartMonths = [];
     if (selectedMonthFilter === 'all') {
       chartMonths = [...generatedMonths];
@@ -1527,41 +1584,31 @@ const superadminModule = {
     const latestMonth = generatedMonths[generatedMonths.length - 1];
     const targetMonth = (selectedMonthFilter !== 'all' && chartMonths.length === 1) ? chartMonths[0] : latestMonth;
 
-    const accumulatedDisplay = hasRealActivity ? targetMonth.accumulated : 0;
-    const flowDisplay = hasRealActivity ? targetMonth.flow : 0;
-
-    // Identificar Pico Máximo Histórico
-    let peakValue = -1;
-    let peakLabelStr = 'Sin Registros ($0)';
-    if (hasRealActivity) {
-      generatedMonths.forEach(mo => {
-        if (mo.accumulated > peakValue) {
-          peakValue = mo.accumulated;
-          peakLabelStr = `${mo.label}`;
-        }
-      });
-      if (peakValue <= 0) {
-        peakLabelStr = 'Sin Registros ($0)';
-      }
-    }
-
-    // Actualizar Tarjetas UI
+    // Actualizar Tarjetas UI con las 3 Reglas del Usuario
     const metricTotalTitleEl = document.getElementById('adv-metric-total-title');
     const metricAvgTitleEl = document.getElementById('adv-metric-avg-title');
+    const metricPeakTitleEl = document.getElementById('adv-metric-peak-title');
+
     const metricTotalEl = document.getElementById('adv-metric-total');
     const metricAvgEl = document.getElementById('adv-metric-avg');
     const metricPeakEl = document.getElementById('adv-metric-peak');
     const titleEl = document.getElementById('sa-advances-chart-title');
 
-    if (metricTotalTitleEl) metricTotalTitleEl.textContent = `Monto Acumulado (${targetMonth.label})`;
-    if (metricAvgTitleEl) metricAvgTitleEl.textContent = `Flujo del Mes (${targetMonth.label})`;
-    
-    if (metricTotalEl) metricTotalEl.textContent = '$' + accumulatedDisplay.toLocaleString('es-CO');
-    if (metricAvgEl) metricAvgEl.textContent = '$' + flowDisplay.toLocaleString('es-CO');
-    if (metricPeakEl) metricPeakEl.textContent = peakLabelStr;
+    // Nombres exactos solicitados
+    if (metricTotalTitleEl) metricTotalTitleEl.textContent = 'Capital Total Acumulado';
+    if (metricAvgTitleEl) metricAvgTitleEl.textContent = 'Intereses y Ganancias';
+    if (metricPeakTitleEl) metricPeakTitleEl.textContent = 'Crecimiento Promedio Mensual';
 
-    const firstChartLabel = chartMonths[0].label;
-    const lastChartLabel = chartMonths[chartMonths.length - 1].label;
+    // Valores exactos según requerimiento:
+    // Tarjeta 1: Suma exacta de (Capital en Caja + Cartera en Calle) -> $1.016.000
+    // Tarjeta 2: Total de Intereses Activos en la calle -> $40.000
+    // Tarjeta 3: (Capital Total Acumulado - Capital Inicial) / meses desde created_at -> $1.016.000 / mes (si es mes 1)
+    if (metricTotalEl) metricTotalEl.textContent = '$' + (hasRealActivity ? capitalTotalAcumuladoActual : 0).toLocaleString('es-CO');
+    if (metricAvgEl) metricAvgEl.textContent = '$' + (hasRealActivity ? interesesActivosActual : 0).toLocaleString('es-CO');
+    if (metricPeakEl) metricPeakEl.textContent = '$' + (hasRealActivity ? crecimientoPromedioMensual : 0).toLocaleString('es-CO') + ' / mes';
+
+    const firstChartLabel = chartMonths[0] ? chartMonths[0].label : '';
+    const lastChartLabel = chartMonths[chartMonths.length - 1] ? chartMonths[chartMonths.length - 1].label : '';
     const chartRangeLabel = chartMonths.length > 1 ? `${firstChartLabel} - ${lastChartLabel}` : firstChartLabel;
 
     if (titleEl) {
@@ -1588,7 +1635,7 @@ const superadminModule = {
         labels: chartLabels,
         datasets: [
           {
-            label: 'Monto Acumulado Cartera ($ COP)',
+            label: 'Capital Total Acumulado ($ COP)',
             data: chartFlowData,
             borderColor: '#34d399',
             backgroundColor: 'rgba(52, 211, 153, 0.15)',
@@ -1599,7 +1646,7 @@ const superadminModule = {
             pointBackgroundColor: '#34d399'
           },
           {
-            label: 'Flujo del Mes ($ COP)',
+            label: 'Crecimiento del Mes ($ COP)',
             data: chartNetFlowData,
             borderColor: '#60a5fa',
             backgroundColor: 'rgba(96, 165, 250, 0.15)',

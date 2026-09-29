@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credipay-v363';
+const CACHE_NAME = 'credipay-v364';
 const ASSETS = [
   './',
   './index.html',
