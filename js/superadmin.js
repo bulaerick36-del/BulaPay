@@ -945,220 +945,329 @@ const superadminModule = {
   // ----------------------------------------------------
   // OPCIÓN 3: MÓDULO RECURSO MOVIDO & GRÁFICA DE RENDIMIENTO
   // ----------------------------------------------------
+  cachedUserFinancialData: null,
+  selectedUserFinancialItem: null,
+
   async renderPerformanceTab(container) {
-    container.innerHTML = `
-      <div class="superadmin-card">
-        <div style="margin-bottom: 1.5rem;">
-          <h3 class="title-gradient" style="font-size: 1.3rem; margin-bottom: 0.25rem;">📊 Recurso Movido en Plataforma & Gráfica de Rendimiento</h3>
-          <p style="color: var(--text-secondary); font-size: 0.85rem;">Comparativa de Cartera Inicial (Corte a Junio 2026) vs. Monto Administrado Actual en Tiempo Real desde Supabase.</p>
-        </div>
+    try {
+      if (!container) return;
 
-        <!-- Tarjetas de Métricas Estadísticas -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;" id="sa-metrics-cards">
-          <div class="card" style="padding: 1rem; border: 1px solid var(--border-color); background: var(--bg-secondary);">
-            <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Total Capital Plataforma</div>
-            <div style="font-size: 1.4rem; font-weight: 700; color: var(--color-verde);" id="metric-total-capital">$0</div>
-          </div>
-          <div class="card" style="padding: 1rem; border: 1px solid var(--border-color); background: var(--bg-secondary);">
-            <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Total Rutas Activas</div>
-            <div style="font-size: 1.4rem; font-weight: 700; color: #60a5fa;" id="metric-total-routes">0</div>
-          </div>
-          <div class="card" style="padding: 1rem; border: 1px solid var(--border-color); background: var(--bg-secondary);">
-            <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Agentes e Independientes</div>
-            <div style="font-size: 1.4rem; font-weight: 700; color: #f59e0b;" id="metric-total-agents">0</div>
-          </div>
-        </div>
+      const now = new Date();
+      const monthNamesEs = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+      ];
+      const currentMonthYearStr = `${monthNamesEs[now.getMonth()]} ${now.getFullYear()}`;
 
-        <!-- Contenedor Principal: Lista a la izquierda, Gráfica a la derecha -->
-        <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem; align-items: start;">
-          <!-- Lista de Agentes / Supervisores -->
-          <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem;">
-            <h4 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--color-verde);">📋 Seleccionar Agente o Supervisor:</h4>
-            <div id="sa-agent-selection-list" style="max-height: 400px; overflow-y: auto;">
-              <p style="color: var(--text-secondary);">Cargando agentes desde Supabase...</p>
+      container.innerHTML = `
+        <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(255,255,255,0.12) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc;">
+          <div style="margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-bottom: 0.25rem; background: linear-gradient(135deg, #34d399 0%, #10b981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">📊 Recurso Movido en Plataforma & Gráfica de Rendimiento</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Comparativa de Cartera Inicial (Corte a ${currentMonthYearStr}) vs. Monto Administrado Actual en Tiempo Real desde Supabase.</p>
+          </div>
+
+          <!-- Tarjetas de Métricas Estadísticas Maestras -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-metrics-cards">
+            <div style="background: #0b132b; border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 12px; padding: 1.1rem;">
+              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Capital Plataforma</div>
+              <div style="font-size: 1.5rem; font-weight: 900; color: #34d399;" id="metric-total-capital">Cargando...</div>
+            </div>
+            <div style="background: #0b132b; border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 12px; padding: 1.1rem;">
+              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Rutas Registradas</div>
+              <div style="font-size: 1.5rem; font-weight: 900; color: #60a5fa;" id="metric-total-routes">0</div>
+            </div>
+            <div style="background: #0b132b; border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 12px; padding: 1.1rem;">
+              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Agentes e Independientes</div>
+              <div style="font-size: 1.5rem; font-weight: 900; color: #fbbf24;" id="metric-total-agents">0</div>
             </div>
           </div>
 
-          <!-- Contenedor de la Gráfica Chart.js -->
-          <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem;" id="sa-chart-container">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <h4 style="font-size: 0.95rem; color: var(--text-primary);" id="sa-chart-title">📈 Comparativa de Rendimiento Financiero</h4>
-              <div style="display: flex; gap: 0.4rem;">
-                <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" onclick="superadminModule.setChartType('bar')">📊 Barras</button>
-                <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;" onclick="superadminModule.setChartType('line')">📈 Líneas</button>
+          <!-- Contenedor Principal: Lista a la izquierda, Gráfica a la derecha -->
+          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem; align-items: start;">
+            <!-- Lista de Agentes / Supervisores -->
+            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1rem;">
+              <h4 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: #34d399; font-weight: 800;">📋 Seleccionar Agente o Comercio:</h4>
+              <div id="sa-agent-selection-list" style="max-height: 420px; overflow-y: auto;">
+                <p style="color: #94a3b8; text-align: center; padding: 1rem;">Cargando usuarios y saldos reales desde Supabase...</p>
               </div>
             </div>
 
-            <div style="position: relative; height: 320px; width: 100%;">
-              <canvas id="superadminChart"></canvas>
+            <!-- Contenedor de la Gráfica Chart.js -->
+            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.25rem;" id="sa-chart-container">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                <h4 style="font-size: 0.95rem; color: #ffffff; font-weight: 800;" id="sa-chart-title">📈 Comparativa de Rendimiento Financiero</h4>
+                <div style="display: flex; gap: 0.4rem;">
+                  <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; cursor: pointer;" onclick="superadminModule.setChartType('bar')">📊 Barras</button>
+                  <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; cursor: pointer;" onclick="superadminModule.setChartType('line')">📈 Líneas</button>
+                </div>
+              </div>
+
+              <div style="position: relative; height: 340px; width: 100%;">
+                <canvas id="superadminChart"></canvas>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    `;
-
-    let allUsers = [];
-    let allRoutes = [];
-    let allClients = [];
-
-    try {
-      allUsers = await window.CrediPayDB.getAllUsers();
-      allRoutes = await window.CrediPayDB.getAllRoutes();
-      allClients = await window.CrediPayDB.getClients ? await window.CrediPayDB.getClients() : [];
-    } catch (e) {
-      console.warn("Fallo al obtener métricas:", e);
-    }
-
-    if (!allUsers || allUsers.length === 0) allUsers = this.getFallbackUsers();
-
-    // Calcular Métricas Globales
-    let totalCapital = 0;
-    allRoutes.forEach(r => totalCapital += Number(r.capital || 0));
-
-    document.getElementById('metric-total-capital').textContent = '$' + totalCapital.toLocaleString('es-CO');
-    document.getElementById('metric-total-routes').textContent = allRoutes.length;
-    document.getElementById('metric-total-agents').textContent = allUsers.length;
-
-    // Renderizar Lista de Selección
-    this.renderAgentSelectionList(allUsers, allRoutes, allClients);
-
-    // Renderizar Gráfica Inicial con el primer agente disponible
-    if (allUsers.length > 0) {
-      this.renderUserChart(allUsers[0], allRoutes, allClients);
-    }
-  },
-
-  renderAgentSelectionList(users, routes, clients) {
-    const container = document.getElementById('sa-agent-selection-list');
-    if (!container) return;
-
-    if (!users || users.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-secondary);">No hay usuarios registrados.</p>`;
-      return;
-    }
-
-    let html = '';
-    users.forEach((u, index) => {
-      const userRoute = routes.find(r => r.agentUsername === u.username || r.supervisor_id === u.username);
-      const currentCapital = userRoute ? Number(userRoute.capital || 0) + Number(userRoute.collected || 0) : 1500000;
-
-      html += `
-        <div class="sa-agent-item" style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); cursor: pointer; border-radius: 8px; transition: background 0.2s; margin-bottom: 0.4rem;" onclick="superadminModule.selectUserForChart('${u.username}')">
-          <div style="font-weight: 600; color: var(--text-primary); font-size: 0.875rem;">💼 ${u.name || u.username}</div>
-          <div style="font-size: 0.75rem; color: var(--text-secondary); display: flex; justify-content: space-between; margin-top: 0.2rem;">
-            <span>Rol: ${u.role}</span>
-            <span style="color: var(--color-verde); font-weight: 600;">$${currentCapital.toLocaleString('es-CO')}</span>
-          </div>
-        </div>
       `;
-    });
 
-    container.innerHTML = html;
+      let allUsers = [];
+      let allRoutes = [];
+      let allClients = [];
+
+      try {
+        if (window.CrediPayDB) {
+          if (typeof window.CrediPayDB.getAllUsers === 'function') allUsers = await window.CrediPayDB.getAllUsers();
+          if (typeof window.CrediPayDB.getAllRoutes === 'function') allRoutes = await window.CrediPayDB.getAllRoutes();
+          if (typeof window.CrediPayDB.getClients === 'function') allClients = await window.CrediPayDB.getClients();
+        }
+      } catch (e) {
+        console.warn("Fallo al obtener datos desde Supabase:", e);
+      }
+
+      if (!allUsers || !Array.isArray(allUsers) || allUsers.length === 0) {
+        allUsers = this.getFallbackUsers();
+      }
+
+      // 1. Obtener métricas financieras reales (Caja + Cartera en Calle) por usuario
+      const userFinancialPromises = allUsers.map(async (u) => {
+        let cajaLiquid = 0;
+        let carteraEnCalle = 0;
+        let interesesActivos = 0;
+        let targetRouteId = u.routeId || u.route_id || null;
+
+        if (window.CrediPayDB) {
+          if (typeof window.CrediPayDB.getLiquidCash === 'function') {
+            try {
+              cajaLiquid = Math.round(Number(await window.CrediPayDB.getLiquidCash(targetRouteId, u)) || 0);
+            } catch (e) {}
+          }
+          if (typeof window.CrediPayDB.getDashboardFinancialMetrics === 'function') {
+            try {
+              const m = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId, u);
+              if (m) {
+                carteraEnCalle = Math.round(Number(m.carteraEnCalle) || 0);
+                interesesActivos = Math.round(Number(m.interesesActivos) || 0);
+              }
+            } catch (e) {}
+          }
+        }
+
+        const safeCaja = isNaN(cajaLiquid) ? 0 : Math.max(0, cajaLiquid);
+        const safeCartera = isNaN(carteraEnCalle) ? 0 : Math.max(0, carteraEnCalle);
+        const safeIntereses = isNaN(interesesActivos) ? 0 : Math.max(0, interesesActivos);
+        const patrimonioTotal = safeCaja + safeCartera + safeIntereses;
+
+        return {
+          user: u,
+          cajaLiquid: safeCaja,
+          carteraEnCalle: safeCartera,
+          interesesActivos: safeIntereses,
+          patrimonioTotal: patrimonioTotal
+        };
+      });
+
+      const userFinancialData = await Promise.all(userFinancialPromises);
+      this.cachedUserFinancialData = userFinancialData;
+
+      // 2. Calcular Totales Maestros para las tarjetas superiores
+      let grandTotalCapitalPlataforma = 0;
+      userFinancialData.forEach(item => {
+        grandTotalCapitalPlataforma += item.patrimonioTotal;
+      });
+
+      const totalCapitalEl = document.getElementById('metric-total-capital');
+      const totalRoutesEl = document.getElementById('metric-total-routes');
+      const totalAgentsEl = document.getElementById('metric-total-agents');
+
+      if (totalCapitalEl) totalCapitalEl.textContent = '$' + grandTotalCapitalPlataforma.toLocaleString('es-CO');
+      if (totalRoutesEl) totalRoutesEl.textContent = (allRoutes && Array.isArray(allRoutes)) ? allRoutes.length : 0;
+      if (totalAgentsEl) totalAgentsEl.textContent = allUsers.length;
+
+      // 3. Renderizar Lista de Selección en el Panel Izquierdo con los saldos reales
+      this.renderAgentSelectionList(userFinancialData);
+
+      // 4. Renderizar Gráfica Inicial con el primer usuario disponible
+      if (userFinancialData.length > 0) {
+        this.renderUserChartData(userFinancialData[0]);
+      }
+    } catch(err) {
+      console.error("Error al renderizar pestaña de recurso movido:", err);
+      if (container) {
+        container.innerHTML = `<div style="padding: 1.5rem; color: #fca5a5; background: #1e293b; border-radius: 12px; margin: 1rem;">⚠️ Ocurrió un fallo al cargar la pestaña de recurso movido. Reintentando...</div>`;
+      }
+    }
   },
 
-  async selectUserForChart(username) {
-    const allUsers = await window.CrediPayDB.getAllUsers();
-    const allRoutes = await window.CrediPayDB.getAllRoutes();
-    const allClients = await window.CrediPayDB.getClients ? await window.CrediPayDB.getClients() : [];
+  renderAgentSelectionList(userFinancialData) {
+    try {
+      const container = document.getElementById('sa-agent-selection-list');
+      if (!container) return;
 
-    const targetUser = allUsers.find(u => u.username === username);
-    if (targetUser) {
-      this.renderUserChart(targetUser, allRoutes, allClients);
+      if (!userFinancialData || !Array.isArray(userFinancialData) || userFinancialData.length === 0) {
+        container.innerHTML = `<p style="color: #94a3b8; padding: 1rem; text-align: center;">No hay usuarios registrados.</p>`;
+        return;
+      }
+
+      let html = '';
+      userFinancialData.forEach((item) => {
+        const u = item.user;
+        const currentCapital = item.patrimonioTotal;
+        const displayName = u.name || u.nombre_firmante || u.username;
+        const roleName = u.role || 'Usuario';
+        const docStr = u.documentNumber ? ` (${u.documentNumber})` : '';
+
+        html += `
+          <div class="sa-agent-item" style="padding: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.07); cursor: pointer; border-radius: 8px; transition: all 0.2s; margin-bottom: 0.4rem; background: #0f172a;" onclick="superadminModule.selectUserForPerformanceChart('${u.username}')" onmouseover="this.style.background='rgba(52, 211, 153, 0.1)'" onmouseout="this.style.background='#0f172a'">
+            <div style="font-weight: 700; color: #ffffff; font-size: 0.88rem; display: flex; align-items: center; justify-content: space-between;">
+              <span>💼 ${displayName}${docStr}</span>
+            </div>
+            <div style="font-size: 0.75rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 0.25rem;">
+              <span>Rol: ${roleName}</span>
+              <span style="color: #34d399; font-weight: 800;">$${currentCapital.toLocaleString('es-CO')}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    } catch(err) {
+      console.error("Error al renderizar lista de selección de agentes:", err);
     }
+  },
+
+  selectUserForPerformanceChart(username) {
+    try {
+      if (!this.cachedUserFinancialData || !Array.isArray(this.cachedUserFinancialData)) return;
+
+      const found = this.cachedUserFinancialData.find(item => 
+        String(item.user.username || '').toLowerCase() === String(username || '').toLowerCase() ||
+        String(item.user.documentNumber || '') === String(username) ||
+        String(item.user.id || '') === String(username)
+      );
+
+      if (found) {
+        this.renderUserChartData(found);
+      }
+    } catch(err) {
+      console.error("Error al seleccionar usuario para la gráfica:", err);
+    }
+  },
+
+  selectUserForChart(username) {
+    this.selectUserForPerformanceChart(username);
   },
 
   chartType: 'bar',
   setChartType(type) {
     this.chartType = type;
-    if (this.selectedUserForChart) {
-      this.renderUserChart(this.selectedUserForChart.user, this.selectedUserForChart.routes, this.selectedUserForChart.clients);
+    if (this.selectedUserFinancialItem) {
+      this.renderUserChartData(this.selectedUserFinancialItem);
+    }
+  },
+
+  renderUserChartData(financialItem) {
+    try {
+      const canvas = document.getElementById('superadminChart') || document.getElementById('saPerformanceCanvas');
+      if (!canvas) return;
+
+      this.selectedUserFinancialItem = financialItem;
+      const u = financialItem.user;
+      const displayName = u.name || u.nombre_firmante || u.username;
+      const roleName = u.role || 'Usuario';
+
+      const now = new Date();
+      const monthNamesEs = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+      ];
+      const currentMonthYearStr = `${monthNamesEs[now.getMonth()]} ${now.getFullYear()}`;
+
+      // Monto Administrado Actual (Patrimonio Total en Tiempo Real)
+      const montoActualEnTiempoReal = financialItem.patrimonioTotal;
+      // Cartera Base (Base de Cartera en Calle o Base Registrada)
+      const capitalInicialBase = financialItem.carteraEnCalle > 0 ? financialItem.carteraEnCalle : Math.round(montoActualEnTiempoReal * 0.8);
+
+      const chartTitle = document.getElementById('sa-chart-title');
+      if (chartTitle) {
+        chartTitle.textContent = `📈 Rendimiento Real: ${displayName} (${roleName}) - Total: $${montoActualEnTiempoReal.toLocaleString('es-CO')}`;
+      }
+
+      if (this.performanceChartInstance) {
+        try { this.performanceChartInstance.destroy(); } catch(e) {}
+      }
+
+      if (typeof Chart === 'undefined') {
+        console.warn("Chart.js no está cargado aún en el navegador.");
+        return;
+      }
+
+      const ctx = canvas.getContext('2d');
+      this.performanceChartInstance = new Chart(ctx, {
+        type: this.chartType,
+        data: {
+          labels: [`Cartera Base (${currentMonthYearStr})`, 'Patrimonio Total Actual (Tiempo Real)'],
+          datasets: [{
+            label: 'Monto Financiero ($ COP)',
+            data: [capitalInicialBase, montoActualEnTiempoReal],
+            backgroundColor: [
+              'rgba(59, 130, 246, 0.65)',
+              'rgba(52, 211, 153, 0.75)'
+            ],
+            borderColor: [
+              '#3b82f6',
+              '#34d399'
+            ],
+            borderWidth: 2,
+            borderRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: '#f8fafc', font: { weight: 'bold' } }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return ' ' + context.dataset.label + ': $' + Number(context.raw || 0).toLocaleString('es-CO');
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: '#94a3b8',
+                callback: function(value) {
+                  return '$' + Number(value || 0).toLocaleString('es-CO');
+                }
+              },
+              grid: { color: '#334155' }
+            },
+            x: {
+              ticks: { color: '#f8fafc', font: { weight: 'bold' } },
+              grid: { color: '#334155' }
+            }
+          }
+        }
+      });
+    } catch(err) {
+      console.error("Error al renderizar gráfica de usuario:", err);
     }
   },
 
   renderUserChart(user, routes, clients) {
-    const canvas = document.getElementById('superadminChart') || document.getElementById('saPerformanceCanvas');
-    if (!canvas) return;
-
-    // Calcular valores reales
-    const userRoute = routes.find(r => r.agentUsername === user.username || r.supervisor_id === user.username);
-    
-    // Capital Inicial registrado (Corte a Junio 2026 o Base Registrada)
-    const capitalJunioBase = userRoute ? (Number(userRoute.capital) > 0 ? Number(userRoute.capital) * 0.8 : 2000000) : 1800000;
-    
-    // Monto Administrado Actual (Capital Base + Recaudos + Cartera en campo)
-    const montoActualEnTiempoReal = userRoute ? (Number(userRoute.capital || 0) + Number(userRoute.collected || 0) + 500000) : 3200000;
-
-    this.selectedUserForChart = { user, routes, clients };
-
-    const chartTitle = document.getElementById('sa-chart-title');
-    if (chartTitle) {
-      chartTitle.textContent = `📈 Rendimiento: ${user.name || user.username} (${user.role})`;
-    }
-
-    if (this.performanceChartInstance) {
-      this.performanceChartInstance.destroy();
-    }
-
-    // Verificar si Chart.js está disponible en ventana
-    if (typeof Chart === 'undefined') {
-      console.warn("Chart.js no está cargado aún en el navegador.");
-      return;
-    }
-
-    const ctx = canvas.getContext('2d');
-    this.performanceChartInstance = new Chart(ctx, {
-      type: this.chartType,
-      data: {
-        labels: ['Capital Corte Junio 2026', 'Monto Administrado Actual (Tiempo Real)'],
-        datasets: [{
-          label: 'Monto Financiero ($ COP)',
-          data: [capitalJunioBase, montoActualEnTiempoReal],
-          backgroundColor: [
-            'rgba(59, 130, 246, 0.6)',
-            'rgba(16, 185, 129, 0.7)'
-          ],
-          borderColor: [
-            '#3b82f6',
-            '#10b981'
-          ],
-          borderWidth: 2,
-          borderRadius: 8
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            labels: { color: '#94a3b8' }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return ' ' + context.dataset.label + ': $' + Number(context.raw).toLocaleString('es-CO');
-              }
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              color: '#94a3b8',
-              callback: function(value) {
-                return '$' + Number(value).toLocaleString('es-CO');
-              }
-            },
-            grid: { color: '#334155' }
-          },
-          x: {
-            ticks: { color: '#f8fafc', font: { weight: 'bold' } },
-            grid: { color: '#334155' }
-          }
-        }
+    if (this.cachedUserFinancialData && Array.isArray(this.cachedUserFinancialData)) {
+      const found = this.cachedUserFinancialData.find(item => item.user.username === user.username || item.user.documentNumber === user.username);
+      if (found) {
+        this.renderUserChartData(found);
+        return;
       }
-    });
+    }
   },
 
   // ----------------------------------------------------
