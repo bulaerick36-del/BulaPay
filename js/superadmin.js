@@ -966,34 +966,18 @@ const superadminModule = {
             <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Comparativa de Cartera Inicial (Corte a ${currentMonthYearStr}) vs. Monto Administrado Actual en Tiempo Real desde Supabase.</p>
           </div>
 
-          <!-- Tarjetas de Métricas Estadísticas Maestras -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;" id="sa-metrics-cards">
-            <div style="background: #0b132b; border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 12px; padding: 1.1rem;">
-              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Capital Plataforma</div>
-              <div style="font-size: 1.5rem; font-weight: 900; color: #34d399;" id="metric-total-capital">Cargando...</div>
-            </div>
-            <div style="background: #0b132b; border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 12px; padding: 1.1rem;">
-              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Rutas Registradas</div>
-              <div style="font-size: 1.5rem; font-weight: 900; color: #60a5fa;" id="metric-total-routes">0</div>
-            </div>
-            <div style="background: #0b132b; border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 12px; padding: 1.1rem;">
-              <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Agentes e Independientes</div>
-              <div style="font-size: 1.5rem; font-weight: 900; color: #fbbf24;" id="metric-total-agents">0</div>
-            </div>
-          </div>
-
           <!-- Contenedor Principal: Lista a la izquierda, Gráfica a la derecha -->
-          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem; align-items: start;">
+          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem; align-items: stretch;">
             <!-- Lista de Agentes / Supervisores -->
-            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1rem;">
-              <h4 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: #34d399; font-weight: 800;">📋 Seleccionar Agente o Comercio:</h4>
-              <div id="sa-agent-selection-list" style="max-height: 420px; overflow-y: auto;">
+            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column;">
+              <h4 style="font-size: 0.95rem; margin-bottom: 0.85rem; color: #34d399; font-weight: 800;">📋 Seleccionar Agente o Comercio:</h4>
+              <div id="sa-agent-selection-list" style="max-height: 480px; overflow-y: auto; flex: 1;">
                 <p style="color: #94a3b8; text-align: center; padding: 1rem;">Cargando usuarios y saldos reales desde Supabase...</p>
               </div>
             </div>
 
             <!-- Contenedor de la Gráfica Chart.js -->
-            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.25rem;" id="sa-chart-container">
+            <div style="background: #0b132b; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column;" id="sa-chart-container">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
                 <h4 style="font-size: 0.95rem; color: #ffffff; font-weight: 800;" id="sa-chart-title">📈 Comparativa de Rendimiento Financiero</h4>
                 <div style="display: flex; gap: 0.4rem;">
@@ -1002,7 +986,7 @@ const superadminModule = {
                 </div>
               </div>
 
-              <div style="position: relative; height: 340px; width: 100%;">
+              <div style="position: relative; height: 400px; width: 100%; flex: 1;">
                 <canvas id="superadminChart"></canvas>
               </div>
             </div>
@@ -1069,24 +1053,10 @@ const superadminModule = {
       const userFinancialData = await Promise.all(userFinancialPromises);
       this.cachedUserFinancialData = userFinancialData;
 
-      // 2. Calcular Totales Maestros para las tarjetas superiores
-      let grandTotalCapitalPlataforma = 0;
-      userFinancialData.forEach(item => {
-        grandTotalCapitalPlataforma += item.patrimonioTotal;
-      });
-
-      const totalCapitalEl = document.getElementById('metric-total-capital');
-      const totalRoutesEl = document.getElementById('metric-total-routes');
-      const totalAgentsEl = document.getElementById('metric-total-agents');
-
-      if (totalCapitalEl) totalCapitalEl.textContent = '$' + grandTotalCapitalPlataforma.toLocaleString('es-CO');
-      if (totalRoutesEl) totalRoutesEl.textContent = (allRoutes && Array.isArray(allRoutes)) ? allRoutes.length : 0;
-      if (totalAgentsEl) totalAgentsEl.textContent = allUsers.length;
-
-      // 3. Renderizar Lista de Selección en el Panel Izquierdo con los saldos reales
+      // 2. Renderizar Lista de Selección en el Panel Izquierdo con los saldos reales
       this.renderAgentSelectionList(userFinancialData);
 
-      // 4. Renderizar Gráfica Inicial con el primer usuario disponible
+      // 3. Renderizar Gráfica Inicial con el primer usuario disponible
       if (userFinancialData.length > 0) {
         this.renderUserChartData(userFinancialData[0]);
       }
