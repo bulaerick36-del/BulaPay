@@ -563,148 +563,169 @@ const superadminModule = {
   // OPCIÓN 1: MÓDULO USUARIOS Y CLIENTES (GESTIÓN DE CONSTRASEÑAS)
   // ----------------------------------------------------
   async renderUsersTab(container) {
-    container.innerHTML = `
-      <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(255,255,255,0.12) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
-          <div>
-            <h3 style="font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-bottom: 0.25rem; background: linear-gradient(135deg, #34d399 0%, #10b981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">👥 Módulo de Usuarios y Clientes</h3>
-            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Gestión centralizada de credenciales, perfiles y restablecimiento de contraseñas de supervisores y agentes.</p>
-          </div>
-          <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; max-width: 380px;">
-            <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula o rol..." style="padding: 0.55rem 0.85rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: #1e293b; color: #ffffff; width: 100%; outline: none;">
-          </div>
-        </div>
-
-        <!-- Tarjeta de Búsqueda y Gestión Rápida por Cédula -->
-        <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.85rem;">
-            <h4 style="margin: 0; color: #fbbf24; font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
-              <span>🔍</span> Buscador Rápido de Suspensión y Liberación por Cédula
-            </h4>
-            <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Consulta básica de usuario, estado y acciones instantáneas de suspensión/liberación</span>
-          </div>
-
-          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <input type="text" id="sa-quick-cedula-input" placeholder="💳 Ingresa el número de cédula o usuario (Ej: 1098765432)..." style="flex: 1; min-width: 260px; padding: 0.65rem 1rem; font-size: 0.9rem; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.4); background: #0f172a; color: #ffffff; outline: none; font-weight: 700;">
-            <button type="button" onclick="superadminModule.buscarUsuarioPorCedulaDirecto()" class="btn" style="padding: 0.65rem 1.3rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #0b132b; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.25);">🔍 Buscar Cédula</button>
-          </div>
-
-          <!-- Contenedor de Resultado Dinámico -->
-          <div id="sa-quick-cedula-result-container" style="display: none; margin-top: 1rem;"></div>
-        </div>
-
-        <div id="sa-users-list-wrapper" style="overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); background: #0b132b;">
-          <p style="color: #94a3b8; padding: 1.5rem; text-align: center;">Cargando usuarios desde Supabase...</p>
-        </div>
-      </div>
-    `;
-
-    let allUsers = [];
     try {
-      allUsers = await window.CrediPayDB.getAllUsers();
-    } catch (e) {
-      console.error('Error de Supabase al cargar usuarios:', e);
-    }
-    if (!allUsers) allUsers = [];
+      if (!container) return;
 
-    this.renderUsersListTable(allUsers);
+      container.innerHTML = `
+        <div class="superadmin-card" style="background: #0f172a !important; border: 1px solid rgba(255,255,255,0.12) !important; border-radius: 14px; padding: 1.5rem; color: #f8fafc;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+              <h3 style="font-size: 1.35rem; font-weight: 800; color: #ffffff; margin-bottom: 0.25rem; background: linear-gradient(135deg, #34d399 0%, #10b981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">👥 Módulo de Usuarios y Clientes</h3>
+              <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Gestión centralizada de credenciales, perfiles y restablecimiento de contraseñas de supervisores y agentes.</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; max-width: 380px;">
+              <input type="text" id="sa-users-search" placeholder="🔍 Buscar por nombre, usuario, cédula o rol..." style="padding: 0.55rem 0.85rem; font-size: 0.85rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: #1e293b; color: #ffffff; width: 100%; outline: none;">
+            </div>
+          </div>
 
-    const quickCedulaInput = document.getElementById('sa-quick-cedula-input');
-    if (quickCedulaInput) {
-      quickCedulaInput.oninput = () => {
-        this.buscarUsuarioPorCedulaDirecto(quickCedulaInput.value, 'sa-quick-cedula-result-container');
-      };
-    }
+          <!-- Tarjeta de Búsqueda y Gestión Rápida por Cédula -->
+          <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.85rem;">
+              <h4 style="margin: 0; color: #fbbf24; font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                <span>🔍</span> Buscador Rápido de Suspensión y Liberación por Cédula
+              </h4>
+              <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Consulta básica de usuario, estado y acciones instantáneas de suspensión/liberación</span>
+            </div>
 
-    const searchInput = document.getElementById('sa-users-search');
-    if (searchInput) {
-      searchInput.oninput = () => {
-        const query = searchInput.value.toLowerCase().trim();
-        const filtered = allUsers.filter(u => 
-          (u.name && u.name.toLowerCase().includes(query)) ||
-          (u.username && u.username.toLowerCase().includes(query)) ||
-          (u.documentNumber && u.documentNumber.toLowerCase().includes(query)) ||
-          (u.role && u.role.toLowerCase().includes(query)) ||
-          (u.email && u.email.toLowerCase().includes(query))
-        );
-        this.renderUsersListTable(filtered);
-      };
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="sa-quick-cedula-input" placeholder="💳 Ingresa el número de cédula o usuario (Ej: 1098765432)..." style="flex: 1; min-width: 260px; padding: 0.65rem 1rem; font-size: 0.9rem; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.4); background: #0f172a; color: #ffffff; outline: none; font-weight: 700;">
+              <button type="button" onclick="superadminModule.buscarUsuarioPorCedulaDirecto()" class="btn" style="padding: 0.65rem 1.3rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #0b132b; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.25);">🔍 Buscar Cédula</button>
+            </div>
+
+            <!-- Contenedor de Resultado Dinámico -->
+            <div id="sa-quick-cedula-result-container" style="display: none; margin-top: 1rem;"></div>
+          </div>
+
+          <div id="sa-users-list-wrapper" style="overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); background: #0b132b;">
+            <p style="color: #94a3b8; padding: 1.5rem; text-align: center;">Cargando usuarios desde Supabase...</p>
+          </div>
+        </div>
+      `;
+
+      let allUsers = [];
+      try {
+        if (window.CrediPayDB && typeof window.CrediPayDB.getAllUsers === 'function') {
+          allUsers = await window.CrediPayDB.getAllUsers();
+        }
+      } catch (e) {
+        console.error('Error de Supabase al cargar usuarios:', e);
+      }
+      if (!allUsers || !Array.isArray(allUsers)) allUsers = [];
+
+      this.renderUsersListTable(allUsers);
+
+      const quickCedulaInput = document.getElementById('sa-quick-cedula-input');
+      if (quickCedulaInput) {
+        quickCedulaInput.oninput = () => {
+          this.buscarUsuarioPorCedulaDirecto(quickCedulaInput.value, 'sa-quick-cedula-result-container');
+        };
+      }
+
+      const searchInput = document.getElementById('sa-users-search');
+      if (searchInput) {
+        searchInput.oninput = () => {
+          const query = searchInput.value.toLowerCase().trim();
+          const filtered = allUsers.filter(u => 
+            (u.name && u.name.toLowerCase().includes(query)) ||
+            (u.username && u.username.toLowerCase().includes(query)) ||
+            (u.documentNumber && u.documentNumber.toLowerCase().includes(query)) ||
+            (u.role && u.role.toLowerCase().includes(query)) ||
+            (u.email && u.email.toLowerCase().includes(query))
+          );
+          this.renderUsersListTable(filtered);
+        };
+      }
+    } catch (err) {
+      console.error("Error al renderizar pestaña de usuarios:", err);
+      if (container) {
+        container.innerHTML = `<div style="padding: 1.5rem; color: #fca5a5; background: #1e293b; border-radius: 12px; margin: 1rem;">⚠️ Ocurrió un fallo al cargar la pestaña de usuarios. Reintentando...</div>`;
+      }
     }
   },
 
   renderUsersListTable(users) {
-    const wrapper = document.getElementById('sa-users-list-wrapper');
-    if (!wrapper) return;
+    try {
+      const wrapper = document.getElementById('sa-users-list-wrapper');
+      if (!wrapper) return;
 
-    if (!users || users.length === 0) {
-      wrapper.innerHTML = `<p style="color: #94a3b8; padding: 1.5rem; text-align: center;">No se encontraron usuarios registrados.</p>`;
-      return;
-    }
+      if (!users || !Array.isArray(users) || users.length === 0) {
+        wrapper.innerHTML = `<p style="color: #94a3b8; padding: 1.5rem; text-align: center;">No se encontraron usuarios registrados.</p>`;
+        return;
+      }
 
-    let html = `
-      <table class="sa-users-table" style="width: 100%; min-width: 950px; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; text-align: left; background: #0b132b; border-radius: 10px; overflow: hidden;">
-        <thead>
-          <tr style="background: #1e293b; color: #34d399; text-transform: uppercase; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; border-bottom: 2px solid rgba(52, 211, 153, 0.3);">
-            <th class="sa-user-col-username" style="padding: 0.9rem 1rem; width: 22%; min-width: 180px;">Usuario / Cédula</th>
-            <th class="sa-user-col-name" style="padding: 0.9rem 1rem; width: 24%; min-width: 190px;">Nombre Completo</th>
-            <th class="sa-user-col-role" style="padding: 0.9rem 1rem; width: 16%; min-width: 140px;">Rol</th>
-            <th class="sa-user-col-contact" style="padding: 0.9rem 1rem; width: 18%; min-width: 170px;">Teléfono / Correo</th>
-            <th class="sa-user-col-status" style="padding: 0.9rem 1rem; width: 8%; min-width: 80px;">Estado</th>
-            <th class="sa-user-col-actions" style="padding: 0.9rem 1rem; width: 12%; min-width: 190px; text-align: right;">Acciones de Gestión</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    users.forEach((u, idx) => {
-      const doc = u.documentNumber ? `${u.documentType || 'CC'}: ${u.documentNumber}` : 'Sin Documento';
-      const roleBadge = u.role === 'Agente Independiente' 
-        ? `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">💼 ${u.role}</span>`
-        : `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa !important; border: 1px solid rgba(59, 130, 246, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">👔 ${u.role || 'Usuario'}</span>`;
-      
-      const rowBg = (idx % 2 === 0) ? '#0f172a' : '#1e293b';
-
-      html += `
-        <tr class="sa-user-row" style="background: ${rowBg}; border-bottom: 1px solid rgba(255,255,255,0.07);">
-          <td class="sa-user-col-username" style="padding: 0.85rem 1rem; vertical-align: middle; width: 22%;">
-            <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;">
-              <span class="sa-user-title" style="color: #ffffff !important; font-weight: 800; font-size: 0.92rem; display: block; line-height: 1.2;">${u.username}</span>
-              <span class="sa-user-doc-badge" style="font-size: 0.75rem; color: #38bdf8 !important; font-weight: 600; display: inline-block; background: rgba(56, 189, 248, 0.14); padding: 0.2rem 0.55rem; border-radius: 5px; border: 1px solid rgba(56, 189, 248, 0.3); white-space: nowrap;">💳 ${doc}</span>
-            </div>
-          </td>
-          <td class="sa-user-col-name" style="padding: 0.85rem 1rem; vertical-align: middle; width: 24%;">
-            <span class="sa-user-fullname" style="color: #f8fafc !important; font-weight: 700; font-size: 0.9rem; display: block; line-height: 1.3;">${u.name || u.nombre_firmante || 'Sin Nombre'}</span>
-          </td>
-          <td class="sa-user-col-role" style="padding: 0.85rem 1rem; vertical-align: middle; width: 16%;">${roleBadge}</td>
-          <td class="sa-user-col-contact" style="padding: 0.85rem 1rem; vertical-align: middle; width: 18%;">
-            <div style="display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem;">
-              <span style="color: #e2e8f0 !important; font-weight: 600;">📞 ${u.phone || 'N/A'}</span>
-              <span style="color: #94a3b8 !important; font-size: 0.75rem;">✉️ ${u.email || 'N/A'}</span>
-              <span style="color: #fbbf24 !important; font-size: 0.75rem; font-weight: 700;">🔑 Clave: ${u.password || '••••••••'}</span>
-            </div>
-          </td>
-          <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle; width: 8%;">
-            ${(() => {
-              const diasInfo = window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function' ? window.CrediPayDB.getDiasRestantes(u) : { dias: 0, fechaCorteStr: 'N/A' };
-              const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
-              return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
-                ${btnHtml}
-                <span style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.45rem; border-radius: 6px; display: inline-block;" title="Corte: ${diasInfo.fechaCorteStr}">⏳ Faltan ${diasInfo.dias} días</span>
-              </div>`;
-            })()}
-          </td>
-          <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
-            <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
-              <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(59, 130, 246, 0.2); color: #93c5fd !important; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
-              <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(255, 255, 255, 0.12); color: #f8fafc !important; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
-            </div>
-          </td>
-        </tr>
+      let html = `
+        <table class="sa-users-table" style="width: 100%; min-width: 950px; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; text-align: left; background: #0b132b; border-radius: 10px; overflow: hidden;">
+          <thead>
+            <tr style="background: #1e293b; color: #34d399; text-transform: uppercase; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; border-bottom: 2px solid rgba(52, 211, 153, 0.3);">
+              <th class="sa-user-col-username" style="padding: 0.9rem 1rem; width: 22%; min-width: 180px;">Usuario / Cédula</th>
+              <th class="sa-user-col-name" style="padding: 0.9rem 1rem; width: 24%; min-width: 190px;">Nombre Completo</th>
+              <th class="sa-user-col-role" style="padding: 0.9rem 1rem; width: 16%; min-width: 140px;">Rol</th>
+              <th class="sa-user-col-contact" style="padding: 0.9rem 1rem; width: 18%; min-width: 170px;">Teléfono / Correo</th>
+              <th class="sa-user-col-status" style="padding: 0.9rem 1rem; width: 8%; min-width: 80px;">Estado</th>
+              <th class="sa-user-col-actions" style="padding: 0.9rem 1rem; width: 12%; min-width: 190px; text-align: right;">Acciones de Gestión</th>
+            </tr>
+          </thead>
+          <tbody>
       `;
-    });
 
-    html += `</tbody></table>`;
-    wrapper.innerHTML = html;
+      users.forEach((u, idx) => {
+        if (!u) return;
+        const doc = u.documentNumber ? `${u.documentType || 'CC'}: ${u.documentNumber}` : 'Sin Documento';
+        const roleBadge = u.role === 'Agente Independiente' 
+          ? `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">💼 ${u.role}</span>`
+          : `<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa !important; border: 1px solid rgba(59, 130, 246, 0.4); padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; display: inline-block;">👔 ${u.role || 'Usuario'}</span>`;
+        
+        const rowBg = (idx % 2 === 0) ? '#0f172a' : '#1e293b';
+
+        html += `
+          <tr class="sa-user-row" style="background: ${rowBg}; border-bottom: 1px solid rgba(255,255,255,0.07);">
+            <td class="sa-user-col-username" style="padding: 0.85rem 1rem; vertical-align: middle; width: 22%;">
+              <div style="display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start;">
+                <span class="sa-user-title" style="color: #ffffff !important; font-weight: 800; font-size: 0.92rem; display: block; line-height: 1.2;">${u.username || 'N/A'}</span>
+                <span class="sa-user-doc-badge" style="font-size: 0.75rem; color: #38bdf8 !important; font-weight: 600; display: inline-block; background: rgba(56, 189, 248, 0.14); padding: 0.2rem 0.55rem; border-radius: 5px; border: 1px solid rgba(56, 189, 248, 0.3); white-space: nowrap;">💳 ${doc}</span>
+              </div>
+            </td>
+            <td class="sa-user-col-name" style="padding: 0.85rem 1rem; vertical-align: middle; width: 24%;">
+              <span class="sa-user-fullname" style="color: #f8fafc !important; font-weight: 700; font-size: 0.9rem; display: block; line-height: 1.3;">${u.name || u.nombre_firmante || 'Sin Nombre'}</span>
+            </td>
+            <td class="sa-user-col-role" style="padding: 0.85rem 1rem; vertical-align: middle; width: 16%;">${roleBadge}</td>
+            <td class="sa-user-col-contact" style="padding: 0.85rem 1rem; vertical-align: middle; width: 18%;">
+              <div style="display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem;">
+                <span style="color: #e2e8f0 !important; font-weight: 600;">📞 ${u.phone || 'N/A'}</span>
+                <span style="color: #94a3b8 !important; font-size: 0.75rem;">✉️ ${u.email || 'N/A'}</span>
+                <span style="color: #fbbf24 !important; font-size: 0.75rem; font-weight: 700;">🔑 Clave: ${u.password || '••••••••'}</span>
+              </div>
+            </td>
+            <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle; width: 8%;">
+              ${(() => {
+                let diasInfo = { dias: 0, fechaCorteStr: 'N/A' };
+                try {
+                  if (window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function') {
+                    diasInfo = window.CrediPayDB.getDiasRestantes(u);
+                  }
+                } catch(eD) {}
+                const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
+                return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
+                  ${btnHtml}
+                  <span style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.45rem; border-radius: 6px; display: inline-block;" title="Corte: ${diasInfo.fechaCorteStr}">⏳ Faltan ${diasInfo.dias} días</span>
+                </div>`;
+              })()}
+            </td>
+            <td class="sa-user-col-actions" style="padding: 0.85rem 1rem; vertical-align: middle; text-align: right; white-space: nowrap;">
+              <div style="display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(59, 130, 246, 0.2); color: #93c5fd !important; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onclick="superadminModule.openResetPwdModal('${u.username}')">🔑 Restablecer Clave</button>
+                <button class="btn btn-secondary" style="padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; background: rgba(255, 255, 255, 0.12); color: #f8fafc !important; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onclick="superadminModule.openEditUserModal('${u.username}')">✏️ Editar</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table>`;
+      wrapper.innerHTML = html;
+    } catch(err) {
+      console.error("Error al renderizar la tabla de usuarios:", err);
+    }
   },
 
   async openResetPwdModal(username) {
@@ -1302,433 +1323,416 @@ const superadminModule = {
   },
 
   async updateAdvancesChart(userChanged = false) {
-    const canvas = document.getElementById('saAdvancesCanvas');
-    if (!canvas || typeof Chart === 'undefined') return;
+    try {
+      const canvas = document.getElementById('saAdvancesCanvas');
+      if (!canvas || typeof Chart === 'undefined') return;
 
-    const userSelect = document.getElementById('sa-advances-user-select');
-    const monthSelect = document.getElementById('sa-advances-month-select');
+      const userSelect = document.getElementById('sa-advances-user-select');
+      const monthSelect = document.getElementById('sa-advances-month-select');
 
-    const selectedUserVal = userSelect ? userSelect.value : '';
-    if (!selectedUserVal) return;
-
-    // 1. REPARAR EL FILTRO POR USUARIO (BÚSQUEDA EXACTA EN SUPABASE CACHED USERS)
-    let found = null;
-    if (this.cachedUsersForAdvances && this.cachedUsersForAdvances.length > 0) {
-      found = this.cachedUsersForAdvances.find(u => 
-        String(u.id || '').toLowerCase() === selectedUserVal.toLowerCase() ||
-        String(u.username || '').toLowerCase() === selectedUserVal.toLowerCase() ||
-        String(u.user_id || '').toLowerCase() === selectedUserVal.toLowerCase()
-      );
-    }
-
-    const nameStr = found ? (found.name || found.nombre_completo || found.nombre_firmante || found.username) : selectedUserVal;
-    const roleStr = found ? (found.role || 'Núcleo Operativo') : 'Usuario';
-    const uName = found ? String(found.username || selectedUserVal).toLowerCase() : selectedUserVal.toLowerCase();
-    const uDoc = found ? (found.documentNumber || found.document_number || '').toString().trim() : '';
-    const uId = found ? String(found.id || found.user_id || '').toString().trim() : '';
-
-    const routes = this.cachedRoutesForAdvances || [];
-    const payments = this.cachedPaymentsForAdvances || [];
-    const cartones = this.cachedCartonesForAdvances || [];
-    const clients = this.cachedClientsForAdvances || [];
-
-    // Resolver la ruta asignada al agente (routeId)
-    let targetRouteId = found ? (found.routeId || found.route_id) : null;
-    if (!targetRouteId && routes.length > 0) {
-      const matchingRoute = routes.find(r => 
-        (r.agentUsername && r.agentUsername.toLowerCase() === uName) ||
-        (r.username && r.username.toLowerCase() === uName) ||
-        (r.agent_id && (String(r.agent_id) === uId || String(r.agent_id).toLowerCase() === uName)) ||
-        (r.supervisor_id && (String(r.supervisor_id).toLowerCase() === uName || String(r.supervisor_id) === uId))
-      );
-      if (matchingRoute) {
-        targetRouteId = matchingRoute.id || matchingRoute.routeId || matchingRoute.route_id;
+      if (!userSelect) {
+        console.warn("Elemento 'sa-advances-user-select' no existe en el DOM aún.");
+        return;
       }
-    }
 
-    // CONSULTAR CAJA Y CARTERA/INTERESES REALES DESDE SUPABASE VIA CrediPayDB PASANDO EL USUARIO SELECCIONADO
-    let cajaLiquid = 0;
-    let carteraEnCalle = 0;
-    let interesesActivos = 0;
+      const selectedUserVal = userSelect.value || '';
+      if (!selectedUserVal) return;
 
-    if (window.CrediPayDB) {
-      if (typeof window.CrediPayDB.getLiquidCash === 'function') {
-        try {
-          cajaLiquid = Math.round(await window.CrediPayDB.getLiquidCash(targetRouteId, found) || 0);
-        } catch (e) {
-          console.warn("Error consultando getLiquidCash en updateAdvancesChart:", e);
+      // 1. REPARAR EL FILTRO POR USUARIO (BÚSQUEDA EXACTA EN SUPABASE CACHED USERS)
+      let found = null;
+      if (this.cachedUsersForAdvances && Array.isArray(this.cachedUsersForAdvances) && this.cachedUsersForAdvances.length > 0) {
+        found = this.cachedUsersForAdvances.find(u => 
+          String(u.id || '').toLowerCase() === selectedUserVal.toLowerCase() ||
+          String(u.username || '').toLowerCase() === selectedUserVal.toLowerCase() ||
+          String(u.user_id || '').toLowerCase() === selectedUserVal.toLowerCase()
+        );
+      }
+
+      const nameStr = found ? (found.name || found.nombre_completo || found.nombre_firmante || found.username) : selectedUserVal;
+      const roleStr = found ? (found.role || 'Núcleo Operativo') : 'Usuario';
+      const uName = found ? String(found.username || selectedUserVal).toLowerCase() : selectedUserVal.toLowerCase();
+      const uDoc = found ? (found.documentNumber || found.document_number || '').toString().trim() : '';
+      const uId = found ? String(found.id || found.user_id || '').toString().trim() : '';
+
+      const routes = Array.isArray(this.cachedRoutesForAdvances) ? this.cachedRoutesForAdvances : [];
+      const payments = Array.isArray(this.cachedPaymentsForAdvances) ? this.cachedPaymentsForAdvances : [];
+      const cartones = Array.isArray(this.cachedCartonesForAdvances) ? this.cachedCartonesForAdvances : [];
+      const clients = Array.isArray(this.cachedClientsForAdvances) ? this.cachedClientsForAdvances : [];
+
+      // Resolver la ruta asignada al agente (routeId)
+      let targetRouteId = found ? (found.routeId || found.route_id) : null;
+      if (!targetRouteId && routes.length > 0) {
+        const matchingRoute = routes.find(r => 
+          (r.agentUsername && String(r.agentUsername).toLowerCase() === uName) ||
+          (r.username && String(r.username).toLowerCase() === uName) ||
+          (r.agent_id && (String(r.agent_id) === uId || String(r.agent_id).toLowerCase() === uName)) ||
+          (r.supervisor_id && (String(r.supervisor_id).toLowerCase() === uName || String(r.supervisor_id) === uId))
+        );
+        if (matchingRoute) {
+          targetRouteId = matchingRoute.id || matchingRoute.routeId || matchingRoute.route_id;
         }
       }
-      if (typeof window.CrediPayDB.getDashboardFinancialMetrics === 'function') {
-        try {
-          const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId, found);
-          if (metrics) {
-            carteraEnCalle = Math.round(metrics.carteraEnCalle || 0);
-            interesesActivos = Math.round(metrics.interesesActivos || 0);
+
+      // CONSULTAR CAJA Y CARTERA/INTERESES REALES DESDE SUPABASE VIA CrediPayDB PASANDO EL USUARIO SELECCIONADO
+      let rawCaja = 0;
+      let rawCartera = 0;
+      let rawIntereses = 0;
+
+      if (window.CrediPayDB) {
+        if (typeof window.CrediPayDB.getLiquidCash === 'function') {
+          try {
+            const resCaja = await window.CrediPayDB.getLiquidCash(targetRouteId, found);
+            rawCaja = Number(resCaja) || 0;
+          } catch (e) {
+            console.error("Error consultando getLiquidCash en updateAdvancesChart:", e);
           }
-        } catch (e) {
-          console.warn("Error consultando getDashboardFinancialMetrics en updateAdvancesChart:", e);
+        }
+        if (typeof window.CrediPayDB.getDashboardFinancialMetrics === 'function') {
+          try {
+            const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId, found);
+            if (metrics) {
+              rawCartera = Number(metrics.carteraEnCalle) || 0;
+              rawIntereses = Number(metrics.interesesActivos) || 0;
+            }
+          } catch (e) {
+            console.error("Error consultando getDashboardFinancialMetrics en updateAdvancesChart:", e);
+          }
         }
       }
-    }
 
-    // Validar Actividad Real en Supabase (Rutas, Pagos, Cartones, Clientes) para el usuario seleccionado
-    const userRoutes = routes.filter(r => 
-      (r.agentUsername && r.agentUsername.toLowerCase() === uName) ||
-      (r.supervisor_id && (r.supervisor_id.toLowerCase() === uName || String(r.supervisor_id) === uId)) ||
-      (r.username && r.username.toLowerCase() === uName) ||
-      (r.agent_id && (String(r.agent_id) === uId || String(r.agent_id).toLowerCase() === uName))
-    );
+      // VALIDACIÓN DE NULOS Y NÚMEROS SEGUROS
+      const cajaLiquid = (isNaN(rawCaja) || !isFinite(rawCaja)) ? 0 : Math.round(rawCaja);
+      const carteraEnCalle = (isNaN(rawCartera) || !isFinite(rawCartera)) ? 0 : Math.round(rawCartera);
+      const interesesActivos = (isNaN(rawIntereses) || !isFinite(rawIntereses)) ? 0 : Math.round(rawIntereses);
 
-    const userPayments = payments.filter(p => 
-      (p.agent_id && (String(p.agent_id).toLowerCase() === uName || String(p.agent_id) === uId)) ||
-      (p.supervisor_id && (String(p.supervisor_id).toLowerCase() === uName || String(p.supervisor_id) === uId)) ||
-      (uDoc && p.clientCedula && String(p.clientCedula) === uDoc)
-    );
+      // Validar Actividad Real en Supabase (Rutas, Pagos, Cartones, Clientes) para el usuario seleccionado
+      const userRoutes = routes.filter(r => 
+        (r.agentUsername && String(r.agentUsername).toLowerCase() === uName) ||
+        (r.supervisor_id && (String(r.supervisor_id).toLowerCase() === uName || String(r.supervisor_id) === uId)) ||
+        (r.username && String(r.username).toLowerCase() === uName) ||
+        (r.agent_id && (String(r.agent_id) === uId || String(r.agent_id).toLowerCase() === uName))
+      );
 
-    const userCartones = cartones.filter(c => 
-      (c.agent_id && (String(c.agent_id).toLowerCase() === uName || String(c.agent_id) === uId)) ||
-      (c.supervisor_id && (String(c.supervisor_id).toLowerCase() === uName || String(c.supervisor_id) === uId)) ||
-      (uDoc && c.clientCedula && String(c.clientCedula) === uDoc)
-    );
+      const userPayments = payments.filter(p => 
+        (p.agent_id && (String(p.agent_id).toLowerCase() === uName || String(p.agent_id) === uId)) ||
+        (p.supervisor_id && (String(p.supervisor_id).toLowerCase() === uName || String(p.supervisor_id) === uId)) ||
+        (uDoc && p.clientCedula && String(p.clientCedula) === uDoc)
+      );
 
-    const userClients = clients.filter(c => 
-      (c.agentUsername && c.agentUsername.toLowerCase() === uName) ||
-      (c.supervisor_id && (c.supervisor_id.toLowerCase() === uName || String(c.supervisor_id) === uId)) ||
-      (uDoc && c.cedula && String(c.cedula) === uDoc)
-    );
+      const userCartones = cartones.filter(c => 
+        (c.agent_id && (String(c.agent_id).toLowerCase() === uName || String(c.agent_id) === uId)) ||
+        (c.supervisor_id && (String(c.supervisor_id).toLowerCase() === uName || String(c.supervisor_id) === uId)) ||
+        (uDoc && c.clientCedula && String(c.clientCedula) === uDoc)
+      );
 
-    const hasRealActivity = (cajaLiquid > 0 || carteraEnCalle > 0 || interesesActivos > 0 || userRoutes.length > 0 || userPayments.length > 0 || userCartones.length > 0 || userClients.length > 0);
+      const userClients = clients.filter(c => 
+        (c.agentUsername && String(c.agentUsername).toLowerCase() === uName) ||
+        (c.supervisor_id && (String(c.supervisor_id).toLowerCase() === uName || String(c.supervisor_id) === uId)) ||
+        (uDoc && c.cedula && String(c.cedula) === uDoc)
+      );
 
-    // 2. DETERMINAR FECHA DE CREACIÓN REAL DEL AGENTE (created_at)
-    let creationDate = null;
-    if (found) {
-      const rawD = found.created_at || found.createdAt || found.fecha_creacion || found.fecha_registro;
-      if (rawD) {
-        const pDate = new Date(rawD);
-        if (!isNaN(pDate.getTime())) creationDate = pDate;
+      const hasRealActivity = (cajaLiquid > 0 || carteraEnCalle > 0 || interesesActivos > 0 || userRoutes.length > 0 || userPayments.length > 0 || userCartones.length > 0 || userClients.length > 0);
+
+      // 2. DETERMINAR FECHA DE CREACIÓN REAL DEL AGENTE (created_at)
+      let creationDate = null;
+      if (found) {
+        const rawD = found.created_at || found.createdAt || found.fecha_creacion || found.fecha_registro;
+        if (rawD) {
+          const pDate = new Date(rawD);
+          if (pDate && !isNaN(pDate.getTime())) creationDate = pDate;
+        }
       }
-    }
 
-    if (!creationDate) {
-      const dates = [];
-      userCartones.forEach(c => { const d = c.created_at || c.fecha_creacion || c.fecha; if (d) dates.push(new Date(d)); });
-      userPayments.forEach(p => { const d = p.created_at || p.fecha_pago || p.fecha || p.date; if (d) dates.push(new Date(d)); });
-      userRoutes.forEach(r => { const d = r.created_at || r.fecha; if (d) dates.push(new Date(d)); });
-      const valid = dates.filter(d => !isNaN(d.getTime()));
-      if (valid.length > 0) {
-        creationDate = new Date(Math.min(...valid.map(d => d.getTime())));
-      } else {
-        creationDate = new Date();
-      }
-    }
-
-    // 3. GENERAR MESES DINÁMICOS DESDE CREATED_AT HASTA HOY
-    const now = new Date();
-    const monthNamesEs = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
-
-    let startYear = creationDate.getFullYear();
-    let startMonth = creationDate.getMonth();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-
-    if (startYear > currentYear || (startYear === currentYear && startMonth > currentMonth)) {
-      startYear = currentYear;
-      startMonth = currentMonth;
-    }
-
-    const generatedMonths = [];
-    let y = startYear;
-    let m = startMonth;
-
-    while (y < currentYear || (y === currentYear && m <= currentMonth)) {
-      const key = `${y}-${String(m + 1).padStart(2, '0')}`;
-      const label = `${monthNamesEs[m]} ${y}`;
-      const endOfMonth = new Date(y, m + 1, 0, 23, 59, 59, 999);
-
-      generatedMonths.push({
-        key,
-        label,
-        year: y,
-        month: m,
-        monthName: monthNamesEs[m],
-        endOfMonth,
-        accumulated: 0,
-        flow: 0
-      });
-
-      m++;
-      if (m > 11) {
-        m = 0;
-        y++;
-      }
-    }
-
-    // 4. ACTUALIZAR SELECTOR DE MESES DINÁMICO
-    if (monthSelect && (userChanged || monthSelect.options.length <= 1 || monthSelect.getAttribute('data-user') !== uName)) {
-      const prevVal = monthSelect.value;
-      monthSelect.setAttribute('data-user', uName);
-      monthSelect.innerHTML = '';
-
-      const firstMoLabel = generatedMonths[0].label;
-      const lastMoLabel = generatedMonths[generatedMonths.length - 1].label;
-      const rangeStr = generatedMonths.length > 1 ? `${firstMoLabel} - ${lastMoLabel}` : firstMoLabel;
-
-      const optAll = document.createElement('option');
-      optAll.value = 'all';
-      optAll.textContent = `📅 Histórico Completo (${rangeStr})`;
-      monthSelect.appendChild(optAll);
-
-      [...generatedMonths].reverse().forEach(mo => {
-        const opt = document.createElement('option');
-        opt.value = mo.key;
-        opt.textContent = `🗓️ ${mo.label}`;
-        monthSelect.appendChild(opt);
-      });
-
-      if (!userChanged && prevVal && (prevVal === 'all' || generatedMonths.some(mo => mo.key === prevVal))) {
-        monthSelect.value = prevVal;
-      } else {
-        monthSelect.value = 'all';
-      }
-    }
-
-    const selectedMonthFilter = monthSelect ? monthSelect.value : 'all';
-
-    // 5. MATEMÁTICA DE NEGOCIO EXACTA Y CÁLCULO DE LAS TARJETAS SOLICITADAS
-    // Tarjeta 1 ('Patrimonio Total'): Caja + Cartera en Calle + Intereses Activos ($816k + $200k + $40k = $1.056.000 para King Enrique)
-    const patrimonioTotalActual = cajaLiquid + carteraEnCalle + interesesActivos;
-
-    // Tarjeta 2 ('Intereses y Ganancias'): Total de Intereses Activos ($40.000)
-    const interesesActivosActual = interesesActivos;
-
-    // Tarjeta 3 ('Crecimiento Promedio Mensual'): Patrimonio Total / Meses Trabajados (desde created_at)
-    let monthsCount = (currentYear - creationDate.getFullYear()) * 12 + (currentMonth - creationDate.getMonth()) + 1;
-    if (monthsCount < 1) monthsCount = 1;
-
-    const crecimientoPromedioMensual = Math.round((hasRealActivity ? patrimonioTotalActual : 0) / monthsCount);
-
-    // Calcular montos dinámicos por mes para la gráfica
-    if (hasRealActivity && generatedMonths.length > 0) {
-      generatedMonths.forEach((mo, idx) => {
-        if (idx === generatedMonths.length - 1) {
-          // Último mes refleja el Patrimonio Total exacto actual
-          mo.accumulated = patrimonioTotalActual;
+      if (!creationDate) {
+        const dates = [];
+        userCartones.forEach(c => { const d = c.created_at || c.fecha_creacion || c.fecha; if (d) dates.push(new Date(d)); });
+        userPayments.forEach(p => { const d = p.created_at || p.fecha_pago || p.fecha || p.date; if (d) dates.push(new Date(d)); });
+        userRoutes.forEach(r => { const d = r.created_at || r.fecha; if (d) dates.push(new Date(d)); });
+        const valid = dates.filter(d => d && !isNaN(d.getTime()));
+        if (valid.length > 0) {
+          creationDate = new Date(Math.min(...valid.map(d => d.getTime())));
         } else {
-          // Meses pasados: calcular patrimonio acumulado hasta fecha de corte
-          let capitalUpToMo = 0;
-          let collectedUpToMo = 0;
+          creationDate = new Date();
+        }
+      }
 
-          userCartones.forEach(c => {
-            const rawD = c.created_at || c.fecha_creacion || c.fecha;
-            if (rawD) {
-              const d = new Date(rawD);
-              if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
-                capitalUpToMo += Number(c.monto_prestamo || c.amount || c.total_a_pagar || 0);
+      // 3. GENERAR MESES DINÁMICOS DESDE CREATED_AT HASTA HOY
+      const now = new Date();
+      const monthNamesEs = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+      ];
+
+      let startYear = (creationDate && !isNaN(creationDate.getFullYear())) ? creationDate.getFullYear() : now.getFullYear();
+      let startMonth = (creationDate && !isNaN(creationDate.getMonth())) ? creationDate.getMonth() : now.getMonth();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+
+      if (startYear > currentYear || (startYear === currentYear && startMonth > currentMonth)) {
+        startYear = currentYear;
+        startMonth = currentMonth;
+      }
+
+      const generatedMonths = [];
+      let y = startYear;
+      let m = startMonth;
+
+      while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+        const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+        const label = `${monthNamesEs[m]} ${y}`;
+        const endOfMonth = new Date(y, m + 1, 0, 23, 59, 59, 999);
+
+        generatedMonths.push({
+          key,
+          label,
+          year: y,
+          month: m,
+          monthName: monthNamesEs[m],
+          endOfMonth,
+          accumulated: 0,
+          flow: 0
+        });
+
+        m++;
+        if (m > 11) {
+          m = 0;
+          y++;
+        }
+      }
+
+      if (generatedMonths.length === 0) {
+        generatedMonths.push({
+          key: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`,
+          label: `${monthNamesEs[currentMonth]} ${currentYear}`,
+          year: currentYear,
+          month: currentMonth,
+          monthName: monthNamesEs[currentMonth],
+          endOfMonth: new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999),
+          accumulated: 0,
+          flow: 0
+        });
+      }
+
+      // 4. ACTUALIZAR SELECTOR DE MESES DINÁMICO
+      if (monthSelect && (userChanged || monthSelect.options.length <= 1 || monthSelect.getAttribute('data-user') !== uName)) {
+        const prevVal = monthSelect.value;
+        monthSelect.setAttribute('data-user', uName);
+        monthSelect.innerHTML = '';
+
+        const firstMoLabel = generatedMonths[0].label;
+        const lastMoLabel = generatedMonths[generatedMonths.length - 1].label;
+        const rangeStr = generatedMonths.length > 1 ? `${firstMoLabel} - ${lastMoLabel}` : firstMoLabel;
+
+        const optAll = document.createElement('option');
+        optAll.value = 'all';
+        optAll.textContent = `📅 Histórico Completo (${rangeStr})`;
+        monthSelect.appendChild(optAll);
+
+        [...generatedMonths].reverse().forEach(mo => {
+          const opt = document.createElement('option');
+          opt.value = mo.key;
+          opt.textContent = `🗓️ ${mo.label}`;
+          monthSelect.appendChild(opt);
+        });
+
+        if (!userChanged && prevVal && (prevVal === 'all' || generatedMonths.some(mo => mo.key === prevVal))) {
+          monthSelect.value = prevVal;
+        } else {
+          monthSelect.value = 'all';
+        }
+      }
+
+      const selectedMonthFilter = monthSelect ? monthSelect.value : 'all';
+
+      // 5. MATEMÁTICA DE NEGOCIO EXACTA Y CÁLCULO DE LAS TARJETAS SOLICITADAS
+      // Tarjeta 1 ('Patrimonio Total'): Caja + Cartera en Calle + Intereses Activos
+      const patrimonioTotalActual = Math.max(0, cajaLiquid + carteraEnCalle + interesesActivos);
+
+      // Tarjeta 2 ('Intereses y Ganancias'): Total de Intereses Activos
+      const interesesActivosActual = Math.max(0, interesesActivos);
+
+      // Tarjeta 3 ('Crecimiento Promedio Mensual'): DIVISIÓN SEGURA SIN NaN NI DIVISIONES POR CERO
+      let monthsCount = 1;
+      if (creationDate && !isNaN(creationDate.getTime())) {
+        const cY = creationDate.getFullYear();
+        const cM = creationDate.getMonth();
+        if (!isNaN(cY) && !isNaN(cM)) {
+          monthsCount = (currentYear - cY) * 12 + (currentMonth - cM) + 1;
+        }
+      }
+      if (isNaN(monthsCount) || !isFinite(monthsCount) || monthsCount < 1) {
+        monthsCount = 1;
+      }
+
+      const totalParaDividir = hasRealActivity ? patrimonioTotalActual : 0;
+      let crecimientoPromedioMensual = 0;
+      if (monthsCount > 0 && !isNaN(totalParaDividir)) {
+        crecimientoPromedioMensual = Math.round(totalParaDividir / monthsCount);
+      }
+      if (isNaN(crecimientoPromedioMensual) || !isFinite(crecimientoPromedioMensual)) {
+        crecimientoPromedioMensual = 0;
+      }
+
+      // Calcular montos dinámicos por mes para la gráfica
+      if (hasRealActivity && generatedMonths.length > 0) {
+        generatedMonths.forEach((mo, idx) => {
+          if (idx === generatedMonths.length - 1) {
+            mo.accumulated = patrimonioTotalActual;
+          } else {
+            let capitalUpToMo = 0;
+            let collectedUpToMo = 0;
+
+            userCartones.forEach(c => {
+              const rawD = c.created_at || c.fecha_creacion || c.fecha;
+              if (rawD) {
+                const d = new Date(rawD);
+                if (d && !isNaN(d.getTime()) && d <= mo.endOfMonth) {
+                  capitalUpToMo += Number(c.monto_prestamo || c.amount || c.total_a_pagar || 0);
+                }
+              } else {
+                capitalUpToMo += Number(c.monto_prestamo || c.amount || 0);
               }
-            } else {
-              capitalUpToMo += Number(c.monto_prestamo || c.amount || 0);
-            }
-          });
+            });
 
-          userPayments.forEach(p => {
-            const rawD = p.created_at || p.fecha_pago || p.fecha || p.date;
-            if (rawD) {
-              const d = new Date(rawD);
-              if (!isNaN(d.getTime()) && d <= mo.endOfMonth) {
+            userPayments.forEach(p => {
+              const rawD = p.created_at || p.fecha_pago || p.fecha || p.date;
+              if (rawD) {
+                const d = new Date(rawD);
+                if (d && !isNaN(d.getTime()) && d <= mo.endOfMonth) {
+                  collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
+                }
+              } else {
                 collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
               }
-            } else {
-              collectedUpToMo += Number(p.amount || p.monto || p.valor || 0);
-            }
-          });
+            });
 
-          mo.accumulated = Math.max(0, capitalUpToMo - collectedUpToMo + cajaLiquid);
-        }
+            mo.accumulated = Math.max(0, capitalUpToMo - collectedUpToMo + cajaLiquid);
+          }
 
-        if (idx === 0) {
-          mo.flow = mo.accumulated;
+          if (idx === 0) {
+            mo.flow = mo.accumulated;
+          } else {
+            const prevMo = generatedMonths[idx - 1];
+            mo.flow = mo.accumulated - prevMo.accumulated;
+          }
+        });
+      }
+
+      // 6. EVALUAR SELECCIÓN DE FILTRO Y ACTUALIZAR TARJETAS Y DOM
+      let chartMonths = [];
+      if (selectedMonthFilter === 'all') {
+        chartMonths = [...generatedMonths];
+      } else {
+        const match = generatedMonths.find(m => m.key === selectedMonthFilter);
+        if (match) {
+          chartMonths = [match];
         } else {
-          const prevMo = generatedMonths[idx - 1];
-          mo.flow = mo.accumulated - prevMo.accumulated;
+          chartMonths = [...generatedMonths];
+        }
+      }
+
+      // Actualizar Tarjetas UI con los nombres y valores exactos solicitados
+      const metricTotalTitleEl = document.getElementById('adv-metric-total-title');
+      const metricAvgTitleEl = document.getElementById('adv-metric-avg-title');
+      const metricPeakTitleEl = document.getElementById('adv-metric-peak-title');
+
+      const metricTotalEl = document.getElementById('adv-metric-total');
+      const metricAvgEl = document.getElementById('adv-metric-avg');
+      const metricPeakEl = document.getElementById('adv-metric-peak');
+      const titleEl = document.getElementById('sa-advances-chart-title');
+
+      if (metricTotalTitleEl) metricTotalTitleEl.textContent = 'Patrimonio Total';
+      if (metricAvgTitleEl) metricAvgTitleEl.textContent = 'Intereses y Ganancias';
+      if (metricPeakTitleEl) metricPeakTitleEl.textContent = 'Crecimiento Promedio Mensual';
+
+      if (metricTotalEl) metricTotalEl.textContent = '$' + (hasRealActivity ? patrimonioTotalActual : 0).toLocaleString('es-CO');
+      if (metricAvgEl) metricAvgEl.textContent = '$' + (hasRealActivity ? interesesActivosActual : 0).toLocaleString('es-CO');
+      if (metricPeakEl) metricPeakEl.textContent = '$' + (hasRealActivity ? crecimientoPromedioMensual : 0).toLocaleString('es-CO') + ' / mes';
+
+      const firstChartLabel = chartMonths[0] ? chartMonths[0].label : '';
+      const lastChartLabel = chartMonths[chartMonths.length - 1] ? chartMonths[chartMonths.length - 1].label : '';
+      const chartRangeLabel = chartMonths.length > 1 ? `${firstChartLabel} - ${lastChartLabel}` : firstChartLabel;
+
+      if (titleEl) {
+        if (hasRealActivity) {
+          titleEl.textContent = `📈 Evolución Financiera Real: ${nameStr} (${chartRangeLabel})`;
+        } else {
+          titleEl.textContent = `📊 Balance de Actividad: ${nameStr} - Sin Movimientos Registrados ($0)`;
+        }
+      }
+
+      // 7. RENDERIZAR GRÁFICA EN CHART.JS (SINCRONIZACIÓN CON PATRIMONIO TOTAL)
+      if (this.advancesChartInstance) {
+        try { this.advancesChartInstance.destroy(); } catch(e) {}
+      }
+
+      const chartLabels = chartMonths.map(m => m.label);
+      const chartFlowData = chartMonths.map(m => (isNaN(m.accumulated) ? 0 : m.accumulated));
+      const chartNetFlowData = chartMonths.map(m => (isNaN(m.flow) ? 0 : m.flow));
+
+      const ctx = canvas.getContext('2d');
+      this.advancesChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: 'Patrimonio Total ($ COP)',
+              data: chartFlowData,
+              borderColor: '#34d399',
+              backgroundColor: 'rgba(52, 211, 153, 0.15)',
+              fill: true,
+              tension: 0.35,
+              borderWidth: 3,
+              pointRadius: 5,
+              pointBackgroundColor: '#34d399'
+            },
+            {
+              label: 'Crecimiento del Mes ($ COP)',
+              data: chartNetFlowData,
+              borderColor: '#60a5fa',
+              backgroundColor: 'rgba(96, 165, 250, 0.15)',
+              fill: true,
+              tension: 0.35,
+              borderWidth: 2,
+              pointRadius: 4,
+              pointBackgroundColor: '#60a5fa'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: true, labels: { color: '#f8fafc', font: { weight: 'bold' } } },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return ' ' + context.dataset.label + ': $' + Number(context.raw || 0).toLocaleString('es-CO');
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: '#94a3b8',
+                callback: function(v) { return '$' + Number(v || 0).toLocaleString('es-CO'); }
+              },
+              grid: { color: '#334155' }
+            },
+            x: {
+              ticks: { color: '#f8fafc', font: { weight: 'bold' } },
+              grid: { color: '#334155' }
+            }
+          }
         }
       });
+    } catch (err) {
+      console.error("Error al actualizar la gráfica de avances:", err);
     }
-
-    // 6. EVALUAR SELECCIÓN DE FILTRO Y ACTUALIZAR TARJETAS Y DOM
-    let chartMonths = [];
-    if (selectedMonthFilter === 'all') {
-      chartMonths = [...generatedMonths];
-    } else {
-      const match = generatedMonths.find(m => m.key === selectedMonthFilter);
-      if (match) {
-        chartMonths = [match];
-      } else {
-        chartMonths = [...generatedMonths];
-      }
-    }
-
-    const latestMonth = generatedMonths[generatedMonths.length - 1];
-    const targetMonth = (selectedMonthFilter !== 'all' && chartMonths.length === 1) ? chartMonths[0] : latestMonth;
-
-    // Actualizar Tarjetas UI con los nombres y valores exactos solicitados
-    const metricTotalTitleEl = document.getElementById('adv-metric-total-title');
-    const metricAvgTitleEl = document.getElementById('adv-metric-avg-title');
-    const metricPeakTitleEl = document.getElementById('adv-metric-peak-title');
-
-    const metricTotalEl = document.getElementById('adv-metric-total');
-    const metricAvgEl = document.getElementById('adv-metric-avg');
-    const metricPeakEl = document.getElementById('adv-metric-peak');
-    const titleEl = document.getElementById('sa-advances-chart-title');
-
-    // Nombres exactos solicitados por el usuario
-    if (metricTotalTitleEl) metricTotalTitleEl.textContent = 'Patrimonio Total';
-    if (metricAvgTitleEl) metricAvgTitleEl.textContent = 'Intereses y Ganancias';
-    if (metricPeakTitleEl) metricPeakTitleEl.textContent = 'Crecimiento Promedio Mensual';
-
-    // Valores exactos según requerimiento:
-    // Tarjeta 1 ('Patrimonio Total'): Caja + Cartera + Intereses -> $1.056.000 (King Enrique)
-    // Tarjeta 2 ('Intereses y Ganancias'): Intereses activos -> $40.000
-    // Tarjeta 3 ('Crecimiento Promedio Mensual'): Patrimonio Total / Meses -> $1.056.000 / mes (si mes 1)
-    if (metricTotalEl) metricTotalEl.textContent = '$' + (hasRealActivity ? patrimonioTotalActual : 0).toLocaleString('es-CO');
-    if (metricAvgEl) metricAvgEl.textContent = '$' + (hasRealActivity ? interesesActivosActual : 0).toLocaleString('es-CO');
-    if (metricPeakEl) metricPeakEl.textContent = '$' + (hasRealActivity ? crecimientoPromedioMensual : 0).toLocaleString('es-CO') + ' / mes';
-
-    const firstChartLabel = chartMonths[0] ? chartMonths[0].label : '';
-    const lastChartLabel = chartMonths[chartMonths.length - 1] ? chartMonths[chartMonths.length - 1].label : '';
-    const chartRangeLabel = chartMonths.length > 1 ? `${firstChartLabel} - ${lastChartLabel}` : firstChartLabel;
-
-    if (titleEl) {
-      if (hasRealActivity) {
-        titleEl.textContent = `📈 Evolución Financiera Real: ${nameStr} (${chartRangeLabel})`;
-      } else {
-        titleEl.textContent = `📊 Balance de Actividad: ${nameStr} - Sin Movimientos Registrados ($0)`;
-      }
-    }
-
-    // 7. RENDERIZAR GRÁFICA EN CHART.JS (SINCRONIZACIÓN CON PATRIMONIO TOTAL)
-    if (this.advancesChartInstance) {
-      try { this.advancesChartInstance.destroy(); } catch(e) {}
-    }
-
-    const chartLabels = chartMonths.map(m => m.label);
-    const chartFlowData = chartMonths.map(m => m.accumulated);
-    const chartNetFlowData = chartMonths.map(m => m.flow);
-
-    const ctx = canvas.getContext('2d');
-    this.advancesChartInstance = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: chartLabels,
-        datasets: [
-          {
-            label: 'Patrimonio Total ($ COP)',
-            data: chartFlowData,
-            borderColor: '#34d399',
-            backgroundColor: 'rgba(52, 211, 153, 0.15)',
-            fill: true,
-            tension: 0.35,
-            borderWidth: 3,
-            pointRadius: 5,
-            pointBackgroundColor: '#34d399'
-          },
-          {
-            label: 'Crecimiento del Mes ($ COP)',
-            data: chartNetFlowData,
-            borderColor: '#60a5fa',
-            backgroundColor: 'rgba(96, 165, 250, 0.15)',
-            fill: true,
-            tension: 0.35,
-            borderWidth: 2,
-            pointRadius: 4,
-            pointBackgroundColor: '#60a5fa'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { display: true, labels: { color: '#f8fafc', font: { weight: 'bold' } } },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return ' ' + context.dataset.label + ': $' + Number(context.raw).toLocaleString('es-CO');
-              }
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              color: '#94a3b8',
-              callback: function(v) { return '$' + Number(v).toLocaleString('es-CO'); }
-            },
-            grid: { color: '#334155' }
-          },
-          x: {
-            ticks: { color: '#f8fafc', font: { weight: 'bold' } },
-            grid: { color: '#334155' }
-          }
-        }
-      }
-    });
-  },
-            backgroundColor: 'rgba(52, 211, 153, 0.15)',
-            fill: true,
-            tension: 0.35,
-            borderWidth: 3,
-            pointRadius: 5,
-            pointBackgroundColor: '#34d399'
-          },
-          {
-            label: 'Crecimiento del Mes ($ COP)',
-            data: chartNetFlowData,
-            borderColor: '#60a5fa',
-            backgroundColor: 'rgba(96, 165, 250, 0.15)',
-            fill: true,
-            tension: 0.35,
-            borderWidth: 2,
-            pointRadius: 4,
-            pointBackgroundColor: '#60a5fa'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { display: true, labels: { color: '#f8fafc', font: { weight: 'bold' } } },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return ' ' + context.dataset.label + ': $' + Number(context.raw).toLocaleString('es-CO');
-              }
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              color: '#94a3b8',
-              callback: function(v) { return '$' + Number(v).toLocaleString('es-CO'); }
-            },
-            grid: { color: '#334155' }
-          },
-          x: {
-            ticks: { color: '#f8fafc', font: { weight: 'bold' } },
-            grid: { color: '#334155' }
-          }
-        }
-      }
-    });
   },
 
   async openChangeSuperadminPwdModal() {
