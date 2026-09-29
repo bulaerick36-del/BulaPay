@@ -3056,55 +3056,136 @@
       return false;
     };
 
-    // Manejador global de navegación entre portales/roles interceptada por seguridad y anuncios
+    // Función auxiliar: Cierre de sesión asíncrono y limpieza explícita de credenciales
+    window.cerrarSesionAnteriorCompleta = async function() {
+      try {
+        if (window.CrediPayDB && typeof window.CrediPayDB.initSupabase === 'function') {
+          const supabase = await window.CrediPayDB.initSupabase();
+          if (supabase && supabase.auth) {
+            await supabase.auth.signOut().catch(e => console.warn("Error en supabase.auth.signOut():", e));
+          }
+        } else if (window.supabaseClient && window.supabaseClient.auth) {
+          await window.supabaseClient.auth.signOut().catch(e => console.warn("Error en supabase.auth.signOut():", e));
+        }
+      } catch(e) {
+        console.warn("⚠️ Fallo asíncrono al cerrar sesión en Supabase:", e);
+      }
+
+      try {
+        const userKeys = [
+          'credipay_user', 'bulapay_user', 'credi_user', 'crediCurrentUser', 
+          'bulaCurrentUser', 'currentUser', 'user', 'user_role', 'crediRole',
+          'credi_superadmin_active', 'credi_supervisor_active', 'credi_agent_active',
+          'sb-auth-token', 'supabase.auth.token'
+        ];
+        userKeys.forEach(k => {
+          localStorage.removeItem(k);
+          sessionStorage.removeItem(k);
+        });
+
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && (k.includes('sb-') || k.includes('auth-token') || k.includes('credipay') || k.includes('user'))) {
+            localStorage.removeItem(k);
+          }
+        }
+
+        sessionStorage.clear();
+
+        if (window.CrediPayDB && typeof window.CrediPayDB.setCurrentUser === 'function') {
+          window.CrediPayDB.setCurrentUser(null);
+        }
+        window.currentUser = null;
+      } catch(e) {
+        console.warn("⚠️ Error al limpiar almacenamiento local:", e);
+      }
+    };
+
+    // Manejador global de navegación entre portales/roles con gestión automatizada de sesión previa
     window.handleRoleNavigation = function(event, role, hashTarget) {
       if (event) event.preventDefault();
 
-      // Bloquear navegación e informar si existe sesión activa
+      const ejecutarNavegacion = () => {
+        const drawer = document.getElementById('drawer-main-menu');
+        if (drawer) drawer.classList.remove('active');
+
+        try {
+          localStorage.setItem('crediRole', role);
+          const regSelect = document.getElementById('register-type');
+          if (regSelect) {
+            if (role === 'independent') regSelect.value = 'Agente Independiente';
+            else if (role === 'supervisor') regSelect.value = 'Usuario Supervisor';
+            else if (role === 'commerce') regSelect.value = 'Otros (Comercios, Compraventas, Mercados)';
+          }
+          if (hashTarget) {
+            window.location.hash = hashTarget;
+          }
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch(e) {
+          console.warn("Error cambiando panel/rol:", e);
+        }
+
+        try {
+          if (window.adsModule && typeof window.adsModule.checkAndShowAd === 'function') {
+            window.adsModule.checkAndShowAd('navigation');
+          }
+        } catch(e) {
+          console.warn("Anuncio de navegación omitido:", e);
+        }
+      };
+
+      // Si existe sesión activa, mostrar modal de acción directa con botón de cierre de sesión
       if (window.checkActiveUserSession()) {
-        const msg = '⚠️ Por favor, cierra sesión antes de cambiar de portal o rol.';
+        const currentUser = window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function' ? window.CrediPayDB.getCurrentUser() : null;
+        const userName = currentUser ? (currentUser.name || currentUser.username || 'Usuario') : 'anterior';
+
         if (typeof Swal !== 'undefined' && typeof Swal.fire === 'function') {
           Swal.fire({
             icon: 'warning',
             title: 'Sesión Activa Detectada',
-            text: msg,
+            html: `
+              <div style="text-align: center; color: #cbd5e1; font-size: 0.9rem;">
+                <p style="margin-bottom: 0.5rem;">Se detectó una sesión previa de <strong style="color: #ffffff;">${userName}</strong>.</p>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin: 0;">Para ingresar al portal seleccionado, cerraremos la sesión anterior y limpiaremos las credenciales automáticamente.</p>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: '🔑 Cerrar sesión anterior y continuar',
             confirmButtonColor: '#ef4444',
-            customClass: { popup: 'credipay-swal-popup' }
+            cancelButtonText: 'Cancelar',
+            cancelButtonColor: '#64748b',
+            background: '#0f172a',
+            color: '#ffffff',
+            customClass: { popup: 'credipay-swal-popup' },
+            allowOutsideClick: false
+          }).then(async (result) => {
+            if (result.isConfirmed) {
+              Swal.fire({
+                title: 'Cerrando sesión anterior...',
+                text: 'Limpiando credenciales y abriendo portal...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); },
+                background: '#0f172a',
+                color: '#ffffff'
+              });
+
+              await window.cerrarSesionAnteriorCompleta();
+              Swal.close();
+              ejecutarNavegacion();
+            }
           });
         } else {
-          alert(msg);
+          if (confirm(`Sesión activa detectada (${userName}). ¿Deseas cerrar la sesión anterior y continuar?`)) {
+            window.cerrarSesionAnteriorCompleta().then(() => {
+              ejecutarNavegacion();
+            });
+          }
         }
         return false;
       }
 
-      const drawer = document.getElementById('drawer-main-menu');
-      if (drawer) drawer.classList.remove('active');
-
-      // 1. Navegar e intercambiar panel de forma inmediata
-      try {
-        localStorage.setItem('crediRole', role);
-        const regSelect = document.getElementById('register-type');
-        if (regSelect) {
-          if (role === 'independent') regSelect.value = 'Agente Independiente';
-          else if (role === 'supervisor') regSelect.value = 'Usuario Supervisor';
-          else if (role === 'commerce') regSelect.value = 'Otros (Comercios, Compraventas, Mercados)';
-        }
-        if (hashTarget) {
-          window.location.hash = hashTarget;
-        }
-        window.dispatchEvent(new HashChangeEvent('hashchange'));
-      } catch(e) {
-        console.warn("Error cambiando panel/rol:", e);
-      }
-
-      // 2. Desplegar anuncio en segundo plano si aplica, sin congelar la app
-      try {
-        if (window.adsModule && typeof window.adsModule.checkAndShowAd === 'function') {
-          window.adsModule.checkAndShowAd('navigation');
-        }
-      } catch(e) {
-        console.warn("Anuncio de navegación omitido:", e);
-      }
+      // Si no hay sesión previa, ingresar de inmediato
+      ejecutarNavegacion();
     };
 
     document.addEventListener("DOMContentLoaded", () => {
