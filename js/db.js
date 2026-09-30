@@ -251,6 +251,12 @@ const db = {
 
     // Inicializar ciclo de vigencia de 30 días para nuevos usuarios
     const nowIso = new Date().toISOString();
+    if (!user.ciclo_actual) {
+      user.ciclo_actual = 1;
+    }
+    if (!user.fecha_inicio_ciclo) {
+      user.fecha_inicio_ciclo = nowIso;
+    }
     if (!user.subscription_start_date) {
       user.subscription_start_date = nowIso;
     }
@@ -4221,50 +4227,152 @@ const db = {
 
     let digitsOnly = String(waNumber || '3044191522').replace(/\D/g, '');
     if (digitsOnly.length === 10) digitsOnly = '57' + digitsOnly;
-    const waMsg = encodeURIComponent('Hola, requiero asistencia para renovar mi mensualidad en CrediPay');
+    const waMsg = encodeURIComponent('Hola, requiero asistencia para renovar mi mensualidad en CrediPay ($50.000 COP)');
     const waUrl = `https://wa.me/${digitsOnly}?text=${waMsg}`;
+    window.open(waUrl, '_blank');
+  },
 
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        title: '💳 Pagar Mensualidad CrediPay',
-        html: `
-          <div style="text-align: left; font-size: 0.9rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.85rem;">
-            <div style="background: rgba(16, 185, 129, 0.15); padding: 1rem; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.35);">
-              <h4 style="margin: 0 0 0.3rem 0; color: #34d399; font-size: 1.05rem; font-weight: 800;">⚡ Pago Seguro & Reactivación 24/7</h4>
-              <p style="margin: 0; color: #94a3b8; font-size: 0.82rem;">
-                Conecta instantáneamente con tu banco o billetera digital favorita. Tu suscripción se ampliará automáticamente por +30 Días al instante de confirmar la transacción.
-              </p>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; text-align: center; font-size: 0.8rem; font-weight: 700;">
-              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3);">📱 Nequi</div>
-              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);">🔴 Daviplata</div>
-              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3);">🏦 PSE Bancos</div>
-              <div style="background: #1e293b; padding: 0.6rem; border-radius: 8px; color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">💳 Tarjetas</div>
-            </div>
-          </div>
-        `,
-        showCancelButton: true,
-        confirmButtonText: '🚀 Pagar Mensualidad',
-        confirmButtonColor: '#10b981',
-        cancelButtonText: 'Soporte WhatsApp',
-        cancelButtonColor: '#64748b',
-        background: '#0f172a',
-        color: '#ffffff',
-        width: '520px',
-        target: document.body
-      }).then((res) => {
-        if (res.isConfirmed) {
-          if (window.CrediPayCheckout && typeof window.CrediPayCheckout.iniciarPagoSuscripcion === 'function') {
-            window.CrediPayCheckout.iniciarPagoSuscripcion(user);
-          } else {
-            window.open(waUrl, '_blank');
-          }
-        } else if (res.dismiss === Swal.DismissReason.cancel) {
-          window.open(waUrl, '_blank');
+  // -------------------------------------------------------------
+  // MÓDULO DE GESTIÓN DE CICLOS DE SUSCRIPCIÓN (30 DÍAS)
+  // -------------------------------------------------------------
+  async renovarCicloManual(usernameTarget) {
+    if (!usernameTarget) return { success: false, error: 'Usuario no especificado' };
+    try {
+      // 1. Obtener datos actuales del usuario objetivo
+      let userObj = await this.getUserByUsername(usernameTarget);
+      if (!userObj) {
+        return { success: false, error: 'Usuario no encontrado' };
+      }
+
+      const cicloActual = Number(userObj.ciclo_actual || 1);
+      const fechaPago = new Date();
+      const anio = fechaPago.getFullYear();
+      const nombreCiclo = `Ciclo ${cicloActual} - ${anio}`;
+
+      // Fecha de inicio y vencimiento previo
+      const fechaInicioCiclo = userObj.fecha_inicio_ciclo || userObj.subscription_start_date || new Date(fechaPago.getTime() - (30 * 24 * 60 * 60 * 1000)).toISOString();
+      const fechaVencimientoActual = userObj.fecha_corte || userObj.fecha_vencimiento || fechaPago.toISOString();
+
+      // Calcular nueva fecha de corte (+30 días exactos a partir de la fecha de pago)
+      const nuevaFechaCorteDate = new Date(fechaPago.getTime() + (30 * 24 * 60 * 60 * 1000));
+      const yyyy = nuevaFechaCorteDate.getFullYear();
+      const mm = String(nuevaFechaCorteDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(nuevaFechaCorteDate.getDate()).padStart(2, '0');
+      const nuevaFechaCorteStr = `${yyyy}-${mm}-${dd}`;
+      const nuevaFechaCorteIso = nuevaFechaCorteDate.toISOString();
+
+      const adminUser = this.getCurrentUser();
+      const registradoPor = adminUser ? (adminUser.username || adminUser.name || 'Superadmin') : 'Superadmin';
+
+      // Registro para historial_suscripciones
+      const historyPayload = {
+        username: usernameTarget,
+        ciclo_numero: cicloActual,
+        anio: anio,
+        nombre_ciclo: nombreCiclo,
+        monto: 50000,
+        estado: 'Pagado',
+        fecha_inicio: fechaInicioCiclo,
+        fecha_vencimiento: fechaVencimientoActual,
+        fecha_pago: fechaPago.toISOString(),
+        metodo_pago: 'Manual (Superadmin)',
+        registrado_por: registradoPor,
+        created_at: fechaPago.toISOString()
+      };
+
+      // 2. Guardar ciclo en tabla historial_suscripciones en Supabase
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { error: histError } = await supabase
+          .from('historial_suscripciones')
+          .insert([historyPayload]);
+
+        if (histError) {
+          console.warn("⚠️ Advertencia al guardar historial_suscripciones en Supabase:", histError);
         }
-      });
-    } else {
-      window.open(waUrl, '_blank');
+      }
+
+      // Guardar copia local en localStorage
+      try {
+        const localHistKey = `credipay_historial_ciclos_${usernameTarget}`;
+        const rawLocalHist = localStorage.getItem(localHistKey);
+        let listHist = rawLocalHist ? JSON.parse(rawLocalHist) : [];
+        listHist.unshift(historyPayload);
+        localStorage.setItem(localHistKey, JSON.stringify(listHist));
+      } catch(e) {}
+
+      // 3. Iniciar el siguiente ciclo (ej. de Ciclo 1 a Ciclo 2), sumar 30 días y reactivar usuario
+      const siguienteCiclo = cicloActual + 1;
+      const userUpdates = {
+        ciclo_actual: siguienteCiclo,
+        fecha_inicio_ciclo: fechaPago.toISOString(),
+        fecha_corte: nuevaFechaCorteStr,
+        fecha_vencimiento: nuevaFechaCorteIso,
+        bloqueado_por_mora: false,
+        estado_suscripcion: 'activa',
+        updated_at: fechaPago.toISOString()
+      };
+
+      if (supabase) {
+        const { error: userUpdError } = await supabase
+          .from('users')
+          .update(userUpdates)
+          .eq('username', usernameTarget);
+
+        if (userUpdError) {
+          console.error("❌ Error actualizando usuario en renovación de ciclo:", userUpdError);
+        }
+      }
+
+      // Actualizar en memoria y caché local
+      Object.assign(userObj, userUpdates);
+      try {
+        let localUsers = this.getUsersFromLocalStorage();
+        const idx = localUsers.findIndex(u => u.username === usernameTarget);
+        if (idx >= 0) {
+          Object.assign(localUsers[idx], userUpdates);
+          this.saveUsersToLocalStorage(localUsers);
+        }
+      } catch(e) {}
+
+      return {
+        success: true,
+        cicloCerrado: nombreCiclo,
+        nuevoCiclo: siguienteCiclo,
+        nuevaFechaCorteStr: nuevaFechaCorteStr,
+        user: userObj
+      };
+    } catch(err) {
+      console.error("Excepción en renovarCicloManual:", err);
+      return { success: false, error: err.message || err };
+    }
+  },
+
+  async getHistorialCiclos(usernameTarget) {
+    if (!usernameTarget) return [];
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('historial_suscripciones')
+          .select('*')
+          .eq('username', usernameTarget)
+          .order('ciclo_numero', { ascending: false });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch(e) {
+      console.warn("Error leyendo historial_suscripciones de Supabase:", e);
+    }
+
+    try {
+      const localHistKey = `credipay_historial_ciclos_${usernameTarget}`;
+      const rawLocalHist = localStorage.getItem(localHistKey);
+      return rawLocalHist ? JSON.parse(rawLocalHist) : [];
+    } catch(e) {
+      return [];
     }
   },
 

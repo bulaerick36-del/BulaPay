@@ -1,196 +1,175 @@
 /**
- * Módulo de Checkout e Integración de Pasarela de Pagos (Wompi / ePayco / Mercado Pago)
- * Gestión automatizada de cobro de mensualidades con soporte para Nequi, Daviplata, PSE y Tarjetas.
+ * Módulo de Checkout - Pago Manual y Cuentas de Recaudo Oficiales
+ * Valor Fijo de Suscripción: $50.000 COP
  */
 
 window.CrediPayCheckout = {
-  // Configuración por defecto de la Pasarela (Colombia)
   config: {
-    wompiPublicKey: 'pub_test_Q5y15g9QLiW3s0v2i9B6w4V5e6', // Clave pública por defecto de Wompi
-    montoMensualidadCOP: 50000, // $50.000 COP
-    moneda: 'COP',
-    redirectUrl: window.location.href.split('#')[0],
+    montoMensualidadCOP: 50000, // $50.000 COP Fijo
+    moneda: 'COP'
   },
 
   /**
-   * Obtiene y valida la Llave Pública de Wompi evitando valores 'undefined' o 'null'
+   * Copiar número de cuenta al portapapeles con notificación visual
    */
-  getPublicKey() {
-    const key = window.WOMPI_PUBLIC_KEY || 
-                (window.env && window.env.WOMPI_PUBLIC_KEY) || 
-                localStorage.getItem('wompi_public_key') || 
-                this.config.wompiPublicKey || 
-                'pub_test_Q5y15g9QLiW3s0v2i9B6w4V5e6';
-    const cleanKey = String(key || '').trim();
-    return (cleanKey && cleanKey !== 'undefined' && cleanKey !== 'null') 
-      ? cleanKey 
-      : 'pub_test_Q5y15g9QLiW3s0v2i9B6w4V5e6';
+  async copiarNumero(numero, bancoName = 'Cuenta') {
+    if (!numero) return;
+    const cleanNum = String(numero).trim();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(cleanNum);
+      } else {
+        const input = document.createElement('input');
+        input.value = cleanNum;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'success',
+          title: `¡Número de ${bancoName} copiado!`,
+          text: cleanNum,
+          showConfirmButton: false,
+          timer: 2000,
+          background: '#0f172a',
+          color: '#34d399'
+        });
+      } else {
+        alert(`¡Número de ${bancoName} copiado: ${cleanNum}!`);
+      }
+    } catch(err) {
+      console.error("Error al copiar número:", err);
+      alert(`Número de cuenta: ${cleanNum}`);
+    }
   },
 
   /**
-   * Genera la referencia única de pago cada vez que el usuario hace clic en Pagar.
-   * Formato: sub_${userId}_${Date.now()}
-   */
-  generarReferencia(userIdParam) {
-    const cleanUserId = String(userIdParam || 'usuario').toLowerCase().replace(/[^a-z0-9]/g, '');
-    return `sub_${cleanUserId}_${Date.now()}`;
-  },
-
-  /**
-   * Carga dinámicamente el SDK oficial del Widget de Wompi desde CDN
-   */
-  async cargarWidgetWompiSDK() {
-    if (window.WidgetCheckout) return true;
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.wompi.co/widget.js';
-      script.async = true;
-      script.onload = () => resolve(true);
-      script.onerror = () => {
-        console.warn('⚠️ No se pudo cargar widget.js de Wompi desde CDN.');
-        resolve(false);
-      };
-      document.head.appendChild(script);
-    });
-  },
-
-  /**
-   * Abre la configuración y ejecución del WidgetCheckout de Wompi con parámetros totalmente validados
+   * Abre el Modal de Cuentas de Recaudo Oficiales (Nequi / Daviplata)
+   * Valor Fijo: $50.000 COP - WhatsApp de Confirmación
    */
   async iniciarPagoSuscripcion(userParam, options = {}) {
     try {
       const user = userParam || (window.CrediPayDB ? window.CrediPayDB.getCurrentUser() : null);
-      if (!user || (!user.username && !user.id)) {
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'warning',
-            title: 'Sesión no iniciada',
-            text: 'Debes iniciar sesión para renovar tu suscripción.',
-            background: '#0f172a',
-            color: '#ffffff'
-          });
-        } else {
-          alert('Debes iniciar sesión para renovar tu suscripción.');
+      
+      // Obtener cuentas registradas o usar las cuentas oficiales por defecto
+      let cuentas = [];
+      let waNumber = '3044191522';
+
+      try {
+        if (window.CrediPayDB) {
+          if (typeof window.CrediPayDB.getCuentas === 'function') {
+            cuentas = await window.CrediPayDB.getCuentas();
+          }
+          if (typeof window.CrediPayDB.getWhatsAppRecaudo === 'function') {
+            waNumber = await window.CrediPayDB.getWhatsAppRecaudo();
+          }
         }
-        return;
+      } catch(e) {
+        console.warn("Error leyendo cuentas o whatsapp:", e);
       }
 
-      // 1. Validación de la Llave Pública (publicKey)
-      const publicKey = this.getPublicKey();
-      if (!publicKey || publicKey === 'undefined' || publicKey === 'null') {
-        console.error("❌ Error: Llave pública de Wompi no configurada.");
-        alert("Error: La llave pública de Wompi no está configurada correctamente.");
-        return;
+      // Si no hay cuentas en BD, ofrecer Nequi y Daviplata predeterminadas
+      if (!cuentas || cuentas.length === 0) {
+        cuentas = [
+          { id: 'def_nequi', banco: 'Nequi', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPay Oficial' },
+          { id: 'def_daviplata', banco: 'Daviplata', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPay Oficial' }
+        ];
       }
 
-      // 2. Tipado del Monto: amountInCents debe ser un número entero explícito (5.000.000 centavos = $50.000 COP)
-      const montoCOP = Number(options.monto || this.config.montoMensualidadCOP || 50000);
-      const amountInCents = parseInt(Math.round(montoCOP * 100), 10); // 5000000 (Number entero)
+      let digitsOnly = String(waNumber || '3044191522').replace(/\D/g, '');
+      if (digitsOnly.length === 10) digitsOnly = '57' + digitsOnly;
+      
+      const userNameStr = user ? (user.name || user.username || 'Usuario') : 'Usuario';
+      const waMsg = encodeURIComponent(`Hola, adjunto comprobante de pago de mi suscripción CrediPay ($50.000 COP). Usuario: ${userNameStr}`);
+      const waUrl = `https://wa.me/${digitsOnly}?text=${waMsg}`;
 
-      // 3. Moneda (currency = 'COP') y Generación de Referencia Única (sub_${userId}_${Date.now()})
-      const currency = 'COP';
-      const userId = user.id || user.username || user.documentNumber || 'usuario';
-      const reference = this.generarReferencia(userId);
-      const redirectUrl = options.redirectUrl || this.config.redirectUrl;
-      const email = (user.email && user.email.includes('@')) 
-        ? String(user.email).trim() 
-        : `${user.username || 'usuario'}@credipay.co`;
+      // Construcción del HTML de las cuentas
+      let cuentasCardsHtml = '';
+      cuentas.forEach((c) => {
+        const bancoClean = String(c.banco || 'Cuenta').trim();
+        const numClean = String(c.numero_cuenta || '').trim();
+        const tipoClean = String(c.tipo_cuenta || 'Ahorros').trim();
+        const titularClean = String(c.titular || 'CrediPay').trim();
+        
+        let isNequi = bancoClean.toLowerCase().includes('nequi');
+        let isDaviplata = bancoClean.toLowerCase().includes('daviplata');
+        let badgeColor = isNequi ? '#f472b6' : (isDaviplata ? '#fca5a5' : '#93c5fd');
+        let borderColor = isNequi ? 'rgba(236, 72, 153, 0.35)' : (isDaviplata ? 'rgba(239, 68, 68, 0.35)' : 'rgba(59, 130, 246, 0.35)');
 
-      console.log("📋 [Wompi Widget Configuration Validated]:", {
-        publicKey,
-        amountInCents,
-        currency,
-        reference,
-        email,
-        redirectUrl
+        cuentasCardsHtml += `
+          <div style="background: #1e293b; border: 1px solid ${borderColor}; border-radius: 12px; padding: 0.9rem 1.1rem; display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; margin-bottom: 0.6rem;">
+            <div style="text-align: left; flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                <span style="background: rgba(255,255,255,0.08); color: ${badgeColor}; font-weight: 800; font-size: 0.8rem; padding: 0.15rem 0.55rem; border-radius: 6px;">
+                  🏦 ${bancoClean}
+                </span>
+                <span style="color: #94a3b8; font-size: 0.75rem;">${tipoClean}</span>
+              </div>
+              <div style="color: #ffffff; font-size: 1.15rem; font-weight: 900; letter-spacing: 0.5px; margin: 0.2rem 0;">
+                ${numClean}
+              </div>
+              <div style="color: #64748b; font-size: 0.75rem;">
+                Titular: <strong style="color: #cbd5e1;">${titularClean}</strong>
+              </div>
+            </div>
+            <button type="button" 
+                    onclick="window.CrediPayCheckout.copiarNumero('${numClean}', '${bancoClean}')"
+                    style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.55rem 0.9rem; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; white-space: nowrap;">
+              📋 Copiar
+            </button>
+          </div>
+        `;
       });
 
-      // Confirmación modal previa antes de abrir el Widget de Wompi
       if (typeof Swal !== 'undefined') {
-        const confirmResult = await Swal.fire({
-          title: '💳 Pagar Mensualidad CrediPay',
+        Swal.fire({
+          title: '💳 Cuentas de Recaudo Oficiales',
           html: `
-            <div style="text-align: left; font-size: 0.9rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.75rem;">
-              <div style="background: rgba(30, 41, 59, 0.8); padding: 1rem; border-radius: 10px; border: 1px solid rgba(52, 211, 153, 0.3);">
-                <span style="color: #94a3b8; font-size: 0.8rem; display: block;">Plan Activo:</span>
-                <strong style="color: #34d399; font-size: 1.15rem;">Mensualidad Licencia CrediPay (+30 Días)</strong>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.5rem;">
-                  <span>Valor a pagar:</span>
-                  <strong style="color: #ffffff; font-size: 1.25rem;">$${montoCOP.toLocaleString('es-CO')} COP</strong>
-                </div>
+            <div style="text-align: center; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.85rem;">
+              
+              <!-- Banner con Monto Fijo -->
+              <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.15)); padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.4);">
+                <span style="color: #94a3b8; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Valor Fijo de Renovación</span>
+                <div style="color: #34d399; font-size: 2rem; font-weight: 900; margin: 0.2rem 0;">$50.000 COP</div>
+                <span style="color: #e2e8f0; font-size: 0.82rem; font-weight: 600; display: block;">Licencia Mensual CrediPay (+30 Días)</span>
               </div>
 
-              <div style="background: #1e293b; padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-                <span style="color: #94a3b8; font-size: 0.78rem; display: block; margin-bottom: 0.4rem;">Métodos Disponibles en Wompi:</span>
-                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                  <span style="background: rgba(236, 72, 153, 0.2); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">📱 Nequi</span>
-                  <span style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">🔴 Daviplata</span>
-                  <span style="background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">🏦 PSE (Todos los Bancos)</span>
-                  <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">💳 Tarjetas Débito / Crédito</span>
-                </div>
-              </div>
-
-              <p style="font-size: 0.78rem; color: #94a3b8; margin: 0;">
-                ⚡ Al completar el pago, tu cuenta se reactivará de manera <strong>inmediata y automática</strong> sin enviar comprobantes manuales.
+              <p style="text-align: left; margin: 0; color: #94a3b8; font-size: 0.82rem;">
+                Realiza la transferencia por el valor de <strong>$50.000 COP</strong> a cualquiera de las siguientes cuentas oficiales y envía el comprobante por WhatsApp para tu reactivación:
               </p>
+
+              <!-- Lista de Cuentas -->
+              <div style="max-height: 240px; overflow-y: auto; padding-right: 0.2rem;">
+                ${cuentasCardsHtml}
+              </div>
+
             </div>
           `,
           showCancelButton: true,
-          confirmButtonText: '🚀 Proceder al Pago Seguro',
-          confirmButtonColor: '#10b981',
-          cancelButtonText: 'Cancelar',
+          confirmButtonText: '💬 Enviar Comprobante (WhatsApp)',
+          confirmButtonColor: '#25D366',
+          cancelButtonText: 'Cerrar',
           cancelButtonColor: '#64748b',
           background: '#0f172a',
           color: '#ffffff',
-          width: '540px'
-        });
-
-        if (!confirmResult.isConfirmed) return;
-      }
-
-      // 4. Cargar e Iniciar WidgetCheckout de Wompi
-      const sdkCargado = await this.cargarWidgetWompiSDK();
-
-      if (sdkCargado && typeof window.WidgetCheckout === 'function') {
-        console.log("🚀 [Wompi WidgetCheckout] Ejecutando instancia con datos validados...");
-        
-        // Instancia del Widget de Wompi con parámetros estrictamente validados
-        const checkout = new window.WidgetCheckout({
-          currency: currency,                          // 'COP'
-          amountInCents: parseInt(amountInCents, 10),  // 5000000 (Number entero)
-          reference: reference,                        // 'sub_${userId}_${Date.now()}'
-          publicKey: publicKey,                        // Llave pública sin espacios ni nulos
-          redirectUrl: redirectUrl,
-          customerData: {
-            email: email,
-            fullName: user.name || user.username || 'Usuario CrediPay'
-          }
-        });
-
-        checkout.open(function (result) {
-          const transaction = result ? result.transaction : null;
-          console.log('📌 [Wompi Callback Transaction]:', transaction);
-          if (transaction && (transaction.status === 'APPROVED' || transaction.status === 'PENDING')) {
-            if (typeof Swal !== 'undefined') {
-              Swal.fire({
-                icon: 'success',
-                title: '¡Pago Recibido!',
-                text: 'Tu transacción ha sido aprobada. Tu suscripción se ampliará automáticamente.',
-                background: '#0f172a',
-                color: '#ffffff'
-              });
-            }
+          width: '540px',
+          target: document.body
+        }).then((res) => {
+          if (res.isConfirmed) {
+            window.open(waUrl, '_blank');
           }
         });
       } else {
-        // Redirección directa al Web Checkout de Wompi como fallback
-        const wompiCheckoutUrl = `https://checkout.wompi.co/p/?public-key=${encodeURIComponent(publicKey)}&currency=${currency}&amount-in-cents=${amountInCents}&reference=${encodeURIComponent(reference)}&redirect-url=${encodeURIComponent(redirectUrl)}`;
-        console.log(`🔗 [Wompi Checkout Fallback] Redirigiendo a: ${wompiCheckoutUrl}`);
-        window.location.href = wompiCheckoutUrl;
+        window.open(waUrl, '_blank');
       }
-    } catch (err) {
-      console.error("❌ Error al ejecutar el Widget de Wompi:", err);
-      alert("Ocurrió un inconveniente al abrir la pasarela de pago. Intenta de nuevo.");
+    } catch(err) {
+      console.error("Error al mostrar Cuentas de Recaudo Oficiales:", err);
+      alert("No se pudo cargar el panel de cuentas de recaudo.");
     }
   }
 };

@@ -228,7 +228,7 @@ const superadminModule = {
                 const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
                 return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
                   ${btnHtml}
-                  <span style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.45rem; border-radius: 6px; display: inline-block;" title="Corte: ${diasInfo.fechaCorteStr}">⏳ Faltan ${diasInfo.dias} días</span>
+                  <button class="btn-ciclo-gestion" onclick="superadminModule.openGestionSuscripcionModal('${u.username}')" style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.2rem 0.55rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer; transition: all 0.2s;" title="Clic para Abrir Gestión de Suscripción por Ciclos">⏳ Faltan ${diasInfo.dias} días (Ciclo ${u.ciclo_actual || 1})</button>
                 </div>`;
               })()}
             </td>
@@ -772,7 +772,7 @@ const superadminModule = {
                 const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
                 return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
                   ${btnHtml}
-                  <span style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.45rem; border-radius: 6px; display: inline-block;" title="Corte: ${diasInfo.fechaCorteStr}">⏳ Faltan ${diasInfo.dias} días</span>
+                  <button class="btn-ciclo-gestion" onclick="superadminModule.openGestionSuscripcionModal('${u.username}')" style="font-size: 0.72rem; font-weight: 800; color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.2rem 0.55rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer; transition: all 0.2s;" title="Clic para Abrir Gestión de Suscripción por Ciclos">⏳ Faltan ${diasInfo.dias} días (Ciclo ${u.ciclo_actual || 1})</button>
                 </div>`;
               })()}
             </td>
@@ -3288,7 +3288,7 @@ const superadminModule = {
           </div>
           <div>
             <span style="color: #94a3b8; display: block; font-weight: 600;">⏳ Vigencia Restante:</span>
-            <span style="color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; font-weight: 800; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.15rem 0.5rem; border-radius: 6px; display: inline-block;">Faltan ${diasInfo.dias} días</span>
+            <button class="btn-ciclo-gestion" onclick="superadminModule.openGestionSuscripcionModal('${matchedUser.username}')" style="color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; font-weight: 800; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.2rem 0.65rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;" title="Clic para Gestor de Ciclos">🔄 Faltan ${diasInfo.dias} días (Ciclo ${matchedUser.ciclo_actual || 1})</button>
           </div>
           <div>
             <span style="color: #94a3b8; display: block; font-weight: 600;">🕒 Último Acceso:</span>
@@ -3698,6 +3698,296 @@ const superadminModule = {
       await this.openCuentasRecaudoModal();
     } catch(e) {
       console.error("Error eliminando cuenta de recaudo:", e);
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // PANEL DE GESTIÓN DE CICLOS DE SUSCRIPCIÓN (SUPERADMIN)
+  // ---------------------------------------------------------------------------
+  async openGestionSuscripcionModal(usernameTarget) {
+    if (!usernameTarget) return;
+
+    let user = null;
+    try {
+      if (window.CrediPayDB && typeof window.CrediPayDB.getUserByUsername === 'function') {
+        user = await window.CrediPayDB.getUserByUsername(usernameTarget);
+      }
+    } catch(err) {
+      console.error("Error obteniendo datos del usuario para gestión de ciclo:", err);
+    }
+
+    if (!user) {
+      alert("No se pudo cargar la información del usuario.");
+      return;
+    }
+
+    const cicloActual = Number(user.ciclo_actual || 1);
+    const diasInfo = (window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function')
+      ? window.CrediPayDB.getDiasRestantes(user)
+      : { dias: 0, diasExactos: 0, fechaCorteStr: 'N/A', status: 'expirado' };
+
+    // Progreso del ciclo (ej. Día 15 de 30)
+    const diasExactos = Number(diasInfo.diasExactos || 0);
+    const diasTranscurridos = Math.max(1, Math.min(30, 30 - Math.max(0, diasExactos) + 1));
+    const porcentajeProgreso = Math.round((diasTranscurridos / 30) * 100);
+
+    const anioActual = new Date().getFullYear();
+    const nombreCicloActual = `Ciclo ${cicloActual} - ${anioActual}`;
+
+    // Obtener historial de ciclos anteriores
+    let historial = [];
+    try {
+      if (window.CrediPayDB && typeof window.CrediPayDB.getHistorialCiclos === 'function') {
+        historial = await window.CrediPayDB.getHistorialCiclos(usernameTarget);
+      }
+    } catch(err) {
+      console.warn("Error cargando historial de ciclos:", err);
+    }
+
+    // Modal DOM Container
+    let modalEl = document.getElementById('modal-gestion-suscripcion-sa');
+    if (!modalEl) {
+      modalEl = document.createElement('div');
+      modalEl.id = 'modal-gestion-suscripcion-sa';
+      modalEl.style.cssText = 'display: flex; position: fixed; inset: 0; z-index: 1000000; background: rgba(11, 19, 43, 0.88); align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(5px);';
+      document.body.appendChild(modalEl);
+    }
+
+    // Construcción de Opciones del Dropdown de Historial (Nomenclatura: Ciclo X - Año YYYY)
+    let optionsHtml = `<option value="actual">⚡ ${nombreCicloActual} (En Curso - Día ${diasTranscurridos} de 30)</option>`;
+    if (Array.isArray(historial) && historial.length > 0) {
+      historial.forEach((h, idx) => {
+        const nom = h.nombre_ciclo || `Ciclo ${h.ciclo_numero || (idx + 1)} - ${h.anio || anioActual}`;
+        const fechaStr = h.fecha_pago ? new Date(h.fecha_pago).toLocaleDateString('es-CO') : 'Fecha N/A';
+        optionsHtml += `<option value="${h.id || idx}">📜 ${nom} (Pagado) - ${fechaStr}</option>`;
+      });
+    }
+
+    const isBlocked = user.bloqueado_por_mora === true || diasInfo.status === 'suspendido' || diasInfo.dias <= 0;
+    const statusBadge = isBlocked 
+      ? `<span style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 800; font-size: 0.8rem;">🔴 Suspendido por Mora</span>`
+      : `<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 800; font-size: 0.8rem;">🟢 Activo</span>`;
+
+    modalEl.innerHTML = `
+      <div style="max-width: 560px; width: 100%; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 16px; padding: 1.75rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); color: #ffffff; position: relative;">
+        
+        <!-- Botón de Cierre -->
+        <button type="button" 
+                onclick="document.getElementById('modal-gestion-suscripcion-sa').remove()" 
+                style="position: absolute; top: 1.1rem; right: 1.1rem; background: rgba(255,255,255,0.1); border: none; color: #94a3b8; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+          ✕
+        </button>
+
+        <!-- Cabecera -->
+        <div style="display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1rem; margin-bottom: 1.25rem;">
+          <div style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 0.65rem; border-radius: 12px; font-size: 1.5rem;">
+            🔄
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 900; color: #ffffff;">Gestión de Suscripción</h3>
+            <p style="margin: 0.1rem 0 0 0; color: #94a3b8; font-size: 0.85rem;">
+              Usuario: <strong style="color: #38bdf8;">${user.name || user.username}</strong> (@${user.username})
+            </p>
+          </div>
+        </div>
+
+        <!-- 1. Visualización del Ciclo Actual -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 1.1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+            <span style="color: #cbd5e1; font-weight: 800; font-size: 0.95rem;">⚡ ${nombreCicloActual}</span>
+            ${statusBadge}
+          </div>
+
+          <!-- Barra de Progreso del Ciclo -->
+          <div style="margin: 0.75rem 0;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.3rem;">
+              <span>Progreso del Ciclo:</span>
+              <strong style="color: #38bdf8;">Día ${diasTranscurridos} de 30</strong>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.8); border-radius: 9999px; height: 10px; width: 100%; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+              <div style="width: ${porcentajeProgreso}%; height: 100%; background: linear-gradient(90deg, #10b981, #06b6d4); border-radius: 9999px; transition: width 0.4s ease;"></div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; font-size: 0.8rem; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.6rem;">
+            <div>
+              <span style="color: #64748b; display: block;">Fecha de Corte:</span>
+              <strong style="color: #f8fafc; font-size: 0.88rem;">📅 ${diasInfo.fechaCorteStr}</strong>
+            </div>
+            <div>
+              <span style="color: #64748b; display: block;">Días Restantes:</span>
+              <strong style="color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#34d399'}; font-size: 0.88rem;">⏳ ${diasInfo.dias} Días</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Historial por Ciclos (Dropdown) -->
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; color: #cbd5e1; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.4rem;">
+            📜 Historial por Ciclos (Dropdown)
+          </label>
+          <select id="select-historial-ciclos-sa" 
+                  onchange="superadminModule.onSelectHistorialCicloChange('${usernameTarget}', this.value)"
+                  style="width: 100%; padding: 0.65rem 0.8rem; font-size: 0.85rem; border-radius: 8px; background: #1e293b; color: #ffffff; border: 1px solid rgba(56, 189, 248, 0.4); outline: none; cursor: pointer; font-weight: 600;">
+            ${optionsHtml}
+          </select>
+
+          <!-- Detalle dinámico del Ciclo Seleccionado -->
+          <div id="detalle-ciclo-container" style="margin-top: 0.6rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 0.75rem; font-size: 0.8rem; color: #94a3b8;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #f8fafc; font-weight: 700;">Ciclo Activo en Curso</span>
+              <span style="color: #34d399; font-weight: 800;">$50.000 COP</span>
+            </div>
+            <p style="margin: 0.2rem 0 0 0; font-size: 0.75rem;">
+              En vigencia actual. Presione <strong>'Marcar como Pagado'</strong> para cerrar este ciclo e iniciar el siguiente.
+            </p>
+          </div>
+        </div>
+
+        <!-- 3. Botón de Renovación Manual -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.1rem; display: flex; gap: 0.75rem; align-items: center;">
+          <button type="button" 
+                  onclick="superadminModule.ejecutarRenovacionManual('${usernameTarget}')" 
+                  style="flex: 1; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; padding: 0.85rem 1rem; border-radius: 10px; font-weight: 800; font-size: 0.95rem; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35); transition: all 0.2s;">
+            ✅ Marcar como Pagado ($50.000 COP)
+          </button>
+          <button type="button" 
+                  onclick="document.getElementById('modal-gestion-suscripcion-sa').remove()" 
+                  style="background: rgba(255,255,255,0.08); color: #cbd5e1; padding: 0.85rem 1rem; border-radius: 10px; font-weight: 700; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;">
+            Cerrar
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    modalEl._historialData = historial;
+  },
+
+  onSelectHistorialCicloChange(usernameTarget, selectedValue) {
+    const container = document.getElementById('detalle-ciclo-container');
+    if (!container) return;
+
+    if (selectedValue === 'actual') {
+      container.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="color: #f8fafc; font-weight: 700;">Ciclo Activo en Curso</span>
+          <span style="color: #34d399; font-weight: 800;">$50.000 COP</span>
+        </div>
+        <p style="margin: 0.2rem 0 0 0; font-size: 0.75rem;">
+          En vigencia actual. Presione <strong>'Marcar como Pagado'</strong> para cerrar este ciclo e iniciar el siguiente (+30 días).
+        </p>
+      `;
+      return;
+    }
+
+    const modalEl = document.getElementById('modal-gestion-suscripcion-sa');
+    const historial = modalEl ? modalEl._historialData : [];
+    const item = Array.isArray(historial) ? historial.find((h, idx) => String(h.id || idx) === String(selectedValue)) : null;
+
+    if (item) {
+      const fechaPagoStr = item.fecha_pago ? new Date(item.fecha_pago).toLocaleString('es-CO') : 'N/A';
+      const montoFormatted = item.monto ? `$${Number(item.monto).toLocaleString('es-CO')} COP` : '$50.000 COP';
+      container.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+          <strong style="color: #38bdf8;">${item.nombre_ciclo || 'Ciclo Anterior'}</strong>
+          <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 800;">
+            ✓ ${item.estado || 'Pagado'}
+          </span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; font-size: 0.78rem;">
+          <div><span style="color: #64748b;">Monto:</span> <strong style="color: #ffffff;">${montoFormatted}</strong></div>
+          <div><span style="color: #64748b;">Fecha de Pago:</span> <strong style="color: #cbd5e1;">${fechaPagoStr}</strong></div>
+          <div><span style="color: #64748b;">Método:</span> <strong style="color: #cbd5e1;">${item.metodo_pago || 'Manual'}</strong></div>
+          <div><span style="color: #64748b;">Registrado Por:</span> <strong style="color: #cbd5e1;">${item.registrado_por || 'Superadmin'}</strong></div>
+        </div>
+      `;
+    }
+  },
+
+  async ejecutarRenovacionManual(usernameTarget) {
+    if (!usernameTarget) return;
+
+    let userObj = null;
+    try {
+      if (window.CrediPayDB && typeof window.CrediPayDB.getUserByUsername === 'function') {
+        userObj = await window.CrediPayDB.getUserByUsername(usernameTarget);
+      }
+    } catch(e) {}
+
+    const nombreUser = userObj ? (userObj.name || userObj.username) : usernameTarget;
+    const cicloActual = userObj ? Number(userObj.ciclo_actual || 1) : 1;
+
+    if (typeof Swal !== 'undefined') {
+      const confirmResult = await Swal.fire({
+        title: '✅ Confirmar Renovación de Ciclo',
+        html: `
+          <div style="text-align: left; font-size: 0.88rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.6rem;">
+            <p style="margin: 0;">¿Está seguro de cerrar el <strong>Ciclo ${cicloActual}</strong> y marcar la suscripción como <strong>PAGADA</strong> para el usuario?</p>
+            <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 0.85rem; border-radius: 8px;">
+              <div>• Usuario: <strong style="color: #ffffff;">${nombreUser}</strong></div>
+              <div>• Valor de Pago: <strong style="color: #34d399;">$50.000 COP</strong></div>
+              <div>• Transición: <strong style="color: #38bdf8;">Ciclo ${cicloActual} ➜ Ciclo ${cicloActual + 1}</strong></div>
+              <div>• Vigencia: <strong style="color: #34d399;">+30 Días desde hoy</strong></div>
+            </div>
+          </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '✅ Marcar como Pagado',
+        confirmButtonColor: '#10b981',
+        cancelButtonText: 'Cancelar',
+        cancelButtonColor: '#64748b',
+        background: '#0f172a',
+        color: '#ffffff'
+      });
+
+      if (!confirmResult.isConfirmed) return;
+    }
+
+    try {
+      if (!window.CrediPayDB || typeof window.CrediPayDB.renovarCicloManual !== 'function') {
+        alert("Error: Módulo de base de datos no disponible.");
+        return;
+      }
+
+      const res = await window.CrediPayDB.renovarCicloManual(usernameTarget);
+      if (res && res.success) {
+        if (typeof Swal !== 'undefined') {
+          await Swal.fire({
+            icon: 'success',
+            title: '¡Ciclo Renovado!',
+            html: `
+              <div style="text-align: center; color: #cbd5e1; font-size: 0.9rem;">
+                <p style="margin-bottom: 0.5rem;">Se cerró <strong>${res.cicloCerrado}</strong> y se dio inicio a <strong>Ciclo ${res.nuevoCiclo}</strong>.</p>
+                <div style="background: rgba(16, 185, 129, 0.15); padding: 0.75rem; border-radius: 8px; color: #34d399; font-weight: 700;">
+                  Nueva Fecha de Corte: ${res.nuevaFechaCorteStr} (+30 Días)
+                </div>
+              </div>
+            `,
+            background: '#0f172a',
+            color: '#ffffff'
+          });
+        } else {
+          alert(`¡Ciclo Renovado! Se dio inicio al Ciclo ${res.nuevoCiclo}. Nueva fecha de corte: ${res.nuevaFechaCorteStr}`);
+        }
+
+        // Re-renderizar modal de gestión
+        await this.openGestionSuscripcionModal(usernameTarget);
+
+        // Re-renderizar lista de usuarios en el panel superadmin
+        if (typeof this.renderUserTable === 'function') {
+          const users = typeof window.CrediPayDB.getUsers === 'function' ? await window.CrediPayDB.getUsers() : [];
+          this.renderUserTable(users);
+        } else if (typeof this.openSuperadminModal === 'function') {
+          this.openSuperadminModal();
+        }
+      } else {
+        alert(`Error al renovar ciclo: ${res.error || 'Intente nuevamente'}`);
+      }
+    } catch(err) {
+      console.error("Error al ejecutar renovación manual:", err);
+      alert("Ocurrió un error inesperado al procesar la renovación.");
     }
   }
 };
