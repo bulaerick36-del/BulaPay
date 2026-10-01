@@ -2996,5 +2996,133 @@ header span[id*="vigencia"] {
   }
 }
 
+/* ==========================================================================
+   ESTILOS BANNER & MODAL DE INSTALACIÓN PWA (ANDROID + IOS)
+   ========================================================================== */
+.pwa-install-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92%;
+  max-width: 440px;
+  background: rgba(11, 19, 43, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 245, 212, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 245, 212, 0.25);
+  border-radius: 16px;
+  padding: 14px 16px;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #ffffff;
+  animation: slideUpPwa 0.4s ease-out;
+}
+
+@keyframes slideUpPwa {
+  from { transform: translate(-50%, 100px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.pwa-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pwa-banner-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.pwa-banner-text h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #00f5d4;
+}
+
+.pwa-banner-text p {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.pwa-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-pwa-install {
+  background: linear-gradient(135deg, #00f5d4, #00bbf9);
+  color: #0b132b;
+  border: none;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 245, 212, 0.3);
+}
+
+.btn-pwa-install:active {
+  transform: scale(0.95);
+}
+
+.btn-pwa-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.btn-pwa-close:hover {
+  color: #ffffff;
+}
+
+.ios-instruction-box {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(0, 245, 212, 0.4);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.ios-instruction-steps {
+  margin-top: 8px;
+  padding-left: 18px;
+  margin-bottom: 0;
+}
+
+.ios-instruction-steps li {
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.ios-share-icon {
+  display: inline-block;
+  background: #1e293b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #38bdf8;
+  font-weight: bold;
+}
+
+
 
 

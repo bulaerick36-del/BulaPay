@@ -240,12 +240,12 @@ const app = {
     }
   },
 
-  // Inicializar PWA e instalador
+  // Inicializar PWA e instalador inteligente (Android + iOS)
   pwa: {
     deferredPrompt: null,
 
     init() {
-      // Auto-destrucción y re-registro forzoso de Service Worker
+      // 1. Auto-destrucción y re-registro forzoso de Service Worker
       if ('serviceWorker' in navigator) {
         if (document.readyState === 'complete') {
           if (window.forcePurgeAndRegisterServiceWorker) window.forcePurgeAndRegisterServiceWorker();
@@ -256,37 +256,109 @@ const app = {
         }
       }
 
-      // Manejar prompt de instalación
-      const installBtn = document.getElementById('btn-install-pwa');
-      
+      // 2. Verificar si la app ya corre como PWA nativa (Standalone)
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                           window.navigator.standalone === true;
+
+      if (isStandalone) {
+        console.log('⚡ CrediPai ejecutándose en modo Standalone PWA.');
+        return;
+      }
+
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || 
+                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+      // 3. Android / Chrome / Edge: Manejo de beforeinstallprompt
       window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         this.deferredPrompt = e;
-        
-        if (installBtn) {
-          installBtn.style.display = 'inline-block';
-          
-          installBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            installBtn.style.display = 'none';
-            
-            this.deferredPrompt.prompt();
-            this.deferredPrompt.userChoice.then((choiceResult) => {
-              if (choiceResult.outcome === 'accepted') {
-                console.log('El usuario aceptó la instalación de CrediPay PWA');
-              } else {
-                console.log('El usuario rechazó la instalación de CrediPay PWA');
-              }
-              this.deferredPrompt = null;
-            });
-          });
-        }
+        this.showAndroidBanner();
       });
 
-      // App instalada exitosamente
+      // 4. iOS Safari: Banner explicativo de instalación manual
+      if (isIOS && !sessionStorage.getItem('iosPwaBannerDismissed')) {
+        window.addEventListener('load', () => {
+          setTimeout(() => this.showIOSModal(), 2500);
+        });
+      }
+
+      // 5. App instalada exitosamente
       window.addEventListener('appinstalled', () => {
-        console.log('CrediPay PWA instalada en el dispositivo.');
+        console.log('🎉 CrediPai PWA instalada en el dispositivo.');
+        const banner = document.getElementById('pwa-install-banner');
+        if (banner) banner.remove();
+        const installBtn = document.getElementById('btn-install-pwa');
         if (installBtn) installBtn.style.display = 'none';
+      });
+    },
+
+    showAndroidBanner() {
+      if (document.getElementById('pwa-install-banner')) return;
+
+      const banner = document.createElement('div');
+      banner.id = 'pwa-install-banner';
+      banner.className = 'pwa-install-banner';
+      banner.innerHTML = `
+        <div class="pwa-banner-content">
+          <img src="./assets/icon-192.png" alt="CrediPai Logo" class="pwa-banner-icon">
+          <div class="pwa-banner-text">
+            <h4>Instalar CrediPai</h4>
+            <p>Acceso directo a tu cartera y rutas</p>
+          </div>
+        </div>
+        <div class="pwa-banner-actions">
+          <button id="btn-install-credipai-banner" class="btn-pwa-install">Instalar</button>
+          <button id="btn-close-pwa-banner" class="btn-pwa-close">&times;</button>
+        </div>
+      `;
+      document.body.appendChild(banner);
+
+      const triggerInstall = async () => {
+        if (!this.deferredPrompt) return;
+        banner.style.display = 'none';
+        this.deferredPrompt.prompt();
+        const choice = await this.deferredPrompt.userChoice;
+        console.log('Resultado instalación PWA:', choice.outcome);
+        this.deferredPrompt = null;
+      };
+
+      document.getElementById('btn-install-credipai-banner')?.addEventListener('click', triggerInstall);
+      
+      const mainBtn = document.getElementById('btn-install-pwa');
+      if (mainBtn) {
+        mainBtn.style.display = 'inline-block';
+        mainBtn.addEventListener('click', triggerInstall);
+      }
+
+      document.getElementById('btn-close-pwa-banner')?.addEventListener('click', () => {
+        banner.remove();
+      });
+    },
+
+    showIOSModal() {
+      if (document.getElementById('pwa-install-banner')) return;
+
+      const banner = document.createElement('div');
+      banner.id = 'pwa-install-banner';
+      banner.className = 'pwa-install-banner';
+      banner.innerHTML = `
+        <div class="ios-instruction-box">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h4 style="margin:0; color:#00f5d4; font-size:14px; font-weight:700;">📲 Instala CrediPai en tu iPhone</h4>
+            <button id="btn-close-ios-banner" class="btn-pwa-close">&times;</button>
+          </div>
+          <p style="margin:6px 0 4px 0; color:#cbd5e1; font-size:12px;">Para instalar la App nativa:</p>
+          <ol class="ios-instruction-steps">
+            <li>Toca el botón <strong>Compartir</strong> <span class="ios-share-icon">⎋</span> en Safari.</li>
+            <li>Selecciona <strong>"Añadir a pantalla de inicio" ➕</strong>.</li>
+          </ol>
+        </div>
+      `;
+      document.body.appendChild(banner);
+
+      document.getElementById('btn-close-ios-banner')?.addEventListener('click', () => {
+        sessionStorage.setItem('iosPwaBannerDismissed', 'true');
+        banner.remove();
       });
     }
   },

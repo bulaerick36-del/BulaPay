@@ -1,23 +1,27 @@
 {
   "short_name": "CrediPai",
   "name": "CrediPai - Gestión de Cartera y Rutas",
-  "description": "SaaS de gestión de cartera comercial, control de ventas a plazos y logística de rutas.",
+  "description": "Sistema privado de administración de cartera comercial, control de ventas a plazos y logística de rutas.",
   "start_url": "./index.html",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#0b132b",
   "theme_color": "#00f5d4",
-  "orientation": "any",
+  "lang": "es-CO",
   "scope": "./",
+  "categories": ["finance", "business", "productivity"],
   "icons": [
     {
       "src": "assets/icon-192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "assets/icon-512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     },
     {
       "src": "assets/logo.png",

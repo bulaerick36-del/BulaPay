@@ -108,3 +108,58 @@ self.addEventListener('fetch', (e) => {
       })
   );
 });
+
+// 4. Manejo de Notificaciones Push Nativas para agentes y clientes
+self.addEventListener('push', (event) => {
+  let payload = {
+    title: 'CrediPai - Notificación',
+    body: 'Tienes una nueva actualización en tu cartera o ruta.',
+    icon: './assets/icon-192.png',
+    badge: './assets/favicon.png',
+    data: { url: './index.html' }
+  };
+
+  if (event.data) {
+    try {
+      const dataJson = event.data.json();
+      payload = { ...payload, ...dataJson };
+    } catch (err) {
+      payload.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: payload.body,
+    icon: payload.icon || './assets/icon-192.png',
+    badge: payload.badge || './assets/favicon.png',
+    vibrate: [100, 50, 100],
+    data: payload.data || { url: './index.html' },
+    actions: [
+      { action: 'open', title: 'Ver en CrediPai' }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, options)
+  );
+});
+
+// 5. Clic en Notificación Push
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || './index.html';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (let client of windowClients) {
+        if (client.url.includes('index.html') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+
