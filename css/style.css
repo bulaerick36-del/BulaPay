@@ -2842,82 +2842,15 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   z-index: 9999999 !important;
 }
 
-/* Logo Unificado y Componente de Marca (CrediPai) */
-.credipai-brand-logo {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  text-decoration: none !important;
-  user-select: none;
-  font-family: var(--font-sans);
-  transition: transform 0.2s ease;
-}
-
-.credipai-brand-logo:hover {
-  transform: translateY(-1px);
-}
-
-.credipai-logo-icon-box {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #10b981;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
-  transition: all 0.25s ease;
-  flex-shrink: 0;
-}
-
-.credipai-brand-logo:hover .credipai-logo-icon-box {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-  transform: scale(1.04);
-}
-
-.credipai-logo-text {
-  font-size: 1.4rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-  line-height: 1;
-  margin: 0;
-}
-
-.credipai-logo-highlight {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-weight: 900;
-}
-
-/* Variante Grande para Login y Portales */
-.credipai-brand-logo-lg {
-  gap: 14px !important;
-}
-
-.credipai-brand-logo-lg .credipai-logo-icon-box {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
-  border-width: 1.5px;
-}
-
-.credipai-brand-logo-lg .credipai-logo-icon-box svg {
-  width: 32px;
-  height: 32px;
-}
-
-.credipai-brand-logo-lg .credipai-logo-text {
-  font-size: 2.2rem;
-}
-
+/* Logo Unificado del Header */
 .header-main-logo {
-  display: none !important;
+  width: 130px;
+  max-width: 100%;
+  height: auto;
+  max-height: 42px;
+  object-fit: contain;
+  display: block;
+  margin: 0 !important;
 }
 
 /* Bloques Flexbox del Header */

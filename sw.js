@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credipai-v366';
+const CACHE_NAME = 'credipay-v365';
 const ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const ASSETS = [
   './js/customer.js?v=363',
   './js/superadmin.js?v=363',
   './js/app.js?v=363',
+  './assets/logo.png',
   './assets/favicon.png',
   './assets/icon-192.png',
   './assets/icon-512.png',
