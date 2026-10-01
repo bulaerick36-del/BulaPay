@@ -3169,9 +3169,11 @@ const agentModule = {
 
         let reasons = ['Saldo Cartón Anterior (Renovación)'];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
+          segVal = 4000;
           reasons.push('Seguro');
         }
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
+          papVal = 4000;
           reasons.push('Papelería / Software');
         }
         if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
@@ -3184,9 +3186,11 @@ const agentModule = {
 
         let reasons = [];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
+          segVal = 4000;
           reasons.push('Seguro');
         }
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
+          papVal = 4000;
           reasons.push('Papelería / Software');
         }
         if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
@@ -3613,11 +3617,17 @@ const agentModule = {
     if (this.isRenewalMode) {
       this.currentRenewalOutstanding = effectiveOutstanding;
 
+      const cbSeguro = document.getElementById('new-client-discount-reason-seguro');
+      const cbPapeleria = document.getElementById('new-client-discount-reason-papeleria');
+
       if (discountCheckbox) {
         discountCheckbox.checked = true;
         discountCheckbox.disabled = true; // Bloqueado rígidamente en renovación (v158)
         if (discountPanel) discountPanel.style.display = 'flex';
       }
+      if (cbSeguro) cbSeguro.checked = true;
+      if (cbPapeleria) cbPapeleria.checked = true;
+
       if (cbOtros) {
         cbOtros.checked = true;
         cbOtros.disabled = true; // Bloqueado rígidamente (v158)
@@ -3705,11 +3715,23 @@ const agentModule = {
       debtInput.value = totalDebt ? formatNumber(totalDebt) : "";
       installmentValInput.value = installmentVal ? formatNumber(installmentVal) : "";
 
-      // v171: Descuento general del campo superior (Seguro, Papelería, etc.)
-      let generalDiscount = 0;
-      if (discountCheckbox && discountCheckbox.checked && discountAmountInput) {
-        generalDiscount = parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0;
+      // Deducciones por Seguro ($4.000) y Papelería/Software ($4.000) si están activos
+      let segDeduction = 0;
+      if (cbSeguro && cbSeguro.checked) {
+        segDeduction = 4000;
       }
+      let papDeduction = 0;
+      if (cbPapeleria && cbPapeleria.checked) {
+        papDeduction = 4000;
+      }
+
+      // Descuento general digitado en el campo superior (si aplica)
+      let manualDiscount = 0;
+      if (discountCheckbox && discountCheckbox.checked && discountAmountInput) {
+        manualDiscount = parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0;
+      }
+
+      const generalDiscount = segDeduction + papDeduction + manualDiscount;
 
       // v171: Saldo del cartón anterior (Renovación) inyectado de forma estricta y exclusiva desde el rollover
       let rolloverDiscount = 0;
@@ -3724,6 +3746,13 @@ const agentModule = {
         netCashInput.value = (capital > 0 || totalDeductions > 0) ? `$${formatNumber(netCash)}` : "";
       }
     };
+
+    if (cbSeguro) {
+      cbSeguro.addEventListener('change', calculate);
+    }
+    if (cbPapeleria) {
+      cbPapeleria.addEventListener('change', calculate);
+    }
 
     if (discountCheckbox && discountPanel) {
       discountCheckbox.addEventListener('change', (e) => {
