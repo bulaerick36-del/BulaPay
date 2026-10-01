@@ -347,11 +347,11 @@ const app = {
             <h4 style="margin:0; color:#00f5d4; font-size:14px; font-weight:700;">📲 Instala CrediPai en tu iPhone</h4>
             <button id="btn-close-ios-banner" class="btn-pwa-close">&times;</button>
           </div>
-          <p style="margin:6px 0 4px 0; color:#cbd5e1; font-size:12px;">Para instalar la App nativa:</p>
-          <ol class="ios-instruction-steps">
-            <li>Toca el botón <strong>Compartir</strong> <span class="ios-share-icon">⎋</span> en Safari.</li>
-            <li>Selecciona <strong>"Añadir a pantalla de inicio" ➕</strong>.</li>
-          </ol>
+          <p style="margin:6px 0 6px 0; color:#cbd5e1; font-size:12px;">Para instalar la App nativa:</p>
+          <div style="margin-top:6px; font-size:13px; line-height:1.5; color:#e2e8f0;">
+            <p style="margin:0 0 6px 0;">1. Toca el botón Compartir <span class="ios-share-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; display: inline-block; margin-top: -3px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span> en tu navegador.</p>
+            <p style="margin:0;">2. Selecciona <strong>"Añadir a pantalla de inicio" ➕</strong>.</p>
+          </div>
         </div>
       `;
       document.body.appendChild(banner);
