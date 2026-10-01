@@ -2851,6 +2851,7 @@ label.dias-operativos-card:has(input[type="radio"]:checked) {
   object-fit: contain;
   display: block;
   margin: 0 !important;
+  mix-blend-mode: multiply;
 }
 
 /* Bloques Flexbox del Header */
