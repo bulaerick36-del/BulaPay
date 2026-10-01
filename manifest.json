@@ -1,6 +1,6 @@
 {
-  "short_name": "CrediPay",
-  "name": "CrediPay - Gestión de Cartera y Rutas",
+  "short_name": "CrediPai",
+  "name": "CrediPai - Gestión de Cartera y Rutas",
   "description": "SaaS de gestión de cartera comercial, control de ventas a plazos y logística de rutas.",
   "start_url": "./index.html",
   "display": "standalone",

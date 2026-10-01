@@ -5017,7 +5017,7 @@ const db = {
                     }
                   });
                 } else {
-                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ver las cuentas de recaudo para realizar su pago?`, "CrediPay")) {
+                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ver las cuentas de recaudo para realizar su pago?`, "CrediPai")) {
                     if (typeof window.showCuentasRecaudoModal === 'function') {
                       window.showCuentasRecaudoModal();
                     } else if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {

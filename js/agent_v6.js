@@ -337,7 +337,7 @@ const agentModule = {
         const saldoRealRemanente = Math.max(0, saldoTotalInicial - totalPagadoReal);
 
         const confirmMsg = `¿Estás seguro de liquidar para renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nSaldo real a refinanciar: $${saldoRealRemanente.toLocaleString('es-CO')}.\nEsto marcará las cuotas y liquidará el cartón sin alterar la caja.`;
-        if (!(await window.showCrediConfirm(confirmMsg, "CrediPay"))) return;
+        if (!(await window.showCrediConfirm(confirmMsg, "CrediPai"))) return;
 
         try {
           // Liquidar cartón anterior con estado 'liquidado_por_renovacion' y marcar cuotas restantes (v160)
@@ -482,7 +482,7 @@ const agentModule = {
             `Deuda Total a Lista Negra: $${saldoPendienteReal.toLocaleString('es-CO')}.\n` +
             `Esta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
 
-          if (!(await window.showCrediConfirm(confirmMsg, "CrediPay"))) {
+          if (!(await window.showCrediConfirm(confirmMsg, "CrediPai"))) {
             if (btn) {
               btn.disabled = false;
               btn.textContent = '⛔ Liquidar / Lista Negra';
@@ -585,7 +585,7 @@ const agentModule = {
       this.btnLiquidarCarton.addEventListener('click', async () => {
         if (!this.currentClient) return;
 
-        if (!(await window.showCrediConfirm('¿Estás seguro de liquidar este cartón? Esta acción es irreversible.', "CrediPay"))) return;
+        if (!(await window.showCrediConfirm('¿Estás seguro de liquidar este cartón? Esta acción es irreversible.', "CrediPai"))) return;
 
         this.btnLiquidarCarton.disabled = true;
         this.btnLiquidarCarton.textContent = 'Liquidando...';
@@ -1431,7 +1431,7 @@ const agentModule = {
               const debtVal = Number(btn.dataset.debt || 0);
               const cartonId = btn.dataset.cartonId;
 
-              const inputVal = await window.showCrediPrompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000", "CrediPay");
+              const inputVal = await window.showCrediPrompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000", "CrediPai");
               if (!inputVal) return;
 
               const amountToPay = Number(inputVal);
@@ -2655,7 +2655,7 @@ const agentModule = {
 
     // Confirmación nativa
     const dateLabel = status.dateStr.slice(5);
-    const isConfirmed = await window.showCrediConfirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`, "CrediPay");
+    const isConfirmed = await window.showCrediConfirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`, "CrediPai");
     if (!isConfirmed) return;
 
     // Regla de Seguridad 2: Descontar el valor de la cuota
@@ -2960,7 +2960,7 @@ const agentModule = {
     }
     if (!this.currentClient) return;
 
-    if (!(await window.showCrediConfirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`, "CrediPay"))) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`, "CrediPai"))) {
       return;
     }
 
@@ -3131,7 +3131,7 @@ const agentModule = {
             });
             proceed = result.isConfirmed;
           } else {
-            proceed = await window.showCrediConfirm(warningMsg, "CrediPay");
+            proceed = await window.showCrediConfirm(warningMsg, "CrediPai");
           }
         }
 
@@ -3344,7 +3344,7 @@ const agentModule = {
             }
           });
         } else {
-          if (await window.showCrediConfirm(warningMsg, "CrediPay")) {
+          if (await window.showCrediConfirm(warningMsg, "CrediPai")) {
             window.CrediPayDB.registerCreditToExistingClient(payload).then((updatedPayload) => {
               this.currentClient = updatedPayload;
               if (typeof this.updateRouteTracking === 'function') {
@@ -3400,9 +3400,9 @@ const agentModule = {
     
     let mensaje = '';
     if (type === 'register') {
-      mensaje = `CrediPay: Crédito APROBADO. Agente: ${agentName}. Consulte su saldo y cartón digital en: ${appUrl}`;
+      mensaje = `CrediPai: Crédito APROBADO. Agente: ${agentName}. Consulte su saldo y cartón digital en: ${appUrl}`;
     } else if (type === 'payment') {
-      mensaje = `CrediPay: Pago EXITOSO. Verifique su saldo actualizado en: ${appUrl}`;
+      mensaje = `CrediPai: Pago EXITOSO. Verifique su saldo actualizado en: ${appUrl}`;
     }
 
     const telefonoCliente = String(client.phone || '').trim();
@@ -3435,7 +3435,7 @@ const agentModule = {
         }
       });
     } else {
-      if (await window.showCrediConfirm(`El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?`, "CrediPay")) {
+      if (await window.showCrediConfirm(`El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?`, "CrediPai")) {
         window.open(urlWa, '_blank');
       }
       if (this.formRegisterClient) {

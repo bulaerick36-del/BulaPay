@@ -1454,7 +1454,7 @@ const supervisorModule = {
     }
 
     if (this.welcomeMsg) {
-      this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'CrediPay'}</span> ${badgeVigencia}`;
+      this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'CrediPai'}</span> ${badgeVigencia}`;
     }
 
     const routes = await window.CrediPayDB.getRoutes();
@@ -1937,7 +1937,7 @@ const supervisorModule = {
   },
 
   async handleDeleteRoute(routeId, routeName) {
-    if (!(await window.showCrediConfirm(`¿Está seguro de que desea eliminar la ruta "${routeName}"?\nEsta acción también eliminará permanentemente todos los agentes de ruta asociados y desvinculará a los clientes de esta ruta.`, "CrediPay"))) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea eliminar la ruta "${routeName}"?\nEsta acción también eliminará permanentemente todos los agentes de ruta asociados y desvinculará a los clientes de esta ruta.`, "CrediPai"))) {
       return;
     }
 
@@ -2031,7 +2031,7 @@ const supervisorModule = {
   },
 
   async removeAgentFromRoute(username, routeId) {
-    if (!(await window.showCrediConfirm(`¿Está seguro de que desea desvincular y eliminar al agente "${username}" de esta ruta?`, "CrediPay"))) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea desvincular y eliminar al agente "${username}" de esta ruta?`, "CrediPai"))) {
       return;
     }
 
@@ -2523,7 +2523,7 @@ const supervisorModule = {
         cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
         
         cell.addEventListener('click', async () => {
-          if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPay")) {
+          if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPai")) {
             await this.payCommerceInstallment(client, i, installmentAmount);
             await this.renderCommerceLedgerGrid(client, container);
           }
@@ -2867,7 +2867,7 @@ const supervisorModule = {
           
           cell.addEventListener('click', async () => {
             try {
-              if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPay")) {
+              if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPai")) {
                 await this.payCommerceInstallment(client, i, installmentAmount);
                 // Recargar el cartón
                 await this.showCommerceClientCarton(client.cedula);

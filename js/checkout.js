@@ -76,8 +76,8 @@ window.CrediPayCheckout = {
       // Si no hay cuentas en BD, ofrecer Nequi y Daviplata predeterminadas
       if (!cuentas || cuentas.length === 0) {
         cuentas = [
-          { id: 'def_nequi', banco: 'Nequi', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPay Oficial' },
-          { id: 'def_daviplata', banco: 'Daviplata', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPay Oficial' }
+          { id: 'def_nequi', banco: 'Nequi', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPai Oficial' },
+          { id: 'def_daviplata', banco: 'Daviplata', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPai Oficial' }
         ];
       }
 
@@ -85,7 +85,7 @@ window.CrediPayCheckout = {
       if (digitsOnly.length === 10) digitsOnly = '57' + digitsOnly;
       
       const userNameStr = user ? (user.name || user.username || 'Usuario') : 'Usuario';
-      const waMsg = encodeURIComponent(`Hola, adjunto comprobante de pago de mi suscripción CrediPay ($50.000 COP). Usuario: ${userNameStr}`);
+      const waMsg = encodeURIComponent(`Hola, adjunto comprobante de pago de mi suscripción CrediPai ($50.000 COP). Usuario: ${userNameStr}`);
       const waUrl = `https://wa.me/${digitsOnly}?text=${waMsg}`;
 
       // Construcción del HTML de las cuentas
@@ -94,7 +94,7 @@ window.CrediPayCheckout = {
         const bancoClean = String(c.banco || 'Cuenta').trim();
         const numClean = String(c.numero_cuenta || '').trim();
         const tipoClean = String(c.tipo_cuenta || 'Ahorros').trim();
-        const titularClean = String(c.titular || 'CrediPay').trim();
+        const titularClean = String(c.titular || 'CrediPai').trim();
         
         let isNequi = bancoClean.toLowerCase().includes('nequi');
         let isDaviplata = bancoClean.toLowerCase().includes('daviplata');
@@ -136,7 +136,7 @@ window.CrediPayCheckout = {
               <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.15)); padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.4);">
                 <span style="color: #94a3b8; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Valor Fijo de Renovación</span>
                 <div style="color: #34d399; font-size: 2rem; font-weight: 900; margin: 0.2rem 0;">$50.000 COP</div>
-                <span style="color: #e2e8f0; font-size: 0.82rem; font-weight: 600; display: block;">Licencia Mensual CrediPay (+30 Días)</span>
+                <span style="color: #e2e8f0; font-size: 0.82rem; font-weight: 600; display: block;">Licencia Mensual CrediPai (+30 Días)</span>
               </div>
 
               <p style="text-align: left; margin: 0; color: #94a3b8; font-size: 0.82rem;">

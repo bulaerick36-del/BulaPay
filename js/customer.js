@@ -89,7 +89,7 @@ const customerModule = {
 
       const client = await window.CrediPayDB.getGlobalClientByCedula(cedula);
       if (!client) {
-        alert('❌ Cliente no registrado en el sistema CrediPay.');
+        alert('❌ Cliente no registrado en el sistema CrediPai.');
         if (this.statementHeader) this.statementHeader.style.display = 'none';
         if (this.statementLedger) this.statementLedger.style.display = 'none';
         if (this.adTop) this.adTop.style.display = 'none';
@@ -339,7 +339,7 @@ const customerModule = {
           </div>
           <div class="agent-contact-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem;">
             <a href="tel:${contactPhone}" class="btn-contact-small btn-contact-call" style="flex: 1; text-align: center; font-size: 0.75rem; padding: 0.4rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 6px; text-decoration: none;">📞 Llamar</a>
-            <a href="https://wa.me/${contactPhone.replace(/[\s+]/g, '')}?text=Hola%20${encodeURIComponent(mgr.name)},%20soy%20cliente%20de%20CrediPay%20y%20deseo%20comunicarme%20con%20ustedes." 
+            <a href="https://wa.me/${contactPhone.replace(/[\s+]/g, '')}?text=Hola%20${encodeURIComponent(mgr.name)},%20soy%20cliente%20de%20CrediPai%20y%20deseo%20comunicarme%20con%20ustedes." 
                target="_blank" class="btn-contact-small btn-contact-whatsapp" style="flex: 1; text-align: center; font-size: 0.75rem; padding: 0.4rem; background-color: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: var(--color-verde); border-radius: 6px; text-decoration: none;">💬 WhatsApp</a>
           </div>
         `;

@@ -47,7 +47,7 @@ module.exports = async (req, res) => {
   const appUrl = `${protocol}://${host}?view=customer&id=${clientData.cedula}`;
 
   const emailHtml = "¡Hola, " + clientData.name + "!<br><br>" +
-    "Le damos la bienvenida a CrediPay.<br><br>" +
+    "Le damos la bienvenida a CrediPai.<br><br>" +
     "Consulte su estado de cartera y realice el seguimiento de sus pagos en su Cartón Digital personalizado haciendo clic en el siguiente enlace:<br><br>" +
     "<a href=\"" + appUrl + "\" style=\"background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;\">Ver mi Cartón Digital</a>";
 
@@ -70,7 +70,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         from: {
           email: "MS_QpWXYt@test-65qngkdzj8jlwr12.mlsender.net",
-          name: "CrediPay"
+          name: "CrediPai"
         },
         to: [
           {
@@ -78,7 +78,7 @@ module.exports = async (req, res) => {
             name: clientData.name
           }
         ],
-        subject: "Bienvenido a CrediPay - Tu Cartón Digital",
+        subject: "Bienvenido a CrediPai - Tu Cartón Digital",
         html: emailHtml
       })
     });
