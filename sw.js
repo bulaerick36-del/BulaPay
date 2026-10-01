@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credipai-logo-v367';
+const CACHE_NAME = 'credipai-logo-v9008';
 const ASSETS = [
   './',
   './index.html',
