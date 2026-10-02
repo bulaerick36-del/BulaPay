@@ -4351,14 +4351,10 @@ const db = {
       const userUpdates = {
         ciclo_actual: siguienteCiclo,
         fecha_inicio_ciclo: hoyIso,
-        fecha_inicio: hoyIso,
-        subscription_start_date: hoyIso,
         fecha_corte: nuevaFechaCorteStr,
         fecha_vencimiento: nuevaFechaCorteIso,
         bloqueado_por_mora: false,
-        bloqueado: false,
-        estado_suscripcion: 'activa',
-        updated_at: hoyIso
+        estado_suscripcion: 'activa'
       };
 
       if (supabase) {
