@@ -1,165 +1,88 @@
-const CACHE_NAME = 'credipai-logo-v9008';
-const ASSETS = [
+const CACHE_NAME = 'credipai-cache-v1';
+const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=363',
-  './js/db.js?v=363',
-  './js/ads.js?v=363',
-  './js/auth.js?v=363',
-  './js/supervisor.js?v=363',
-  './js/agent_v6.js?v=363',
-  './js/customer.js?v=363',
-  './js/superadmin.js?v=363',
-  './js/app.js?v=363',
-  './assets/logo.png',
-  './assets/favicon.png',
+  './css/style.css',
+  './js/app.js',
+  './js/db.js',
+  './js/auth.js',
+  './js/agent_v6.js',
   './assets/icon-192.png',
   './assets/icon-512.png',
-  './assets/logo.svg'
+  './assets/logo.png',
+  './assets/favicon.png'
 ];
 
-// 1. Instalar el Service Worker y forzar la activación inmediata (skipWaiting)
-self.addEventListener('install', (e) => {
+// 1. Instalar Service Worker y precargar shell de la aplicación
+self.addEventListener('install', (event) => {
   self.skipWaiting();
-  e.waitUntil(
+  event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell credipay-v363');
-      return cache.addAll(ASSETS);
+      console.log('[Service Worker] Precargando activos de la app CrediPai');
+      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
+        console.warn('[Service Worker] Advertencia en precarga de assets:', err);
+      });
     })
   );
 });
 
-// 2. Activar y purgar de inmediato cualquier versión de caché antigua
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
+// 2. Activar Service Worker y limpiar cachés anteriores
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[Service Worker credipay-v357] Purgando y auto-destruyendo caché obsoleta:', key);
+            console.log('[Service Worker] Purgando caché obsoleta:', key);
             return caches.delete(key);
           }
         })
       );
-    }).then(() => {
-      console.log('[Service Worker credipay-v357] Reclamando clientes para control inmediato');
-      return self.clients.claim();
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
-// 3. Estrategia Network-First estricta para navegación, HTML y recursos estáticos
-self.addEventListener('fetch', (e) => {
-  const url = e.request ? e.request.url : '';
+// 3. Estrategia Network-First (Online-First) con Fallback a Caché
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
 
-  // Excluir esquemas no HTTP/HTTPS (como mailto:, tel:) y peticiones a Supabase / APIs externas (Real-time Cloud-Only)
-  if (!url || url.startsWith('mailto:') || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+  // Interceptar únicamente peticiones GET
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+
+  // Excluir peticiones no HTTP/HTTPS (mailto, tel, etc.)
+  if (!url.protocol.startsWith('http')) return;
+
+  // Excluir peticiones API a Supabase Cloud / backend para garantizar tiempo real sin respuestas en caché
+  if (url.hostname.includes('supabase.co') || url.pathname.includes('/rest/v1/')) {
     return;
   }
 
-  // Las peticiones a Supabase Cloud NUNCA se guardan en caché para garantizar respuesta limpia en tiempo real
-  if (url.includes('supabase.co') || url.includes('/rest/v1/') || !url.startsWith(self.location.origin)) {
-    return;
-  }
-
-  const isHTMLRequest = e.request.mode === 'navigate' || 
-                        (e.request.headers.get('accept') && e.request.headers.get('accept').includes('text/html')) || 
-                        url.endsWith('.html') || 
-                        url.includes('index.html');
-
-  if (isHTMLRequest) {
-    // ESTRATEGIA NETWORK FIRST PARA NAVEGACIÓN Y ARCHIVOS HTML
-    e.respondWith(
-      fetch(e.request, { cache: 'no-cache' })
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(e.request, responseClone);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          console.warn('[Service Worker] Sin conexión. Sirviendo HTML desde caché fallback.');
-          return caches.match(e.request).then((cachedResponse) => {
-            return cachedResponse || caches.match('./index.html');
-          });
-        })
-    );
-    return;
-  }
-
-  // Estrategia Network-First para activos estáticos (JS, CSS, Imágenes) con bypass de caché del navegador
-  e.respondWith(
-    fetch(e.request, { cache: 'no-cache' })
+  // Ejecutar Network-First (Intenta red -> Guarda en Caché -> Si falla red, entrega Caché)
+  event.respondWith(
+    fetch(request)
       .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseClone = networkResponse.clone();
+        if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
+          const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(e.request, responseClone);
+            cache.put(request, responseToCache);
           });
         }
         return networkResponse;
       })
       .catch(() => {
-        return caches.match(e.request);
+        console.warn('[Service Worker] Sin red. Buscando recurso en caché:', request.url);
+        return caches.match(request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // Si es una navegación HTML y no hay red, servir index.html precargado
+          if (request.mode === 'navigate' || (request.headers.get('accept') && request.headers.get('accept').includes('text/html'))) {
+            return caches.match('./index.html');
+          }
+        });
       })
   );
 });
-
-// 4. Manejo de Notificaciones Push Nativas para agentes y clientes
-self.addEventListener('push', (event) => {
-  let payload = {
-    title: 'CrediPai - Notificación',
-    body: 'Tienes una nueva actualización en tu cartera o ruta.',
-    icon: './assets/icon-192.png',
-    badge: './assets/favicon.png',
-    data: { url: './index.html' }
-  };
-
-  if (event.data) {
-    try {
-      const dataJson = event.data.json();
-      payload = { ...payload, ...dataJson };
-    } catch (err) {
-      payload.body = event.data.text();
-    }
-  }
-
-  const options = {
-    body: payload.body,
-    icon: payload.icon || './assets/icon-192.png',
-    badge: payload.badge || './assets/favicon.png',
-    vibrate: [100, 50, 100],
-    data: payload.data || { url: './index.html' },
-    actions: [
-      { action: 'open', title: 'Ver en CrediPai' }
-    ]
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(payload.title, options)
-  );
-});
-
-// 5. Clic en Notificación Push
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const targetUrl = event.notification.data?.url || './index.html';
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (let client of windowClients) {
-        if (client.url.includes('index.html') && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
-    })
-  );
-});
-

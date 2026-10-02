@@ -3,19 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <script>
-    // 1. Purga automática de caché de Opera/Chrome en el momento cero
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(r => r.unregister());
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(keys => {
-        keys.forEach(k => caches.delete(k));
-      });
-    }
-
-    // 2. Destrucción inmediata y reactiva en tiempo real con MutationObserver
+    // Destrucción inmediata y reactiva en tiempo real con MutationObserver
     (function() {
       const targets = ["Probador DOM", "Exportar Contratos PDF", "Correo Soporte"];
 
@@ -44,7 +32,7 @@
   
   <!-- Configuración PWA y Favicon -->
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0b132b">
+  <meta name="theme-color" content="#10b981">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CrediPai">
@@ -3276,6 +3264,21 @@
         setTimeout(eliminarBotonesSobrantes, 500);
         setTimeout(eliminarBotonesSobrantes, 1500);
     });
+  </script>
+
+  <!-- Registro de Service Worker PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((registration) => {
+            console.log('✔ Service Worker CrediPai registrado con éxito. Scope:', registration.scope);
+          })
+          .catch((error) => {
+            console.error('❌ Error al registrar el Service Worker:', error);
+          });
+      });
+    }
   </script>
 </body>
 </html>

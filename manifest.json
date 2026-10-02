@@ -1,42 +1,27 @@
 {
+  "name": "CrediPai",
   "short_name": "CrediPai",
-  "name": "CrediPai - Gestión de Cartera y Rutas",
-  "description": "Sistema privado de administración de cartera comercial, control de ventas a plazos y logística de rutas.",
+  "description": "Plataforma de Gestión de Cartera y Rutas CrediPai",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#0b132b",
-  "theme_color": "#00f5d4",
+  "background_color": "#0f172a",
+  "theme_color": "#10b981",
   "lang": "es-CO",
   "scope": "./",
   "categories": ["finance", "business", "productivity"],
   "icons": [
     {
       "src": "assets/icon-192.png",
-      "type": "image/png",
       "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
       "src": "assets/icon-512.png",
-      "type": "image/png",
       "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "assets/logo.png",
-      "type": "image/png",
-      "sizes": "1024x559"
-    },
-    {
-      "src": "assets/favicon.png",
-      "type": "image/png",
-      "sizes": "128x128"
-    },
-    {
-      "src": "assets/logo.svg",
-      "type": "image/svg+xml",
-      "sizes": "any"
     }
   ]
 }

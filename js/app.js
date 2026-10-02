@@ -758,92 +758,29 @@ window.applyDynamicTheme = function() {
 
 // Purga automática de Service Workers y comunicados obsoletos en caché local (credipay-v350)
 window.forcePurgeAndRegisterServiceWorker = async function() {
-  // Purga total de comunicados locales obsoletos (Modo Cloud-Only Estricto)
-  try {
-    ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(key => {
-      localStorage.removeItem(key);
-    });
-
-    const rawAds = localStorage.getItem('credi_announcements');
-    if (rawAds) {
-      const parsedAds = JSON.parse(rawAds);
-      if (Array.isArray(parsedAds)) {
-        const cleanedAds = parsedAds.filter(a => a && a.id !== 'ad_demo_initial');
-        if (cleanedAds.length !== parsedAds.length) {
-          if (cleanedAds.length > 0) {
-            localStorage.setItem('credi_announcements', JSON.stringify(cleanedAds));
-          } else {
-            localStorage.removeItem('credi_announcements');
-          }
-        }
-      }
-    }
-  } catch(e) {}
-
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // 1. Desinscribir de inmediato cualquier Service Worker antiguo que no contenga v351
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    if (registrations && registrations.length > 0) {
-      for (const registration of registrations) {
-        const scriptUrl = (registration.active || registration.installing || registration.waiting)?.scriptURL || '';
-        if (!scriptUrl.includes('v=351')) {
-          const unregistered = await registration.unregister();
-          if (unregistered) {
-            console.log('🧹 [PWA Purga] SW antiguo desregistrado:', registration.scope);
-            if (window.crediMobileDebugLog) {
-              window.crediMobileDebugLog('SW Antiguo Desregistrado: ' + registration.scope, 'warning');
-            }
-          }
-        }
-      }
-    }
-
-    // 2. Limpiar todas las cachés locales antiguas almacenadas en el dispositivo móvil
-    if ('caches' in window) {
-      const cacheKeys = await caches.keys();
-      for (const key of cacheKeys) {
-        if (key !== 'credipay-v356') {
-          await caches.delete(key);
-          console.log('🧹 [PWA Purga] Caché obsoleta eliminada:', key);
-          if (window.crediMobileDebugLog) {
-            window.crediMobileDebugLog('Caché obsoleta eliminada: ' + key, 'warning');
-          }
-        }
-      }
-    }
-
-    // 3. Registrar el nuevo Service Worker con parámetro de versión dinámico (v356)
-    const swUrl = './sw.js?v=356&t=' + Date.now();
-    const newReg = await navigator.serviceWorker.register(swUrl);
-    await newReg.update();
-    console.log('✔ Service Worker credipay-v356 registrado con éxito (Fresh Register). Scope:', newReg.scope);
-
-    if (window.crediMobileDebugLog) {
-      window.crediMobileDebugLog('¡SW credipay-v356 Registrado y Purgado con Éxito!', 'success');
-    }
+    const newReg = await navigator.serviceWorker.register('./sw.js');
+    console.log('✔ Service Worker CrediPai registrado con éxito. Scope:', newReg.scope);
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (credipay-v356)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (CrediPai)';
   } catch (err) {
-    console.error('❌ Error durante la purga/registro del Service Worker:', err);
-    if (window.crediMobileDebugLog) {
-      window.crediMobileDebugLog('Error en purga/registro SW: ' + (err.message || err), 'error');
-    }
+    console.error('❌ Error al registrar el Service Worker:', err);
   }
 };
 
-// Registro de Service Worker PWA con Auto-Destrucción y Re-registro Forzoso (credipay-v356)
+// Registro de Service Worker CrediPai PWA
 if ('serviceWorker' in navigator) {
-  const triggerPurge = () => {
+  const triggerRegister = () => {
     window.forcePurgeAndRegisterServiceWorker();
   };
 
   if (document.readyState === 'complete') {
-    triggerPurge();
+    triggerRegister();
   } else {
-    window.addEventListener('load', triggerPurge);
+    window.addEventListener('load', triggerRegister);
   }
 }
 
