@@ -4238,22 +4238,62 @@ const db = {
   async renovarCicloManual(usernameTarget) {
     if (!usernameTarget) return { success: false, error: 'Usuario no especificado' };
     try {
-      // 1. Obtener datos actuales del usuario objetivo
-      let userObj = await this.getUserByUsername(usernameTarget);
-      if (!userObj) {
-        return { success: false, error: 'Usuario no encontrado' };
+      const cleanUsername = String(usernameTarget).trim();
+      const supabase = await initSupabase();
+
+      // 1. Obtener datos actualizados del usuario en Supabase (evitando caché desfasado)
+      let userObj = null;
+      if (supabase) {
+        const { data: uData } = await supabase
+          .from('users')
+          .select('*')
+          .ilike('username', cleanUsername);
+        if (uData && uData.length > 0) {
+          userObj = uData[0];
+        }
       }
 
-      const cicloActual = Number(userObj.ciclo_actual || 1);
+      if (!userObj) {
+        userObj = await this.getUserByUsername(cleanUsername);
+      }
+
+      if (!userObj) {
+        return { success: false, error: 'Usuario no encontrado en la base de datos' };
+      }
+
+      // 2. Consultar historial existente en Supabase para determinar con certeza el número del ciclo a cerrar
+      let historialExistente = [];
+      if (supabase) {
+        const { data: histData } = await supabase
+          .from('historial_suscripciones')
+          .select('*')
+          .ilike('username', cleanUsername)
+          .order('ciclo_numero', { ascending: false });
+
+        if (histData && Array.isArray(histData)) {
+          historialExistente = histData;
+        }
+      }
+
+      let cicloActual = Number(userObj.ciclo_actual || 1);
+      
+      // Si el historial ya cuenta con registros, calcular cicloActual según el último ciclo pagado
+      if (historialExistente.length > 0) {
+        const maxCicloHistorial = Math.max(...historialExistente.map(h => Number(h.ciclo_numero || 1)));
+        if (maxCicloHistorial >= cicloActual) {
+          cicloActual = maxCicloHistorial;
+        }
+      }
+
       const fechaPago = new Date();
+      const hoyIso = fechaPago.toISOString();
+      const hoyFechaStr = hoyIso.split('T')[0];
       const anio = fechaPago.getFullYear();
       const nombreCiclo = `Ciclo ${cicloActual} - ${anio}`;
 
-      // Fecha de inicio y vencimiento previo
-      const fechaInicioCiclo = userObj.fecha_inicio_ciclo || userObj.subscription_start_date || new Date(fechaPago.getTime() - (30 * 24 * 60 * 60 * 1000)).toISOString();
-      const fechaVencimientoActual = userObj.fecha_corte || userObj.fecha_vencimiento || fechaPago.toISOString();
-
-      // Calcular nueva fecha de corte (+30 días exactos a partir de la fecha de pago)
+      // 3. REINICIAR TIEMPO:
+      // start_date (fecha_inicio_ciclo) = HOY
+      // end_date (fecha_corte / fecha_vencimiento) = HOY + 30 DÍAS
       const nuevaFechaCorteDate = new Date(fechaPago.getTime() + (30 * 24 * 60 * 60 * 1000));
       const yyyy = nuevaFechaCorteDate.getFullYear();
       const mm = String(nuevaFechaCorteDate.getMonth() + 1).padStart(2, '0');
@@ -4261,79 +4301,90 @@ const db = {
       const nuevaFechaCorteStr = `${yyyy}-${mm}-${dd}`;
       const nuevaFechaCorteIso = nuevaFechaCorteDate.toISOString();
 
+      const fechaInicioCiclo = userObj.fecha_inicio_ciclo || userObj.subscription_start_date || hoyIso;
       const adminUser = this.getCurrentUser();
       const registradoPor = adminUser ? (adminUser.username || adminUser.name || 'Superadmin') : 'Superadmin';
 
-      // Registro para historial_suscripciones
+      // 4. HISTORIAL: Guardar ciclo que finaliza como "Pagado"
       const historyPayload = {
-        username: usernameTarget,
+        username: userObj.username,
         ciclo_numero: cicloActual,
         anio: anio,
         nombre_ciclo: nombreCiclo,
         monto: 50000,
         estado: 'Pagado',
         fecha_inicio: fechaInicioCiclo,
-        fecha_vencimiento: fechaVencimientoActual,
-        fecha_pago: fechaPago.toISOString(),
+        fecha_vencimiento: userObj.fecha_corte || userObj.fecha_vencimiento || hoyFechaStr,
+        fecha_pago: hoyIso,
         metodo_pago: 'Manual (Superadmin)',
         registrado_por: registradoPor,
-        created_at: fechaPago.toISOString()
+        created_at: hoyIso
       };
 
-      // 2. Guardar ciclo en tabla historial_suscripciones en Supabase
-      const supabase = await initSupabase();
       if (supabase) {
-        const { error: histError } = await supabase
-          .from('historial_suscripciones')
-          .insert([historyPayload]);
+        // Evitar duplicar el mismo número de ciclo en historial_suscripciones
+        const yaExisteEnHist = historialExistente.some(h => Number(h.ciclo_numero) === cicloActual);
+        if (!yaExisteEnHist) {
+          const { error: histError } = await supabase
+            .from('historial_suscripciones')
+            .insert([historyPayload]);
 
-        if (histError) {
-          console.warn("⚠️ Advertencia al guardar historial_suscripciones en Supabase:", histError);
+          if (histError) {
+            console.warn("⚠️ Advertencia insertando historial_suscripciones en Supabase:", histError);
+          }
         }
       }
 
       // Guardar copia local en localStorage
       try {
-        const localHistKey = `credipay_historial_ciclos_${usernameTarget}`;
+        const localHistKey = `credipay_historial_ciclos_${userObj.username}`;
         const rawLocalHist = localStorage.getItem(localHistKey);
         let listHist = rawLocalHist ? JSON.parse(rawLocalHist) : [];
-        listHist.unshift(historyPayload);
-        localStorage.setItem(localHistKey, JSON.stringify(listHist));
+        if (!listHist.some(h => Number(h.ciclo_numero) === cicloActual)) {
+          listHist.unshift(historyPayload);
+          localStorage.setItem(localHistKey, JSON.stringify(listHist));
+        }
       } catch(e) {}
 
-      // 3. Iniciar el siguiente ciclo (ej. de Ciclo 1 a Ciclo 2), sumar 30 días y reactivar usuario
+      // 5. AVANZAR EL CICLO (+1), REINICIAR DÍAS A 30 Y DESBLOQUEAR LA CUENTA COMPLETAMENTE
       const siguienteCiclo = cicloActual + 1;
       const userUpdates = {
         ciclo_actual: siguienteCiclo,
-        fecha_inicio_ciclo: fechaPago.toISOString(),
+        fecha_inicio_ciclo: hoyIso,
+        fecha_inicio: hoyIso,
+        subscription_start_date: hoyIso,
         fecha_corte: nuevaFechaCorteStr,
         fecha_vencimiento: nuevaFechaCorteIso,
         bloqueado_por_mora: false,
+        bloqueado: false,
         estado_suscripcion: 'activa',
-        updated_at: fechaPago.toISOString()
+        updated_at: hoyIso
       };
 
       if (supabase) {
         const { error: userUpdError } = await supabase
           .from('users')
           .update(userUpdates)
-          .eq('username', usernameTarget);
+          .ilike('username', userObj.username);
 
         if (userUpdError) {
-          console.error("❌ Error actualizando usuario en renovación de ciclo:", userUpdError);
+          console.error("❌ Error actualizando usuario en Supabase:", userUpdError);
         }
       }
 
-      // Actualizar en memoria y caché local
+      // Actualizar objeto en memoria y caché local
       Object.assign(userObj, userUpdates);
       try {
         let localUsers = this.getUsersFromLocalStorage();
-        const idx = localUsers.findIndex(u => u.username === usernameTarget);
+        const idx = localUsers.findIndex(u => String(u.username).toLowerCase() === String(userObj.username).toLowerCase());
         if (idx >= 0) {
           Object.assign(localUsers[idx], userUpdates);
           this.saveUsersToLocalStorage(localUsers);
         }
       } catch(e) {}
+
+      // Limpiar caché global de usuarios
+      this.cachedUsers = null;
 
       return {
         success: true,
@@ -4344,7 +4395,7 @@ const db = {
       };
     } catch(err) {
       console.error("Excepción en renovarCicloManual:", err);
-      return { success: false, error: err.message || err };
+      return { success: false, error: err.message || String(err) };
     }
   },
 
