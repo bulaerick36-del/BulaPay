@@ -1457,6 +1457,9 @@ const supervisorModule = {
       this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'CrediPai'}</span> ${badgeVigencia}`;
     }
 
+    // Actualizar Tarjeta Superior de GESTIÓN DE CAJA GLOBAL con totales consolidados de Supabase
+    this.renderCajaGlobalData().catch(e => console.warn("Aviso en renderCajaGlobalData:", e));
+
     const routes = await window.CrediPayDB.getRoutes();
     const allUsers = await window.CrediPayDB.getUsers();
     const agents = allUsers.filter(u => u.role === 'Agente de Ruta');
@@ -3363,6 +3366,138 @@ const supervisorModule = {
     if (mapContainer) {
       mapContainer.style.width = '100%';
     }
+  },
+
+  async openCajaGlobalModal() {
+    const modal = document.getElementById('modal-supervisor-caja-global');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    this.switchCajaTab('estado');
+    await this.renderCajaGlobalData();
+  },
+
+  closeCajaGlobalModal() {
+    const modal = document.getElementById('modal-supervisor-caja-global');
+    if (modal) modal.style.display = 'none';
+  },
+
+  switchCajaTab(tabName) {
+    const tabs = document.querySelectorAll('.sup-caja-tab');
+    tabs.forEach(t => {
+      t.style.background = 'transparent';
+      t.style.color = 'var(--text-secondary, #94a3b8)';
+    });
+
+    const activeBtn = document.getElementById(`tab-sup-caja-${tabName}`);
+    if (activeBtn) {
+      activeBtn.style.background = tabName === 'salida' || tabName === 'blacklist' ? '#ef4444' : '#059669';
+      activeBtn.style.color = '#ffffff';
+    }
+
+    const contents = ['estado', 'inyeccion', 'salida', 'patrimonio', 'blacklist'];
+    contents.forEach(c => {
+      const el = document.getElementById(`sup-caja-content-${c}`);
+      if (el) el.style.display = c === tabName ? 'block' : 'none';
+    });
+  },
+
+  async renderCajaGlobalData() {
+    const currentUser = window.CrediPayDB.getCurrentUser() || { username: 'admin' };
+    const data = await window.CrediPayDB.getSupervisorCajaGlobalData(currentUser.username);
+
+    // Actualizar Tarjeta Superior en Dashboard
+    const topRecaudo = document.getElementById('sup-top-card-recaudo');
+    const topLiquid = document.getElementById('sup-top-card-liquid');
+    const topPatrimonio = document.getElementById('sup-top-card-patrimonio');
+
+    if (topRecaudo) topRecaudo.textContent = `$${data.recaudoHoy.toLocaleString('es-CO')}`;
+    if (topLiquid) topLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
+    if (topPatrimonio) topPatrimonio.textContent = `$${data.patrimonioReal.toLocaleString('es-CO')}`;
+
+    // Actualizar Módulo 1 (Estado de Caja)
+    const modalLiquid = document.getElementById('sup-modal-liquid-cash');
+    const modalRecaudo = document.getElementById('sup-modal-recaudo-hoy');
+    const modalCartera = document.getElementById('sup-modal-cartera');
+    const modalInyecciones = document.getElementById('sup-modal-inyecciones');
+    const modalSalidas = document.getElementById('sup-modal-salidas');
+
+    if (modalLiquid) modalLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
+    if (modalRecaudo) modalRecaudo.textContent = `$${data.recaudoHoy.toLocaleString('es-CO')}`;
+    if (modalCartera) modalCartera.textContent = `$${data.carteraEnCalle.toLocaleString('es-CO')}`;
+    if (modalInyecciones) modalInyecciones.textContent = `+$${data.inyeccionesTotales.toLocaleString('es-CO')}`;
+    if (modalSalidas) modalSalidas.textContent = `-$${data.salidasTotales.toLocaleString('es-CO')}`;
+
+    // Actualizar Módulo 4 (Patrimonio)
+    const patTotal = document.getElementById('sup-modal-patrimonio-total');
+    const patLiquid = document.getElementById('sup-patrimonio-liquid');
+    const patCartera = document.getElementById('sup-patrimonio-cartera');
+    const patIntereses = document.getElementById('sup-patrimonio-intereses');
+
+    if (patTotal) patTotal.textContent = `$${data.patrimonioReal.toLocaleString('es-CO')}`;
+    if (patLiquid) patLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
+    if (patCartera) patCartera.textContent = `$${data.carteraEnCalle.toLocaleString('es-CO')}`;
+    if (patIntereses) patIntereses.textContent = `$${data.interesesActivos.toLocaleString('es-CO')}`;
+
+    // Actualizar Módulo 5 (Lista Negra)
+    const blacklistContainer = document.getElementById('sup-blacklist-items-container');
+    if (blacklistContainer) {
+      if (!data.listaNegra || data.listaNegra.length === 0) {
+        blacklistContainer.innerHTML = `
+          <div style="padding: 1.5rem; text-align: center; background: rgba(16,185,129,0.1); border: 1px solid #10b981; border-radius: 12px; color: #10b981;">
+            🟢 No hay clientes en mora o lista negra en tus rutas.
+          </div>
+        `;
+      } else {
+        blacklistContainer.innerHTML = data.listaNegra.map(c => `
+          <div style="padding: 0.9rem; background: var(--bg-secondary, #1e293b); border: 1px solid rgba(239,68,68,0.3); border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong style="color: #f8fafc; font-size: 0.95rem;">${c.name}</strong>
+              <div style="font-size: 0.78rem; color: #94a3b8;">Cédula: ${c.cedula} | Tel: ${c.phone || 'N/A'}</div>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 0.9rem; font-weight: 800; color: #ef4444; display: block;">$${(Number(c.outstanding) || 0).toLocaleString('es-CO')}</span>
+              <span style="font-size: 0.7rem; background: rgba(239,68,68,0.2); color: #fca5a5; padding: 0.15rem 0.4rem; border-radius: 6px;">Mora Crítica</span>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+  },
+
+  async submitCapitalInjection() {
+    const amountInput = document.getElementById('input-sup-inject-amount');
+    const notesInput = document.getElementById('input-sup-inject-notes');
+    const val = parseFloat(amountInput ? amountInput.value : 0);
+
+    if (!val || val <= 0) {
+      alert("Por favor ingresa un monto válido a inyectar.");
+      return;
+    }
+
+    await window.CrediPayDB.injectSupervisorCapital(val, notesInput ? notesInput.value : '');
+    if (amountInput) amountInput.value = '';
+    if (notesInput) notesInput.value = '';
+    alert(`✅ Inyección de $${val.toLocaleString('es-CO')} registrada con éxito en Supabase.`);
+    await this.renderCajaGlobalData();
+    this.switchCajaTab('estado');
+  },
+
+  async submitCashWithdrawal() {
+    const amountInput = document.getElementById('input-sup-withdraw-amount');
+    const notesInput = document.getElementById('input-sup-withdraw-notes');
+    const val = parseFloat(amountInput ? amountInput.value : 0);
+
+    if (!val || val <= 0) {
+      alert("Por favor ingresa un monto válido de salida.");
+      return;
+    }
+
+    await window.CrediPayDB.recordSupervisorCashWithdrawal(val, notesInput ? notesInput.value : '');
+    if (amountInput) amountInput.value = '';
+    if (notesInput) notesInput.value = '';
+    alert(`🔴 Salida de $${val.toLocaleString('es-CO')} registrada con éxito en Supabase.`);
+    await this.renderCajaGlobalData();
+    this.switchCajaTab('estado');
   },
 
   destroy() {

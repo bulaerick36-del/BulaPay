@@ -5038,6 +5038,191 @@ const db = {
       this._isEvaluatingCobro = false;
       window.isEvaluatingCobro = false;
     }
+  },
+
+  async getSupervisorCajaGlobalData(supervisorId) {
+    const supabase = await initSupabase();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const supId = supervisorId || (this.getCurrentUser() ? this.getCurrentUser().username : 'admin');
+
+    try {
+      let agentUsernames = [];
+      let routeIds = [];
+
+      if (supabase) {
+        const { data: agentesRuta } = await supabase
+          .from('agentes_ruta')
+          .select('username, ruta_id')
+          .eq('supervisor_id', supId);
+
+        if (agentesRuta && agentesRuta.length > 0) {
+          agentUsernames = agentesRuta.map(a => a.username).filter(Boolean);
+          routeIds = agentesRuta.map(a => a.ruta_id).filter(Boolean);
+        }
+
+        const { data: routesData } = await supabase
+          .from('routes')
+          .select('id, capital, collected')
+          .or(`supervisor_id.eq.${supId}`);
+
+        if (routesData && routesData.length > 0) {
+          routesData.forEach(r => { if (r.id) routeIds.push(r.id); });
+        }
+      }
+
+      if (agentUsernames.length === 0 || routeIds.length === 0) {
+        const localUsers = JSON.parse(localStorage.getItem('credipay_users') || '[]');
+        const localRoutes = JSON.parse(localStorage.getItem('credipay_routes') || '[]');
+
+        localUsers.filter(u => u.supervisor === supId || u.supervisor_id === supId).forEach(u => {
+          if (u.username) agentUsernames.push(u.username);
+          if (u.routeId) routeIds.push(u.routeId);
+        });
+
+        localRoutes.filter(r => r.supervisor_id === supId).forEach(r => {
+          if (r.id) routeIds.push(r.id);
+        });
+      }
+
+      agentUsernames = [...new Set(agentUsernames)];
+      routeIds = [...new Set(routeIds)];
+
+      let clients = [];
+      let payments = [];
+      let cajaMovimientos = [];
+      let capitalInjections = [];
+
+      if (supabase) {
+        let cQuery = supabase.from('clients').select('*');
+        if (routeIds.length > 0 && agentUsernames.length > 0) {
+          cQuery = cQuery.or(`supervisor_id.eq.${supId},routeId.in.(${routeIds.join(',')}),agent_id.in.(${agentUsernames.join(',')})`);
+        } else {
+          cQuery = cQuery.or(`supervisor_id.eq.${supId}`);
+        }
+        const { data: cData } = await cQuery;
+        clients = cData || [];
+
+        let pQuery = supabase.from('payments').select('*');
+        if (agentUsernames.length > 0) {
+          pQuery = pQuery.or(`supervisor_id.eq.${supId},agent_id.in.(${agentUsernames.join(',')})`);
+        } else {
+          pQuery = pQuery.or(`supervisor_id.eq.${supId}`);
+        }
+        const { data: pData } = await pQuery;
+        payments = pData || [];
+
+        const { data: movData } = await supabase.from('caja_movimientos').select('*');
+        cajaMovimientos = movData || [];
+
+        const { data: injData } = await supabase.from('capital_injections').select('*');
+        capitalInjections = injData || [];
+      } else {
+        clients = JSON.parse(localStorage.getItem('credipay_clients') || '[]');
+        payments = JSON.parse(localStorage.getItem('credipay_payments') || '[]');
+        cajaMovimientos = JSON.parse(localStorage.getItem('credipay_caja_movimientos') || '[]');
+        capitalInjections = JSON.parse(localStorage.getItem('credipay_capital_injections') || '[]');
+      }
+
+      const supervisorClients = clients.filter(c => 
+        c.supervisor_id === supId || 
+        (c.routeId && routeIds.includes(c.routeId)) ||
+        (c.agent_id && agentUsernames.includes(c.agent_id))
+      );
+
+      const hoyPayments = payments.filter(p => 
+        (p.supervisor_id === supId || (p.agent_id && agentUsernames.includes(p.agent_id))) &&
+        (p.date === todayStr || p.created_at?.startsWith(todayStr))
+      );
+      const recaudoHoy = hoyPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const carteraEnCalle = supervisorClients.reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
+
+      const interesesActivos = supervisorClients.reduce((sum, c) => {
+        const totalDebt = Number(c.totalDebt || 0);
+        const amount = Number(c.amount || 0);
+        return sum + (totalDebt > amount ? totalDebt - amount : 0);
+      }, 0);
+
+      const inyeccionesTotales = capitalInjections.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+      const salidasTotales = cajaMovimientos
+        .filter(m => m.type === 'egreso' || m.type === 'salida')
+        .reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+
+      const entradasExtra = cajaMovimientos
+        .filter(m => m.type === 'ingreso' || m.type === 'entrada')
+        .reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+
+      const capitalBaseRutas = Math.max(500000, routeIds.length * 500000);
+      const liquidCash = Math.max(0, capitalBaseRutas + inyeccionesTotales + entradasExtra + recaudoHoy - salidasTotales);
+      const patrimonioReal = Math.round(liquidCash + carteraEnCalle + interesesActivos);
+
+      const listaNegra = supervisorClients.filter(c => 
+        c.risk === 'Rojo' || c.risk === 'Lista Negra' || Number(c.outstanding) > Number(c.totalDebt || 0) * 0.8
+      );
+
+      return {
+        supervisorId: supId,
+        recaudoHoy,
+        carteraEnCalle,
+        interesesActivos,
+        inyeccionesTotales,
+        salidasTotales,
+        entradasExtra,
+        liquidCash,
+        patrimonioReal,
+        listaNegra,
+        rutasCount: routeIds.length,
+        agentesCount: agentUsernames.length,
+        clientesCount: supervisorClients.length
+      };
+    } catch (err) {
+      console.error("Error al obtener Caja Global del Supervisor:", err);
+      return {
+        recaudoHoy: 0, carteraEnCalle: 0, interesesActivos: 0, liquidCash: 0, patrimonioReal: 0, listaNegra: []
+      };
+    }
+  },
+
+  async injectSupervisorCapital(amount, notes = '') {
+    const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser() || { username: 'admin' };
+    const record = {
+      id: 'inj_' + Date.now(),
+      amount: Number(amount),
+      agent_id: currentUser.username,
+      date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      await supabase.from('capital_injections').insert([record]);
+    }
+
+    const currentLocal = JSON.parse(localStorage.getItem('credipay_capital_injections') || '[]');
+    currentLocal.push(record);
+    localStorage.setItem('credipay_capital_injections', JSON.stringify(currentLocal));
+    return record;
+  },
+
+  async recordSupervisorCashWithdrawal(amount, notes = '') {
+    const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser() || { username: 'admin' };
+    const record = {
+      id: 'mov_' + Date.now(),
+      type: 'egreso',
+      amount: Number(amount),
+      agent_id: currentUser.username,
+      date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      await supabase.from('caja_movimientos').insert([record]);
+    }
+
+    const currentLocal = JSON.parse(localStorage.getItem('credipay_caja_movimientos') || '[]');
+    currentLocal.push(record);
+    localStorage.setItem('credipay_caja_movimientos', JSON.stringify(currentLocal));
+    return record;
   }
 };
 
