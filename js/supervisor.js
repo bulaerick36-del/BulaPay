@@ -3372,7 +3372,6 @@ const supervisorModule = {
     const modal = document.getElementById('modal-supervisor-caja-global');
     if (!modal) return;
     modal.style.display = 'flex';
-    this.switchCajaTab('estado');
     await this.renderCajaGlobalData();
   },
 
@@ -3381,88 +3380,179 @@ const supervisorModule = {
     if (modal) modal.style.display = 'none';
   },
 
-  switchCajaTab(tabName) {
-    const tabs = document.querySelectorAll('.sup-caja-tab');
-    tabs.forEach(t => {
-      t.style.background = 'transparent';
-      t.style.color = 'var(--text-secondary, #94a3b8)';
-    });
-
-    const activeBtn = document.getElementById(`tab-sup-caja-${tabName}`);
-    if (activeBtn) {
-      activeBtn.style.background = tabName === 'salida' || tabName === 'blacklist' ? '#ef4444' : '#059669';
-      activeBtn.style.color = '#ffffff';
-    }
-
-    const contents = ['estado', 'inyeccion', 'salida', 'patrimonio', 'blacklist'];
-    contents.forEach(c => {
-      const el = document.getElementById(`sup-caja-content-${c}`);
-      if (el) el.style.display = c === tabName ? 'block' : 'none';
-    });
-  },
-
   async renderCajaGlobalData() {
     const currentUser = window.CrediPayDB.getCurrentUser() || { username: 'admin' };
     const data = await window.CrediPayDB.getSupervisorCajaGlobalData(currentUser.username);
 
-    // Actualizar Tarjetas en Dashboard
-    const topRecaudo = document.getElementById('sup-top-card-recaudo');
-    const topLiquid = document.getElementById('sup-top-card-liquid');
-    const topPatrimonio = document.getElementById('sup-top-card-patrimonio');
+    // Guardar datos en la instancia para modales interactivos
+    this.cajaGlobalCacheData = data;
+
+    // Actualizar valores en UI de la tarjeta y el modal
     const kpiCajaVal = document.getElementById('kpi-caja-global-val');
-
-    if (topRecaudo) topRecaudo.textContent = `$${data.recaudoHoy.toLocaleString('es-CO')}`;
-    if (topLiquid) topLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
-    if (topPatrimonio) topPatrimonio.textContent = `$${data.patrimonioReal.toLocaleString('es-CO')}`;
-    if (kpiCajaVal) kpiCajaVal.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
-
-    // Actualizar Módulo 1 (Estado de Caja)
     const modalLiquid = document.getElementById('sup-modal-liquid-cash');
-    const modalRecaudo = document.getElementById('sup-modal-recaudo-hoy');
     const modalCartera = document.getElementById('sup-modal-cartera');
-    const modalInyecciones = document.getElementById('sup-modal-inyecciones');
-    const modalSalidas = document.getElementById('sup-modal-salidas');
+    const modalIntereses = document.getElementById('sup-modal-intereses');
 
+    if (kpiCajaVal) kpiCajaVal.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
     if (modalLiquid) modalLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
-    if (modalRecaudo) modalRecaudo.textContent = `$${data.recaudoHoy.toLocaleString('es-CO')}`;
     if (modalCartera) modalCartera.textContent = `$${data.carteraEnCalle.toLocaleString('es-CO')}`;
-    if (modalInyecciones) modalInyecciones.textContent = `+$${data.inyeccionesTotales.toLocaleString('es-CO')}`;
-    if (modalSalidas) modalSalidas.textContent = `-$${data.salidasTotales.toLocaleString('es-CO')}`;
+    if (modalIntereses) modalIntereses.textContent = `$${data.interesesActivos.toLocaleString('es-CO')}`;
+  },
 
-    // Actualizar Módulo 4 (Patrimonio)
-    const patTotal = document.getElementById('sup-modal-patrimonio-total');
-    const patLiquid = document.getElementById('sup-patrimonio-liquid');
-    const patCartera = document.getElementById('sup-patrimonio-cartera');
-    const patIntereses = document.getElementById('sup-patrimonio-intereses');
+  async openSupervisorInjectModal() {
+    if (window.Swal) {
+      const { value: formValues } = await Swal.fire({
+        title: '🟢 Agregar a Caja',
+        text: 'Ingresa el monto de dinero que sumarás a la Caja Global de tus rutas:',
+        html: `
+          <input id="swal-sup-inject-amount" type="number" class="swal2-input" placeholder="Monto Ej. 1000000" style="font-size: 1.1rem; font-weight: bold;">
+          <input id="swal-sup-inject-notes" type="text" class="swal2-input" placeholder="Nota u origen de fondos (Opcional)">
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Registrar Inyección',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#10b981',
+        preConfirm: () => {
+          const amount = document.getElementById('swal-sup-inject-amount').value;
+          const notes = document.getElementById('swal-sup-inject-notes').value;
+          if (!amount || Number(amount) <= 0) {
+            Swal.showValidationMessage('Por favor ingresa un monto válido');
+            return false;
+          }
+          return { amount: Number(amount), notes };
+        }
+      });
 
-    if (patTotal) patTotal.textContent = `$${data.patrimonioReal.toLocaleString('es-CO')}`;
-    if (patLiquid) patLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
-    if (patCartera) patCartera.textContent = `$${data.carteraEnCalle.toLocaleString('es-CO')}`;
-    if (patIntereses) patIntereses.textContent = `$${data.interesesActivos.toLocaleString('es-CO')}`;
-
-    // Actualizar Módulo 5 (Lista Negra)
-    const blacklistContainer = document.getElementById('sup-blacklist-items-container');
-    if (blacklistContainer) {
-      if (!data.listaNegra || data.listaNegra.length === 0) {
-        blacklistContainer.innerHTML = `
-          <div style="padding: 1.5rem; text-align: center; background: rgba(16,185,129,0.1); border: 1px solid #10b981; border-radius: 12px; color: #10b981;">
-            🟢 No hay clientes en mora o lista negra en tus rutas.
-          </div>
-        `;
-      } else {
-        blacklistContainer.innerHTML = data.listaNegra.map(c => `
-          <div style="padding: 0.9rem; background: var(--bg-secondary, #1e293b); border: 1px solid rgba(239,68,68,0.3); border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <strong style="color: #f8fafc; font-size: 0.95rem;">${c.name}</strong>
-              <div style="font-size: 0.78rem; color: #94a3b8;">Cédula: ${c.cedula} | Tel: ${c.phone || 'N/A'}</div>
-            </div>
-            <div style="text-align: right;">
-              <span style="font-size: 0.9rem; font-weight: 800; color: #ef4444; display: block;">$${(Number(c.outstanding) || 0).toLocaleString('es-CO')}</span>
-              <span style="font-size: 0.7rem; background: rgba(239,68,68,0.2); color: #fca5a5; padding: 0.15rem 0.4rem; border-radius: 6px;">Mora Crítica</span>
-            </div>
-          </div>
-        `).join('');
+      if (formValues) {
+        await window.CrediPayDB.injectSupervisorCapital(formValues.amount, formValues.notes);
+        await this.renderCajaGlobalData();
+        Swal.fire('✅ ¡Éxito!', `Se agregaron $${formValues.amount.toLocaleString('es-CO')} a la Caja Global en Supabase.`, 'success');
       }
+    } else {
+      const amountStr = prompt("Ingresa el monto a agregar a la Caja Global ($):");
+      if (amountStr && Number(amountStr) > 0) {
+        await window.CrediPayDB.injectSupervisorCapital(Number(amountStr), 'Inyección manual supervisor');
+        await this.renderCajaGlobalData();
+        alert("🟢 Inyección registrada con éxito.");
+      }
+    }
+  },
+
+  async openSupervisorWithdrawModal() {
+    if (window.Swal) {
+      const { value: formValues } = await Swal.fire({
+        title: '🔴 Sacar de Caja',
+        text: 'Ingresa el monto que retirarás o gastarás de la Caja Global:',
+        html: `
+          <input id="swal-sup-withdraw-amount" type="number" class="swal2-input" placeholder="Monto Ej. 200000" style="font-size: 1.1rem; font-weight: bold;">
+          <input id="swal-sup-withdraw-notes" type="text" class="swal2-input" placeholder="Concepto o justificación de salida">
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Registrar Salida',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444',
+        preConfirm: () => {
+          const amount = document.getElementById('swal-sup-withdraw-amount').value;
+          const notes = document.getElementById('swal-sup-withdraw-notes').value;
+          if (!amount || Number(amount) <= 0) {
+            Swal.showValidationMessage('Por favor ingresa un monto válido');
+            return false;
+          }
+          return { amount: Number(amount), notes };
+        }
+      });
+
+      if (formValues) {
+        await window.CrediPayDB.recordSupervisorCashWithdrawal(formValues.amount, formValues.notes);
+        await this.renderCajaGlobalData();
+        Swal.fire('🔴 Salida Registrada', `Se dedujeron $${formValues.amount.toLocaleString('es-CO')} de la Caja Global en Supabase.`, 'info');
+      }
+    } else {
+      const amountStr = prompt("Ingresa el monto a sacar de la Caja Global ($):");
+      if (amountStr && Number(amountStr) > 0) {
+        await window.CrediPayDB.recordSupervisorCashWithdrawal(Number(amountStr), 'Salida manual supervisor');
+        await this.renderCajaGlobalData();
+        alert("🔴 Salida registrada con éxito.");
+      }
+    }
+  },
+
+  async openSupervisorCashSummaryModal() {
+    const data = this.cajaGlobalCacheData || await window.CrediPayDB.getSupervisorCajaGlobalData();
+    if (window.Swal) {
+      Swal.fire({
+        title: '📊 Cierre y Cuadre de Caja Global',
+        html: `
+          <div style="text-align: left; font-size: 0.9rem; display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem;">
+            <div style="display:flex; justify-content:space-between;"><span>Total Recaudado Hoy:</span> <strong style="color:#10b981;">$${data.recaudoHoy.toLocaleString('es-CO')}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>(+) Inyecciones de Capital:</span> <strong style="color:#10b981;">+$${data.inyeccionesTotales.toLocaleString('es-CO')}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>(-) Salidas / Egresos:</span> <strong style="color:#ef4444;">-$${data.salidasTotales.toLocaleString('es-CO')}</strong></div>
+            <hr style="border: 0.5px solid #334155; margin: 0.5rem 0;">
+            <div style="display:flex; justify-content:space-between; font-size: 1.1rem;"><span>Efectivo Líquido Disponible:</span> <strong style="color:#10b981;">$${data.liquidCash.toLocaleString('es-CO')}</strong></div>
+          </div>
+        `,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#10b981'
+      });
+    } else {
+      alert(`📊 Cierre de Caja Global:\n\nRecaudado Hoy: $${data.recaudoHoy.toLocaleString('es-CO')}\nInyecciones: +$${data.inyeccionesTotales.toLocaleString('es-CO')}\nSalidas: -$${data.salidasTotales.toLocaleString('es-CO')}\n\nEfectivo Líquido: $${data.liquidCash.toLocaleString('es-CO')}`);
+    }
+  },
+
+  async openSupervisorPatrimonioModal() {
+    const data = this.cajaGlobalCacheData || await window.CrediPayDB.getSupervisorCajaGlobalData();
+    if (window.Swal) {
+      Swal.fire({
+        title: '🏛️ Patrimonio Real del Negocio',
+        html: `
+          <div style="text-align: left; font-size: 0.9rem; display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem;">
+            <div style="display:flex; justify-content:space-between;"><span>💵 Efectivo Líquido en Caja:</span> <strong style="color:#10b981;">$${data.liquidCash.toLocaleString('es-CO')}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>🛣️ Cartera en Calle (Deuda Activa):</span> <strong style="color:#3b82f6;">$${data.carteraEnCalle.toLocaleString('es-CO')}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>📈 Intereses Activos (Utilidades):</span> <strong style="color:#f59e0b;">$${data.interesesActivos.toLocaleString('es-CO')}</strong></div>
+            <hr style="border: 0.5px solid #334155; margin: 0.5rem 0;">
+            <div style="display:flex; justify-content:space-between; font-size: 1.15rem; background: rgba(16,185,129,0.15); padding: 0.75rem; border-radius: 10px; border: 1px solid #10b981;">
+              <span>Patrimonio Real Activo:</span>
+              <strong style="color:#10b981; font-size: 1.3rem;">$${data.patrimonioReal.toLocaleString('es-CO')}</strong>
+            </div>
+          </div>
+        `,
+        confirmButtonText: 'Cerrar Reporte',
+        confirmButtonColor: '#10b981'
+      });
+    } else {
+      alert(`🏛️ Patrimonio Real:\n\nLíquido: $${data.liquidCash.toLocaleString('es-CO')}\nCartera: $${data.carteraEnCalle.toLocaleString('es-CO')}\nIntereses: $${data.interesesActivos.toLocaleString('es-CO')}\n\nTOTAL PATRIMONIO: $${data.patrimonioReal.toLocaleString('es-CO')}`);
+    }
+  },
+
+  async openSupervisorBlacklistModal() {
+    const data = this.cajaGlobalCacheData || await window.CrediPayDB.getSupervisorCajaGlobalData();
+    const lista = data.listaNegra || [];
+
+    if (window.Swal) {
+      const htmlList = lista.length === 0
+        ? `<div style="padding: 1rem; color: #10b981;">🟢 No hay clientes en mora o lista negra en tus rutas.</div>`
+        : lista.map(c => `
+            <div style="padding: 0.75rem; background: #1e293b; border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong style="color: #f8fafc;">${c.name}</strong>
+                <div style="font-size: 0.75rem; color: #94a3b8;">Cédula: ${c.cedula}</div>
+              </div>
+              <div style="text-align: right;">
+                <span style="font-weight: 800; color: #ef4444; font-size: 0.95rem;">$${(Number(c.outstanding) || 0).toLocaleString('es-CO')}</span>
+              </div>
+            </div>
+          `).join('');
+
+      Swal.fire({
+        title: '🚨 Lista Negra (Morosos)',
+        html: `<div style="max-height: 60vh; overflow-y: auto;">${htmlList}</div>`,
+        confirmButtonText: 'Cerrar Lista Negra',
+        confirmButtonColor: '#ef4444'
+      });
+    } else {
+      alert(`🚨 Lista Negra: ${lista.length} clientes en riesgo crítico.`);
     }
   },
 
