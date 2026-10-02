@@ -765,16 +765,14 @@
               <p id="kpi-total-collected">$0</p>
             </div>
           </div>
-          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openGlobalReportModal()">
-            <div class="kpi-icon">📊</div>
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openCajaGlobalModal()" style="background: linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(5,150,105,0.2) 100%); border: 1px solid rgba(16,185,129,0.4);">
+            <div class="kpi-icon">🏛️</div>
             <div class="kpi-info" style="width: 100%; display: flex; flex-direction: column;">
-              <h4>Progreso de Cobros</h4>
-              <p id="kpi-route-progress">0%</p>
-              <div class="progress-bar-container" style="margin-top: 0.5rem; background-color: rgba(255,255,255,0.05); height: 6px; border-radius: 10px; overflow: hidden; width: 100%;">
-                <div id="kpi-route-progress-bar" class="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.5s ease; border-radius: 10px;"></div>
-              </div>
-              <button type="button" id="btn-consultar-reporte" class="btn btn-primary" onclick="event.stopPropagation(); console.log('Clic detectado en Consultar Reporte de Pago'); supervisorModule.openGlobalReportModal();" style="position: relative !important; z-index: 10 !important; pointer-events: auto !important; margin-top: 0.75rem !important; width: 100% !important; padding: 0.4rem 0.6rem !important; font-size: 0.75rem !important; font-weight: bold !important; border-radius: 8px !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 0.35rem !important; background-color: var(--primary) !important; border: 1px solid var(--primary) !important; color: #fff !important; cursor: pointer !important; transition: opacity 0.2s !important;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">
-                <span>🔍</span> Consultar Reporte de Pago
+              <h4 style="color: #34d399; font-weight: 800;">GESTIÓN DE CAJA GLOBAL</h4>
+              <p id="kpi-caja-global-val" style="font-size: 1.5rem; font-weight: 900; color: #ffffff;">$0</p>
+              <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 0.2rem;">Suma consolidada de rutas y clientes asignados</div>
+              <button type="button" id="btn-administrar-caja-global" class="btn btn-primary" onclick="event.stopPropagation(); supervisorModule.openCajaGlobalModal();" style="position: relative !important; z-index: 10 !important; pointer-events: auto !important; margin-top: 0.75rem !important; width: 100% !important; padding: 0.5rem 0.6rem !important; font-size: 0.8rem !important; font-weight: 800 !important; border-radius: 8px !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 0.35rem !important; background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; border: 1px solid #10b981 !important; color: #fff !important; cursor: pointer !important; transition: opacity 0.2s !important;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">
+                <span>🏛️</span> Administrar Caja
               </button>
             </div>
           </div>

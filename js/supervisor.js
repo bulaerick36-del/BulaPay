@@ -3405,14 +3405,16 @@ const supervisorModule = {
     const currentUser = window.CrediPayDB.getCurrentUser() || { username: 'admin' };
     const data = await window.CrediPayDB.getSupervisorCajaGlobalData(currentUser.username);
 
-    // Actualizar Tarjeta Superior en Dashboard
+    // Actualizar Tarjetas en Dashboard
     const topRecaudo = document.getElementById('sup-top-card-recaudo');
     const topLiquid = document.getElementById('sup-top-card-liquid');
     const topPatrimonio = document.getElementById('sup-top-card-patrimonio');
+    const kpiCajaVal = document.getElementById('kpi-caja-global-val');
 
     if (topRecaudo) topRecaudo.textContent = `$${data.recaudoHoy.toLocaleString('es-CO')}`;
     if (topLiquid) topLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
     if (topPatrimonio) topPatrimonio.textContent = `$${data.patrimonioReal.toLocaleString('es-CO')}`;
+    if (kpiCajaVal) kpiCajaVal.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
 
     // Actualizar Módulo 1 (Estado de Caja)
     const modalLiquid = document.getElementById('sup-modal-liquid-cash');
