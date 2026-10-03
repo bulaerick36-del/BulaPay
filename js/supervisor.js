@@ -359,6 +359,8 @@ const supervisorModule = {
       await this.populateKpiCollectedModal();
     } else if (kpi === 'progress') {
       await this.populateKpiProgressModal();
+    } else if (kpi === 'blacklist') {
+      await this.populateKpiBlacklistModal();
     }
   },
 
@@ -730,91 +732,178 @@ const supervisorModule = {
     }
   },
 
-  // 2. POPULATE MODAL: CAPITAL ASIGNADO
+  // 2. POPULATE MODAL: CAPITAL ASIGNADO (AUDITORÍA DE RUTA)
   async populateKpiCapitalModal() {
-    const container = document.getElementById('modal-capital-routes-container');
-    const detailSection = document.getElementById('modal-capital-detail-section');
+    const routeSelect = document.getElementById('modal-capital-route-select');
+    const baseEl = document.getElementById('modal-audit-capital-base');
+    const calleEl = document.getElementById('modal-audit-en-calle');
+    const bolsilloEl = document.getElementById('modal-audit-en-bolsillo');
+    const gananciasEl = document.getElementById('modal-audit-ganancias-proyectadas');
+    const perdidasEl = document.getElementById('modal-audit-perdidas');
+
+    if (!routeSelect) return;
+
+    const routes = await window.BulaPayDB.getRoutes();
+    const currentVal = routeSelect.value;
+
+    // Poblar selector de rutas si aún no está lleno
+    if (routeSelect.options.length <= 1) {
+      routeSelect.innerHTML = '<option value="ALL">Consolidado General (Todas las rutas)</option>';
+      routes.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = `Ruta: ${r.name} (${r.agentName || 'Sin agente'})`;
+        routeSelect.appendChild(opt);
+      });
+      if (currentVal) routeSelect.value = currentVal;
+    }
+
+    const selectedId = routeSelect.value || 'ALL';
+    let filteredRoutes = routes;
+    if (selectedId !== 'ALL') {
+      filteredRoutes = routes.filter(r => r.id === selectedId);
+    }
+
+    const allClients = await window.BulaPayDB.getClients();
+    const allPayments = await window.BulaPayDB.getPayments();
+    const routeIds = filteredRoutes.map(r => r.id);
+
+    // Clientes de las rutas seleccionadas
+    const selectedClients = allClients.filter(c => c.routeId && routeIds.includes(c.routeId));
+
+    // 1. Capital Base (Inversión Inicial)
+    const capitalBase = filteredRoutes.reduce((sum, r) => sum + (Number(r.capital) || 0), 0);
+
+    // 2. En Calle (Saldos Pendientes de clientes activos)
+    const enCalle = selectedClients
+      .filter(c => c.risk !== 'Rojo' && c.risk !== 'Lista Negra' && c.status !== 'Blacklisted')
+      .reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
+
+    // 3. En Bolsillo (Efectivo) = Capital Base + Total Recaudado - Total Préstamos Realizados
+    const paymentsRoute = allPayments.filter(p => p.routeId && routeIds.includes(p.routeId));
+    const totalRecaudos = paymentsRoute.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const totalPrestados = selectedClients.reduce((sum, c) => sum + (Number(c.amount || c.monto_prestado) || 0), 0);
+    const enBolsillo = Math.max(0, capitalBase + totalRecaudos - totalPrestados);
+
+    // 4. Ganancias Proyectadas (Intereses esperados de cartera activa)
+    const gananciasProyectadas = selectedClients
+      .filter(c => c.risk !== 'Rojo' && c.risk !== 'Lista Negra' && c.status !== 'Blacklisted')
+      .reduce((sum, c) => {
+        const totalDebt = Number(c.totalDebt || 0);
+        const amount = Number(c.amount || 0);
+        return sum + (totalDebt > amount ? totalDebt - amount : 0);
+      }, 0);
+
+    // 5. Pérdidas (Saldos de incobrables en Lista Negra / Mora grave)
+    const perdidas = selectedClients
+      .filter(c => c.risk === 'Rojo' || c.risk === 'Lista Negra' || c.status === 'Blacklisted')
+      .reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
+
+    if (baseEl) baseEl.textContent = `$${capitalBase.toLocaleString('es-CO')}`;
+    if (calleEl) calleEl.textContent = `$${enCalle.toLocaleString('es-CO')}`;
+    if (bolsilloEl) bolsilloEl.textContent = `$${enBolsillo.toLocaleString('es-CO')}`;
+    if (gananciasEl) gananciasEl.textContent = `$${gananciasProyectadas.toLocaleString('es-CO')}`;
+    if (perdidasEl) perdidasEl.textContent = `$${perdidas.toLocaleString('es-CO')}`;
+  },
+
+  // 3. CIERRE DE CAJA (ARQUEO FISICO)
+  async openCierreCajaModal() {
+    const modal = document.getElementById('modal-kpi-cierre-caja');
+    const routeSelect = document.getElementById('modal-cierre-route-select');
+    if (!modal || !routeSelect) return;
+
+    const routes = await window.BulaPayDB.getRoutes();
+    routeSelect.innerHTML = '';
+    routes.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = `Ruta: ${r.name} (${r.agentName || 'Sin agente'})`;
+      routeSelect.appendChild(opt);
+    });
+
+    modal.classList.add('active');
+    await this.calculateCierreCaja();
+  },
+
+  closeCierreCajaModal() {
+    const modal = document.getElementById('modal-kpi-cierre-caja');
+    if (modal) modal.classList.remove('active');
+  },
+
+  async calculateCierreCaja() {
+    const routeSelect = document.getElementById('modal-cierre-route-select');
+    const inicialEl = document.getElementById('cierre-efectivo-inicial');
+    const cobradoHoyEl = document.getElementById('cierre-cobrado-hoy');
+    const prestamosHoyEl = document.getElementById('cierre-prestamos-hoy');
+    const entregarEl = document.getElementById('cierre-efectivo-entregar');
+
+    if (!routeSelect) return;
+    const routeId = routeSelect.value;
+    const routes = await window.BulaPayDB.getRoutes();
+    const route = routes.find(r => r.id === routeId);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
+
+    const cobradoHoy = payments
+      .filter(p => (p.routeId === routeId || p.route_id === routeId) && (p.date === todayStr || p.created_at?.startsWith(todayStr)))
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const nuevosClientesHoy = clients.filter(c => (c.routeId === routeId) && (c.created_at?.startsWith(todayStr) || c.date === todayStr));
+    const prestamosHoy = nuevosClientesHoy.reduce((sum, c) => sum + (Number(c.amount || c.monto_prestado) || 0), 0);
+
+    // Efectivo inicial en bolsillo (capital base de la ruta)
+    const efectivoInicial = route ? Number(route.capital || 0) : 0;
+    const efectivoEntregar = Math.max(0, efectivoInicial + cobradoHoy - prestamosHoy);
+
+    if (inicialEl) inicialEl.textContent = `$${efectivoInicial.toLocaleString('es-CO')}`;
+    if (cobradoHoyEl) cobradoHoyEl.textContent = `+$${cobradoHoy.toLocaleString('es-CO')}`;
+    if (prestamosHoyEl) prestamosHoyEl.textContent = `-$${prestamosHoy.toLocaleString('es-CO')}`;
+    if (entregarEl) entregarEl.textContent = `$${efectivoEntregar.toLocaleString('es-CO')}`;
+  },
+
+  // 4. POPULATE MODAL: LISTA NEGRA (MOROSOS)
+  async populateKpiBlacklistModal() {
+    const container = document.getElementById('modal-blacklist-container');
     if (!container) return;
 
-    if (detailSection) detailSection.style.display = 'none';
-
     container.innerHTML = '';
+    const allClients = await window.BulaPayDB.getClients();
     const routes = await window.BulaPayDB.getRoutes();
 
-    routes.forEach(route => {
+    const morosos = allClients.filter(c => 
+      c.risk === 'Rojo' || c.risk === 'Lista Negra' || c.status === 'Blacklisted' || Number(c.outstanding) > Number(c.totalDebt || 0) * 0.8
+    );
+
+    if (morosos.length === 0) {
+      container.innerHTML = `<div style="text-align: center; color: var(--text-secondary); font-size: 0.85rem; padding: 2rem;">✅ No hay clientes registrados en Lista Negra o Mora severa.</div>`;
+      return;
+    }
+
+    morosos.forEach(client => {
+      const route = routes.find(r => r.id === client.routeId) || { name: 'Ruta no especificada' };
       const item = document.createElement('div');
-      item.style.padding = '0.75rem 1rem';
-      item.style.background = 'rgba(255,255,255,0.02)';
-      item.style.border = '1px solid var(--border-color)';
-      item.style.borderRadius = '8px';
-      item.style.cursor = 'pointer';
+      item.style.padding = '0.85rem 1rem';
+      item.style.background = 'rgba(239, 68, 68, 0.06)';
+      item.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      item.style.borderRadius = '10px';
       item.style.display = 'flex';
       item.style.justifyContent = 'space-between';
       item.style.alignItems = 'center';
-      item.style.transition = 'var(--transition-smooth)';
 
       item.innerHTML = `
         <div>
-          <strong style="color: white; font-size: 0.9rem;">${route.name}</strong>
-          <div style="font-size: 0.75rem; color: var(--text-secondary);">Agente: ${route.agentName}</div>
+          <strong style="color: #f87171; font-size: 0.95rem;">${client.name}</strong>
+          <div style="font-size: 0.75rem; color: var(--text-secondary);">C.C. ${client.cedula || 'N/A'} | Ruta: ${route.name}</div>
         </div>
         <div style="text-align: right;">
-          <strong style="color: var(--accent); font-size: 0.95rem;">$${Number(route.capital).toLocaleString('es-CO')}</strong>
-          <div style="font-size: 0.65rem; color: var(--text-muted);">Clic para analizar</div>
+          <span style="font-size: 0.7rem; color: #f87171; font-weight: bold; display: block;">Saldo Deuda</span>
+          <strong style="color: #ffffff; font-size: 1rem;">$${Number(client.outstanding || 0).toLocaleString('es-CO')}</strong>
         </div>
       `;
-
-      item.addEventListener('mouseenter', () => {
-        item.style.borderColor = 'var(--accent)';
-        item.style.backgroundColor = 'rgba(0, 245, 212, 0.03)';
-      });
-      item.addEventListener('mouseleave', () => {
-        item.style.borderColor = 'var(--border-color)';
-        item.style.backgroundColor = 'rgba(255,255,255,0.02)';
-      });
-
-      item.addEventListener('click', () => this.showModalCapitalDetail(route.id));
       container.appendChild(item);
     });
-  },
-
-  async showModalCapitalDetail(routeId) {
-    const detailSection = document.getElementById('modal-capital-detail-section');
-    const title = document.getElementById('modal-capital-detail-title');
-    const deliveredEl = document.getElementById('modal-capital-delivered');
-    const collectedEl = document.getElementById('modal-capital-collected');
-    const remainingEl = document.getElementById('modal-capital-remaining');
-    const moraEl = document.getElementById('modal-capital-mora-index');
-
-    if (!detailSection) return;
-
-    const routes = await window.BulaPayDB.getRoutes();
-    const route = routes.find(r => r.id === routeId);
-    if (!route) return;
-
-    title.textContent = `Análisis de Rendimiento: ${route.name}`;
-    deliveredEl.textContent = `$${Number(route.capital).toLocaleString('es-CO')}`;
-    collectedEl.textContent = `$${Number(route.collected).toLocaleString('es-CO')}`;
-    
-    const remaining = Math.max(0, Number(route.capital) - Number(route.collected));
-    remainingEl.textContent = `$${remaining.toLocaleString('es-CO')}`;
-
-    // Simular un índice de mora en base a clientes de esa ruta
-    const allClients = await window.BulaPayDB.getClients();
-    const clients = allClients.filter(c => c.routeId === route.id);
-    const redCount = clients.filter(c => c.risk === 'Rojo').length;
-    const yellowCount = clients.filter(c => c.risk === 'Amarillo').length;
-    
-    let moraPercent = 0;
-    if (clients.length > 0) {
-      moraPercent = Math.round(((redCount * 1.0 + yellowCount * 0.4) / clients.length) * 100);
-    } else {
-      moraPercent = routeId === 'route_2' ? 12 : 5; // seed fallback
-    }
-
-    moraEl.textContent = `${moraPercent}%`;
-
-    detailSection.style.display = 'block';
   },
 
   // 3. POPULATE MODAL: RECAUDO HOY (RANKING)
@@ -1516,6 +1605,12 @@ const supervisorModule = {
     if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
     if (this.kpiTotalCapital) this.kpiTotalCapital.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
     if (this.kpiTotalCollected) this.kpiTotalCollected.textContent = `$${totalCollectedToday.toLocaleString('es-CO')}`;
+    
+    const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
+    if (kpiBlacklistEl) {
+      const blacklistedCount = clients.filter(c => c.risk === 'Rojo' || c.risk === 'Lista Negra' || c.status === 'Blacklisted' || Number(c.outstanding) > Number(c.totalDebt || 0) * 0.8).length;
+      kpiBlacklistEl.textContent = blacklistedCount;
+    }
     
     if (this.kpiRouteProgress) this.kpiRouteProgress.textContent = `${progressPercent}%`;
     const mainProgressBar = document.getElementById('kpi-route-progress-bar');

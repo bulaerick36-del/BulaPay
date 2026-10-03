@@ -709,8 +709,9 @@
       <!-- VISTA ESTÁNDAR SUPERVISOR -->
       <div id="supervisor-dashboard-standard">
         
-        <!-- KPIs Dashboard -->
+        <!-- KPIs Dashboard (Modelo de Auditoría y Rastreo) -->
         <div class="dashboard-grid">
+          <!-- Tarjeta 1: Agentes Activos -->
           <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('agents')">
             <div class="kpi-icon">📋</div>
             <div class="kpi-info">
@@ -718,22 +719,34 @@
               <p id="kpi-active-agents">0</p>
             </div>
           </div>
-          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('collected')">
-            <div class="kpi-icon">📈</div>
+
+          <!-- Tarjeta 2: Capital Asignado (Auditoría de Ruta) -->
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('capital')">
+            <div class="kpi-icon">💰</div>
             <div class="kpi-info">
-              <h4>Recaudado Hoy</h4>
-              <p id="kpi-total-collected">$0</p>
+              <h4>Capital Asignado</h4>
+              <p id="kpi-total-capital">$0</p>
             </div>
           </div>
-          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openCajaGlobalModal()" style="background: linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(5,150,105,0.2) 100%); border: 1px solid rgba(16,185,129,0.4);">
-            <div class="kpi-icon">🏛️</div>
+
+          <!-- Tarjeta 3: Recaudado Hoy + Botón Cierre de Caja -->
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('collected')">
+            <div class="kpi-icon">📈</div>
             <div class="kpi-info" style="width: 100%; display: flex; flex-direction: column;">
-              <h4 style="color: #34d399; font-weight: 800;">GESTIÓN DE CAJA GLOBAL</h4>
-              <p id="kpi-caja-global-val" style="font-size: 1.5rem; font-weight: 900; color: #ffffff;">$0</p>
-              <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 0.2rem;">Suma consolidada de rutas y clientes asignados</div>
-              <button type="button" id="btn-administrar-caja-global" class="btn btn-primary" onclick="event.stopPropagation(); supervisorModule.openCajaGlobalModal();" style="position: relative !important; z-index: 10 !important; pointer-events: auto !important; margin-top: 0.75rem !important; width: 100% !important; padding: 0.5rem 0.6rem !important; font-size: 0.8rem !important; font-weight: 800 !important; border-radius: 8px !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 0.35rem !important; background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; border: 1px solid #10b981 !important; color: #fff !important; cursor: pointer !important; transition: opacity 0.2s !important;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">
-                <span>🏛️</span> Administrar Caja
+              <h4>Recaudado Hoy</h4>
+              <p id="kpi-total-collected" style="margin-bottom: 0.2rem;">$0</p>
+              <button type="button" class="btn btn-secondary" onclick="event.stopPropagation(); supervisorModule.openCierreCajaModal();" style="margin-top: 0.4rem; padding: 0.35rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 0.3rem; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; cursor: pointer;">
+                <span>🔒</span> Cierre de Caja
               </button>
+            </div>
+          </div>
+
+          <!-- Tarjeta 4: Lista Negra (Morosos) -->
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('blacklist')" style="background: linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(185,28,28,0.2) 100%); border: 1px solid rgba(239,68,68,0.4);">
+            <div class="kpi-icon">🚨</div>
+            <div class="kpi-info">
+              <h4 style="color: #f87171; font-weight: 800;">Lista Negra</h4>
+              <p id="kpi-blacklist-count" style="font-size: 1.5rem; font-weight: 900; color: #ffffff;">0</p>
             </div>
           </div>
         </div>
@@ -2297,39 +2310,100 @@
     </div>
   </div>
 
-  <!-- MODAL KPIs: CAPITAL ASIGNADO -->
+  <!-- MODAL KPIs: AUDITORÍA DE CAPITAL ASIGNADO POR RUTA -->
   <div class="supervisor-modal-overlay" id="modal-kpi-capital">
-    <div class="supervisor-modal-card">
+    <div class="supervisor-modal-card" style="max-width: 750px; width: 100%;">
       <button class="supervisor-modal-close" onclick="supervisorModule.closeKpiModal('capital')">&times;</button>
-      <h3 class="title-gradient" style="margin-bottom: 0.5rem; font-size: 1.4rem;">💰 Distribución de Capital Asignado</h3>
-      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">Resumen financiero agrupado por rutas de cobro activas.</p>
+      <h3 class="title-gradient" style="margin-bottom: 0.3rem; font-size: 1.4rem;">💰 Auditoría y Desglose de Capital por Ruta</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">Selecciona una ruta para auditar la salud financiera y rastrear el efectivo.</p>
       
-      <!-- Lista de Rutas -->
-      <div id="modal-capital-routes-container" style="display: grid; gap: 1rem; margin-bottom: 1.5rem; max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
-        <!-- Se inyecta dinámicamente -->
+      <!-- Selector de Ruta -->
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label for="modal-capital-route-select" style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.3rem;">Ruta a Auditar</label>
+        <select id="modal-capital-route-select" onchange="supervisorModule.populateKpiCapitalModal()" style="width: 100%; padding: 0.6rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; font-size: 0.9rem; font-weight: 600;">
+          <!-- Se llena dinámicamente con las rutas -->
+        </select>
       </div>
 
-      <!-- Detalle de Rendimiento de Ruta -->
-      <div id="modal-capital-detail-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-        <h4 id="modal-capital-detail-title" style="margin-bottom: 1rem; color: var(--text-primary);">Rendimiento de Ruta</h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem;">
-          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
-            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Capital Base</span>
-            <span id="modal-capital-delivered" style="font-size: 1rem; font-weight: 700; color: var(--text-primary);">$0</span>
-          </div>
-          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
-            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Total Recaudado</span>
-            <span id="modal-capital-collected" style="font-size: 1rem; font-weight: 700; color: var(--color-verde);">$0</span>
-          </div>
-          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
-            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Por Recaudar</span>
-            <span id="modal-capital-remaining" style="font-size: 1rem; font-weight: 700; color: var(--accent);">$0</span>
-          </div>
-          <div class="card" style="padding: 0.75rem 1rem; background-color: var(--bg-primary); margin: 0; border-radius: 8px;">
-            <span style="font-size: 0.7rem; color: var(--text-secondary); display: block; text-transform: uppercase;">Índice Mora Histórico</span>
-            <span id="modal-capital-mora-index" style="font-size: 1rem; font-weight: 700; color: var(--color-rojo);">0%</span>
-          </div>
+      <!-- Grid de 5 Métricas Principales de Auditoría -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+        <!-- 1. Capital Base (Inversión Inicial) -->
+        <div class="card" style="padding: 0.85rem 1rem; background-color: rgba(255,255,255,0.03); border: 1px solid var(--border-color); margin: 0; border-radius: 10px;">
+          <span style="font-size: 0.72rem; color: var(--text-secondary); display: block; font-weight: 600; text-transform: uppercase;">💼 Capital Base (Inversión)</span>
+          <span id="modal-audit-capital-base" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); margin-top: 0.2rem; display: block;">$0</span>
         </div>
+
+        <!-- 2. En Calle (Saldos Pendientes Activos) -->
+        <div class="card" style="padding: 0.85rem 1rem; background-color: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); margin: 0; border-radius: 10px;">
+          <span style="font-size: 0.72rem; color: #60a5fa; display: block; font-weight: 600; text-transform: uppercase;">📡 En Calle (Cartera Activa)</span>
+          <span id="modal-audit-en-calle" style="font-size: 1.25rem; font-weight: 800; color: #60a5fa; margin-top: 0.2rem; display: block;">$0</span>
+        </div>
+
+        <!-- 3. En Bolsillo / Efectivo (Capital Base + Recaudos - Préstamos) -->
+        <div class="card" style="padding: 0.85rem 1rem; background-color: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); margin: 0; border-radius: 10px;">
+          <span style="font-size: 0.72rem; color: #34d399; display: block; font-weight: 600; text-transform: uppercase;">💵 En Bolsillo (Efectivo)</span>
+          <span id="modal-audit-en-bolsillo" style="font-size: 1.25rem; font-weight: 800; color: #34d399; margin-top: 0.2rem; display: block;">$0</span>
+        </div>
+
+        <!-- 4. Ganancias Proyectadas (Intereses de Cartera Activa) -->
+        <div class="card" style="padding: 0.85rem 1rem; background-color: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); margin: 0; border-radius: 10px;">
+          <span style="font-size: 0.72rem; color: #fbbf24; display: block; font-weight: 600; text-transform: uppercase;">📈 Ganancias Proyectadas</span>
+          <span id="modal-audit-ganancias-proyectadas" style="font-size: 1.25rem; font-weight: 800; color: #fbbf24; margin-top: 0.2rem; display: block;">$0</span>
+        </div>
+
+        <!-- 5. Pérdidas (Incobrables / Lista Negra) -->
+        <div class="card" style="padding: 0.85rem 1rem; background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); margin: 0; border-radius: 10px; grid-column: span 1 / -1;">
+          <span style="font-size: 0.72rem; color: #f87171; display: block; font-weight: 600; text-transform: uppercase;">🔴 Pérdidas (Cartera Incobrable)</span>
+          <span id="modal-audit-perdidas" style="font-size: 1.25rem; font-weight: 800; color: #f87171; margin-top: 0.2rem; display: block;">$0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CIERRE Y CUADRE FISICO DE CAJA DIARIO -->
+  <div class="supervisor-modal-overlay" id="modal-kpi-cierre-caja">
+    <div class="supervisor-modal-card" style="max-width: 600px; width: 100%;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeCierreCajaModal()">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.3rem; font-size: 1.4rem;">🔒 Arqueo y Cierre de Caja Diario</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">Matemática de cuadre físico del efectivo a entregar al supervisor.</p>
+      
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label for="modal-cierre-route-select" style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.3rem;">Seleccionar Ruta</label>
+        <select id="modal-cierre-route-select" onchange="supervisorModule.calculateCierreCaja()" style="width: 100%; padding: 0.6rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; font-size: 0.9rem; font-weight: 600;">
+          <!-- Se llena dinámicamente con las rutas -->
+        </select>
+      </div>
+
+      <div style="background-color: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; display: grid; gap: 0.85rem; font-size: 0.9rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="color: var(--text-secondary);">💵 Efectivo en Bolsillo Inicial:</span>
+          <strong id="cierre-efectivo-inicial" style="color: var(--text-primary);">$0</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+          <span>➕ Total Cobrado Hoy:</span>
+          <strong id="cierre-cobrado-hoy">+$0</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
+          <span>➖ Nuevos Préstamos de Hoy:</span>
+          <strong id="cierre-prestamos-hoy">-$0</strong>
+        </div>
+        <div style="border-top: 1px dashed var(--border-color); padding-top: 0.85rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.1rem; font-weight: 800;">
+          <span style="color: #34d399;">🏛️ Efectivo a Entregar al Supervisor:</span>
+          <strong id="cierre-efectivo-entregar" style="color: #34d399; font-size: 1.35rem;">$0</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KPIs: LISTA NEGRA (MOROSOS) -->
+  <div class="supervisor-modal-overlay" id="modal-kpi-blacklist">
+    <div class="supervisor-modal-card" style="max-width: 750px; width: 100%;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeKpiModal('blacklist')">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.3rem; font-size: 1.4rem; color: #f87171;">🚨 Registro de Clientes en Lista Negra y Mora</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">Clientes bloqueados, liquidados por mora o con alto nivel de riesgo patrimonial.</p>
+
+      <div id="modal-blacklist-container" style="max-height: 350px; overflow-y: auto; display: grid; gap: 0.75rem;">
+        <!-- Creado dinámicamente -->
       </div>
     </div>
   </div>
