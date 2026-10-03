@@ -3,7 +3,7 @@
  * Valor Fijo de Suscripción: $50.000 COP
  */
 
-window.CrediPayCheckout = {
+window.BulaPayCheckout = {
   config: {
     montoMensualidadCOP: 50000, // $50.000 COP Fijo
     moneda: 'COP'
@@ -54,19 +54,19 @@ window.CrediPayCheckout = {
    */
   async iniciarPagoSuscripcion(userParam, options = {}) {
     try {
-      const user = userParam || (window.CrediPayDB ? window.CrediPayDB.getCurrentUser() : null);
+      const user = userParam || (window.BulaPayDB ? window.BulaPayDB.getCurrentUser() : null);
       
       // Obtener cuentas registradas o usar las cuentas oficiales por defecto
       let cuentas = [];
       let waNumber = '3044191522';
 
       try {
-        if (window.CrediPayDB) {
-          if (typeof window.CrediPayDB.getCuentas === 'function') {
-            cuentas = await window.CrediPayDB.getCuentas();
+        if (window.BulaPayDB) {
+          if (typeof window.BulaPayDB.getCuentas === 'function') {
+            cuentas = await window.BulaPayDB.getCuentas();
           }
-          if (typeof window.CrediPayDB.getWhatsAppRecaudo === 'function') {
-            waNumber = await window.CrediPayDB.getWhatsAppRecaudo();
+          if (typeof window.BulaPayDB.getWhatsAppRecaudo === 'function') {
+            waNumber = await window.BulaPayDB.getWhatsAppRecaudo();
           }
         }
       } catch(e) {
@@ -76,8 +76,8 @@ window.CrediPayCheckout = {
       // Si no hay cuentas en BD, ofrecer Nequi y Daviplata predeterminadas
       if (!cuentas || cuentas.length === 0) {
         cuentas = [
-          { id: 'def_nequi', banco: 'Nequi', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPai Oficial' },
-          { id: 'def_daviplata', banco: 'Daviplata', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'CrediPai Oficial' }
+          { id: 'def_nequi', banco: 'Nequi', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'BulaPay Oficial' },
+          { id: 'def_daviplata', banco: 'Daviplata', tipo_cuenta: 'Billetera Digital', numero_cuenta: '3044191522', titular: 'BulaPay Oficial' }
         ];
       }
 
@@ -85,7 +85,7 @@ window.CrediPayCheckout = {
       if (digitsOnly.length === 10) digitsOnly = '57' + digitsOnly;
       
       const userNameStr = user ? (user.name || user.username || 'Usuario') : 'Usuario';
-      const waMsg = encodeURIComponent(`Hola, adjunto comprobante de pago de mi suscripción CrediPai ($50.000 COP). Usuario: ${userNameStr}`);
+      const waMsg = encodeURIComponent(`Hola, adjunto comprobante de pago de mi suscripción BulaPay ($50.000 COP). Usuario: ${userNameStr}`);
       const waUrl = `https://wa.me/${digitsOnly}?text=${waMsg}`;
 
       // Construcción del HTML de las cuentas
@@ -94,7 +94,7 @@ window.CrediPayCheckout = {
         const bancoClean = String(c.banco || 'Cuenta').trim();
         const numClean = String(c.numero_cuenta || '').trim();
         const tipoClean = String(c.tipo_cuenta || 'Ahorros').trim();
-        const titularClean = String(c.titular || 'CrediPai').trim();
+        const titularClean = String(c.titular || 'BulaPay').trim();
         
         let isNequi = bancoClean.toLowerCase().includes('nequi');
         let isDaviplata = bancoClean.toLowerCase().includes('daviplata');
@@ -118,7 +118,7 @@ window.CrediPayCheckout = {
               </div>
             </div>
             <button type="button" 
-                    onclick="window.CrediPayCheckout.copiarNumero('${numClean}', '${bancoClean}')"
+                    onclick="window.BulaPayCheckout.copiarNumero('${numClean}', '${bancoClean}')"
                     style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.55rem 0.9rem; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; white-space: nowrap;">
               📋 Copiar
             </button>
@@ -136,7 +136,7 @@ window.CrediPayCheckout = {
               <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.15)); padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.4);">
                 <span style="color: #94a3b8; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Valor Fijo de Renovación</span>
                 <div style="color: #34d399; font-size: 2rem; font-weight: 900; margin: 0.2rem 0;">$50.000 COP</div>
-                <span style="color: #e2e8f0; font-size: 0.82rem; font-weight: 600; display: block;">Licencia Mensual CrediPai (+30 Días)</span>
+                <span style="color: #e2e8f0; font-size: 0.82rem; font-weight: 600; display: block;">Licencia Mensual BulaPay (+30 Días)</span>
               </div>
 
               <p style="text-align: left; margin: 0; color: #94a3b8; font-size: 0.82rem;">

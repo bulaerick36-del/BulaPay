@@ -1,4 +1,4 @@
-// Módulo de Autenticación y Sesiones de CrediPay
+// Módulo de Autenticación y Sesiones de BulaPay
 
 const authModule = {
   initialized: false,
@@ -125,12 +125,12 @@ const authModule = {
       }
 
       try {
-        const user = await window.CrediPayDB.getUserByUsername(usernameInput);
+        const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
         const isSuspended = user && (
           user.bloqueado_por_mora === true ||
           user.bloqueado_por_mora === 'true' ||
-          (window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function' && window.CrediPayDB.getDiasRestantes(user).status === 'suspendido')
+          (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
         );
 
         if (isSuspended) {
@@ -159,12 +159,12 @@ const authModule = {
         const passwordInput = document.getElementById('agent-login-password').value;
 
         try {
-          const user = await window.CrediPayDB.getUserByUsername(usernameInput);
+          const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
           const isSuspended = user && (
             user.bloqueado_por_mora === true ||
             user.bloqueado_por_mora === 'true' ||
-            (window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function' && window.CrediPayDB.getDiasRestantes(user).status === 'suspendido')
+            (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
           );
 
           if (isSuspended) {
@@ -212,9 +212,9 @@ const authModule = {
 
       try {
         // Validar si el usuario ya existe
-        const existingUser = await window.CrediPayDB.getUserByUsername(username);
+        const existingUser = await window.BulaPayDB.getUserByUsername(username);
         if (existingUser) {
-          alert('❌ Este nombre de usuario ya está registrado en CrediPay.');
+          alert('❌ Este nombre de usuario ya está registrado en BulaPay.');
           return;
         }
 
@@ -227,7 +227,7 @@ const authModule = {
 
         const acceptationTimestamp = new Date().toISOString();
         const docFormatted = `${docType}: ${docNum}`;
-        const signatureHash = 'CREDIPAY-SIG-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now();
+        const signatureHash = 'BULAPAY-SIG-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now();
 
         const newUser = {
           username,
@@ -255,11 +255,11 @@ const authModule = {
         };
 
         // Guardar usuario en base de datos sin generar rutas fantasmas
-        await window.CrediPayDB.saveUser(newUser);
+        await window.BulaPayDB.saveUser(newUser);
         if (newUser.role === 'Otros (Comercios, Compraventas, Mercados)' || newUser.role === 'Comercio Independiente' || (newUser.role && (newUser.role.toLowerCase().includes('comercio') || newUser.role.toLowerCase().includes('vitrina')))) {
           alert('¡Tu Vitrina Digital ha sido creada y guardada en Neon PostgreSQL!');
         } else {
-          alert('🎉 Registro exitoso. ¡Bienvenido a CrediPay!');
+          alert('🎉 Registro exitoso. ¡Bienvenido a BulaPay!');
         }
         this.loginUser(newUser);
       } catch (err) {
@@ -271,7 +271,7 @@ const authModule = {
     // Cerrar Sesión (escucha a todos los botones con clase .btn-logout, incluyendo el del drawer)
     document.querySelectorAll('.btn-logout').forEach(btn => {
       btn.addEventListener('click', () => {
-        window.CrediPayDB.logout();
+        window.BulaPayDB.logout();
         localStorage.removeItem('crediRole');
         window.location.hash = '';
         window.location.reload();
@@ -352,13 +352,13 @@ const authModule = {
   },
 
   async loginUser(user) {
-    window.CrediPayDB.setCurrentUser(user);
+    window.BulaPayDB.setCurrentUser(user);
     this.updateNavBar(user);
 
     if (user && user.username) {
       user.last_sign_in_at = new Date().toISOString();
-      if (window.CrediPayDB && typeof window.CrediPayDB.updateUserLastSignIn === 'function') {
-        window.CrediPayDB.updateUserLastSignIn(user.username);
+      if (window.BulaPayDB && typeof window.BulaPayDB.updateUserLastSignIn === 'function') {
+        window.BulaPayDB.updateUserLastSignIn(user.username);
       }
     }
 
@@ -423,8 +423,8 @@ const authModule = {
     }
 
     // Evaluación automática e interna de notificaciones de cobro privadas para este usuario
-    if (window.CrediPayDB && typeof window.CrediPayDB.evaluateUserCobroNotifications === 'function') {
-      window.CrediPayDB.evaluateUserCobroNotifications(user).then(() => {
+    if (window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
+      window.BulaPayDB.evaluateUserCobroNotifications(user).then(() => {
         if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
           window.adsModule.updateComunicadosBadge();
         }
@@ -449,24 +449,24 @@ const authModule = {
   },
 
   checkCurrentSession() {
-    const user = window.CrediPayDB.getCurrentUser();
+    const user = window.BulaPayDB.getCurrentUser();
     if (user) {
       const isSuspended = (
         user.bloqueado_por_mora === true ||
         user.bloqueado_por_mora === 'true' ||
-        (window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function' && window.CrediPayDB.getDiasRestantes(user).status === 'suspendido')
+        (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
       );
       if (isSuspended) {
         console.warn("🔒 Sesión finalizada silenciosamente: cuenta suspendida por mora.");
-        window.CrediPayDB.logout();
+        window.BulaPayDB.logout();
         this.updateNavBar(null);
         return;
       }
     }
     if (user) {
       this.updateNavBar(user);
-      if (window.CrediPayDB && typeof window.CrediPayDB.evaluateUserCobroNotifications === 'function') {
-        window.CrediPayDB.evaluateUserCobroNotifications(user).then(() => {
+      if (window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
+        window.BulaPayDB.evaluateUserCobroNotifications(user).then(() => {
           if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
             window.adsModule.updateComunicadosBadge();
           }
@@ -492,7 +492,7 @@ const authModule = {
     const modal = document.getElementById('modal-user-profile');
     if (!modal) return;
 
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser) return;
 
     // Sincronizar estado de apertura
@@ -504,7 +504,7 @@ const authModule = {
 
     try {
       // Fetch rápido a la base de datos Supabase
-      const freshUser = await window.CrediPayDB.getUserByUsername(currentUser.username);
+      const freshUser = await window.BulaPayDB.getUserByUsername(currentUser.username);
       if (freshUser) {
         this.populateProfileFields(freshUser);
       }
@@ -531,7 +531,7 @@ const authModule = {
   async handleUserProfileUpdate(event) {
     if (event) event.preventDefault();
 
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser) return;
 
     const nameVal = document.getElementById('profile-input-name').value.trim();
@@ -552,7 +552,7 @@ const authModule = {
         email: emailVal
       };
 
-      await window.CrediPayDB.updateUserProfile(currentUser.username, updatedData);
+      await window.BulaPayDB.updateUserProfile(currentUser.username, updatedData);
       
       // Construir el objeto de usuario actualizado para la sesión
       const updatedUser = {
@@ -561,7 +561,7 @@ const authModule = {
       };
 
       // Guardar en la sesión local
-      window.CrediPayDB.setCurrentUser(updatedUser);
+      window.BulaPayDB.setCurrentUser(updatedUser);
 
       // Sincronizar UI
       this.updateNavBar(updatedUser);
@@ -626,8 +626,8 @@ const authModule = {
     }
 
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.createSupportTicket === 'function') {
-        await window.CrediPayDB.createSupportTicket({ name: nom, documentNumber: ced, role: rol, whatsapp: wa, message: msg });
+      if (window.BulaPayDB && typeof window.BulaPayDB.createSupportTicket === 'function') {
+        await window.BulaPayDB.createSupportTicket({ name: nom, documentNumber: ced, role: rol, whatsapp: wa, message: msg });
       }
     } catch(err) {
       console.warn("Fallo guardando ticket de soporte:", err);
@@ -697,7 +697,7 @@ window.ensureSupportModalExists = function() {
         <div style="display: flex; align-items: center; gap: 0.6rem;">
           <span style="font-size: 1.4rem;">💬</span>
           <div>
-            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #38bdf8;">Mensajería Interna de Soporte CrediPay</h3>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #38bdf8;">Mensajería Interna de Soporte BulaPay</h3>
             <p style="margin: 0; font-size: 0.78rem; color: #94a3b8;">Tu mensaje se enviará directamente al panel de administración</p>
           </div>
         </div>

@@ -77,9 +77,9 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. Extraer el nombre de usuario de la referencia (Ej: credipay_usuario123_1710000000)
+    // 2. Extraer el nombre de usuario de la referencia (Ej: bulapay_usuario123_1710000000)
     let usernameToUpdate = "";
-    if (reference.startsWith("credipay_")) {
+    if (reference.startsWith("bulapay_")) {
       const parts = reference.split("_");
       if (parts.length >= 2) {
         usernameToUpdate = parts[1].toLowerCase().trim();
@@ -117,7 +117,7 @@ serve(async (req: Request) => {
     if (findErr || !users || users.length === 0) {
       console.error("❌ Usuario no encontrado en BD para referencia:", reference, findErr);
       return new Response(
-        JSON.stringify({ error: "Usuario no registrado en CrediPay BD", reference }),
+        JSON.stringify({ error: "Usuario no registrado en BulaPay BD", reference }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
       );
     }

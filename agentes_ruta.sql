@@ -1,5 +1,5 @@
 -- ==============================================================================
--- CREDIPAI SaaS - TABLA AGENTES DE RUTA (Relación con Rutas y Supervisores)
+-- BULAPAY SaaS - TABLA AGENTES DE RUTA (Relación con Rutas y Supervisores)
 -- ==============================================================================
 
 -- 1. Creación de la Tabla agentes_ruta
@@ -64,7 +64,7 @@ ON agentes_ruta FOR ALL TO authenticated
 USING (supervisor_id = auth.uid()::text OR supervisor_id IN (SELECT username FROM users WHERE username = auth.uid()::text))
 WITH CHECK (supervisor_id = auth.uid()::text OR supervisor_id IN (SELECT username FROM users WHERE username = auth.uid()::text));
 
--- Política 2: Permisos generales para el cliente web SPA CrediPai (roles anon y authenticated)
+-- Política 2: Permisos generales para el cliente web SPA BulaPay (roles anon y authenticated)
 DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en agentes_ruta" ON agentes_ruta;
 CREATE POLICY "Permitir todo a anonimos y autenticados en agentes_ruta" 
 ON agentes_ruta FOR ALL TO anon, authenticated 
@@ -76,7 +76,7 @@ GRANT ALL ON TABLE agentes_ruta TO anon, authenticated, service_role;
 -- 5. Registro de Datos Semilla para Pruebas
 INSERT INTO agentes_ruta (ruta_id, supervisor_id, username, nombre, telefono, email, estado, meta_diaria)
 VALUES 
-  ('route_1', 'admin', 'agente1', 'Juan Pérez', '+57 311 555 1234', 'juan.perez@credipai.com', 'en_ruta', 250000),
-  ('route_2', 'admin', 'agente2', 'María López', '+57 312 555 6789', 'maria.lopez@credipai.com', 'activo', 300000)
+  ('route_1', 'admin', 'agente1', 'Juan Pérez', '+57 311 555 1234', 'juan.perez@bulapay.com', 'en_ruta', 250000),
+  ('route_2', 'admin', 'agente2', 'María López', '+57 312 555 6789', 'maria.lopez@bulapay.com', 'activo', 300000)
 ON CONFLICT (username) DO UPDATE 
 SET ruta_id = EXCLUDED.ruta_id, supervisor_id = EXCLUDED.supervisor_id, updated_at = NOW();

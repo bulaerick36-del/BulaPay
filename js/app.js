@@ -1,4 +1,4 @@
-// Controlador Principal y Enrutador SPA de CrediPay PWA
+// Controlador Principal y Enrutador SPA de BulaPay PWA
 
 const app = {
   // Configuración del Enrutador SPA
@@ -62,13 +62,13 @@ const app = {
       }
 
       // 3. Fallback: Evaluar sesión de usuario para redirigir
-      let user = (window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function') ? window.CrediPayDB.getCurrentUser() : null;
+      let user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
 
-      if (!user && window.CrediPayDB && typeof window.CrediPayDB.getUserByUsername === 'function') {
+      if (!user && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
         try {
-          user = await window.CrediPayDB.getUserByUsername('admin');
+          user = await window.BulaPayDB.getUserByUsername('admin');
           if (user) {
-            window.CrediPayDB.setCurrentUser(user);
+            window.BulaPayDB.setCurrentUser(user);
             if (window.authModule && typeof window.authModule.updateNavBar === 'function') {
               window.authModule.updateNavBar(user);
             }
@@ -140,7 +140,7 @@ const app = {
 
       const devLinks = document.getElementById('demo-quick-links');
       if (devLinks) {
-        const currentUser = (window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function') ? window.CrediPayDB.getCurrentUser() : null;
+        const currentUser = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
         devLinks.style.display = currentUser ? 'none' : 'flex';
       }
 
@@ -153,7 +153,7 @@ const app = {
         route = 'auth';
       }
 
-      const user = (window.CrediPayDB && typeof window.CrediPayDB.getCurrentUser === 'function') ? window.CrediPayDB.getCurrentUser() : null;
+      const user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
       const curName = user ? String(user.username || '').toLowerCase() : '';
       const curDoc = user ? String(user.documentNumber || '').trim() : '';
       const curRole = user ? String(user.role || '').trim() : '';
@@ -261,7 +261,7 @@ const app = {
                            window.navigator.standalone === true;
 
       if (isStandalone) {
-        console.log('⚡ CrediPai ejecutándose en modo Standalone PWA.');
+        console.log('⚡ BulaPay ejecutándose en modo Standalone PWA.');
         return;
       }
 
@@ -284,7 +284,7 @@ const app = {
 
       // 5. App instalada exitosamente
       window.addEventListener('appinstalled', () => {
-        console.log('🎉 CrediPai PWA instalada en el dispositivo.');
+        console.log('🎉 BulaPay PWA instalada en el dispositivo.');
         const banner = document.getElementById('pwa-install-banner');
         if (banner) banner.remove();
         const installBtn = document.getElementById('btn-install-pwa');
@@ -300,14 +300,14 @@ const app = {
       banner.className = 'pwa-install-banner';
       banner.innerHTML = `
         <div class="pwa-banner-content">
-          <img src="./assets/icon-192.png" alt="CrediPai Logo" class="pwa-banner-icon">
+          <img src="./assets/icon-192.png" alt="BulaPay Logo" class="pwa-banner-icon">
           <div class="pwa-banner-text">
-            <h4>Instalar CrediPai</h4>
+            <h4>Instalar BulaPay</h4>
             <p>Acceso directo a tu cartera y rutas</p>
           </div>
         </div>
         <div class="pwa-banner-actions">
-          <button id="btn-install-credipai-banner" class="btn-pwa-install">Instalar</button>
+          <button id="btn-install-bulapay-banner" class="btn-pwa-install">Instalar</button>
           <button id="btn-close-pwa-banner" class="btn-pwa-close">&times;</button>
         </div>
       `;
@@ -322,7 +322,7 @@ const app = {
         this.deferredPrompt = null;
       };
 
-      document.getElementById('btn-install-credipai-banner')?.addEventListener('click', triggerInstall);
+      document.getElementById('btn-install-bulapay-banner')?.addEventListener('click', triggerInstall);
       
       const mainBtn = document.getElementById('btn-install-pwa');
       if (mainBtn) {
@@ -344,7 +344,7 @@ const app = {
       banner.innerHTML = `
         <div class="ios-instruction-box">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h4 style="margin:0; color:#00f5d4; font-size:14px; font-weight:700;">📲 Instala CrediPai en tu iPhone</h4>
+            <h4 style="margin:0; color:#00f5d4; font-size:14px; font-weight:700;">📲 Instala BulaPay en tu iPhone</h4>
             <button id="btn-close-ios-banner" class="btn-pwa-close">&times;</button>
           </div>
           <p style="margin:6px 0 6px 0; color:#cbd5e1; font-size:12px;">Para instalar la App nativa:</p>
@@ -516,7 +516,7 @@ const app = {
 
       // 2. Actualizar Temporizador de Ruta (Sincronizado con Supabase en tiempo real)
       if (routeStatusElement) {
-        const currentUser = window.CrediPayDB.getCurrentUser();
+        const currentUser = window.BulaPayDB.getCurrentUser();
         
         if (currentUser && currentUser.role === 'Agente Independiente') {
           // Los Agentes Independientes no tienen indicador de ruta ni restricciones horarias
@@ -617,7 +617,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Utilidad Global: Mostrar Recibo Digital de Pago
-window.showCrediPayReceipt = function(payment, client) {
+window.showBulaPayReceipt = function(payment, client) {
   const modal = document.getElementById('receipt-modal');
   if (!modal) return;
 
@@ -756,22 +756,22 @@ window.applyDynamicTheme = function() {
   }
 };
 
-// Purga automática de Service Workers y comunicados obsoletos en caché local (credipay-v350)
+// Purga automática de Service Workers y comunicados obsoletos en caché local (bulapay-v350)
 window.forcePurgeAndRegisterServiceWorker = async function() {
   if (!('serviceWorker' in navigator)) return;
 
   try {
     const newReg = await navigator.serviceWorker.register('./sw.js');
-    console.log('✔ Service Worker CrediPai registrado con éxito. Scope:', newReg.scope);
+    console.log('✔ Service Worker BulaPay registrado con éxito. Scope:', newReg.scope);
 
     const pwaStatus = document.getElementById('pwa-status');
-    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (CrediPai)';
+    if (pwaStatus) pwaStatus.textContent = 'PWA Activa (BulaPay)';
   } catch (err) {
     console.error('❌ Error al registrar el Service Worker:', err);
   }
 };
 
-// Registro de Service Worker CrediPai PWA
+// Registro de Service Worker BulaPay PWA
 if ('serviceWorker' in navigator) {
   const triggerRegister = () => {
     window.forcePurgeAndRegisterServiceWorker();
@@ -784,4 +784,4 @@ if ('serviceWorker' in navigator) {
   }
 }
 
-// Fin de Controlador Principal CrediPay PWA
+// Fin de Controlador Principal BulaPay PWA

@@ -1,5 +1,5 @@
 -- =============================================================================
--- TABLA DE HISTORIAL DE SUSCRIPCIONES Y LÓGICA DE CICLOS CREDIPAY
+-- TABLA DE HISTORIAL DE SUSCRIPCIONES Y LÓGICA DE CICLOS BULAPAY
 -- =============================================================================
 
 -- 1. Asegurar columnas de ciclos en la tabla users

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credipai-cache-v1';
+const CACHE_NAME = 'bulapay-cache-v1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -19,7 +19,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Precargando activos de la app CrediPai');
+      console.log('[Service Worker] Precargando activos de la app BulaPay');
       return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
         console.warn('[Service Worker] Advertencia en precarga de assets:', err);
       });

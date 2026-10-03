@@ -14,7 +14,7 @@ const supervisorModule = {
 
   async getCachedUsers(forceRefresh = false) {
     if (!this.cachedUsers || forceRefresh) {
-      this.cachedUsers = await window.CrediPayDB.getUsers();
+      this.cachedUsers = await window.BulaPayDB.getUsers();
     }
     return this.cachedUsers;
   },
@@ -31,7 +31,7 @@ const supervisorModule = {
     this.kpiTotalCollected = document.getElementById('kpi-total-collected');
     this.kpiRouteProgress = document.getElementById('kpi-route-progress');
 
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     const isCommerce = currentUser && (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente');
 
     this.bindEvents();
@@ -126,7 +126,7 @@ const supervisorModule = {
           const passwordInput = group.querySelector('.route-agent-password').value;
 
           // Validar si el usuario ya existe
-          const existingUser = await window.CrediPayDB.getUserByUsername(usernameInput);
+          const existingUser = await window.BulaPayDB.getUserByUsername(usernameInput);
           if (existingUser) {
             alert(`❌ El nombre de usuario "${usernameInput}" ya está registrado.`);
             validationFailed = true;
@@ -143,7 +143,7 @@ const supervisorModule = {
 
         if (validationFailed || agentsData.length === 0) return;
 
-        const supervisorUser = window.CrediPayDB.getCurrentUser() || { username: 'admin' };
+        const supervisorUser = window.BulaPayDB.getCurrentUser() || { username: 'admin' };
         const routeId = 'route_' + Date.now();
 
         // 1. Crear la Ruta Logística PRIMERO (para que la FK en users sea válida)
@@ -162,7 +162,7 @@ const supervisorModule = {
         };
 
         try {
-          await window.CrediPayDB.saveRoute(newRoute);
+          await window.BulaPayDB.saveRoute(newRoute);
 
           // 2. Registrar cada agente en la base de datos SEGUNDO
           for (const agent of agentsData) {
@@ -176,7 +176,7 @@ const supervisorModule = {
               documentType: 'CC',
               documentNumber: agent.cedula
             };
-            await window.CrediPayDB.saveUser(newAgent);
+            await window.BulaPayDB.saveUser(newAgent);
           }
 
           alert(`✅ Ruta "${routeName}" creada con éxito.\n👤 Se registraron ${agentsData.length} agentes asignados.`);
@@ -225,14 +225,14 @@ const supervisorModule = {
 
     // Escuchar el evento de pago registrado en tiempo real
     if (this.handlePaymentRegistered) {
-      window.removeEventListener('credipay-payment-registered', this.handlePaymentRegistered);
+      window.removeEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
     }
     this.handlePaymentRegistered = async () => {
       await this.renderDashboard();
       await this.renderLiveFeed();
       await this.updateMapMarkers();
     };
-    window.addEventListener('credipay-payment-registered', this.handlePaymentRegistered);
+    window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
 
     // Calculadora en tiempo real para el valor de cuota en el registro de venta del comercio
     const salePriceInput = document.getElementById('sale-product-price');
@@ -376,7 +376,7 @@ const supervisorModule = {
     // Llenar datalist dinámicamente con los nombres de todas las rutas activas
     if (datalist) {
       datalist.innerHTML = '';
-      const routes = await window.CrediPayDB.getRoutes();
+      const routes = await window.BulaPayDB.getRoutes();
       routes.forEach(r => {
         const option = document.createElement('option');
         option.value = r.name;
@@ -395,7 +395,7 @@ const supervisorModule = {
     const filterText = routeFilterInput.value.trim().toLowerCase();
     const allUsers = await this.getCachedUsers();
     let agents = allUsers.filter(u => u.role === 'Agente de Ruta');
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
 
     if (filterText !== '') {
       agents = agents.filter(a => {
@@ -465,12 +465,12 @@ const supervisorModule = {
     title.textContent = `Detalles de Operación: ${agent.name}`;
 
     // Obtener clientes asignados a la ruta del agente
-    const allClients = await window.CrediPayDB.getClients();
+    const allClients = await window.BulaPayDB.getClients();
     const clients = allClients.filter(c => c.routeId === agent.routeId);
     clientsCountEl.textContent = `${clients.length} cliente(s)`;
 
     // Obtener capital y recaudo
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     const r = routes.find(rt => rt.id === agent.routeId);
     
     const capital = r ? r.capital : 0;
@@ -541,7 +541,7 @@ const supervisorModule = {
         return;
       }
 
-      const routes = await window.CrediPayDB.getRoutes();
+      const routes = await window.BulaPayDB.getRoutes();
       const route = routes.find(r => r.id === agent.routeId);
       const routeName = route ? route.name : 'Sin ruta asignada';
 
@@ -550,12 +550,12 @@ const supervisorModule = {
       }
 
       // Obtener todos los clientes de la ruta
-      const allClients = await window.CrediPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const clients = allClients.filter(c => c.routeId === agent.routeId);
 
       // Obtener todos los pagos de hoy
       const todayStr = new Date().toISOString().split('T')[0];
-      const allPayments = await window.CrediPayDB.getPayments();
+      const allPayments = await window.BulaPayDB.getPayments();
       const todayPayments = allPayments.filter(p => p.date === todayStr);
 
       listContainer.innerHTML = '';
@@ -639,7 +639,7 @@ const supervisorModule = {
     if (!ledgerContainer || !gridEl) return;
 
     try {
-      const client = await window.CrediPayDB.getClientByCedula(cedula);
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
       if (!client) return;
 
       const allUsers = await this.getCachedUsers();
@@ -649,7 +649,7 @@ const supervisorModule = {
       nameEl.textContent = client.name;
       metaEl.textContent = `Cédula: ${client.cedula} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
 
-      const payments = await window.CrediPayDB.getPaymentsByClient(cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
 
       gridEl.innerHTML = '';
       const totalSlots = client.installmentsCount;
@@ -681,7 +681,7 @@ const supervisorModule = {
             <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
           `;
           slotCard.addEventListener('click', () => {
-            window.showCrediPayReceipt(payment, client);
+            window.showBulaPayReceipt(payment, client);
           });
         } else {
           slotCard.innerHTML = `
@@ -728,7 +728,7 @@ const supervisorModule = {
     if (detailSection) detailSection.style.display = 'none';
 
     container.innerHTML = '';
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
 
     routes.forEach(route => {
       const item = document.createElement('div');
@@ -777,7 +777,7 @@ const supervisorModule = {
 
     if (!detailSection) return;
 
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     const route = routes.find(r => r.id === routeId);
     if (!route) return;
 
@@ -789,7 +789,7 @@ const supervisorModule = {
     remainingEl.textContent = `$${remaining.toLocaleString('es-CO')}`;
 
     // Simular un índice de mora en base a clientes de esa ruta
-    const allClients = await window.CrediPayDB.getClients();
+    const allClients = await window.BulaPayDB.getClients();
     const clients = allClients.filter(c => c.routeId === route.id);
     const redCount = clients.filter(c => c.risk === 'Rojo').length;
     const yellowCount = clients.filter(c => c.risk === 'Amarillo').length;
@@ -812,7 +812,7 @@ const supervisorModule = {
     if (!container) return;
 
     container.innerHTML = '';
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
 
     // Ordenar de mayor a menor recaudo
     const sortedRoutes = [...routes].sort((a, b) => Number(b.collected) - Number(a.collected));
@@ -865,7 +865,7 @@ const supervisorModule = {
     }
 
     routeSelect.innerHTML = `<option value="Todos">Todas las Rutas</option>`;
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     routes.forEach(r => {
       routeSelect.innerHTML += `<option value="${r.id}">${r.name}</option>`;
     });
@@ -875,9 +875,9 @@ const supervisorModule = {
 
   // METRICAS DE AUDITORIA FINANCIERA (HISTORICO Y DIARIO)
   async calculateAuditMetrics(selectedRouteId, selectedDate) {
-    const routes = await window.CrediPayDB.getRoutes();
-    const payments = await window.CrediPayDB.getPayments();
-    const clients = await window.CrediPayDB.getClients();
+    const routes = await window.BulaPayDB.getRoutes();
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
 
     const routeIds = selectedRouteId === 'Todos' 
       ? routes.map(r => r.id) 
@@ -960,7 +960,7 @@ const supervisorModule = {
     // Calcular métricas
     const metrics = await this.calculateAuditMetrics(selectedRouteId, selectedDate);
     const allUsers = await this.getCachedUsers();
-    const clients = await window.CrediPayDB.getClients();
+    const clients = await window.BulaPayDB.getClients();
 
     // Actualizar KPIs del modal
     const expectedEl = document.getElementById('modal-audit-kpi-expected');
@@ -1023,7 +1023,7 @@ const supervisorModule = {
       const endRange = new Date(startRange);
       endRange.setDate(endRange.getDate() + 1);
 
-      const allPayments = await window.CrediPayDB.getPayments();
+      const allPayments = await window.BulaPayDB.getPayments();
       const routePayments = allPayments.filter(p => {
         if (selectedRouteId !== 'Todos') {
           const client = clients.find(c => c.cedula === p.clientCedula);
@@ -1079,7 +1079,7 @@ const supervisorModule = {
 
     if (!ledgerContainer || !gridEl) return;
 
-    const client = await window.CrediPayDB.getClientByCedula(cedula);
+    const client = await window.BulaPayDB.getClientByCedula(cedula);
     if (!client) return;
 
     const allUsers = await this.getCachedUsers();
@@ -1089,7 +1089,7 @@ const supervisorModule = {
     nameEl.textContent = client.name;
     metaEl.textContent = `Cédula: ${client.cedula} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
 
-    const payments = await window.CrediPayDB.getPaymentsByClient(cedula);
+    const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
 
     gridEl.innerHTML = '';
     const totalSlots = client.installmentsCount;
@@ -1121,7 +1121,7 @@ const supervisorModule = {
           <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
         `;
         slotCard.addEventListener('click', () => {
-          window.showCrediPayReceipt(payment, client);
+          window.showBulaPayReceipt(payment, client);
         });
       } else {
         slotCard.innerHTML = `
@@ -1148,7 +1148,7 @@ const supervisorModule = {
     if (!filter) return;
 
     filter.innerHTML = `<option value="Todos">Todas las Rutas</option>`;
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
     routes.forEach(r => {
       filter.innerHTML += `<option value="${r.id}">${r.name}</option>`;
     });
@@ -1194,8 +1194,8 @@ const supervisorModule = {
     const filter = document.getElementById('map-route-filter');
     const selectedRouteId = filter ? filter.value : 'Todos';
 
-    const routes = await window.CrediPayDB.getRoutes();
-    const allUsers = await window.CrediPayDB.getUsers();
+    const routes = await window.BulaPayDB.getRoutes();
+    const allUsers = await window.BulaPayDB.getUsers();
 
     let activeRoutes = routes;
     if (selectedRouteId !== 'Todos') {
@@ -1348,9 +1348,9 @@ const supervisorModule = {
     feedContent.innerHTML = '';
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const payments = await window.CrediPayDB.getPayments();
-    const clients = await window.CrediPayDB.getClients();
-    const routes = await window.CrediPayDB.getRoutes();
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
+    const routes = await window.BulaPayDB.getRoutes();
 
     // Filtra los pagos de hoy
     const paymentsToday = payments
@@ -1402,10 +1402,10 @@ const supervisorModule = {
 
   // RENDERIZAR DASHBOARD KPIs Y TABLA
   async renderDashboard() {
-    const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
     
-    const infoVigencia = window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function' 
-      ? window.CrediPayDB.getDiasRestantes(currentUser) 
+    const infoVigencia = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' 
+      ? window.BulaPayDB.getDiasRestantes(currentUser) 
       : null;
     const badgeVigencia = infoVigencia 
       ? `<span style="margin-left: 0.75rem; background: ${infoVigencia.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; color: ${infoVigencia.dias <= 5 ? '#fca5a5' : '#38bdf8'}; border: 1px solid ${infoVigencia.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.35)'}; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.3rem;" title="Fecha de corte: ${infoVigencia.fechaCorteStr}">⏳ Vigencia: Faltan ${infoVigencia.dias} días</span>` 
@@ -1430,7 +1430,7 @@ const supervisorModule = {
       if (commerceMainSection) commerceMainSection.style.display = 'block';
       
       // Load commerce KPIs
-      const buyers = await window.CrediPayDB.getCommerceBuyers();
+      const buyers = await window.BulaPayDB.getCommerceBuyers();
       
       const kpiCommerceClients = document.getElementById('kpi-commerce-clients');
       if (kpiCommerceClients) kpiCommerceClients.textContent = buyers.length;
@@ -1454,14 +1454,14 @@ const supervisorModule = {
     }
 
     if (this.welcomeMsg) {
-      this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'CrediPai'}</span> ${badgeVigencia}`;
+      this.welcomeMsg.innerHTML = `Bienvenido, <span style="color: var(--text-primary); font-weight: 600;">${currentUser.name}</span> <span style="color: var(--text-muted); font-size: 0.8rem;">| ${currentUser.company || 'BulaPay'}</span> ${badgeVigencia}`;
     }
 
     // Actualizar Tarjeta Superior de GESTIÓN DE CAJA GLOBAL con totales consolidados de Supabase
     this.renderCajaGlobalData().catch(e => console.warn("Aviso en renderCajaGlobalData:", e));
 
-    const routes = await window.CrediPayDB.getRoutes();
-    const allUsers = await window.CrediPayDB.getUsers();
+    const routes = await window.BulaPayDB.getRoutes();
+    const allUsers = await window.BulaPayDB.getUsers();
     const agents = allUsers.filter(u => u.role === 'Agente de Ruta');
 
     // Calcular KPIs
@@ -1469,8 +1469,8 @@ const supervisorModule = {
     const totalCapital = routes.reduce((acc, curr) => acc + Number(curr.capital), 0);
     
     // Calcular Progreso de Cobros con la nueva fórmula dinámica y en tiempo real (con corte a las 6:00 AM)
-    const payments = await window.CrediPayDB.getPayments();
-    const clients = await window.CrediPayDB.getClients();
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
     const routeIds = new Set(routes.map(r => r.id));
 
     // Determinar la ventana de 24 horas para "Hoy" (con corte a las 6:00 AM)
@@ -1525,8 +1525,8 @@ const supervisorModule = {
       return;
     }
 
-    const payments = await window.CrediPayDB.getPayments();
-    const clients = await window.CrediPayDB.getClients();
+    const payments = await window.BulaPayDB.getPayments();
+    const clients = await window.BulaPayDB.getClients();
 
     // Group routes by name
     const groupedRoutes = {};
@@ -1601,7 +1601,7 @@ const supervisorModule = {
       let displayStatus = gRoute.status;
 
       // Validar si la ruta está abierta actualmente
-      const isOpen = window.CrediPayDB.isRouteOpen({
+      const isOpen = window.BulaPayDB.isRouteOpen({
         opening_time: gRoute.openingTime,
         closing_time: gRoute.closingTime,
         workingDays: gRoute.workingDays,
@@ -1678,7 +1678,7 @@ const supervisorModule = {
         has_extension: hasExtension
       };
 
-      const isOpen = window.CrediPayDB.isRouteOpen(routeMock, now);
+      const isOpen = window.BulaPayDB.isRouteOpen(routeMock, now);
 
       let formattedTime = '00:00 horas';
       let bgColor = 'rgba(239, 68, 68, 0.1)';
@@ -1755,7 +1755,7 @@ const supervisorModule = {
     const lbl2 = document.getElementById('map-lbl-agent-2');
 
     // Obtener rutas activas
-    const routes = await window.CrediPayDB.getRoutes();
+    const routes = await window.BulaPayDB.getRoutes();
 
     if (routes.length === 0) {
       if (agent1) agent1.style.display = 'none';
@@ -1862,8 +1862,8 @@ const supervisorModule = {
     `;
 
     try {
-      const routes = await window.CrediPayDB.getRoutes();
-      const allUsers = await window.CrediPayDB.getUsers();
+      const routes = await window.BulaPayDB.getRoutes();
+      const allUsers = await window.BulaPayDB.getUsers();
       
       listContainer.innerHTML = '';
       if (routes.length === 0) {
@@ -1940,12 +1940,12 @@ const supervisorModule = {
   },
 
   async handleDeleteRoute(routeId, routeName) {
-    if (!(await window.showCrediConfirm(`¿Está seguro de que desea eliminar la ruta "${routeName}"?\nEsta acción también eliminará permanentemente todos los agentes de ruta asociados y desvinculará a los clientes de esta ruta.`, "CrediPai"))) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea eliminar la ruta "${routeName}"?\nEsta acción también eliminará permanentemente todos los agentes de ruta asociados y desvinculará a los clientes de esta ruta.`, "BulaPay"))) {
       return;
     }
 
     try {
-      await window.CrediPayDB.deleteRoute(routeId);
+      await window.BulaPayDB.deleteRoute(routeId);
       alert(`✅ Ruta "${routeName}" eliminada con éxito.`);
       await this.renderDashboard();
       await this.renderManageRoutesList();
@@ -1973,7 +1973,7 @@ const supervisorModule = {
     `;
 
     try {
-      const route = await window.CrediPayDB.getRouteById(routeId);
+      const route = await window.BulaPayDB.getRouteById(routeId);
       if (!route) {
         alert('❌ No se encontró la ruta especificada.');
         this.closeEditRouteModal();
@@ -2034,12 +2034,12 @@ const supervisorModule = {
   },
 
   async removeAgentFromRoute(username, routeId) {
-    if (!(await window.showCrediConfirm(`¿Está seguro de que desea desvincular y eliminar al agente "${username}" de esta ruta?`, "CrediPai"))) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea desvincular y eliminar al agente "${username}" de esta ruta?`, "BulaPay"))) {
       return;
     }
 
     try {
-      await window.CrediPayDB.deleteUser(username);
+      await window.BulaPayDB.deleteUser(username);
       
       // Sincronizar campos concatenados en la tabla routes
       const allUsers = await this.getCachedUsers(true); // Force refresh cache!
@@ -2048,7 +2048,7 @@ const supervisorModule = {
       const usernames = remainingAgents.map(a => a.username).join(', ');
       const names = remainingAgents.map(a => a.name).join(', ');
       
-      await window.CrediPayDB.updateRouteAgents(routeId, usernames, names);
+      await window.BulaPayDB.updateRouteAgents(routeId, usernames, names);
       
       // Actualizar modal, listado de rutas y dashboard
       await this.openEditRouteModal(routeId);
@@ -2080,13 +2080,13 @@ const supervisorModule = {
 
     try {
       // Validar si el usuario ya existe
-      const existingUser = await window.CrediPayDB.getUserByUsername(username);
+      const existingUser = await window.BulaPayDB.getUserByUsername(username);
       if (existingUser) {
         alert(`❌ El nombre de usuario "${username}" ya está registrado.`);
         return;
       }
 
-      const supervisorUser = window.CrediPayDB.getCurrentUser() || { username: 'admin' };
+      const supervisorUser = window.BulaPayDB.getCurrentUser() || { username: 'admin' };
       
       // Guardar agente
       const newAgent = {
@@ -2100,7 +2100,7 @@ const supervisorModule = {
         documentNumber: cedula
       };
 
-      await window.CrediPayDB.saveUser(newAgent);
+      await window.BulaPayDB.saveUser(newAgent);
 
       // Sincronizar campos concatenados en la tabla routes
       const allUsers = await this.getCachedUsers(true); // Force refresh cache!
@@ -2109,7 +2109,7 @@ const supervisorModule = {
       const usernames = allRouteAgents.map(a => a.username).join(', ');
       const names = allRouteAgents.map(a => a.name).join(', ');
 
-      await window.CrediPayDB.updateRouteAgents(routeId, usernames, names);
+      await window.BulaPayDB.updateRouteAgents(routeId, usernames, names);
 
       alert(`✅ Agente "${name}" registrado y asignado con éxito.`);
       
@@ -2135,7 +2135,7 @@ const supervisorModule = {
     modal.classList.add('active');
     
     try {
-      const routes = await window.CrediPayDB.getRoutes();
+      const routes = await window.BulaPayDB.getRoutes();
       
       let openingTime = '06:00';
       let closingTime = '18:00';
@@ -2146,7 +2146,7 @@ const supervisorModule = {
         if (routes[0].workingDays) {
           workingDays = routes[0].workingDays;
         } else {
-          const supId = window.CrediPayDB.getSupervisorId();
+          const supId = window.BulaPayDB.getSupervisorId();
           const localVal = localStorage.getItem(`workingDays_${supId}`);
           if (localVal) workingDays = localVal;
         }
@@ -2281,7 +2281,7 @@ const supervisorModule = {
     this.endDay = endDay;
     
     try {
-      await window.CrediPayDB.updateRoutesSchedule(openingTime, closingTime, startDay, endDay);
+      await window.BulaPayDB.updateRoutesSchedule(openingTime, closingTime, startDay, endDay);
       alert("Horario guardado correctamente");
       
       // Forzar actualización inmediata del reloj si el agente comparte sesión
@@ -2298,10 +2298,10 @@ const supervisorModule = {
   
   async toggleExtension(routeId, currentStatus) {
     try {
-      await window.CrediPayDB.toggleRouteExtension(routeId, !currentStatus);
+      await window.BulaPayDB.toggleRouteExtension(routeId, !currentStatus);
       
       // Recargar lista del modal
-      const routes = await window.CrediPayDB.getRoutes();
+      const routes = await window.BulaPayDB.getRoutes();
       this.renderScheduleExtensions(routes);
       
       // Forzar actualización inmediata del reloj si el agente comparte sesión
@@ -2385,7 +2385,7 @@ const supervisorModule = {
     const email = document.getElementById('sale-client-email').value.trim();
     const phone = document.getElementById('sale-client-phone').value.trim();
     
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     const supervisor_id = currentUser ? currentUser.username : 'admin';
     
     const newClient = {
@@ -2408,13 +2408,13 @@ const supervisorModule = {
     };
     
     try {
-      const existing = await window.CrediPayDB.getCommerceBuyerByCedula(cedula);
+      const existing = await window.BulaPayDB.getCommerceBuyerByCedula(cedula);
       if (existing) {
         alert('Error: Esta cédula ya está registrada como comprador en el comercio.');
         return;
       }
       
-      await window.CrediPayDB.saveCommerceBuyer(newClient);
+      await window.BulaPayDB.saveCommerceBuyer(newClient);
       
       const cardLink = `${window.location.origin}${window.location.pathname}?view=customer&id=${cedula}`;
       
@@ -2456,7 +2456,7 @@ const supervisorModule = {
     }
     
     try {
-      const client = await window.CrediPayDB.getClientByCedula(cedula);
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
       const resultsDiv = document.getElementById('commerce-payment-results');
       const placeholderDiv = document.getElementById('commerce-payment-placeholder');
       
@@ -2494,7 +2494,7 @@ const supervisorModule = {
     const totalInstallments = client.installmentsCount || 5;
     const installmentAmount = client.installmentAmount || 100000;
     
-    const payments = await window.CrediPayDB.getPaymentsByClient(client.cedula);
+    const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
     const paidInstallments = payments
       .filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0)
       .map(p => p.installmentNumber);
@@ -2526,7 +2526,7 @@ const supervisorModule = {
         cell.innerHTML = `Cuota ${i}<br>$${Number(installmentAmount).toLocaleString('es-CO')}`;
         
         cell.addEventListener('click', async () => {
-          if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPai")) {
+          if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "BulaPay")) {
             await this.payCommerceInstallment(client, i, installmentAmount);
             await this.renderCommerceLedgerGrid(client, container);
           }
@@ -2537,7 +2537,7 @@ const supervisorModule = {
   },
   
   async payCommerceInstallment(client, installmentNumber, amount) {
-    const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Comercio' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Comercio' };
     
     try {
       const newPayment = {
@@ -2549,7 +2549,7 @@ const supervisorModule = {
         status: 'Pagado'
       };
       
-      await window.CrediPayDB.addPayment(newPayment);
+      await window.BulaPayDB.addPayment(newPayment);
       
       this.sendPaymentReceiptEmail(client.email, {
         clientName: client.name,
@@ -2558,9 +2558,9 @@ const supervisorModule = {
         amount: amount
       });
       
-      const updatedClient = await window.CrediPayDB.getClientByCedula(client.cedula);
+      const updatedClient = await window.BulaPayDB.getClientByCedula(client.cedula);
       if (updatedClient && Number(updatedClient.outstanding) <= 0) {
-        await window.CrediPayDB.checkAndHandleLastInstallment(updatedClient, async () => {
+        await window.BulaPayDB.checkAndHandleLastInstallment(updatedClient, async () => {
           await this.renderDashboard();
         });
       } else {
@@ -2599,7 +2599,7 @@ const supervisorModule = {
 
       let clients = [];
       try {
-        clients = await window.CrediPayDB.getCommerceBuyers();
+        clients = await window.BulaPayDB.getCommerceBuyers();
       } catch (dbErr) {
         console.error("Error al obtener clientes de comercio:", dbErr);
         clients = [];
@@ -2699,9 +2699,9 @@ const supervisorModule = {
       let client = null;
       let payments = [];
       try {
-        client = await window.CrediPayDB.getCommerceBuyerByCedula(cedula);
+        client = await window.BulaPayDB.getCommerceBuyerByCedula(cedula);
         if (client) {
-          payments = await window.CrediPayDB.getPaymentsByClient(cedula);
+          payments = await window.BulaPayDB.getPaymentsByClient(cedula);
         }
       } catch (dbErr) {
         console.error("Error al obtener datos del cliente:", dbErr);
@@ -2795,9 +2795,9 @@ const supervisorModule = {
       let client = null;
       let payments = [];
       try {
-        client = await window.CrediPayDB.getClientByCedula(cedula);
+        client = await window.BulaPayDB.getClientByCedula(cedula);
         if (client) {
-          payments = await window.CrediPayDB.getPaymentsByClient(client.cedula);
+          payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
         }
       } catch (dbErr) {
         console.error("Error al obtener datos para el cartón digital:", dbErr);
@@ -2870,7 +2870,7 @@ const supervisorModule = {
           
           cell.addEventListener('click', async () => {
             try {
-              if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "CrediPai")) {
+              if (await window.showCrediConfirm(`¿Marcar cuota ${i} como PAGADA por $${Number(installmentAmount).toLocaleString('es-CO')}?`, "BulaPay")) {
                 await this.payCommerceInstallment(client, i, installmentAmount);
                 // Recargar el cartón
                 await this.showCommerceClientCarton(client.cedula);
@@ -2910,9 +2910,9 @@ const supervisorModule = {
       let client = null;
       let payments = [];
       try {
-        client = await window.CrediPayDB.getCommerceBuyerByCedula(cedula);
+        client = await window.BulaPayDB.getCommerceBuyerByCedula(cedula);
         if (client) {
-          payments = await window.CrediPayDB.getPaymentsByClient(cedula);
+          payments = await window.BulaPayDB.getPaymentsByClient(cedula);
         }
       } catch (dbErr) {
         console.error("Error al obtener detalles del producto:", dbErr);
@@ -3058,9 +3058,9 @@ const supervisorModule = {
     }
     try {
       const todayStr = this.getLocalDateString();
-      const allPayments = await window.CrediPayDB.getPayments();
+      const allPayments = await window.BulaPayDB.getPayments();
       
-      const allClients = await window.CrediPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const blacklistedCedulas = new Set(
         allClients
           .filter(c => {
@@ -3140,8 +3140,8 @@ const supervisorModule = {
     listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">Cargando rutas y agentes...</p>';
 
     try {
-      const routes = await window.CrediPayDB.getRoutes();
-      const agents = await window.CrediPayDB.getCachedUsers();
+      const routes = await window.BulaPayDB.getRoutes();
+      const agents = await window.BulaPayDB.getCachedUsers();
       
       listContainer.innerHTML = '';
       
@@ -3230,9 +3230,9 @@ const supervisorModule = {
 
     try {
       const todayStr = this.getLocalDateString();
-      const allPayments = await window.CrediPayDB.getPayments();
+      const allPayments = await window.BulaPayDB.getPayments();
       
-      const allClients = await window.CrediPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const blacklistedCedulas = new Set(
         allClients
           .filter(c => {
@@ -3381,8 +3381,8 @@ const supervisorModule = {
   },
 
   async renderCajaGlobalData() {
-    const currentUser = window.CrediPayDB.getCurrentUser() || { username: 'admin' };
-    const data = await window.CrediPayDB.getSupervisorCajaGlobalData(currentUser.username);
+    const currentUser = window.BulaPayDB.getCurrentUser() || { username: 'admin' };
+    const data = await window.BulaPayDB.getSupervisorCajaGlobalData(currentUser.username);
 
     // Guardar datos en la instancia para modales interactivos
     this.cajaGlobalCacheData = data;
@@ -3425,14 +3425,14 @@ const supervisorModule = {
       });
 
       if (formValues) {
-        await window.CrediPayDB.injectSupervisorCapital(formValues.amount, formValues.notes);
+        await window.BulaPayDB.injectSupervisorCapital(formValues.amount, formValues.notes);
         await this.renderCajaGlobalData();
         Swal.fire('✅ ¡Éxito!', `Se agregaron $${formValues.amount.toLocaleString('es-CO')} a la Caja Global en Supabase.`, 'success');
       }
     } else {
       const amountStr = prompt("Ingresa el monto a agregar a la Caja Global ($):");
       if (amountStr && Number(amountStr) > 0) {
-        await window.CrediPayDB.injectSupervisorCapital(Number(amountStr), 'Inyección manual supervisor');
+        await window.BulaPayDB.injectSupervisorCapital(Number(amountStr), 'Inyección manual supervisor');
         await this.renderCajaGlobalData();
         alert("🟢 Inyección registrada con éxito.");
       }
@@ -3465,14 +3465,14 @@ const supervisorModule = {
       });
 
       if (formValues) {
-        await window.CrediPayDB.recordSupervisorCashWithdrawal(formValues.amount, formValues.notes);
+        await window.BulaPayDB.recordSupervisorCashWithdrawal(formValues.amount, formValues.notes);
         await this.renderCajaGlobalData();
         Swal.fire('🔴 Salida Registrada', `Se dedujeron $${formValues.amount.toLocaleString('es-CO')} de la Caja Global en Supabase.`, 'info');
       }
     } else {
       const amountStr = prompt("Ingresa el monto a sacar de la Caja Global ($):");
       if (amountStr && Number(amountStr) > 0) {
-        await window.CrediPayDB.recordSupervisorCashWithdrawal(Number(amountStr), 'Salida manual supervisor');
+        await window.BulaPayDB.recordSupervisorCashWithdrawal(Number(amountStr), 'Salida manual supervisor');
         await this.renderCajaGlobalData();
         alert("🔴 Salida registrada con éxito.");
       }
@@ -3480,7 +3480,7 @@ const supervisorModule = {
   },
 
   async openSupervisorCashSummaryModal() {
-    const data = this.cajaGlobalCacheData || await window.CrediPayDB.getSupervisorCajaGlobalData();
+    const data = this.cajaGlobalCacheData || await window.BulaPayDB.getSupervisorCajaGlobalData();
     if (window.Swal) {
       Swal.fire({
         title: '📊 Cierre y Cuadre de Caja Global',
@@ -3502,7 +3502,7 @@ const supervisorModule = {
   },
 
   async openSupervisorPatrimonioModal() {
-    const data = this.cajaGlobalCacheData || await window.CrediPayDB.getSupervisorCajaGlobalData();
+    const data = this.cajaGlobalCacheData || await window.BulaPayDB.getSupervisorCajaGlobalData();
     if (window.Swal) {
       Swal.fire({
         title: '🏛️ Patrimonio Real del Negocio',
@@ -3527,7 +3527,7 @@ const supervisorModule = {
   },
 
   async openSupervisorBlacklistModal() {
-    const data = this.cajaGlobalCacheData || await window.CrediPayDB.getSupervisorCajaGlobalData();
+    const data = this.cajaGlobalCacheData || await window.BulaPayDB.getSupervisorCajaGlobalData();
     const lista = data.listaNegra || [];
 
     if (window.Swal) {
@@ -3566,7 +3566,7 @@ const supervisorModule = {
       return;
     }
 
-    await window.CrediPayDB.injectSupervisorCapital(val, notesInput ? notesInput.value : '');
+    await window.BulaPayDB.injectSupervisorCapital(val, notesInput ? notesInput.value : '');
     if (amountInput) amountInput.value = '';
     if (notesInput) notesInput.value = '';
     alert(`✅ Inyección de $${val.toLocaleString('es-CO')} registrada con éxito en Supabase.`);
@@ -3584,7 +3584,7 @@ const supervisorModule = {
       return;
     }
 
-    await window.CrediPayDB.recordSupervisorCashWithdrawal(val, notesInput ? notesInput.value : '');
+    await window.BulaPayDB.recordSupervisorCashWithdrawal(val, notesInput ? notesInput.value : '');
     if (amountInput) amountInput.value = '';
     if (notesInput) notesInput.value = '';
     alert(`🔴 Salida de $${val.toLocaleString('es-CO')} registrada con éxito en Supabase.`);
@@ -3615,7 +3615,7 @@ const supervisorModule = {
       this.operatingTimeInterval = null;
     }
     if (this.handlePaymentRegistered) {
-      window.removeEventListener('credipay-payment-registered', this.handlePaymentRegistered);
+      window.removeEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
       this.handlePaymentRegistered = null;
     }
     if (this.mapInstance) {

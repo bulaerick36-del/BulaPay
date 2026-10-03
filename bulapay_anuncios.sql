@@ -1,5 +1,5 @@
 -- =============================================================================
--- SCRIPT DE BASE DE DATOS UNIFICADA Y SUPABASE STORAGE - CREDIPAY ANUNCIOS
+-- SCRIPT DE BASE DE DATOS UNIFICADA Y SUPABASE STORAGE - BULAPAY ANUNCIOS
 -- =============================================================================
 
 -- 1. Crear / actualizar la tabla única de anuncios publicitarios: bulapay_anuncios

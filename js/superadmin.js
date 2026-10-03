@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(eliminarBotonesSobrantes, 1500);
 });
 
-// Módulo de Superadministrador Maestro de CrediPay
+// Módulo de Superadministrador Maestro de BulaPay
 
 const superadminModule = {
   activeTab: 'users', // 'users' | 'contracts' | 'advances' | 'support' | 'ads'
@@ -53,7 +53,7 @@ const superadminModule = {
     }
 
     // Buscar en sesión actual de usuario
-    const currentUser = window.CrediPayDB ? window.CrediPayDB.getCurrentUser() : null;
+    const currentUser = window.BulaPayDB ? window.BulaPayDB.getCurrentUser() : null;
     if (currentUser) {
       const curName = String(currentUser.username || '').toLowerCase();
       const curDoc = String(currentUser.documentNumber || '').trim();
@@ -179,8 +179,8 @@ const superadminModule = {
     // 4. Cargar usuarios (con fallback seguro ante cualquier error)
     let users = [];
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getAllUsers === 'function') {
-        users = await window.CrediPayDB.getAllUsers();
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAllUsers === 'function') {
+        users = await window.BulaPayDB.getAllUsers();
       }
     } catch (e) {
       console.warn("Fallo al obtener usuarios Supabase:", e);
@@ -190,7 +190,7 @@ const superadminModule = {
         users = this.getFallbackUsers();
       } catch(e) {
         users = [
-          { username: 'admin', name: 'Administrador General', role: 'Usuario Supervisor', phone: '3000000000', email: 'admin@credipay.com', documentType: 'CC', documentNumber: '1121338578' }
+          { username: 'admin', name: 'Administrador General', role: 'Usuario Supervisor', phone: '3000000000', email: 'admin@bulapay.com', documentType: 'CC', documentNumber: '1121338578' }
         ];
       }
     }
@@ -224,7 +224,7 @@ const superadminModule = {
             </td>
             <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle;">
               ${(() => {
-                const diasInfo = window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function' ? window.CrediPayDB.getDiasRestantes(u) : { dias: 0, fechaCorteStr: 'N/A' };
+                const diasInfo = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' ? window.BulaPayDB.getDiasRestantes(u) : { dias: 0, fechaCorteStr: 'N/A' };
                 const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
                 return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
                   ${btnHtml}
@@ -592,8 +592,8 @@ const superadminModule = {
 
       let allUsers = [];
       try {
-        if (window.CrediPayDB && typeof window.CrediPayDB.getAllUsers === 'function') {
-          allUsers = await window.CrediPayDB.getAllUsers();
+        if (window.BulaPayDB && typeof window.BulaPayDB.getAllUsers === 'function') {
+          allUsers = await window.BulaPayDB.getAllUsers();
         }
       } catch (e) {
         console.error('Error de Supabase al cargar usuarios:', e);
@@ -765,8 +765,8 @@ const superadminModule = {
               ${(() => {
                 let diasInfo = { dias: 0, fechaCorteStr: 'N/A' };
                 try {
-                  if (window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function') {
-                    diasInfo = window.CrediPayDB.getDiasRestantes(u);
+                  if (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function') {
+                    diasInfo = window.BulaPayDB.getDiasRestantes(u);
                   }
                 } catch(eD) {}
                 const btnHtml = u.bloqueado_por_mora === true ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
@@ -796,14 +796,14 @@ const superadminModule = {
   async openResetPwdModal(username) {
     let user = null;
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getUserByUsername === 'function') {
-        user = await window.CrediPayDB.getUserByUsername(username);
+      if (window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+        user = await window.BulaPayDB.getUserByUsername(username);
       }
     } catch(e) {}
 
     if (!user) {
       try {
-        const all = (await window.CrediPayDB.getAllUsers()) || [];
+        const all = (await window.BulaPayDB.getAllUsers()) || [];
         user = all.find(u => String(u.username).toLowerCase() === String(username).toLowerCase() || String(u.documentNumber) === String(username));
       } catch(e) {}
     }
@@ -812,17 +812,17 @@ const superadminModule = {
     const docNum = user ? (user.documentNumber || user.username || username) : username;
     const defaultPwd = 'credi56';
 
-    const newPwdInput = await window.showCrediPrompt(`🔑 Restablecer Contraseña para el usuario "${displayName}" (Cédula: ${docNum}):\n\nConfirma o ingresa la clave asignada:`, defaultPwd, "CrediPai");
+    const newPwdInput = await window.showCrediPrompt(`🔑 Restablecer Contraseña para el usuario "${displayName}" (Cédula: ${docNum}):\n\nConfirma o ingresa la clave asignada:`, defaultPwd, "BulaPay");
     if (newPwdInput === null) return;
 
     const assignedPassword = newPwdInput.trim() || defaultPwd;
 
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.updateUserPassword === 'function') {
-        await window.CrediPayDB.updateUserPassword(username, assignedPassword);
+      if (window.BulaPayDB && typeof window.BulaPayDB.updateUserPassword === 'function') {
+        await window.BulaPayDB.updateUserPassword(username, assignedPassword);
       }
-      if (window.CrediPayDB && typeof window.CrediPayDB.resetUserPasswordDirectly === 'function') {
-        await window.CrediPayDB.resetUserPasswordDirectly(docNum || username, assignedPassword);
+      if (window.BulaPayDB && typeof window.BulaPayDB.resetUserPasswordDirectly === 'function') {
+        await window.BulaPayDB.resetUserPasswordDirectly(docNum || username, assignedPassword);
       }
 
       alert(`🎉 Contraseña restablecida exitosamente a: ${assignedPassword}\n\n👤 Usuario: ${displayName}\n💳 Cédula: ${docNum}`);
@@ -837,9 +837,9 @@ const superadminModule = {
   },
 
   async openEditUserModal(username) {
-    let user = await window.CrediPayDB.getUserByUsername(username);
+    let user = await window.BulaPayDB.getUserByUsername(username);
     if (!user) {
-      const all = await window.CrediPayDB.getAllUsers();
+      const all = await window.BulaPayDB.getAllUsers();
       user = (all || []).find(u => u.username === username || u.documentNumber === username);
     }
     if (!user) {
@@ -908,7 +908,7 @@ const superadminModule = {
         const corteVal = document.getElementById('edit-sa-corte').value;
 
         try {
-          await window.CrediPayDB.updateUserProfile(targetUsername, {
+          await window.BulaPayDB.updateUserProfile(targetUsername, {
             name: nameVal,
             role: roleVal,
             phone: phoneVal,
@@ -918,8 +918,8 @@ const superadminModule = {
 
           // Si se editó a 'erick26' o al usuario actual en sesión, actualizar de inmediato permisos y rol
           if (targetUsername === 'erick26' || targetUsername === '1121338578') {
-            await window.CrediPayDB.updateUserProfile('erick26', { role: roleVal });
-            await window.CrediPayDB.updateUserProfile('1121338578', { role: roleVal });
+            await window.BulaPayDB.updateUserProfile('erick26', { role: roleVal });
+            await window.BulaPayDB.updateUserProfile('1121338578', { role: roleVal });
           }
 
           alert(`✅ Usuario "${targetUsername}" actualizado exitosamente en Supabase.\nNuevo rol: ${roleVal}`);
@@ -959,7 +959,7 @@ const superadminModule = {
       </div>
     `;
 
-    const allUsers = await window.CrediPayDB.getAllUsers() || this.getFallbackUsers();
+    const allUsers = await window.BulaPayDB.getAllUsers() || this.getFallbackUsers();
     this.renderContractsTable(allUsers);
     
     document.getElementById('sa-contracts-search').oninput = (e) => this.searchContractByDoc(e.target.value, allUsers);
@@ -980,7 +980,7 @@ const superadminModule = {
       </tr></thead><tbody>`;
       
     users.forEach(u => {
-      const hash = u.hash_firma_digital || `CREDIPAI-SIG-${u.username.toUpperCase()}-STAMP`;
+      const hash = u.hash_firma_digital || `BULAPAY-SIG-${u.username.toUpperCase()}-STAMP`;
       const doc = u.documentNumber || 'N/A';
       html += `
         <tr>
@@ -1081,12 +1081,12 @@ const superadminModule = {
     let allClients = [];
 
     try {
-      if (window.CrediPayDB) {
-        if (typeof window.CrediPayDB.getAllUsers === 'function') allUsers = await window.CrediPayDB.getAllUsers();
-        if (typeof window.CrediPayDB.getAllRoutes === 'function') allRoutes = await window.CrediPayDB.getAllRoutes();
-        if (typeof window.CrediPayDB.getPayments === 'function') allPayments = await window.CrediPayDB.getPayments();
-        if (typeof window.CrediPayDB.getAllCartones === 'function') allCartones = await window.CrediPayDB.getAllCartones();
-        if (typeof window.CrediPayDB.getClients === 'function') allClients = await window.CrediPayDB.getClients();
+      if (window.BulaPayDB) {
+        if (typeof window.BulaPayDB.getAllUsers === 'function') allUsers = await window.BulaPayDB.getAllUsers();
+        if (typeof window.BulaPayDB.getAllRoutes === 'function') allRoutes = await window.BulaPayDB.getAllRoutes();
+        if (typeof window.BulaPayDB.getPayments === 'function') allPayments = await window.BulaPayDB.getPayments();
+        if (typeof window.BulaPayDB.getAllCartones === 'function') allCartones = await window.BulaPayDB.getAllCartones();
+        if (typeof window.BulaPayDB.getClients === 'function') allClients = await window.BulaPayDB.getClients();
       }
     } catch(e) {
       console.warn("Fallo al obtener datos desde Supabase para avances:", e);
@@ -1219,23 +1219,23 @@ const superadminModule = {
         }
       }
 
-      // CONSULTAR CAJA Y CARTERA/INTERESES REALES DESDE SUPABASE VIA CrediPayDB PASANDO EL USUARIO SELECCIONADO
+      // CONSULTAR CAJA Y CARTERA/INTERESES REALES DESDE SUPABASE VIA BulaPayDB PASANDO EL USUARIO SELECCIONADO
       let rawCaja = 0;
       let rawCartera = 0;
       let rawIntereses = 0;
 
-      if (window.CrediPayDB) {
-        if (typeof window.CrediPayDB.getLiquidCash === 'function') {
+      if (window.BulaPayDB) {
+        if (typeof window.BulaPayDB.getLiquidCash === 'function') {
           try {
-            const resCaja = await window.CrediPayDB.getLiquidCash(targetRouteId, found);
+            const resCaja = await window.BulaPayDB.getLiquidCash(targetRouteId, found);
             rawCaja = Number(resCaja) || 0;
           } catch (e) {
             console.error("Error consultando getLiquidCash en updateAdvancesChart:", e);
           }
         }
-        if (typeof window.CrediPayDB.getDashboardFinancialMetrics === 'function') {
+        if (typeof window.BulaPayDB.getDashboardFinancialMetrics === 'function') {
           try {
-            const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(targetRouteId, found);
+            const metrics = await window.BulaPayDB.getDashboardFinancialMetrics(targetRouteId, found);
             if (metrics) {
               rawCartera = Number(metrics.carteraEnCalle) || 0;
               rawIntereses = Number(metrics.interesesActivos) || 0;
@@ -1582,7 +1582,7 @@ const superadminModule = {
   },
 
   async openChangeSuperadminPwdModal() {
-    const currentPwd = await window.showCrediPrompt('🔐 Ingresa la contraseña actual de Superadministrador:', '', "CrediPai");
+    const currentPwd = await window.showCrediPrompt('🔐 Ingresa la contraseña actual de Superadministrador:', '', "BulaPay");
     if (currentPwd === null) return;
 
     if (currentPwd !== this.getSuperadminPassword()) {
@@ -1590,7 +1590,7 @@ const superadminModule = {
       return;
     }
 
-    const newPwd = await window.showCrediPrompt('🔑 Ingresa la NUEVA contraseña para Superadministrador:', '', "CrediPai");
+    const newPwd = await window.showCrediPrompt('🔑 Ingresa la NUEVA contraseña para Superadministrador:', '', "BulaPay");
     if (!newPwd || newPwd.trim() === '') {
       alert('⚠️ La contraseña no puede estar vacía.');
       return;
@@ -1601,7 +1601,7 @@ const superadminModule = {
   },
 
   getSupportEmail() {
-    return localStorage.getItem('credi_support_email') || 'soporte.credipai.oficial@gmail.com';
+    return localStorage.getItem('credi_support_email') || 'soporte.bulapay.oficial@gmail.com';
   },
 
   saveSupportEmail() {
@@ -1700,11 +1700,11 @@ const superadminModule = {
 
     let dbTickets = [];
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getSupportTickets === 'function') {
-        dbTickets = await window.CrediPayDB.getSupportTickets();
+      if (window.BulaPayDB && typeof window.BulaPayDB.getSupportTickets === 'function') {
+        dbTickets = await window.BulaPayDB.getSupportTickets();
       }
     } catch(e) {
-      console.warn("Fallo cargando tickets de soporte de CrediPayDB:", e);
+      console.warn("Fallo cargando tickets de soporte de BulaPayDB:", e);
     }
 
     let localTickets = [];
@@ -1770,7 +1770,7 @@ const superadminModule = {
 
       const cleanWa = wa ? wa.replace(/[^0-9]/g, '') : '';
       const waNumber = cleanWa ? (cleanWa.startsWith('57') ? cleanWa : '57' + cleanWa) : '';
-      const waMessage = `Hola ${t.name || 'Usuario'}, te saludamos de Soporte CrediPai.`;
+      const waMessage = `Hola ${t.name || 'Usuario'}, te saludamos de Soporte BulaPay.`;
       const waLinkUrl = waNumber ? `https://wa.me/${waNumber}?text=${encodeURIComponent(waMessage)}` : '#';
 
       const waLinkHtml = wa
@@ -1879,11 +1879,11 @@ const superadminModule = {
       console.warn("Fallo actualizando ticket en localStorage:", e);
     }
 
-    if (window.CrediPayDB && typeof window.CrediPayDB.updateSupportTicketStatus === 'function') {
+    if (window.BulaPayDB && typeof window.BulaPayDB.updateSupportTicketStatus === 'function') {
       try {
-        await window.CrediPayDB.updateSupportTicketStatus(id, newStatus);
+        await window.BulaPayDB.updateSupportTicketStatus(id, newStatus);
       } catch(e) {
-        console.warn("Fallo actualizando ticket en CrediPayDB:", e);
+        console.warn("Fallo actualizando ticket en BulaPayDB:", e);
       }
     }
 
@@ -1891,7 +1891,7 @@ const superadminModule = {
   },
 
   async deleteTicket(id) {
-    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este registro de soporte?', "CrediPai"))) return;
+    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este registro de soporte?', "BulaPay"))) return;
 
     try {
       const raw = localStorage.getItem('credi_support_tickets') || localStorage.getItem('credi_local_tickets') || '[]';
@@ -1903,11 +1903,11 @@ const superadminModule = {
       console.warn("Fallo eliminando ticket en localStorage:", e);
     }
 
-    if (window.CrediPayDB && typeof window.CrediPayDB.deleteSupportTicket === 'function') {
+    if (window.BulaPayDB && typeof window.BulaPayDB.deleteSupportTicket === 'function') {
       try {
-        await window.CrediPayDB.deleteSupportTicket(id);
+        await window.BulaPayDB.deleteSupportTicket(id);
       } catch(e) {
-        console.warn("Fallo eliminando ticket en CrediPayDB:", e);
+        console.warn("Fallo eliminando ticket en BulaPayDB:", e);
       }
     }
 
@@ -1917,9 +1917,9 @@ const superadminModule = {
   async checkPendingNotifications() {
     try {
       let dbTickets = [];
-      if (window.CrediPayDB && typeof window.CrediPayDB.getSupportTickets === 'function') {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getSupportTickets === 'function') {
         try {
-          dbTickets = await window.CrediPayDB.getSupportTickets();
+          dbTickets = await window.BulaPayDB.getSupportTickets();
         } catch(e) {}
       }
 
@@ -1967,7 +1967,7 @@ const superadminModule = {
     }, 4000);
   },
 
-  // Módulo de Gestión de Anuncios y Publicidad (credipay-v339)
+  // Módulo de Gestión de Anuncios y Publicidad (bulapay-v339)
   async renderAdsTab(container) {
     if (!container) return;
 
@@ -2276,8 +2276,8 @@ const superadminModule = {
 
     let supabase = null;
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.initSupabase === 'function') {
-        supabase = await window.CrediPayDB.initSupabase();
+      if (window.BulaPayDB && typeof window.BulaPayDB.initSupabase === 'function') {
+        supabase = await window.BulaPayDB.initSupabase();
       }
     } catch(e) {}
 
@@ -2436,7 +2436,7 @@ const superadminModule = {
     }
 
     try {
-      await window.CrediPayDB.saveNotificacion({
+      await window.BulaPayDB.saveNotificacion({
         titulo: title,
         categoria: category,
         mensaje: message
@@ -2460,8 +2460,8 @@ const superadminModule = {
     if (!container) return;
 
     try {
-      const notifs = (window.CrediPayDB && typeof window.CrediPayDB.getNotificaciones === 'function')
-        ? await window.CrediPayDB.getNotificaciones()
+      const notifs = (window.BulaPayDB && typeof window.BulaPayDB.getNotificaciones === 'function')
+        ? await window.BulaPayDB.getNotificaciones()
         : [];
 
       if (!notifs || notifs.length === 0) {
@@ -2519,10 +2519,10 @@ const superadminModule = {
   },
 
   async deleteNotificacion(notifId) {
-    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este comunicado gerencial?', "CrediPai"))) return;
+    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este comunicado gerencial?', "BulaPay"))) return;
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.deleteNotificacion === 'function') {
-        await window.CrediPayDB.deleteNotificacion(notifId);
+      if (window.BulaPayDB && typeof window.BulaPayDB.deleteNotificacion === 'function') {
+        await window.BulaPayDB.deleteNotificacion(notifId);
       }
       await this.loadNotificacionesList();
       if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
@@ -2576,7 +2576,7 @@ const superadminModule = {
     try {
       let ads = [];
       try {
-        ads = await window.CrediPayDB.getAnnouncements();
+        ads = await window.BulaPayDB.getAnnouncements();
       } catch(errAds) {
         console.warn("Excepción al cargar anuncios en superadmin:", errAds);
         ads = [];
@@ -2711,7 +2711,7 @@ const superadminModule = {
 
   async toggleAdStatus(adId, active) {
     try {
-      await window.CrediPayDB.toggleAnnouncementStatus(adId, active);
+      await window.BulaPayDB.toggleAnnouncementStatus(adId, active);
       await this.loadAdsList();
     } catch(e) {
       console.error("Error cambiando estado del anuncio:", e);
@@ -2719,9 +2719,9 @@ const superadminModule = {
   },
 
   async deleteAd(adId) {
-    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este anuncio publicitario?', "CrediPai"))) return;
+    if (!(await window.showCrediConfirm('¿Estás seguro de eliminar este anuncio publicitario?', "BulaPay"))) return;
     try {
-      await window.CrediPayDB.deleteAnnouncement(adId);
+      await window.BulaPayDB.deleteAnnouncement(adId);
       await this.loadAdsList();
     } catch(e) {
       console.error("Error eliminando anuncio:", e);
@@ -2729,7 +2729,7 @@ const superadminModule = {
   },
 
   // -------------------------------------------------------------
-  // MÓDULO ANALÍTICO DE ANUNCIOS ACTIVOS / EN LÍNEA (credipay-v353)
+  // MÓDULO ANALÍTICO DE ANUNCIOS ACTIVOS / EN LÍNEA (bulapay-v353)
   // -------------------------------------------------------------
   async openAdsAnalyticsModal() {
     const modal = document.getElementById('modal-ads-analytics');
@@ -2757,7 +2757,7 @@ const superadminModule = {
     try {
       let ads = [];
       try {
-        ads = await window.CrediPayDB.getAnnouncements();
+        ads = await window.BulaPayDB.getAnnouncements();
       } catch(err) {
         console.warn("Error consultando anuncios para analíticas:", err);
         ads = [];
@@ -2949,11 +2949,11 @@ const superadminModule = {
     const confirmMsg = `¿Confirma cambiar el estado del usuario "${username}"?\n\nAcción: ${actionText}\n\n` +
       (targetStatus ? 'El usuario quedará impedido de iniciar sesión de forma inmediata.' : 'El usuario podrá volver a ingresar normalmente a la aplicación.');
 
-    if (!(await window.showCrediConfirm(confirmMsg, "CrediPai"))) return;
+    if (!(await window.showCrediConfirm(confirmMsg, "BulaPay"))) return;
 
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.toggleUserBloqueoMora === 'function') {
-        await window.CrediPayDB.toggleUserBloqueoMora(username, targetStatus);
+      if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+        await window.BulaPayDB.toggleUserBloqueoMora(username, targetStatus);
       }
       alert(`🎉 Estado actualizado con éxito.\n\n👤 Usuario: ${username}\nNuevo Estado: ${targetStatus ? '🔴 Suspendido por Mora' : '🟢 Activo'}`);
       if (typeof this.renderCurrentTab === 'function') {
@@ -3003,8 +3003,8 @@ const superadminModule = {
 
     let progs = [];
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getProgramacionCobros === 'function') {
-        progs = await window.CrediPayDB.getProgramacionCobros();
+      if (window.BulaPayDB && typeof window.BulaPayDB.getProgramacionCobros === 'function') {
+        progs = await window.BulaPayDB.getProgramacionCobros();
       }
     } catch(e) {}
 
@@ -3050,7 +3050,7 @@ const superadminModule = {
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 1rem; margin-bottom: 1.25rem;">
           <div>
-            <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-weight: 800; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 9999px; text-transform: uppercase;">🔔 MÓDULO DE NOTIFICACIONES Y CAMPANITA CREDIPAY</span>
+            <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-weight: 800; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 9999px; text-transform: uppercase;">🔔 MÓDULO DE NOTIFICACIONES Y CAMPANITA BULAPAY</span>
             <h3 style="font-size: 1.35rem; font-weight: 900; color: #ffffff; margin-top: 0.4rem; margin-bottom: 0.15rem; display: flex; align-items: center; gap: 0.5rem;">
               <span>📅 Programación de Mensajes de Cobro Preventivo</span>
             </h3>
@@ -3132,7 +3132,7 @@ const superadminModule = {
     }
 
     try {
-      await window.CrediPayDB.saveProgramacionCobro({
+      await window.BulaPayDB.saveProgramacionCobro({
         id: `prog_${dias}d`,
         dias_previos: parseInt(dias),
         titulo: titulo,
@@ -3148,10 +3148,10 @@ const superadminModule = {
   },
 
   async cargarPlantillaProgresivaCobros() {
-    if (!(await window.showCrediConfirm('¿Confirma cargar la cadena progresiva estándar de recordatorios de cobro (5 a 1 días)?', 'CrediPai'))) return;
+    if (!(await window.showCrediConfirm('¿Confirma cargar la cadena progresiva estándar de recordatorios de cobro (5 a 1 días)?', 'BulaPay'))) return;
 
     const plantillas = [
-      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio CrediPai. Realice su pago a tiempo para evitar suspensiones.', activo: true },
+      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio BulaPay. Realice su pago a tiempo para evitar suspensiones.', activo: true },
       { id: 'prog_4d', dias_previos: 4, titulo: '⚠️ Recordatorio Preventivo - 4 Días', mensaje: 'Faltan 4 días para el corte de su suscripción. Por favor efectúe el pago para mantener sus rutas y cobros activos.', activo: true },
       { id: 'prog_3d', dias_previos: 3, titulo: '🚨 Advertencia Preventiva - 3 Días', mensaje: 'Atención: Solo restan 3 días antes de la suspensión del servicio por impago. Evite la interrupción de su acceso.', activo: true },
       { id: 'prog_2d', dias_previos: 2, titulo: '🔥 URGENTE: Corte Próximo - 2 Días', mensaje: 'Faltan 2 días para el bloqueo por mora de su cuenta. Por favor reporte su pago inmediatamente a administración.', activo: true },
@@ -3160,7 +3160,7 @@ const superadminModule = {
 
     try {
       for (const p of plantillas) {
-        await window.CrediPayDB.saveProgramacionCobro(p);
+        await window.BulaPayDB.saveProgramacionCobro(p);
       }
       alert('🎉 Cadena progresiva de 5 días de cobro preventivo cargada con éxito.');
       await this.renderProgramarCobroModalContent();
@@ -3171,20 +3171,20 @@ const superadminModule = {
 
   async toggleCobroActivo(id, currentlyActive) {
     try {
-      const progs = await window.CrediPayDB.getProgramacionCobros();
+      const progs = await window.BulaPayDB.getProgramacionCobros();
       const item = progs.find(p => p.id === id);
       if (item) {
         item.activo = !currentlyActive;
-        await window.CrediPayDB.saveProgramacionCobro(item);
+        await window.BulaPayDB.saveProgramacionCobro(item);
         await this.renderProgramarCobroModalContent();
       }
     } catch(e) {}
   },
 
   async eliminarCobroProgramado(id) {
-    if (!(await window.showCrediConfirm('¿Confirma eliminar este recordatorio programado?', "CrediPai"))) return;
+    if (!(await window.showCrediConfirm('¿Confirma eliminar este recordatorio programado?', "BulaPay"))) return;
     try {
-      await window.CrediPayDB.deleteProgramacionCobro(id);
+      await window.BulaPayDB.deleteProgramacionCobro(id);
       await this.renderProgramarCobroModalContent();
     } catch(e) {}
   },
@@ -3206,8 +3206,8 @@ const superadminModule = {
 
     let allUsers = [];
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getAllUsers === 'function') {
-        allUsers = await window.CrediPayDB.getAllUsers();
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAllUsers === 'function') {
+        allUsers = await window.BulaPayDB.getAllUsers();
       }
     } catch(e) {}
     if (!allUsers || allUsers.length === 0) {
@@ -3244,8 +3244,8 @@ const superadminModule = {
     }
 
     const isBlocked = matchedUser.bloqueado_por_mora === true;
-    const diasInfo = window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function' 
-      ? window.CrediPayDB.getDiasRestantes(matchedUser) 
+    const diasInfo = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' 
+      ? window.BulaPayDB.getDiasRestantes(matchedUser) 
       : { dias: 0, fechaCorteStr: 'N/A' };
 
     container.style.display = 'block';
@@ -3314,10 +3314,10 @@ const superadminModule = {
     const inputEl = document.getElementById('sa-quick-cedula-input') || document.getElementById('sa-modal-cedula-input');
     const currentQuery = (inputEl && inputEl.value ? inputEl.value.trim() : '') || username;
 
-    if (!(await window.showCrediConfirm(`¿Confirma SUSPENDER Y BLOQUEAR inmediatamente el acceso del usuario "${username}" en Supabase?`, "CrediPai"))) return;
+    if (!(await window.showCrediConfirm(`¿Confirma SUSPENDER Y BLOQUEAR inmediatamente el acceso del usuario "${username}" en Supabase?`, "BulaPay"))) return;
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.toggleUserBloqueoMora === 'function') {
-        await window.CrediPayDB.toggleUserBloqueoMora(username, true);
+      if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+        await window.BulaPayDB.toggleUserBloqueoMora(username, true);
       }
       alert(`🔴 Acceso Suspendido con Éxito\n\nEl usuario "${username}" ha sido bloqueado por mora en Supabase.`);
       await this.buscarUsuarioPorCedulaDirecto(currentQuery, containerId);
@@ -3332,10 +3332,10 @@ const superadminModule = {
     const inputEl = document.getElementById('sa-quick-cedula-input') || document.getElementById('sa-modal-cedula-input');
     const currentQuery = (inputEl && inputEl.value ? inputEl.value.trim() : '') || username;
 
-    if (!(await window.showCrediConfirm(`¿Confirma LIBERAR Y REACTIVAR el servicio de inmediato para el usuario "${username}"?`, "CrediPai"))) return;
+    if (!(await window.showCrediConfirm(`¿Confirma LIBERAR Y REACTIVAR el servicio de inmediato para el usuario "${username}"?`, "BulaPay"))) return;
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.toggleUserBloqueoMora === 'function') {
-        await window.CrediPayDB.toggleUserBloqueoMora(username, false);
+      if (window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+        await window.BulaPayDB.toggleUserBloqueoMora(username, false);
       }
       alert(`🟢 Servicio Liberado con Éxito\n\nEl usuario "${username}" ha sido reactivado en Supabase y puede acceder normalmente.`);
       await this.buscarUsuarioPorCedulaDirecto(currentQuery, containerId);
@@ -3463,12 +3463,12 @@ const superadminModule = {
     let cuentas = [];
     let waNumber = '3044191522';
     try {
-      if (window.CrediPayDB) {
-        if (typeof window.CrediPayDB.getCuentas === 'function') {
-          cuentas = await window.CrediPayDB.getCuentas();
+      if (window.BulaPayDB) {
+        if (typeof window.BulaPayDB.getCuentas === 'function') {
+          cuentas = await window.BulaPayDB.getCuentas();
         }
-        if (typeof window.CrediPayDB.getWhatsAppRecaudo === 'function') {
-          waNumber = await window.CrediPayDB.getWhatsAppRecaudo();
+        if (typeof window.BulaPayDB.getWhatsAppRecaudo === 'function') {
+          waNumber = await window.BulaPayDB.getWhatsAppRecaudo();
         }
       }
     } catch(err) {
@@ -3530,7 +3530,7 @@ const superadminModule = {
         <!-- Cabecera -->
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.85rem;">
           <h3 style="margin: 0; color: #34d399; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
-            <span>🏦</span> Cuentas de Recaudo CrediPay
+            <span>🏦</span> Cuentas de Recaudo BulaPay
           </h3>
           <button onclick="document.getElementById('modal-cuentas-recaudo-sa').style.display='none'" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-weight: bold;">✕</button>
         </div>
@@ -3577,7 +3577,7 @@ const superadminModule = {
             </div>
             <div>
               <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 0.2rem;">Nombre Titular:</label>
-              <input id="sa-input-cuenta-titular" type="text" placeholder="Ej: CrediPay S.A.S." style="width: 100%; background: #0b132b; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">
+              <input id="sa-input-cuenta-titular" type="text" placeholder="Ej: BulaPay S.A.S." style="width: 100%; background: #0b132b; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.8rem;">
             </div>
           </div>
 
@@ -3619,7 +3619,7 @@ const superadminModule = {
     }
 
     try {
-      const res = await window.CrediPayDB.saveWhatsAppRecaudo(val);
+      const res = await window.BulaPayDB.saveWhatsAppRecaudo(val);
       if (res && res.success !== false) {
         if (typeof Swal !== 'undefined') {
           Swal.fire({ icon: 'success', title: '¡WhatsApp Guardado!', text: `Los comprobantes serán enviados a: +57 ${res.valor}`, timer: 2000, showConfirmButton: false, background: '#0f172a', color: '#fff' });
@@ -3655,7 +3655,7 @@ const superadminModule = {
     }
 
     try {
-      const res = await window.CrediPayDB.saveCuenta({
+      const res = await window.BulaPayDB.saveCuenta({
         banco,
         tipo_cuenta: tipo,
         numero_cuenta: numero,
@@ -3683,7 +3683,7 @@ const superadminModule = {
   async deleteCuentaRecaudo(id) {
     let confirmDel = true;
     if (typeof window.showCrediConfirm === 'function') {
-      confirmDel = await window.showCrediConfirm('¿Estás seguro de eliminar esta cuenta de recaudo?', "CrediPai");
+      confirmDel = await window.showCrediConfirm('¿Estás seguro de eliminar esta cuenta de recaudo?', "BulaPay");
     } else if (typeof Swal !== 'undefined') {
       const res = await Swal.fire({ title: '¿Eliminar cuenta?', text: 'Esta acción no se puede deshacer.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Sí, eliminar', background: '#0f172a', color: '#fff' });
       confirmDel = res.isConfirmed;
@@ -3691,7 +3691,7 @@ const superadminModule = {
     if (!confirmDel) return;
 
     try {
-      await window.CrediPayDB.deleteCuenta(id);
+      await window.BulaPayDB.deleteCuenta(id);
       if (typeof Swal !== 'undefined') {
         Swal.fire({ icon: 'success', title: 'Eliminada', text: 'La cuenta fue eliminada correctamente.', timer: 1500, showConfirmButton: false, background: '#0f172a', color: '#fff' });
       }
@@ -3709,8 +3709,8 @@ const superadminModule = {
 
     let user = null;
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getUserByUsername === 'function') {
-        user = await window.CrediPayDB.getUserByUsername(usernameTarget);
+      if (window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+        user = await window.BulaPayDB.getUserByUsername(usernameTarget);
       }
     } catch(err) {
       console.error("Error obteniendo datos del usuario para gestión de ciclo:", err);
@@ -3722,8 +3722,8 @@ const superadminModule = {
     }
 
     const cicloActual = Number(user.ciclo_actual || 1);
-    const diasInfo = (window.CrediPayDB && typeof window.CrediPayDB.getDiasRestantes === 'function')
-      ? window.CrediPayDB.getDiasRestantes(user)
+    const diasInfo = (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function')
+      ? window.BulaPayDB.getDiasRestantes(user)
       : { dias: 0, diasExactos: 0, fechaCorteStr: 'N/A', status: 'expirado' };
 
     // Progreso del ciclo (ej. Día 15 de 30)
@@ -3737,8 +3737,8 @@ const superadminModule = {
     // Obtener historial de ciclos anteriores
     let historial = [];
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getHistorialCiclos === 'function') {
-        historial = await window.CrediPayDB.getHistorialCiclos(usernameTarget);
+      if (window.BulaPayDB && typeof window.BulaPayDB.getHistorialCiclos === 'function') {
+        historial = await window.BulaPayDB.getHistorialCiclos(usernameTarget);
       }
     } catch(err) {
       console.warn("Error cargando historial de ciclos:", err);
@@ -3910,8 +3910,8 @@ const superadminModule = {
 
     let userObj = null;
     try {
-      if (window.CrediPayDB && typeof window.CrediPayDB.getUserByUsername === 'function') {
-        userObj = await window.CrediPayDB.getUserByUsername(usernameTarget);
+      if (window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+        userObj = await window.BulaPayDB.getUserByUsername(usernameTarget);
       }
     } catch(e) {}
 
@@ -3946,12 +3946,12 @@ const superadminModule = {
     }
 
     try {
-      if (!window.CrediPayDB || typeof window.CrediPayDB.renovarCicloManual !== 'function') {
+      if (!window.BulaPayDB || typeof window.BulaPayDB.renovarCicloManual !== 'function') {
         alert("Error: Módulo de base de datos no disponible.");
         return;
       }
 
-      const res = await window.CrediPayDB.renovarCicloManual(usernameTarget);
+      const res = await window.BulaPayDB.renovarCicloManual(usernameTarget);
       if (res && res.success) {
         if (typeof Swal !== 'undefined') {
           await Swal.fire({
@@ -3977,7 +3977,7 @@ const superadminModule = {
 
         // Re-renderizar lista de usuarios en el panel superadmin
         if (typeof this.renderUserTable === 'function') {
-          const users = typeof window.CrediPayDB.getUsers === 'function' ? await window.CrediPayDB.getUsers() : [];
+          const users = typeof window.BulaPayDB.getUsers === 'function' ? await window.BulaPayDB.getUsers() : [];
           this.renderUserTable(users);
         } else if (typeof this.openSuperadminModal === 'function') {
           this.openSuperadminModal();

@@ -233,7 +233,7 @@ const agentModule = {
   },
 
   bindEvents() {
-    window.addEventListener('credipay-payment-registered', async () => {
+    window.addEventListener('bulapay-payment-registered', async () => {
       await this.renderFinancialDashboard();
       await this.updateCashViews();
     });
@@ -288,8 +288,8 @@ const agentModule = {
         const client = this.currentClient;
 
         // Validación de Regla de Renovación (v85/v160)
-        const payments = await window.CrediPayDB.getPaymentsByClient(client.cedula);
-        const dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(client, payments);
+        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
         const canRenovar = this.canRenovarCarton(client, dailyStatusList);
 
         if (!canRenovar) {
@@ -337,11 +337,11 @@ const agentModule = {
         const saldoRealRemanente = Math.max(0, saldoTotalInicial - totalPagadoReal);
 
         const confirmMsg = `¿Estás seguro de liquidar para renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nSaldo real a refinanciar: $${saldoRealRemanente.toLocaleString('es-CO')}.\nEsto marcará las cuotas y liquidará el cartón sin alterar la caja.`;
-        if (!(await window.showCrediConfirm(confirmMsg, "CrediPai"))) return;
+        if (!(await window.showCrediConfirm(confirmMsg, "BulaPay"))) return;
 
         try {
           // Liquidar cartón anterior con estado 'liquidado_por_renovacion' y marcar cuotas restantes (v160)
-          await window.CrediPayDB.liquidateCredit({
+          await window.BulaPayDB.liquidateCredit({
             cedula: client.cedula,
             status: 'liquidado_por_renovacion',
             outstanding: 0,
@@ -403,7 +403,7 @@ const agentModule = {
             btn.textContent = 'Verificando...';
           }
 
-          const supabase = await window.CrediPayDB.initSupabase();
+          const supabase = await window.BulaPayDB.initSupabase();
 
           // 1. LECTURA EN TIEMPO REAL: Consultar obligatoriamente el cartón activo y cliente en la base de datos
           let cartonQuery = supabase.from('cartones').select('*');
@@ -482,7 +482,7 @@ const agentModule = {
             `Deuda Total a Lista Negra: $${saldoPendienteReal.toLocaleString('es-CO')}.\n` +
             `Esta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
 
-          if (!(await window.showCrediConfirm(confirmMsg, "CrediPai"))) {
+          if (!(await window.showCrediConfirm(confirmMsg, "BulaPay"))) {
             if (btn) {
               btn.disabled = false;
               btn.textContent = '⛔ Liquidar / Lista Negra';
@@ -562,7 +562,7 @@ const agentModule = {
 
           // Forzar recarga limpia del mapa de clientes en DB y de la UI
           console.log("🔄 [RECARGA INTERFAZ] Recargando cartones activos y métricas financieras...");
-          await window.CrediPayDB.loadActiveCredits();
+          await window.BulaPayDB.loadActiveCredits();
           await Promise.all([
             this.updateRouteTracking(),
             this.renderFinancialDashboard()
@@ -585,7 +585,7 @@ const agentModule = {
       this.btnLiquidarCarton.addEventListener('click', async () => {
         if (!this.currentClient) return;
 
-        if (!(await window.showCrediConfirm('¿Estás seguro de liquidar este cartón? Esta acción es irreversible.', "CrediPai"))) return;
+        if (!(await window.showCrediConfirm('¿Estás seguro de liquidar este cartón? Esta acción es irreversible.', "BulaPay"))) return;
 
         this.btnLiquidarCarton.disabled = true;
         this.btnLiquidarCarton.textContent = 'Liquidando...';
@@ -616,9 +616,9 @@ const agentModule = {
           const numeroCarton = client.numero_carton;
           const cedulaStr = String(client.cedula || '').trim();
 
-          const supabase = await window.CrediPayDB.initSupabase();
+          const supabase = await window.BulaPayDB.initSupabase();
           if (nuevoEstado === 'liquidado_perdida') {
-            await window.CrediPayDB.liquidateCredit({
+            await window.BulaPayDB.liquidateCredit({
               cedula: client.cedula,
               cartonId: cartonId,
               numeroCarton: numeroCarton,
@@ -631,7 +631,7 @@ const agentModule = {
             });
             if (error) console.error("Error al liquidar:", error);
           } else {
-            await window.CrediPayDB.liquidateCredit({
+            await window.BulaPayDB.liquidateCredit({
               cedula: client.cedula,
               cartonId: cartonId,
               numeroCarton: numeroCarton,
@@ -642,7 +642,7 @@ const agentModule = {
           }
 
           // Fuerza una recarga inmediata de la interfaz (loadActiveCredits() y resumen de caja v124)
-          await window.CrediPayDB.loadActiveCredits();
+          await window.BulaPayDB.loadActiveCredits();
 
           // Actualizar inmediatamente las métricas financieras del Dashboard de forma síncrona en vivo (v124)
           await Promise.all([
@@ -739,7 +739,7 @@ const agentModule = {
       resultsDiv.style.display = 'none';
       
       try {
-        const client = await window.CrediPayDB.getGlobalClientByCedula(cedula);
+        const client = await window.BulaPayDB.getGlobalClientByCedula(cedula);
         if (!client) {
           statusDiv.textContent = '❌ Cliente no encontrado.';
           return;
@@ -809,9 +809,9 @@ const agentModule = {
         this.selectedInstallments = [];
         if (this.btnProcessMassPayment) this.btnProcessMassPayment.style.display = 'none';
         if (this.currentClient) {
-          window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula).then(payments => {
-            const dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(this.currentClient, payments);
-            window.CrediPayDB.renderOverdueDaysList(this.cobroOverdueDaysList, dailyStatusList, (st) => this.handleCartonPayment(st), []);
+          window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula).then(payments => {
+            const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+            window.BulaPayDB.renderOverdueDaysList(this.cobroOverdueDaysList, dailyStatusList, (st) => this.handleCartonPayment(st), []);
           });
         }
       });
@@ -836,7 +836,7 @@ const agentModule = {
   },
 
   async updateAgentHeader() {
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
     const roleTag = document.getElementById('agent-role-tag');
@@ -880,7 +880,7 @@ const agentModule = {
       if (agentNameElement) agentNameElement.textContent = `Cobrador: ${currentUser.name}`;
       if (roleTag) roleTag.textContent = currentUser.role;
       
-      const routes = await window.CrediPayDB.getRoutes();
+      const routes = await window.BulaPayDB.getRoutes();
       const myRoute = routes.find(r => r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username));
       
       if (agentRouteElement) {
@@ -932,10 +932,10 @@ const agentModule = {
 
   async hydratePrivatePanel(currentUser) {
     try {
-      const dbUser = await window.CrediPayDB.getUserByUsername(currentUser.username);
+      const dbUser = await window.BulaPayDB.getUserByUsername(currentUser.username);
       if (dbUser) {
         currentUser = { ...currentUser, ...dbUser };
-        localStorage.setItem('credipay_user', JSON.stringify(currentUser));
+        localStorage.setItem('bulapay_user', JSON.stringify(currentUser));
       }
     } catch (e) {
       console.warn("Error sincronizando perfil desde DB:", e);
@@ -978,14 +978,14 @@ const agentModule = {
             zone: newAddress
           };
           
-          await window.CrediPayDB.updateUserProfile(currentUser.username, profileUpdates);
+          await window.BulaPayDB.updateUserProfile(currentUser.username, profileUpdates);
           
           currentUser.name = newName;
           currentUser.phone = newPhone;
           currentUser.email = newEmail;
           currentUser.address = newAddress;
           currentUser.direccion = newAddress;
-          localStorage.setItem('credipay_user', JSON.stringify(currentUser));
+          localStorage.setItem('bulapay_user', JSON.stringify(currentUser));
           
           // Actualizar la vista
           const agentNameElement = document.getElementById('agent-welcome-name');
@@ -1027,10 +1027,10 @@ const agentModule = {
         btnUpdatePassword.disabled = true;
         
         try {
-          await window.CrediPayDB.updateUserPassword(currentUser.username, newPass);
+          await window.BulaPayDB.updateUserPassword(currentUser.username, newPass);
           
           currentUser.password = newPass; 
-          localStorage.setItem('credipay_user', JSON.stringify(currentUser));
+          localStorage.setItem('bulapay_user', JSON.stringify(currentUser));
           
           alert('✅ ¡Contraseña actualizada correctamente!');
           if (inputCurrentPassword) inputCurrentPassword.value = '';
@@ -1066,7 +1066,7 @@ const agentModule = {
         }
         
         btnConfirmInject.onclick = async () => {
-          const currentUser = window.CrediPayDB.getCurrentUser();
+          const currentUser = window.BulaPayDB.getCurrentUser();
           const rawAmount = document.getElementById('inject-capital-amount').value.replace(/\./g, '');
           const amount = Math.round(parseFloat(rawAmount) || 0);
           
@@ -1079,7 +1079,7 @@ const agentModule = {
           btnConfirmInject.textContent = 'Procesando...';
           
           try {
-            await window.CrediPayDB.injectCapital(currentUser.routeId, currentUser.username || currentUser.id, amount);
+            await window.BulaPayDB.injectCapital(currentUser.routeId, currentUser.username || currentUser.id, amount);
             alert('✅ Capital inyectado exitosamente.');
             injectModal.style.display = 'none';
             document.getElementById('inject-capital-amount').value = '';
@@ -1088,13 +1088,13 @@ const agentModule = {
             if (typeof window.AgentV6 !== 'undefined' && window.AgentV6.renderFinancialDashboard) {
               await window.AgentV6.renderFinancialDashboard();
             } else {
-              const newCapital = await window.CrediPayDB.getRealBaseCapital(currentUser.routeId);
+              const newCapital = await window.BulaPayDB.getRealBaseCapital(currentUser.routeId);
               const capEl = document.getElementById('private-panel-capital');
               if (capEl) capEl.textContent = `$${newCapital.toLocaleString('es-CO')}`;
             }
 
             // Actualizar vistas de Caja en tiempo real para reflejar de inmediato el dinero inyectado (sin F5)
-            const { onHand } = await window.CrediPayDB.getEfectivoEnCajaDia();
+            const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
             const elAvailable = document.getElementById('cash-management-available');
             if (elAvailable) {
               elAvailable.textContent = `$${Math.abs(onHand).toLocaleString('es-CO')}`;
@@ -1158,7 +1158,7 @@ const agentModule = {
       if (movementAmount) movementAmount.value = '';
 
       try {
-        const data = await window.CrediPayDB.getEfectivoEnCajaDia() || {};
+        const data = await window.BulaPayDB.getEfectivoEnCajaDia() || {};
         const totalCollected = Number(data.totalCollected) || 0;
         const totalLent = Number(data.totalLent) || 0;
         const totalDiscounts = Number(data.totalDiscounts) || 0;
@@ -1292,7 +1292,7 @@ const agentModule = {
           return;
         }
         
-        const currentUser = window.CrediPayDB.getCurrentUser();
+        const currentUser = window.BulaPayDB.getCurrentUser();
         if (!currentUser) return;
 
         const movementType = window._currentCashMovementType || 'entrada';
@@ -1305,10 +1305,10 @@ const agentModule = {
         try {
           if (movementType === 'salida') {
             // REGLA ABSOLUTA DE RETIRO v180: Registrar retiro con monto negativo en capital_injections
-            await window.CrediPayDB.injectCapital(currentUser.routeId, agentId, amount, true);
+            await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount, true);
           } else {
             // REGLA DE INYECCIÓN v180: Registrar inyección de capital positivo en capital_injections
-            await window.CrediPayDB.injectCapital(currentUser.routeId, agentId, amount, false);
+            await window.BulaPayDB.injectCapital(currentUser.routeId, agentId, amount, false);
           }
 
           document.getElementById('cash-movement-amount').value = '';
@@ -1316,7 +1316,7 @@ const agentModule = {
           if (movementForm) movementForm.style.display = 'none';
 
           // REGLA CRÍTICA DE ORDEN DE EJECUCIÓN (v180): Actualizar la interfaz ANTES de mostrar el alert bloqueante
-          const { onHand } = await window.CrediPayDB.getEfectivoEnCajaDia();
+          const { onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
           const elOnHand = document.getElementById('private-cash-on-hand');
           if (elOnHand) {
             if (onHand < 0) {
@@ -1377,9 +1377,9 @@ const agentModule = {
         container.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Cargando morosos...</p>';
         
         try {
-          const currentUser = window.CrediPayDB.getCurrentUser();
+          const currentUser = window.BulaPayDB.getCurrentUser();
           const targetRouteId = currentUser ? currentUser.routeId : null;
-          const badClients = await window.CrediPayDB.getBlacklistedClients(targetRouteId);
+          const badClients = await window.BulaPayDB.getBlacklistedClients(targetRouteId);
           
           if (badClients.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: #10b981; font-weight: bold;">🎉 ¡Felicidades! No tienes clientes en Lista Negra.</p>';
@@ -1431,7 +1431,7 @@ const agentModule = {
               const debtVal = Number(btn.dataset.debt || 0);
               const cartonId = btn.dataset.cartonId;
 
-              const inputVal = await window.showCrediPrompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000", "CrediPai");
+              const inputVal = await window.showCrediPrompt(`Recibir pago para rehabilitar cliente (C.C. ${cedula}):`, debtVal > 0 ? debtVal : "120000", "BulaPay");
               if (!inputVal) return;
 
               const amountToPay = Number(inputVal);
@@ -1443,7 +1443,7 @@ const agentModule = {
               btn.disabled = true;
               btn.textContent = "⏳ Procesando...";
 
-              const success = await window.CrediPayDB.rehabilitateBlacklistedClient(cedula, amountToPay, cartonId);
+              const success = await window.BulaPayDB.rehabilitateBlacklistedClient(cedula, amountToPay, cartonId);
               if (success) {
                 // Refrescar la interfaz completamente (v146)
                 setTimeout(() => {
@@ -1544,7 +1544,7 @@ const agentModule = {
 
     try {
       const cedulaBuscada = String(cedula || '').trim();
-      const supabase = await window.CrediPayDB.initSupabase();
+      const supabase = await window.BulaPayDB.initSupabase();
 
       // 1. CONSULTA DIRECTA A SUPABASE DE CARTONES DEL CLIENTE (v152)
       let hasHistoricalLoss = false;
@@ -1587,7 +1587,7 @@ const agentModule = {
         .eq('cedula', cedulaBuscada)
         .maybeSingle();
 
-      const client = dbClient || (await window.CrediPayDB.getGlobalClientByCedula(cedulaBuscada));
+      const client = dbClient || (await window.BulaPayDB.getGlobalClientByCedula(cedulaBuscada));
       
       if (!client && !hasHistoricalLoss) {
         // Cliente NO existe: Ocultar resultados y mostrar error visual rojo
@@ -1622,8 +1622,8 @@ const agentModule = {
 
       // Flujo normal de evaluación para clientes sin antecedentes o con crédito nuevo limpio
       try {
-        const payments = await window.CrediPayDB.getPaymentsByClient(cedulaBuscada);
-        const dailyStatus = window.CrediPayDB.getDailyPaymentStatus(client, payments);
+        const payments = await window.BulaPayDB.getPaymentsByClient(cedulaBuscada);
+        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
         const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
         
         if (overdueCount >= 3) {
@@ -1653,7 +1653,7 @@ const agentModule = {
         let agentName = client?.agent_id || 'Desconocido';
         try {
           if (client?.agent_id) {
-            const agentUser = await window.CrediPayDB.getUserByUsername(client.agent_id);
+            const agentUser = await window.BulaPayDB.getUserByUsername(client.agent_id);
             if (agentUser) agentName = agentUser.name || agentUser.username;
           }
         } catch (e) {}
@@ -1721,7 +1721,7 @@ const agentModule = {
     if (!cedula) return;
     
     // Obtener los pagos reales desde Supabase
-    const payments = await window.CrediPayDB.getPaymentsByClient(cedula);
+    const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
     
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
     const startDate = cartonDateStr ? new Date(cartonDateStr) : new Date();
@@ -1820,12 +1820,12 @@ const agentModule = {
   },
 
   async payInstallmentFromCard(installmentNumber, amount) {
-    const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
       // Validar si ya pagó hoy
       const todayStr = this.getLocalDateString();
-      const payments = await window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       if (payments.some(p => p.date === todayStr)) {
         alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
         return;
@@ -1848,11 +1848,11 @@ const agentModule = {
       };
 
       // Registrar el pago en Supabase y actualizar el saldo del cliente
-      const savedPayment = await window.CrediPayDB.addPayment(newPayment);
+      const savedPayment = await window.BulaPayDB.addPayment(newPayment);
 
       // Si el saldo recalculado llega a 0 o menos, forzar cambio explícito de estado a 'liquidado' en Supabase
       if (isFinalPayment) {
-        await window.CrediPayDB.liquidateCredit({
+        await window.BulaPayDB.liquidateCredit({
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
@@ -1865,10 +1865,10 @@ const agentModule = {
       this.captureAndSendLocation();
 
       // Mostrar recibo digital
-      window.showCrediPayReceipt(savedPayment, this.currentClient);
+      window.showBulaPayReceipt(savedPayment, this.currentClient);
 
       // Re-consultar los datos del cliente actualizados
-      let updatedClient = await window.CrediPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
@@ -1916,7 +1916,7 @@ const agentModule = {
       return;
     }
     
-    const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
     const todayStr = this.getLocalDateString();
     
     try {
@@ -1943,18 +1943,18 @@ const agentModule = {
           is_mass_payment: true,
           liquidado: tempRem <= 0
         };
-        lastPayment = await window.CrediPayDB.addPayment(newPayment);
+        lastPayment = await window.BulaPayDB.addPayment(newPayment);
       }
 
       const newBalance = Math.max(0, currentDebt - Math.round(totalAmount));
       const isFinalPayment = newBalance <= 0;
 
       // 2. Date Shifting (Corrimiento de Fechas) Estricto
-      await window.CrediPayDB.shiftPendingDates(this.currentClient.cedula);
+      await window.BulaPayDB.shiftPendingDates(this.currentClient.cedula);
 
       // Si el saldo llega a 0 o menos, forzar cambio explícito de estado a 'liquidado' en Supabase
       if (isFinalPayment) {
-        await window.CrediPayDB.liquidateCredit({
+        await window.BulaPayDB.liquidateCredit({
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
@@ -1973,7 +1973,7 @@ const agentModule = {
           amount: totalAmount, // Gran total
           installmentNumber: `Masivo (${this.selectedInstallments.length} cuotas)` 
         };
-        window.showCrediPayReceipt(fakePaymentForReceipt, this.currentClient);
+        window.showBulaPayReceipt(fakePaymentForReceipt, this.currentClient);
       }
 
       // Reset UI y Estados
@@ -1985,7 +1985,7 @@ const agentModule = {
       }
 
       // Re-consultar los datos del cliente actualizados
-      let updatedClient = await window.CrediPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
@@ -2128,7 +2128,7 @@ const agentModule = {
           }
           btnPayRehab.disabled = true;
           btnPayRehab.textContent = "⏳ Procesando pago...";
-          const success = await window.CrediPayDB.rehabilitateBlacklistedClient(client.cedula, targetAmount);
+          const success = await window.BulaPayDB.rehabilitateBlacklistedClient(client.cedula, targetAmount);
           if (success) {
             await agentModule.searchClient();
             await agentModule.renderFinancialDashboard();
@@ -2363,9 +2363,9 @@ const agentModule = {
     }
 
     try {
-      const client = await window.CrediPayDB.getClientByCedula(cedula);
+      const client = await window.BulaPayDB.getClientByCedula(cedula);
       if (!client) {
-        alert('❌ Cliente no registrado en el sistema CrediPay.');
+        alert('❌ Cliente no registrado en el sistema BulaPay.');
         if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
         if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
         if (this.searchError) this.searchError.style.display = 'none';
@@ -2416,15 +2416,15 @@ const agentModule = {
       // Preparar el Cartón Interactivo (Flujo B)
       if (this.cobroOverdueDaysList) {
         try {
-          const payments = await window.CrediPayDB.getPaymentsByClient(client, client.carton_id || client.id);
-          const dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(client, payments);
+          const payments = await window.BulaPayDB.getPaymentsByClient(client, client.carton_id || client.id);
+          const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
           const todayStr = this.getLocalDateString();
           this.hasPaidRecordToday = payments ? payments.some(p => p.date === todayStr && Number(p.amount) > 0 && String(p.status || '').trim().toLowerCase() !== 'no pago') : false;
           
           // Re-evaluar estado de los botones de pago, renovación y liquidación por mora
           this.updateCobroViewState(client, dailyStatusList);
 
-          window.CrediPayDB.renderOverdueDaysList(
+          window.BulaPayDB.renderOverdueDaysList(
             this.cobroOverdueDaysList, 
             dailyStatusList, 
             (status) => this.handleCartonPayment(status) // Callback interactivo solo aquí
@@ -2495,10 +2495,10 @@ const agentModule = {
 
     try {
       const amount = parseFloat(this.inputCobroAmount.value);
-      const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+      const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
-      const payments = await window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula);
-      const dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
       
       const todayStr = this.getLocalDateString();
       const firstPending = dailyStatusList.find(c => !c.hasPaid);
@@ -2539,11 +2539,11 @@ const agentModule = {
         liquidado: isFinalPayment
       };
 
-      await window.CrediPayDB.addPayment(newPayment);
+      await window.BulaPayDB.addPayment(newPayment);
 
       // Si el pago cancela el residuo / saldo pendiente, recalcular y cambiar estado explícitamente a 'liquidado' en Supabase
       if (isFinalPayment) {
-        await window.CrediPayDB.liquidateCredit({
+        await window.BulaPayDB.liquidateCredit({
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
@@ -2560,7 +2560,7 @@ const agentModule = {
         this.cobroInvoiceModal.style.display = 'none';
       }
 
-      let updatedClient = await window.CrediPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
@@ -2626,15 +2626,15 @@ const agentModule = {
         this.btnProcessMassPayment.style.display = 'none';
       }
       
-      const payments = await window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula);
-      const dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
       const selectedIds = this.selectedInstallments.map(i => i.number);
-      window.CrediPayDB.renderOverdueDaysList(this.cobroOverdueDaysList, dailyStatusList, (st) => this.handleCartonPayment(st), selectedIds);
+      window.BulaPayDB.renderOverdueDaysList(this.cobroOverdueDaysList, dailyStatusList, (st) => this.handleCartonPayment(st), selectedIds);
       return;
     }
     
-    const payments = await window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula);
-    const dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(this.currentClient, payments);
+    const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+    const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
     const firstPending = dailyStatusList.find(s => !s.hasPaid);
 
     const todayStr = this.getLocalDateString();
@@ -2655,7 +2655,7 @@ const agentModule = {
 
     // Confirmación nativa
     const dateLabel = status.dateStr.slice(5);
-    const isConfirmed = await window.showCrediConfirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`, "CrediPai");
+    const isConfirmed = await window.showCrediConfirm(`¿Marcar Día ${status.dayNumber} (${dateLabel}) como pagado?`, "BulaPay");
     if (!isConfirmed) return;
 
     // Regla de Seguridad 2: Descontar el valor de la cuota
@@ -2666,12 +2666,12 @@ const agentModule = {
       return;
     }
 
-    const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
-      const payments = await window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       
-      const dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
       const tieneAtrasos = dailyStatusList.some(s => s.isOverdue);
       const todayStr = this.getLocalDateString();
       
@@ -2696,10 +2696,10 @@ const agentModule = {
         liquidado: isFinalPayment
       };
 
-      await window.CrediPayDB.addPayment(newPayment);
+      await window.BulaPayDB.addPayment(newPayment);
 
       if (isFinalPayment) {
-        await window.CrediPayDB.liquidateCredit({
+        await window.BulaPayDB.liquidateCredit({
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
@@ -2710,7 +2710,7 @@ const agentModule = {
 
       this.captureAndSendLocation();
 
-      let updatedClient = await window.CrediPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
@@ -2761,7 +2761,7 @@ const agentModule = {
     const cedulaDetailStr = String(client.cedula || '').trim();
     let isLossRecordInDetail = false;
     try {
-      const supabaseDetail = await window.CrediPayDB.initSupabase();
+      const supabaseDetail = await window.BulaPayDB.initSupabase();
       const { data: cartonesMorosos } = await supabaseDetail
         .from('cartones')
         .select('*')
@@ -2784,8 +2784,8 @@ const agentModule = {
       client.risk = 'Rojo';
     } else {
       try {
-        const payments = await window.CrediPayDB.getPaymentsByClient(client.cedula);
-        dailyStatusList = window.CrediPayDB.getDailyPaymentStatus(client, payments);
+        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
         const overdueCount = dailyStatusList.filter(s => s.isOverdue).length;
         
         if (overdueCount >= 3) {
@@ -2832,12 +2832,12 @@ const agentModule = {
     // Renderizar Días de Mora en Detalles del Cliente
     const container = document.getElementById('client-overdue-days-list');
     if (container) {
-      window.CrediPayDB.renderOverdueDaysList(container, dailyStatusList);
+      window.BulaPayDB.renderOverdueDaysList(container, dailyStatusList);
     }
   },
 
   isRouteClosed() {
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser) return false;
     
     // El Agente Independiente está libre de restricciones (por rol o por crediRole en localStorage)
@@ -2873,10 +2873,10 @@ const agentModule = {
       return;
     }
 
-    const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
-      const payments = await window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       
       // Validar si ya pagó hoy
       const todayStr = this.getLocalDateString();
@@ -2902,10 +2902,10 @@ const agentModule = {
       };
 
       // Registrar en base de datos
-      const savedPayment = await window.CrediPayDB.addPayment(newPayment);
+      const savedPayment = await window.BulaPayDB.addPayment(newPayment);
 
       if (isFinalPayment) {
-        await window.CrediPayDB.liquidateCredit({
+        await window.BulaPayDB.liquidateCredit({
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
@@ -2918,10 +2918,10 @@ const agentModule = {
       this.captureAndSendLocation();
 
       // Desplegar recibo digital premium
-      window.showCrediPayReceipt(savedPayment, this.currentClient);
+      window.showBulaPayReceipt(savedPayment, this.currentClient);
 
       // Re-buscar el cliente para actualizar pantalla
-      let updatedClient = await window.CrediPayDB.getClientByCedula(this.currentClient.cedula);
+      let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
@@ -2960,14 +2960,14 @@ const agentModule = {
     }
     if (!this.currentClient) return;
 
-    if (!(await window.showCrediConfirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`, "CrediPai"))) {
+    if (!(await window.showCrediConfirm(`¿Está seguro de que desea registrar un No Pago para el cliente ${this.currentClient.name} el día de hoy?`, "BulaPay"))) {
       return;
     }
 
-    const currentUser = window.CrediPayDB.getCurrentUser() || { name: 'Juan Pérez' };
+    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
-      const payments = await window.CrediPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
       
       // Validar si ya pagó hoy
       const todayStr = this.getLocalDateString();
@@ -2986,16 +2986,16 @@ const agentModule = {
       };
 
       // Registrar en base de datos
-      const savedPayment = await window.CrediPayDB.addPayment(newPayment);
+      const savedPayment = await window.BulaPayDB.addPayment(newPayment);
 
       // Reportar ubicación
       this.captureAndSendLocation();
 
       // Desplegar recibo digital premium
-      window.showCrediPayReceipt(savedPayment, this.currentClient);
+      window.showBulaPayReceipt(savedPayment, this.currentClient);
 
       // Re-buscar el cliente para actualizar pantalla
-      const updatedClient = await window.CrediPayDB.getClientByCedula(this.currentClient.cedula);
+      const updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
       await this.renderClientInfo(updatedClient);
 
       // Actualizar botón de seguimiento
@@ -3080,7 +3080,7 @@ const agentModule = {
       }
       
       // Obtener agentId de forma segura desde la sesión activa
-      const currentUser = window.CrediPayDB.getCurrentUser();
+      const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser) {
         alert('❌ Error de seguridad: No hay sesión activa.');
         return;
@@ -3100,7 +3100,7 @@ const agentModule = {
       console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
 
       // BLOQUEO ASÍNCRONO ESTRICTO: Resolver al 100% el SELECT de validación ANTES de iniciar el INSERT
-      const existing = await window.CrediPayDB.getGlobalClientByCedula(cedula);
+      const existing = await window.BulaPayDB.getGlobalClientByCedula(cedula);
 
       // Si el cliente NO existe, silenciar/limpiar cualquier estado de alerta previa de duplicado
       if (!existing) {
@@ -3131,7 +3131,7 @@ const agentModule = {
             });
             proceed = result.isConfirmed;
           } else {
-            proceed = await window.showCrediConfirm(warningMsg, "CrediPai");
+            proceed = await window.showCrediConfirm(warningMsg, "BulaPay");
           }
         }
 
@@ -3144,13 +3144,13 @@ const agentModule = {
       }
 
       let routeId = currentUser && currentUser.routeId ? currentUser.routeId : null;
-      if (!routeId && typeof window.CrediPayDB.getActiveRouteIdForUser === 'function') {
-        routeId = await window.CrediPayDB.getActiveRouteIdForUser(currentUser);
+      if (!routeId && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
+        routeId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
       }
 
       let supervisorId = currentUser && currentUser.supervisor ? currentUser.supervisor : null;
-      if (!supervisorId && typeof window.CrediPayDB.getSupervisorIdForUser === 'function') {
-        supervisorId = await window.CrediPayDB.getSupervisorIdForUser(currentUser);
+      if (!supervisorId && typeof window.BulaPayDB.getSupervisorIdForUser === 'function') {
+        supervisorId = await window.BulaPayDB.getSupervisorIdForUser(currentUser);
       }
 
       const applyDiscount = document.getElementById('new-client-apply-discount')?.checked;
@@ -3242,9 +3242,9 @@ const agentModule = {
       const isRenov = !!this.isRenewalMode;
       let savedResult;
       if (existing || this.isRenewalMode) {
-        savedResult = await window.CrediPayDB.registerCreditToExistingClient(payload);
+        savedResult = await window.BulaPayDB.registerCreditToExistingClient(payload);
       } else {
-        savedResult = await window.CrediPayDB.saveClient(payload);
+        savedResult = await window.BulaPayDB.saveClient(payload);
       }
       console.log('Guardado exitoso:', savedResult);
       this.currentClient = payload;
@@ -3277,11 +3277,11 @@ const agentModule = {
       this.showMandatorySmsPrompt(payload, 'register');
     } catch (err) {
       console.error('Error durante la inserción del cliente:', err);
-      const dupMsg = window.CrediPayDB.getClientDuplicationMessage(err);
+      const dupMsg = window.BulaPayDB.getClientDuplicationMessage(err);
       if (dupMsg === 'DUPLICATE_CEDULA' || dupMsg === 'DUPLICATE_DATA') {
         if (this.isRenewalMode) {
           try {
-            const updatedPayload = await window.CrediPayDB.registerCreditToExistingClient(payload);
+            const updatedPayload = await window.BulaPayDB.registerCreditToExistingClient(payload);
             this.currentClient = updatedPayload;
             if (typeof this.updateRouteTracking === 'function') {
               this.updateRouteTracking();
@@ -3312,7 +3312,7 @@ const agentModule = {
             if (result.isConfirmed) {
               try {
                 // Paso 1 y 2: Registrar Crédito y Actualizar Cliente
-                const updatedPayload = await window.CrediPayDB.registerCreditToExistingClient(payload);
+                const updatedPayload = await window.BulaPayDB.registerCreditToExistingClient(payload);
                 this.currentClient = updatedPayload;
                 
                 if (typeof this.updateRouteTracking === 'function') {
@@ -3344,8 +3344,8 @@ const agentModule = {
             }
           });
         } else {
-          if (await window.showCrediConfirm(warningMsg, "CrediPai")) {
-            window.CrediPayDB.registerCreditToExistingClient(payload).then((updatedPayload) => {
+          if (await window.showCrediConfirm(warningMsg, "BulaPay")) {
+            window.BulaPayDB.registerCreditToExistingClient(payload).then((updatedPayload) => {
               this.currentClient = updatedPayload;
               if (typeof this.updateRouteTracking === 'function') {
                 this.updateRouteTracking();
@@ -3393,16 +3393,16 @@ const agentModule = {
   },
 
   async showMandatorySmsPrompt(client, type) {
-    const currentUser = window.CrediPayDB.getCurrentUser() || {};
+    const currentUser = window.BulaPayDB.getCurrentUser() || {};
     const agentName = currentUser.name || currentUser.username || 'nuestro Agente';
     const cleanCedula = String(client.cedula).replace(/[\s-]/g, '');
-    const appUrl = `https://credipay.online/?view=customer&id=${cleanCedula}`;
+    const appUrl = `https://bulapay.online/?view=customer&id=${cleanCedula}`;
     
     let mensaje = '';
     if (type === 'register') {
-      mensaje = `CrediPai: Crédito APROBADO. Agente: ${agentName}. Consulte su saldo y cartón digital en: ${appUrl}`;
+      mensaje = `BulaPay: Crédito APROBADO. Agente: ${agentName}. Consulte su saldo y cartón digital en: ${appUrl}`;
     } else if (type === 'payment') {
-      mensaje = `CrediPai: Pago EXITOSO. Verifique su saldo actualizado en: ${appUrl}`;
+      mensaje = `BulaPay: Pago EXITOSO. Verifique su saldo actualizado en: ${appUrl}`;
     }
 
     const telefonoCliente = String(client.phone || '').trim();
@@ -3435,7 +3435,7 @@ const agentModule = {
         }
       });
     } else {
-      if (await window.showCrediConfirm(`El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?`, "CrediPai")) {
+      if (await window.showCrediConfirm(`El registro se ha guardado exitosamente en el sistema. ¿Desea enviar el comprobante digital al cliente?`, "BulaPay")) {
         window.open(urlWa, '_blank');
       }
       if (this.formRegisterClient) {
@@ -3446,14 +3446,14 @@ const agentModule = {
 
   async captureAndSendLocation() {
     try {
-      const currentUser = window.CrediPayDB.getCurrentUser();
+      const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser || !navigator.geolocation) return;
 
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
           try {
-            await window.CrediPayDB.updateUserLocation(currentUser.username, latitude, longitude);
+            await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
             console.log(`[GPS] Ubicación crítica reportada: ${latitude}, ${longitude}`);
           } catch (e) {
             console.warn("Fallo al actualizar geolocalización crítica en Supabase:", e);
@@ -3513,11 +3513,11 @@ const agentModule = {
 
   async sendWatchPosition(position) {
     try {
-      const currentUser = window.CrediPayDB.getCurrentUser();
+      const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser || !position || !position.coords) return;
 
       const { latitude, longitude } = position.coords;
-      await window.CrediPayDB.updateUserLocation(currentUser.username, latitude, longitude);
+      await window.BulaPayDB.updateUserLocation(currentUser.username, latitude, longitude);
       console.log(`[GPS Watch] Ubicación reportada a Supabase cada 30s: ${latitude}, ${longitude}`);
     } catch (e) {
       console.warn("[GPS Watch] Fallo al actualizar geolocalización en Supabase:", e);
@@ -3825,7 +3825,7 @@ const agentModule = {
     const selector = document.getElementById('agent-selector');
     if (!selector) return;
 
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     if (currentUser) {
       selector.innerHTML = `<option value="${currentUser.username}" selected>${currentUser.name}</option>`;
     } else {
@@ -3843,7 +3843,7 @@ const agentModule = {
   // FÓRMULA MATEMÁTICA OBLIGATORIA v101:
   // Capital en Caja = [Inyecciones] - [Préstamos ACTIVOS] + [Abonos Reales] - [Capitales Dados de Baja en Lista Negra]
   async calculateCapitalEnCaja(routeId) {
-    return await window.CrediPayDB.getLiquidCash(routeId);
+    return await window.BulaPayDB.getLiquidCash(routeId);
   },
 
   async renderFinancialDashboard() {
@@ -3857,13 +3857,13 @@ const agentModule = {
     if (gananciaEl) gananciaEl.textContent = '...';
 
     try {
-      const currentUser = window.CrediPayDB.getCurrentUser();
+      const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser) return;
 
       const liquidCash = await this.calculateCapitalEnCaja(currentUser.routeId);
       capitalEl.textContent = `$${Number(liquidCash).toLocaleString('es-CO')}`;
       
-      const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(currentUser.routeId);
+      const metrics = await window.BulaPayDB.getDashboardFinancialMetrics(currentUser.routeId);
       if (carteraEl) carteraEl.textContent = `$${Number(metrics.carteraEnCalle).toLocaleString('es-CO')}`;
       const intereses = Number(metrics.interesesActivos !== undefined ? metrics.interesesActivos : metrics.posibleGanancia);
       if (gananciaEl) gananciaEl.textContent = `$${intereses.toLocaleString('es-CO')}`;
@@ -3880,12 +3880,12 @@ const agentModule = {
 
   async updateCashViews() {
     try {
-      const currentUser = window.CrediPayDB.getCurrentUser();
+      const currentUser = window.BulaPayDB.getCurrentUser();
       const routeId = currentUser ? currentUser.routeId : null;
 
-      const { totalCollected, onHand } = await window.CrediPayDB.getEfectivoEnCajaDia();
-      const liquidCash = await window.CrediPayDB.getLiquidCash(routeId);
-      const metrics = await window.CrediPayDB.getDashboardFinancialMetrics(routeId);
+      const { totalCollected, onHand } = await window.BulaPayDB.getEfectivoEnCajaDia();
+      const liquidCash = await window.BulaPayDB.getLiquidCash(routeId);
+      const metrics = await window.BulaPayDB.getDashboardFinancialMetrics(routeId);
 
       const cartera = Math.round(Number(metrics.carteraEnCalle || 0));
       const intereses = Math.round(Number(metrics.interesesActivos !== undefined ? metrics.interesesActivos : metrics.posibleGanancia || 0));
@@ -3969,7 +3969,7 @@ const agentModule = {
   },
 
   async updateRouteTracking() {
-    const currentUser = window.CrediPayDB.getCurrentUser();
+    const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser || (currentUser.role !== 'Agente de Ruta' && currentUser.role !== 'agent' && currentUser.role !== 'Agente Independiente')) {
       const btn = document.getElementById('btn-agent-route-tracking');
       if (btn) btn.style.display = 'none';
@@ -3982,9 +3982,9 @@ const agentModule = {
     btn.style.display = 'inline-flex';
 
     try {
-      const allClients = await window.CrediPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const todayStr = this.getLocalDateString();
-      const allPayments = await window.CrediPayDB.getPayments();
+      const allPayments = await window.BulaPayDB.getPayments();
       
       const clientMap = new Map(allClients.map(c => [String(c.cedula), c]));
       const todayPaymentsMap = new Set();
@@ -4065,11 +4065,11 @@ const agentModule = {
   showSuccessLiquidationModal(client, onCompleteCallback) {
     if (!client) return;
     const clientName = client.name || client.nombre || 'Cliente';
-    const message = `¡Felicitaciones por pagar las cuotas exitosamente! CrediPay te invita a obtener un nuevo crédito.`;
+    const message = `¡Felicitaciones por pagar las cuotas exitosamente! BulaPay te invita a obtener un nuevo crédito.`;
 
     const doLiquidation = async () => {
       try {
-        await window.CrediPayDB.liquidateCredit({
+        await window.BulaPayDB.liquidateCredit({
           cedula: client.cedula || client.id,
           status: 'Liquidado_Pagado',
           outstanding: 0,
@@ -4134,9 +4134,9 @@ const agentModule = {
     modal.style.display = 'flex';
 
     try {
-      const allClients = await window.CrediPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const todayStr = this.getLocalDateString();
-      const allPayments = await window.CrediPayDB.getPayments();
+      const allPayments = await window.BulaPayDB.getPayments();
       
       const clientMap = new Map(allClients.map(c => [String(c.cedula), c]));
       const todayPaymentsMap = new Set();
@@ -4286,13 +4286,13 @@ const agentModule = {
 
   async generateCashReport() {
     try {
-      const currentUser = window.CrediPayDB.getCurrentUser();
+      const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser) return;
 
       const todayStr = this.getLocalDateString();
-      const allPayments = await window.CrediPayDB.getPayments();
+      const allPayments = await window.BulaPayDB.getPayments();
       
-      const allClients = await window.CrediPayDB.getClients();
+      const allClients = await window.BulaPayDB.getClients();
       const blacklistedCedulas = new Set(
         allClients
           .filter(c => {

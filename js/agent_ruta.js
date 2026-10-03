@@ -1,5 +1,5 @@
 /**
- * CrediPai SaaS - Módulo de Interfaz Frontend para Agente de Ruta (Cobrador de Campo)
+ * BulaPay SaaS - Módulo de Interfaz Frontend para Agente de Ruta (Cobrador de Campo)
  * 
  * NOTA DE DISEÑO & ARQUITECTURA DE NEGOCIO:
  * Este agente tiene un perfil estrictamente operativo (Solo Recaudo en Campo).
@@ -16,7 +16,7 @@ const AgenteRutaModule = {
   routeClients: [],
 
   init() {
-    console.log("🚀 Inicializando módulo Agente de Ruta (CrediPai)...");
+    console.log("🚀 Inicializando módulo Agente de Ruta (BulaPay)...");
     this.renderViewContainer();
     this.bindEvents();
     this.loadAgentRouteData();
@@ -27,7 +27,7 @@ const AgenteRutaModule = {
    */
   async loadAgentRouteData() {
     try {
-      const sessionUser = JSON.parse(localStorage.getItem('credipay_user') || '{}');
+      const sessionUser = JSON.parse(localStorage.getItem('bulapay_user') || '{}');
       const agentUsername = sessionUser.username || 'agente1';
 
       // Simulación de consulta relacional: agentes_ruta JOIN routes JOIN users (Supervisor)
@@ -58,7 +58,7 @@ const AgenteRutaModule = {
 
   fetchDailyCollectionStats() {
     // Calcular recaudo del día para esta ruta
-    const payments = JSON.parse(localStorage.getItem('credipay_payments') || '[]');
+    const payments = JSON.parse(localStorage.getItem('bulapay_payments') || '[]');
     const todayStr = new Date().toISOString().split('T')[0];
     
     const totalToday = payments
@@ -74,7 +74,7 @@ const AgenteRutaModule = {
 
   /**
    * Renderiza la plantilla HTML para la vista del Agente de Ruta
-   * Recicla la estética Glassmorphic de CrediPai / BulaPay
+   * Recicla la estética Glassmorphic de BulaPay / BulaPay
    */
   getHTMLTemplate() {
     return `

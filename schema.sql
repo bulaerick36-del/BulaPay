@@ -1,4 +1,4 @@
--- Script Maestro para Supabase (CrediPay PostgreSQL Schema)
+-- Script Maestro para Supabase (BulaPay PostgreSQL Schema)
 
 -- Habilitar RLS (Row Level Security) y políticas de acceso para la clave anon
 DROP TABLE IF EXISTS payments;
@@ -132,13 +132,13 @@ INSERT INTO clients ("cedula", "name", "phone", "email", "city", "zone", "risk",
 
 -- 5. Pagos Semilla
 INSERT INTO payments ("id", "clientCedula", "installmentNumber", "amount", "date", "agentName", "agent_id", "status", "signature") VALUES
-('pay_1', '12345', 1, 100000, '2026-06-01', 'Juan Pérez', 'agente1', 'Pagado', 'CrediPay-SIG-12345-01'),
-('pay_2', '12345', 2, 100000, '2026-06-08', 'Juan Pérez', 'agente1', 'Pagado', 'CrediPay-SIG-12345-02'),
-('pay_3', '12345', 3, 150000, '2026-06-15', 'Juan Pérez', 'agente1', 'Pagado', 'CrediPay-SIG-12345-03'),
-('pay_4', '67890', 1, 80000, '2026-06-02', 'Juan Pérez', 'agente1', 'Pagado', 'CrediPay-SIG-67890-01'),
-('pay_5', '67890', 2, 80000, '2026-06-12', 'Juan Pérez', 'agente1', 'Pagado', 'CrediPay-SIG-67890-02'),
-('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'agente2', 'Pagado', 'CrediPay-SIG-11223-01'),
-('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'agente2', 'Abonado', 'CrediPay-SIG-11223-02');
+('pay_1', '12345', 1, 100000, '2026-06-01', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-12345-01'),
+('pay_2', '12345', 2, 100000, '2026-06-08', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-12345-02'),
+('pay_3', '12345', 3, 150000, '2026-06-15', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-12345-03'),
+('pay_4', '67890', 1, 80000, '2026-06-02', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-67890-01'),
+('pay_5', '67890', 2, 80000, '2026-06-12', 'Juan Pérez', 'agente1', 'Pagado', 'BulaPay-SIG-67890-02'),
+('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'agente2', 'Pagado', 'BulaPay-SIG-11223-01'),
+('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'agente2', 'Abonado', 'BulaPay-SIG-11223-02');
 
 -- Migraciones seguras para bases de datos existentes:
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "opening_time" TEXT DEFAULT '06:00';
@@ -248,7 +248,7 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en password_reset_tokens" ON pas
 CREATE POLICY "Permitir todo a anonimos en password_reset_tokens" ON password_reset_tokens FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE password_reset_tokens TO anon, authenticated;
 
--- 8. Tablas de Anuncios y Publicidad (Módulo credipay-v327)
+-- 8. Tablas de Anuncios y Publicidad (Módulo bulapay-v327)
 CREATE TABLE IF NOT EXISTS bulapay_anuncios (
   "id" TEXT PRIMARY KEY,
   "categoria" TEXT NOT NULL,
@@ -303,7 +303,7 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en announcements" ON announcemen
 CREATE POLICY "Permitir todo a anonimos en announcements" ON announcements FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE announcements TO anon, authenticated;
 
--- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo credipay-v349)
+-- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo bulapay-v349)
 CREATE TABLE IF NOT EXISTS bulapay_notificaciones (
   "id" TEXT PRIMARY KEY,
   "titulo" TEXT NOT NULL,
@@ -332,8 +332,8 @@ CREATE TABLE IF NOT EXISTS notificaciones (
 
 ALTER TABLE notificaciones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir lectura publica en notificaciones" ON notificaciones;
-('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'agente2', 'Pagado', 'CrediPay-SIG-11223-01'),
-('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'agente2', 'Abonado', 'CrediPay-SIG-11223-02');
+('pay_6', '11223', 1, 100000, '2026-05-20', 'María López', 'agente2', 'Pagado', 'BulaPay-SIG-11223-01'),
+('pay_7', '11223', 2, 50000, '2026-05-30', 'María López', 'agente2', 'Abonado', 'BulaPay-SIG-11223-02');
 
 -- Migraciones seguras para bases de datos existentes:
 ALTER TABLE routes ADD COLUMN IF NOT EXISTS "opening_time" TEXT DEFAULT '06:00';
@@ -480,7 +480,7 @@ CREATE POLICY "Acceso publico actualizacion bulapay-multimedia" ON storage.objec
 DROP POLICY IF EXISTS "Acceso publico eliminacion bulapay-multimedia" ON storage.objects;
 CREATE POLICY "Acceso publico eliminacion bulapay-multimedia" ON storage.objects FOR DELETE TO public USING (bucket_id = 'bulapay-multimedia');
 
--- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo credipay-v349)
+-- 9. Tablas de Notificaciones y Comunicados Gerenciales (Módulo bulapay-v349)
 CREATE TABLE IF NOT EXISTS bulapay_notificaciones (
   "id" TEXT PRIMARY KEY,
   "titulo" TEXT NOT NULL,

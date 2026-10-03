@@ -1,8 +1,8 @@
 -- =============================================================================
--- TABLA DE CUENTAS DE RECAUDO CREDIPAY (credipay_cuentas)
+-- TABLA DE CUENTAS DE RECAUDO BULAPAY (bulapay_cuentas)
 -- =============================================================================
 
-CREATE TABLE IF NOT EXISTS credipay_cuentas (
+CREATE TABLE IF NOT EXISTS bulapay_cuentas (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   banco TEXT NOT NULL,
   tipo_cuenta TEXT NOT NULL,
@@ -12,13 +12,13 @@ CREATE TABLE IF NOT EXISTS credipay_cuentas (
 );
 
 -- Habilitar Row Level Security (RLS) y Políticas de Acceso
-ALTER TABLE credipay_cuentas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bulapay_cuentas ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Permitir acceso publico a credipay_cuentas" ON credipay_cuentas;
-CREATE POLICY "Permitir acceso publico a credipay_cuentas" 
-  ON credipay_cuentas FOR ALL 
+DROP POLICY IF EXISTS "Permitir acceso publico a bulapay_cuentas" ON bulapay_cuentas;
+CREATE POLICY "Permitir acceso publico a bulapay_cuentas" 
+  ON bulapay_cuentas FOR ALL 
   TO anon, authenticated 
   USING (true) 
   WITH CHECK (true);
 
-GRANT ALL ON TABLE credipay_cuentas TO anon, authenticated;
+GRANT ALL ON TABLE bulapay_cuentas TO anon, authenticated;

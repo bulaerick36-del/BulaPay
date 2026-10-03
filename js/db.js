@@ -1,7 +1,7 @@
-// Módulo de Base de Datos Real de Supabase (CrediPay DB)
+// Módulo de Base de Datos Real de Supabase (BulaPay DB)
 
 const DB_KEYS = {
-  CURRENT_USER: 'credipay_current_user'
+  CURRENT_USER: 'bulapay_current_user'
 };
 
 const SUPABASE_URL = 'https://vxvyiklzyfmfbrgwqgxv.supabase.co';
@@ -27,7 +27,7 @@ async function initSupabase() {
 
   // 2. Fallback opcional a /api/config sólo en entornos Node/Vercel
   const host = window.location.hostname || '';
-  if (!host.includes('credipay.online') && !host.includes('github.io')) {
+  if (!host.includes('bulapay.online') && !host.includes('github.io')) {
     try {
       const res = await fetch('/api/config');
       if (res.ok) {
@@ -184,13 +184,13 @@ const db = {
     
     // Insertar Pagos Semilla
     const { error: paymentsErr } = await supabase.from('payments').insert([
-      { id: 'pay_1', clientCedula: '12345', installmentNumber: 1, amount: 100000, date: '2026-06-01', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-12345-01', supervisor_id: 'admin' },
-      { id: 'pay_2', clientCedula: '12345', installmentNumber: 2, amount: 100000, date: '2026-06-08', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-12345-02', supervisor_id: 'admin' },
-      { id: 'pay_3', clientCedula: '12345', installmentNumber: 3, amount: 150000, date: '2026-06-15', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-12345-03', supervisor_id: 'admin' },
-      { id: 'pay_4', clientCedula: '67890', installmentNumber: 1, amount: 80000, date: '2026-06-02', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-67890-01', supervisor_id: 'admin' },
-      { id: 'pay_5', clientCedula: '67890', installmentNumber: 2, amount: 80000, date: '2026-06-12', agentName: 'Juan Pérez', status: 'Pagado', signature: 'CrediPay-SIG-67890-02', supervisor_id: 'admin' },
-      { id: 'pay_6', clientCedula: '11223', installmentNumber: 1, amount: 100000, date: '2026-05-20', agentName: 'María López', status: 'Pagado', signature: 'CrediPay-SIG-11223-01', supervisor_id: 'admin' },
-      { id: 'pay_7', clientCedula: '11223', installmentNumber: 2, amount: 50000, date: '2026-05-30', agentName: 'María López', status: 'Abonado', signature: 'CrediPay-SIG-11223-02', supervisor_id: 'admin' }
+      { id: 'pay_1', clientCedula: '12345', installmentNumber: 1, amount: 100000, date: '2026-06-01', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-01', supervisor_id: 'admin' },
+      { id: 'pay_2', clientCedula: '12345', installmentNumber: 2, amount: 100000, date: '2026-06-08', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-02', supervisor_id: 'admin' },
+      { id: 'pay_3', clientCedula: '12345', installmentNumber: 3, amount: 150000, date: '2026-06-15', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-12345-03', supervisor_id: 'admin' },
+      { id: 'pay_4', clientCedula: '67890', installmentNumber: 1, amount: 80000, date: '2026-06-02', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-01', supervisor_id: 'admin' },
+      { id: 'pay_5', clientCedula: '67890', installmentNumber: 2, amount: 80000, date: '2026-06-12', agentName: 'Juan Pérez', status: 'Pagado', signature: 'BulaPay-SIG-67890-02', supervisor_id: 'admin' },
+      { id: 'pay_6', clientCedula: '11223', installmentNumber: 1, amount: 100000, date: '2026-05-20', agentName: 'María López', status: 'Pagado', signature: 'BulaPay-SIG-11223-01', supervisor_id: 'admin' },
+      { id: 'pay_7', clientCedula: '11223', installmentNumber: 2, amount: 50000, date: '2026-05-30', agentName: 'María López', status: 'Abonado', signature: 'BulaPay-SIG-11223-02', supervisor_id: 'admin' }
     ]);
     if (paymentsErr) console.error("Error al sembrar pagos semilla:", paymentsErr);
 
@@ -236,7 +236,7 @@ const db = {
 
   async saveUser(user) {
     const supabase = await initSupabase();
-    console.log('💾 [CrediPay DB saveUser] Recibido usuario para inserción con rol:', user.role);
+    console.log('💾 [BulaPay DB saveUser] Recibido usuario para inserción con rol:', user.role);
     const supId = this.getSupervisorId();
     if (supId && !user.supervisor_id) {
       user.supervisor_id = supId;
@@ -409,7 +409,7 @@ const db = {
       image: String(restaurantData.image || restaurantData.logo_url || restaurantData.logo || restaurantData.logoUrl || restaurantData.cover_url || '').trim()
     };
 
-    console.log('📡 [CrediPay DB saveRestaurant] Enviando vitrina a /api/restaurants (Neon PostgreSQL):', payload);
+    console.log('📡 [BulaPay DB saveRestaurant] Enviando vitrina a /api/restaurants (Neon PostgreSQL):', payload);
 
     try {
       const response = await fetch('/api/restaurants', {
@@ -420,10 +420,10 @@ const db = {
         body: JSON.stringify(payload)
       });
       const resData = await response.json();
-      console.log('✅ [CrediPay DB saveRestaurant] Respuesta de /api/restaurants:', resData);
+      console.log('✅ [BulaPay DB saveRestaurant] Respuesta de /api/restaurants:', resData);
       return resData;
     } catch (err) {
-      console.error('❌ [CrediPay DB saveRestaurant] Error en fetch /api/restaurants:', err);
+      console.error('❌ [BulaPay DB saveRestaurant] Error en fetch /api/restaurants:', err);
       throw err;
     }
   },
@@ -494,7 +494,7 @@ const db = {
           updated_at: nowIso 
         })
         .eq('username', String(username).toLowerCase());
-      console.log(`⏱️ [CrediPay DB] Último acceso registrado para '${username}': ${nowIso}`);
+      console.log(`⏱️ [BulaPay DB] Último acceso registrado para '${username}': ${nowIso}`);
     } catch (e) {
       console.warn("Error actualizando fecha de último acceso en Supabase:", e);
     }
@@ -986,7 +986,7 @@ const db = {
         });
       });
 
-      console.log('✅ [CrediPay DB] Cartones activos re-mapeados con clients (loadActiveCredits):', activeCreditsList);
+      console.log('✅ [BulaPay DB] Cartones activos re-mapeados con clients (loadActiveCredits):', activeCreditsList);
       return activeCreditsList;
     } catch (err) {
       console.error("Excepción en loadActiveCredits:", err);
@@ -1756,7 +1756,7 @@ const db = {
     const outstanding = Math.round(Number(client.outstanding || 0));
     if (outstanding <= 0) {
       const clientName = client.name || client.nombre || 'Cliente';
-      const message = `¡Felicitaciones por pagar las cuotas exitosamente! CrediPay te invita a obtener un nuevo crédito.`;
+      const message = `¡Felicitaciones por pagar las cuotas exitosamente! BulaPay te invita a obtener un nuevo crédito.`;
 
       const executeLiquidation = async () => {
         try {
@@ -1775,8 +1775,8 @@ const db = {
         }
       };
 
-      if (typeof window.CrediPayAgent !== 'undefined' && typeof window.CrediPayAgent.showSuccessLiquidationModal === 'function') {
-        window.CrediPayAgent.showSuccessLiquidationModal(client, onCompleteCallback);
+      if (typeof window.BulaPayAgent !== 'undefined' && typeof window.BulaPayAgent.showSuccessLiquidationModal === 'function') {
+        window.BulaPayAgent.showSuccessLiquidationModal(client, onCompleteCallback);
         return true;
       }
 
@@ -1980,7 +1980,7 @@ const db = {
 
     const installmentNumber = payment.installmentNumber || (activeCartonPayments.length + 1);
     
-    const signature = `CrediPay-SIG-${payment.clientCedula}-${Date.now().toString().slice(-4)}`;
+    const signature = `BulaPay-SIG-${payment.clientCedula}-${Date.now().toString().slice(-4)}`;
     const id = 'pay_' + installmentNumber + '_' + Date.now();
     
     const supId = this.getSupervisorId();
@@ -2036,7 +2036,7 @@ const db = {
     }
     
     // Dispatch custom event to notify supervisor SPA & agent UI in real-time
-    window.dispatchEvent(new CustomEvent('credipay-payment-registered', { detail: newPayment }));
+    window.dispatchEvent(new CustomEvent('bulapay-payment-registered', { detail: newPayment }));
 
     return newPayment;
   },
@@ -2118,7 +2118,7 @@ const db = {
 
     // 3. Sincronización inmediata en todas las llaves de localStorage
     try {
-      const keys = ['credipay_users', 'users', 'credipay_users', 'credipay_users_db', 'credi_local_users'];
+      const keys = ['bulapay_users', 'users', 'bulapay_users', 'bulapay_users_db', 'credi_local_users'];
       for (const k of keys) {
         const raw = localStorage.getItem(k);
         if (raw) {
@@ -2983,7 +2983,7 @@ const db = {
               agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
               agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
               status: 'Pagado',
-              signature: `CrediPay-SIG-${cedula}-LIQ-${i}`,
+              signature: `BulaPay-SIG-${cedula}-LIQ-${i}`,
               supervisor_id: supId
             });
           }
@@ -3896,7 +3896,7 @@ const db = {
 
     // 2. Actualizar en localStorage fallback
     try {
-      const keys = ['credipay_users', 'users', 'credipay_users'];
+      const keys = ['bulapay_users', 'users', 'bulapay_users'];
       for (const k of keys) {
         const raw = localStorage.getItem(k);
         if (raw) {
@@ -4060,14 +4060,14 @@ const db = {
   },
 
   // -------------------------------------------------------------
-  // MÓDULO DE CUENTAS DE RECAUDO (credipay_cuentas)
+  // MÓDULO DE CUENTAS DE RECAUDO (bulapay_cuentas)
   // -------------------------------------------------------------
   async getCuentas() {
     try {
       const supabase = await initSupabase();
       if (supabase) {
         const { data, error } = await supabase
-          .from('credipay_cuentas')
+          .from('bulapay_cuentas')
           .select('*')
           .order('created_at', { ascending: false });
 
@@ -4076,10 +4076,10 @@ const db = {
         }
       }
     } catch(e) {
-      console.warn("Error consultando credipay_cuentas en Supabase:", e);
+      console.warn("Error consultando bulapay_cuentas en Supabase:", e);
     }
     try {
-      const raw = localStorage.getItem('credipay_cuentas');
+      const raw = localStorage.getItem('bulapay_cuentas');
       return raw ? JSON.parse(raw) : [];
     } catch(e) {
       return [];
@@ -4101,23 +4101,23 @@ const db = {
       const supabase = await initSupabase();
       if (supabase) {
         const { data, error } = await supabase
-          .from('credipay_cuentas')
+          .from('bulapay_cuentas')
           .upsert([normalized])
           .select();
 
         if (error) {
-          console.error("❌ Error de inserción en credipay_cuentas:", error);
+          console.error("❌ Error de inserción en bulapay_cuentas:", error);
           return { success: false, error };
         }
         
         let local = [];
         try {
-          const raw = localStorage.getItem('credipay_cuentas');
+          const raw = localStorage.getItem('bulapay_cuentas');
           local = raw ? JSON.parse(raw) : [];
         } catch(e) {}
         local = local.filter(c => c.id !== normalized.id);
         local.unshift(normalized);
-        localStorage.setItem('credipay_cuentas', JSON.stringify(local));
+        localStorage.setItem('bulapay_cuentas', JSON.stringify(local));
 
         return { success: true, data };
       }
@@ -4127,11 +4127,11 @@ const db = {
 
     try {
       let local = [];
-      const raw = localStorage.getItem('credipay_cuentas');
+      const raw = localStorage.getItem('bulapay_cuentas');
       local = raw ? JSON.parse(raw) : [];
       local = local.filter(c => c.id !== normalized.id);
       local.unshift(normalized);
-      localStorage.setItem('credipay_cuentas', JSON.stringify(local));
+      localStorage.setItem('bulapay_cuentas', JSON.stringify(local));
       return { success: true, data: [normalized] };
     } catch(e) {
       return { success: false, error: e };
@@ -4143,17 +4143,17 @@ const db = {
     try {
       const supabase = await initSupabase();
       if (supabase) {
-        await supabase.from('credipay_cuentas').delete().eq('id', cuentaId);
+        await supabase.from('bulapay_cuentas').delete().eq('id', cuentaId);
       }
     } catch(e) {
       console.warn("Error eliminando cuenta en Supabase:", e);
     }
 
     try {
-      const raw = localStorage.getItem('credipay_cuentas');
+      const raw = localStorage.getItem('bulapay_cuentas');
       let local = raw ? JSON.parse(raw) : [];
       local = local.filter(c => String(c.id) !== String(cuentaId));
-      localStorage.setItem('credipay_cuentas', JSON.stringify(local));
+      localStorage.setItem('bulapay_cuentas', JSON.stringify(local));
       return true;
     } catch(e) {
       return false;
@@ -4165,7 +4165,7 @@ const db = {
       const supabase = await initSupabase();
       if (supabase) {
         const { data, error } = await supabase
-          .from('credipay_config')
+          .from('bulapay_config')
           .select('valor')
           .eq('clave', 'whatsapp_recaudo')
           .maybeSingle();
@@ -4179,7 +4179,7 @@ const db = {
     }
 
     try {
-      const localNum = localStorage.getItem('credipay_whatsapp_recaudo');
+      const localNum = localStorage.getItem('bulapay_whatsapp_recaudo');
       if (localNum) return String(localNum).trim();
     } catch(e) {}
 
@@ -4195,7 +4195,7 @@ const db = {
       const supabase = await initSupabase();
       if (supabase) {
         const { error } = await supabase
-          .from('credipay_config')
+          .from('bulapay_config')
           .upsert([{ clave: 'whatsapp_recaudo', valor: cleanNum, updated_at: new Date().toISOString() }]);
 
         if (error) {
@@ -4207,7 +4207,7 @@ const db = {
     }
 
     try {
-      localStorage.setItem('credipay_whatsapp_recaudo', cleanNum);
+      localStorage.setItem('bulapay_whatsapp_recaudo', cleanNum);
     } catch(e) {}
 
     return { success: true, valor: cleanNum };
@@ -4215,8 +4215,8 @@ const db = {
 
   async showCuentasRecaudoModal() {
     const user = this.getCurrentUser();
-    if (window.CrediPayCheckout && typeof window.CrediPayCheckout.iniciarPagoSuscripcion === 'function') {
-      await window.CrediPayCheckout.iniciarPagoSuscripcion(user);
+    if (window.BulaPayCheckout && typeof window.BulaPayCheckout.iniciarPagoSuscripcion === 'function') {
+      await window.BulaPayCheckout.iniciarPagoSuscripcion(user);
       return;
     }
 
@@ -4227,7 +4227,7 @@ const db = {
 
     let digitsOnly = String(waNumber || '3044191522').replace(/\D/g, '');
     if (digitsOnly.length === 10) digitsOnly = '57' + digitsOnly;
-    const waMsg = encodeURIComponent('Hola, requiero asistencia para renovar mi mensualidad en CrediPay ($50.000 COP)');
+    const waMsg = encodeURIComponent('Hola, requiero asistencia para renovar mi mensualidad en BulaPay ($50.000 COP)');
     const waUrl = `https://wa.me/${digitsOnly}?text=${waMsg}`;
     window.open(waUrl, '_blank');
   },
@@ -4337,7 +4337,7 @@ const db = {
 
       // Guardar copia local en localStorage
       try {
-        const localHistKey = `credipay_historial_ciclos_${userObj.username}`;
+        const localHistKey = `bulapay_historial_ciclos_${userObj.username}`;
         const rawLocalHist = localStorage.getItem(localHistKey);
         let listHist = rawLocalHist ? JSON.parse(rawLocalHist) : [];
         if (!listHist.some(h => Number(h.ciclo_numero) === cicloActual)) {
@@ -4415,7 +4415,7 @@ const db = {
     }
 
     try {
-      const localHistKey = `credipay_historial_ciclos_${usernameTarget}`;
+      const localHistKey = `bulapay_historial_ciclos_${usernameTarget}`;
       const rawLocalHist = localStorage.getItem(localHistKey);
       return rawLocalHist ? JSON.parse(rawLocalHist) : [];
     } catch(e) {
@@ -4460,7 +4460,7 @@ const db = {
 
     // Limpieza de almacenamiento local para evitar estados desincronizados
     try {
-      ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
+      ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
     const nowMs = Date.now();
@@ -4520,7 +4520,7 @@ const db = {
               });
 
             supabaseList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-            console.log(`🔔 [CrediPay Comunicados Cloud-Only Supabase] Obtención exitosa para ${currentUsername || 'anónimo'} (${supabaseList.length}):`, supabaseList);
+            console.log(`🔔 [BulaPay Comunicados Cloud-Only Supabase] Obtención exitosa para ${currentUsername || 'anónimo'} (${supabaseList.length}):`, supabaseList);
             return supabaseList;
           }
         }
@@ -4551,7 +4551,7 @@ const db = {
 
     // Purga de almacenamiento local
     try {
-      ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
+      ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
     // Publicación estricta y directa en Supabase Cloud (bulapay_notificaciones)
@@ -4634,7 +4634,7 @@ const db = {
           }
 
           if (!error) {
-            console.log(`✅ [CrediPay Comunicados Cloud-Only credipay-v351] Publicado exitosamente en Supabase Cloud ("bulapay_notificaciones"):`, payload);
+            console.log(`✅ [BulaPay Comunicados Cloud-Only bulapay-v351] Publicado exitosamente en Supabase Cloud ("bulapay_notificaciones"):`, payload);
           } else {
             console.error("❌ Error guardando en Supabase Cloud bulapay_notificaciones:", error);
             throw new Error((error && (error.message || error.details || error.hint)) || "Error al insertar en Supabase Cloud.");
@@ -4654,7 +4654,7 @@ const db = {
   async deleteNotificacion(notifId) {
     // Purga de almacenamiento local
     try {
-      ['credipay_comunicados_oficiales', 'credipay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
+      ['bulapay_comunicados_oficiales', 'bulapay_comunicados_local', 'credi_notificaciones'].forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
     // Eliminación directa en Supabase Cloud (bulapay_notificaciones)
@@ -4664,7 +4664,7 @@ const db = {
         if (supabase) {
           const { error } = await supabase.from('bulapay_notificaciones').delete().eq('id', notifId);
           if (error) console.warn("⚠️ Error eliminando en Supabase Cloud bulapay_notificaciones:", error);
-          else console.log(`🗑️ [CrediPay Comunicados Cloud-Only] Registro ${notifId} eliminado en Supabase Cloud.`);
+          else console.log(`🗑️ [BulaPay Comunicados Cloud-Only] Registro ${notifId} eliminado en Supabase Cloud.`);
         }
       } catch(e) {
         console.warn("Fallo eliminando de Supabase Nube:", e);
@@ -4912,7 +4912,7 @@ const db = {
     } catch(e) {}
 
     return [
-      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio CrediPay. Realice su pago a tiempo para evitar suspensiones.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
+      { id: 'prog_5d', dias_previos: 5, titulo: '📢 Recordatorio de Pago - 5 Días', mensaje: 'Estimado usuario: Le recordamos que faltan 5 días para la fecha de vencimiento de su servicio BulaPay. Realice su pago a tiempo para evitar suspensiones.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
       { id: 'prog_4d', dias_previos: 4, titulo: '⚠️ Recordatorio Preventivo - 4 Días', mensaje: 'Faltan 4 días para el corte de su suscripción. Por favor efectúe el pago para mantener sus rutas y cobros activos.', activo: true, prioridad: 'Media', created_at: new Date().toISOString() },
       { id: 'prog_3d', dias_previos: 3, titulo: '🚨 Advertencia Preventiva - 3 Días', mensaje: 'Atención: Solo restan 3 días antes de la suspensión del servicio por impago. Evite la interrupción de su acceso.', activo: true, prioridad: 'Alta', created_at: new Date().toISOString() },
       { id: 'prog_2d', dias_previos: 2, titulo: '🔥 URGENTE: Corte Próximo - 2 Días', mensaje: 'Faltan 2 días para el bloqueo por mora de su cuenta. Por favor reporte su pago inmediatamente a administración.', activo: true, prioridad: 'Alta', created_at: new Date().toISOString() },
@@ -5052,8 +5052,8 @@ const db = {
                       // Disparar modal estilizado de Cuentas de Recaudo con opción de copiar y WhatsApp
                       if (typeof window.showCuentasRecaudoModal === 'function') {
                         window.showCuentasRecaudoModal();
-                      } else if (window.CrediPayDB && typeof window.CrediPayDB.showCuentasRecaudoModal === 'function') {
-                        window.CrediPayDB.showCuentasRecaudoModal();
+                      } else if (window.BulaPayDB && typeof window.BulaPayDB.showCuentasRecaudoModal === 'function') {
+                        window.BulaPayDB.showCuentasRecaudoModal();
                       } else {
                         if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
                           window.app.router.navigate('cobros');
@@ -5064,7 +5064,7 @@ const db = {
                     }
                   });
                 } else {
-                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ver las cuentas de recaudo para realizar su pago?`, "CrediPai")) {
+                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ver las cuentas de recaudo para realizar su pago?`, "BulaPay")) {
                     if (typeof window.showCuentasRecaudoModal === 'function') {
                       window.showCuentasRecaudoModal();
                     } else if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
@@ -5118,8 +5118,8 @@ const db = {
       }
 
       if (agentUsernames.length === 0 || routeIds.length === 0) {
-        const localUsers = JSON.parse(localStorage.getItem('credipay_users') || '[]');
-        const localRoutes = JSON.parse(localStorage.getItem('credipay_routes') || '[]');
+        const localUsers = JSON.parse(localStorage.getItem('bulapay_users') || '[]');
+        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
 
         localUsers.filter(u => u.supervisor === supId || u.supervisor_id === supId).forEach(u => {
           if (u.username) agentUsernames.push(u.username);
@@ -5164,10 +5164,10 @@ const db = {
         const { data: injData } = await supabase.from('capital_injections').select('*');
         capitalInjections = injData || [];
       } else {
-        clients = JSON.parse(localStorage.getItem('credipay_clients') || '[]');
-        payments = JSON.parse(localStorage.getItem('credipay_payments') || '[]');
-        cajaMovimientos = JSON.parse(localStorage.getItem('credipay_caja_movimientos') || '[]');
-        capitalInjections = JSON.parse(localStorage.getItem('credipay_capital_injections') || '[]');
+        clients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
+        payments = JSON.parse(localStorage.getItem('bulapay_payments') || '[]');
+        cajaMovimientos = JSON.parse(localStorage.getItem('bulapay_caja_movimientos') || '[]');
+        capitalInjections = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
       }
 
       const supervisorClients = clients.filter(c => 
@@ -5244,9 +5244,9 @@ const db = {
       await supabase.from('capital_injections').insert([record]);
     }
 
-    const currentLocal = JSON.parse(localStorage.getItem('credipay_capital_injections') || '[]');
+    const currentLocal = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
     currentLocal.push(record);
-    localStorage.setItem('credipay_capital_injections', JSON.stringify(currentLocal));
+    localStorage.setItem('bulapay_capital_injections', JSON.stringify(currentLocal));
     return record;
   },
 
@@ -5266,9 +5266,9 @@ const db = {
       await supabase.from('caja_movimientos').insert([record]);
     }
 
-    const currentLocal = JSON.parse(localStorage.getItem('credipay_caja_movimientos') || '[]');
+    const currentLocal = JSON.parse(localStorage.getItem('bulapay_caja_movimientos') || '[]');
     currentLocal.push(record);
-    localStorage.setItem('credipay_caja_movimientos', JSON.stringify(currentLocal));
+    localStorage.setItem('bulapay_caja_movimientos', JSON.stringify(currentLocal));
     return record;
   }
 };
@@ -5277,11 +5277,11 @@ const db = {
 db.init();
 
 // Exportar globalmente
-window.CrediPayDB = db;
+window.BulaPayDB = db;
 
 window.showCuentasRecaudoModal = function() {
-  if (window.CrediPayDB && typeof window.CrediPayDB.showCuentasRecaudoModal === 'function') {
-    window.CrediPayDB.showCuentasRecaudoModal();
+  if (window.BulaPayDB && typeof window.BulaPayDB.showCuentasRecaudoModal === 'function') {
+    window.BulaPayDB.showCuentasRecaudoModal();
   }
 };
 
@@ -5342,3 +5342,5 @@ window.copyToClipboard = function(text, btnElement) {
   }
 };
 window.BulaPayDB = db;
+
+window.CrediPayDB = window.BulaPayDB || db;

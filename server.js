@@ -16,7 +16,7 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  console.log(`[CrediPay Server] ${req.method} ${req.url}`);
+  console.log(`[BulaPay Server] ${req.method} ${req.url}`);
 
   // Mock de la Serverless Function de Vercel en desarrollo local
   if (req.url.split('?')[0] === '/api/config') {
@@ -73,7 +73,7 @@ const server = http.createServer((req, res) => {
   fs.stat(absolutePath, (err, stats) => {
     if (err || !stats.isFile()) {
       // Si el archivo no existe, podría ser una ruta de la SPA. Servimos index.html
-      console.log(`[CrediPay Server] File not found: ${filePath}. Serving SPA fallback index.html`);
+      console.log(`[BulaPay Server] File not found: ${filePath}. Serving SPA fallback index.html`);
       absolutePath = path.join(__dirname, 'index.html');
     }
 
@@ -100,7 +100,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`\n==================================================`);
-  console.log(`🚀 Servidor CrediPay PWA corriendo exitosamente!`);
+  console.log(`🚀 Servidor BulaPay PWA corriendo exitosamente!`);
   console.log(`👉 Abre tu navegador en: http://localhost:${PORT}`);
   console.log(`==================================================\n`);
 });

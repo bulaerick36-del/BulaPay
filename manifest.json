@@ -1,7 +1,7 @@
 {
-  "name": "CrediPai",
-  "short_name": "CrediPai",
-  "description": "Plataforma de Gestión de Cartera y Rutas CrediPai",
+  "name": "BulaPay",
+  "short_name": "BulaPay",
+  "description": "Plataforma de Gestión de Cartera y Rutas BulaPay",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
