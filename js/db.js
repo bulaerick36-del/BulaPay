@@ -683,7 +683,47 @@ const db = {
       console.error("Error al crear ruta en Supabase:", error);
       throw error;
     }
-    return data ? data[0] : route;
+
+    const savedRoute = (data && data[0]) ? data[0] : route;
+
+    // AUTOMATIZACIÓN EN BACKEND / DB:
+    // Al crear una nueva ruta logística, si el capital_asignado es mayor a 0,
+    // el sistema debe realizar automáticamente un INSERT en la tabla capital_injections.
+    const capitalAsignado = Number(savedRoute.capital || savedRoute.capital_asignado || route.capital || route.capital_asignado || 0);
+    if (capitalAsignado > 0) {
+      const injectionRecord = {
+        id: 'inj_route_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        amount: capitalAsignado,
+        supervisor_id: supId,
+        agent_id: supId,
+        route_id: savedRoute.id || route.id,
+        routeId: savedRoute.id || route.id,
+        notes: "Capital inicial asignado a la ruta",
+        date: new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString()
+      };
+
+      try {
+        const { error: injErr } = await supabase
+          .from('capital_injections')
+          .insert([injectionRecord]);
+        if (injErr) {
+          console.error("Error al realizar el INSERT automático en capital_injections al crear ruta:", injErr);
+        }
+      } catch (e) {
+        console.error("Excepción al realizar el INSERT automático en capital_injections:", e);
+      }
+
+      try {
+        const currentLocal = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
+        currentLocal.push(injectionRecord);
+        localStorage.setItem('bulapay_capital_injections', JSON.stringify(currentLocal));
+      } catch (e) {
+        console.warn("Error guardando capital_injection en localStorage:", e);
+      }
+    }
+
+    return savedRoute;
   },
 
   async updateRouteCapital(routeId, capitalAdd) {
@@ -5190,8 +5230,8 @@ const db = {
         cajaMovimientos = movData || [];
 
         let injQuery = supabase.from('capital_injections').select('*');
-        if (agentUsernames.length > 0) {
-          injQuery = injQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId},agent_id.in.(${agentUsernames.join(',')})`);
+        if (routeIds.length > 0) {
+          injQuery = injQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId},routeId.in.(${routeIds.join(',')}),route_id.in.(${routeIds.join(',')})`);
         } else {
           injQuery = injQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId}`);
         }
@@ -5209,6 +5249,15 @@ const db = {
         (c.routeId && routeIds.includes(c.routeId)) ||
         (c.agent_id && agentUsernames.includes(c.agent_id))
       );
+
+      let routesList = [];
+      if (supabase && routeIds.length > 0) {
+        const { data: rData } = await supabase.from('routes').select('*').in('id', routeIds);
+        routesList = rData || [];
+      } else {
+        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+        routesList = localRoutes.filter(r => routeIds.includes(r.id));
+      }
 
       if (filterRouteId && String(filterRouteId).trim() !== '') {
         supervisorClients = supervisorClients.filter(c => c.routeId === filterRouteId);
@@ -5248,25 +5297,39 @@ const db = {
         (m.route_id && routeIds.includes(m.route_id))
       );
 
-      const inyeccionesTotales = capitalInjections.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-      const salidasTotales = cajaMovimientos
-        .filter(m => m.type === 'egreso' || m.type === 'salida')
-        .reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+      // Inyecciones totales (suma de todas las inyecciones de capital del supervisor actual)
+      let inyeccionesTotales = capitalInjections
+        .filter(i => Number(i.amount) > 0)
+        .reduce((sum, i) => sum + Number(i.amount), 0);
+
+      // Fallback para rutas legacy que tienen capital > 0 pero no registraron entrada previa en capital_injections
+      routesList.forEach(r => {
+        const cap = Number(r.capital || r.capital_asignado || 0);
+        if (cap > 0) {
+          const hasInjection = capitalInjections.some(i => (i.routeId === r.id || i.route_id === r.id) && Number(i.amount) > 0);
+          if (!hasInjection) {
+            inyeccionesTotales += cap;
+          }
+        }
+      });
+
+      // Retiros totales (salidas en capital_injections con monto negativo + salidas/egresos en caja_movimientos)
+      const retirosInyecciones = capitalInjections
+        .filter(i => Number(i.amount) < 0)
+        .reduce((sum, i) => sum + Math.abs(Number(i.amount)), 0);
+
+      const retirosMovimientos = cajaMovimientos
+        .filter(m => (m.type === 'egreso' || m.type === 'salida' || m.tipo === 'salida') && !String(m.id || '').startsWith('mov_inj_ret_'))
+        .reduce((sum, m) => sum + (Number(m.amount || m.monto) || 0), 0);
+
+      const salidasTotales = retirosInyecciones + retirosMovimientos;
 
       const entradasExtra = cajaMovimientos
         .filter(m => m.type === 'ingreso' || m.type === 'entrada')
-        .reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+        .reduce((sum, m) => sum + (Number(m.amount || m.monto) || 0), 0);
 
-      let routesList = [];
-      if (supabase && routeIds.length > 0) {
-        const { data: rData } = await supabase.from('routes').select('*').in('id', routeIds);
-        routesList = rData || [];
-      } else {
-        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
-        routesList = localRoutes.filter(r => routeIds.includes(r.id));
-      }
-      const capitalAsignadoRutas = routesList.reduce((sum, r) => sum + (Number(r.capital) || 0), 0);
-      const liquidCash = Math.max(0, inyeccionesTotales + entradasExtra + recaudoHoy - salidasTotales - capitalAsignadoRutas);
+      // Gestión de Caja Global = Inyecciones de Capital Totales - Retiros (+ Recaudo Hoy + Entradas Extra)
+      const liquidCash = Math.max(0, inyeccionesTotales + entradasExtra + recaudoHoy - salidasTotales);
       const patrimonioReal = Math.round(liquidCash + carteraEnCalle + interesesActivos);
 
       const listaNegra = supervisorClients.filter(c => 
