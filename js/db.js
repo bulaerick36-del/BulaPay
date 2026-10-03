@@ -5198,8 +5198,16 @@ const db = {
         .filter(m => m.type === 'ingreso' || m.type === 'entrada')
         .reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
 
-      const capitalBaseRutas = Math.max(500000, routeIds.length * 500000);
-      const liquidCash = Math.max(0, capitalBaseRutas + inyeccionesTotales + entradasExtra + recaudoHoy - salidasTotales);
+      let routesList = [];
+      if (supabase && routeIds.length > 0) {
+        const { data: rData } = await supabase.from('routes').select('*').in('id', routeIds);
+        routesList = rData || [];
+      } else {
+        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+        routesList = localRoutes.filter(r => routeIds.includes(r.id));
+      }
+      const capitalAsignadoRutas = routesList.reduce((sum, r) => sum + (Number(r.capital) || 0), 0);
+      const liquidCash = Math.max(0, inyeccionesTotales + entradasExtra + recaudoHoy - salidasTotales - capitalAsignadoRutas);
       const patrimonioReal = Math.round(liquidCash + carteraEnCalle + interesesActivos);
 
       const listaNegra = supervisorClients.filter(c => 

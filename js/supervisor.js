@@ -3400,13 +3400,37 @@ const supervisorModule = {
   },
 
   async openSupervisorInjectModal() {
+    let routeOptionsHtml = '<option value="">Caja Global General (Sin asignar a ruta)</option>';
+    try {
+      const routes = await window.BulaPayDB.getRoutes();
+      if (routes && routes.length > 0) {
+        routes.forEach(r => {
+          const agentStr = r.agentName ? ` (Agente: ${r.agentName})` : '';
+          routeOptionsHtml += `<option value="${r.id}">Ruta: ${r.name}${agentStr}</option>`;
+        });
+      }
+    } catch (e) {
+      console.warn("Error al cargar rutas para inyección:", e);
+    }
+
     if (window.Swal) {
       const { value: formValues } = await Swal.fire({
-        title: '🟢 Agregar a Caja',
-        text: 'Ingresa el monto de dinero que sumarás a la Caja Global de tus rutas:',
+        title: '🟢 Agregar a Caja Global',
         html: `
-          <input id="swal-sup-inject-amount" type="number" class="swal2-input" placeholder="Monto Ej. 1000000" style="font-size: 1.1rem; font-weight: bold;">
-          <input id="swal-sup-inject-notes" type="text" class="swal2-input" placeholder="Nota u origen de fondos (Opcional)">
+          <div style="text-align: left; margin-bottom: 0.5rem;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Monto a Inyectar ($)</label>
+            <input id="swal-sup-inject-amount" type="number" class="swal2-input" placeholder="Ej. 1000000" style="width: 100%; margin: 0; font-size: 1.1rem; font-weight: bold;">
+          </div>
+          <div style="text-align: left; margin-bottom: 0.5rem; margin-top: 1rem;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Asignar a Ruta (Opcional)</label>
+            <select id="swal-sup-inject-route" class="swal2-input" style="width: 100%; margin: 0; font-size: 0.9rem;">
+              ${routeOptionsHtml}
+            </select>
+          </div>
+          <div style="text-align: left; margin-top: 1rem;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Nota u Origen de Fondos</label>
+            <input id="swal-sup-inject-notes" type="text" class="swal2-input" placeholder="Nota u origen de fondos (Opcional)" style="width: 100%; margin: 0;">
+          </div>
         `,
         focusConfirm: false,
         showCancelButton: true,
@@ -3416,18 +3440,19 @@ const supervisorModule = {
         preConfirm: () => {
           const amount = document.getElementById('swal-sup-inject-amount').value;
           const notes = document.getElementById('swal-sup-inject-notes').value;
+          const routeId = document.getElementById('swal-sup-inject-route').value;
           if (!amount || Number(amount) <= 0) {
             Swal.showValidationMessage('Por favor ingresa un monto válido');
             return false;
           }
-          return { amount: Number(amount), notes };
+          return { amount: Number(amount), notes, routeId };
         }
       });
 
       if (formValues) {
-        await window.BulaPayDB.injectSupervisorCapital(formValues.amount, formValues.notes);
+        await window.BulaPayDB.injectSupervisorCapital(formValues.amount, formValues.notes, formValues.routeId);
         await this.renderCajaGlobalData();
-        Swal.fire('✅ ¡Éxito!', `Se agregaron $${formValues.amount.toLocaleString('es-CO')} a la Caja Global en Supabase.`, 'success');
+        Swal.fire('✅ ¡Éxito!', `Se agregaron ${formValues.amount.toLocaleString('es-CO')} a la Caja Global.`, 'success');
       }
     } else {
       const amountStr = prompt("Ingresa el monto a agregar a la Caja Global ($):");

@@ -3148,6 +3148,43 @@ const agentModule = {
         routeId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
       }
 
+      // Validar Límite de Capital Asignado a la Ruta y fijar interés estricto
+      if (routeId) {
+        const route = await window.BulaPayDB.getRouteById(routeId);
+        if (route) {
+          // Forzar porcentaje de interés de la ruta
+          const routeInterest = Number(route.margin || route.interest_rate || 20);
+          debt = Math.round(montoPrestamo * (1 + routeInterest / 100));
+
+          if (Number(route.capital) > 0) {
+            const allClients = (await window.BulaPayDB.getClients()) || [];
+            const routeClients = allClients.filter(c => 
+              (c.routeId === route.id || c.agent_id === currentUser.username || c.agent_id === currentUser.id) &&
+              c.status !== 'Pagado' && c.status !== 'Finalizado'
+            );
+            const activeLoansTotal = routeClients.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+            const maxCapitalRuta = Number(route.capital);
+
+            if (activeLoansTotal + montoPrestamo > maxCapitalRuta) {
+              const disponibleRuta = Math.max(0, maxCapitalRuta - activeLoansTotal);
+              if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                  icon: 'error',
+                  title: '❌ Capital Asignado a Ruta Excedido',
+                  html: `El capital asignado a la ruta <b>"${route.name}"</b> es de <b>${maxCapitalRuta.toLocaleString('es-CO')}</b>.<br><br>` +
+                        `Total prestado en créditos activos: <b>${activeLoansTotal.toLocaleString('es-CO')}</b>.<br>` +
+                        `Disponible máximo para prestar: <b style="color:#10b981;">${disponibleRuta.toLocaleString('es-CO')}</b>.<br><br>` +
+                        `No es posible otorgar este préstamo de <b>${montoPrestamo.toLocaleString('es-CO')}</b>.`
+                });
+              } else {
+                alert(`❌ Límite de Ruta Excedido: El disponible en la ruta "${route.name}" es de ${disponibleRuta.toLocaleString('es-CO')}.`);
+              }
+              return;
+            }
+          }
+        }
+      }
+
       let supervisorId = currentUser && currentUser.supervisor ? currentUser.supervisor : null;
       if (!supervisorId && typeof window.BulaPayDB.getSupervisorIdForUser === 'function') {
         supervisorId = await window.BulaPayDB.getSupervisorIdForUser(currentUser);
