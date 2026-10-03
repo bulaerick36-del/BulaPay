@@ -172,11 +172,22 @@ GRANT ALL ON TABLE caja_movimientos TO anon, authenticated;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_amount" NUMERIC DEFAULT 0;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_reason" TEXT;
 
+ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "supervisor_id" TEXT;
+ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "notes" TEXT;
+ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "concept" TEXT;
+
+ALTER TABLE capital_injections ADD COLUMN IF NOT EXISTS "supervisor_id" TEXT;
+ALTER TABLE capital_injections ADD COLUMN IF NOT EXISTS "notes" TEXT;
+ALTER TABLE capital_injections ADD COLUMN IF NOT EXISTS "route_id" TEXT;
+
 -- Nueva tabla de inyecciones de capital
 CREATE TABLE IF NOT EXISTS capital_injections (
   "id" TEXT PRIMARY KEY,
   "routeId" TEXT REFERENCES routes("id") ON DELETE SET NULL,
+  "route_id" TEXT,
   "agent_id" TEXT,
+  "supervisor_id" TEXT,
+  "notes" TEXT,
   "amount" NUMERIC NOT NULL,
   "date" DATE NOT NULL DEFAULT CURRENT_DATE,
   "created_at" TIMESTAMPTZ DEFAULT NOW()

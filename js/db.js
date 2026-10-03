@@ -2439,17 +2439,28 @@ const db = {
   async getCapitalInjections(routeId) {
     try {
       const supabase = await initSupabase();
+      const currentUser = this.getCurrentUser();
+      if (!currentUser) return [];
+
+      const userId = currentUser.username || currentUser.id;
+      const supId = currentUser.supervisor || userId;
+
       let query = supabase.from('capital_injections').select('*');
       if (routeId) {
-        query = query.eq('routeId', routeId);
+        query = query.or(`routeId.eq.${routeId},route_id.eq.${routeId}`);
+      } else {
+        query = query.or(`supervisor_id.eq.${userId},agent_id.eq.${userId},agent_id.eq.${supId}`);
       }
       const { data, error } = await query;
-      if (error && error.code === '42P01') {
-        console.warn('Tabla capital_injections no existe aún.');
-        return [];
-      }
+      if (error && error.code === '42P01') return [];
       if (error) throw error;
-      return data || [];
+      const list = data || [];
+      return list.filter(i => 
+        (routeId && (i.routeId === routeId || i.route_id === routeId)) ||
+        i.agent_id === userId || 
+        i.supervisor_id === userId || 
+        i.supervisor_id === supId
+      );
     } catch (err) {
       console.error('Error fetching capital injections:', err);
       return [];
@@ -3481,10 +3492,16 @@ const db = {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
-      let query = supabase.from('caja_movimientos').select('*');
+      if (!currentUser) return [];
+
+      const userId = currentUser.username || currentUser.id;
+      const supId = currentUser.supervisor || userId;
       
-      if (currentUser && currentUser.role === 'Agente de Ruta') {
-         query = query.eq('agent_id', currentUser.id || currentUser.username);
+      let query = supabase.from('caja_movimientos').select('*');
+      if (currentUser.role === 'Agente de Ruta') {
+         query = query.or(`agent_id.eq.${userId},supervisor_id.eq.${supId}`);
+      } else {
+         query = query.or(`supervisor_id.eq.${userId},agent_id.eq.${userId}`);
       }
       
       const { data, error } = await query;
@@ -3493,7 +3510,12 @@ const db = {
         return [];
       }
       if (error) throw error;
-      return data || [];
+      const list = data || [];
+      return list.filter(m => 
+        m.agent_id === userId || 
+        m.supervisor_id === userId || 
+        m.supervisor_id === supId
+      );
     } catch (err) {
       console.error('Error fetching cash movements:', err);
       return [];
@@ -5158,10 +5180,22 @@ const db = {
         const { data: pData } = await pQuery;
         payments = pData || [];
 
-        const { data: movData } = await supabase.from('caja_movimientos').select('*');
+        let movQuery = supabase.from('caja_movimientos').select('*');
+        if (agentUsernames.length > 0) {
+          movQuery = movQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId},agent_id.in.(${agentUsernames.join(',')})`);
+        } else {
+          movQuery = movQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId}`);
+        }
+        const { data: movData } = await movQuery;
         cajaMovimientos = movData || [];
 
-        const { data: injData } = await supabase.from('capital_injections').select('*');
+        let injQuery = supabase.from('capital_injections').select('*');
+        if (agentUsernames.length > 0) {
+          injQuery = injQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId},agent_id.in.(${agentUsernames.join(',')})`);
+        } else {
+          injQuery = injQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId}`);
+        }
+        const { data: injData } = await injQuery;
         capitalInjections = injData || [];
       } else {
         clients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
@@ -5188,6 +5222,23 @@ const db = {
         const amount = Number(c.amount || 0);
         return sum + (totalDebt > amount ? totalDebt - amount : 0);
       }, 0);
+
+      // Filtro de aislamiento estricto multi-tenancy (Supervisor / Tenant)
+      capitalInjections = capitalInjections.filter(i => 
+        i.supervisor_id === supId || 
+        i.agent_id === supId || 
+        (i.agent_id && agentUsernames.includes(i.agent_id)) ||
+        (i.routeId && routeIds.includes(i.routeId)) ||
+        (i.route_id && routeIds.includes(i.route_id))
+      );
+
+      cajaMovimientos = cajaMovimientos.filter(m => 
+        m.supervisor_id === supId || 
+        m.agent_id === supId || 
+        (m.agent_id && agentUsernames.includes(m.agent_id)) ||
+        (m.routeId && routeIds.includes(m.routeId)) ||
+        (m.route_id && routeIds.includes(m.route_id))
+      );
 
       const inyeccionesTotales = capitalInjections.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
       const salidasTotales = cajaMovimientos
