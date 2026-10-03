@@ -107,12 +107,22 @@ const supervisorModule = {
     }
 
     // Crear Nueva Ruta y Credenciales de Agente (Múltiples)
+    const routeCapitalInput = document.getElementById('route-capital');
+    if (routeCapitalInput) {
+      routeCapitalInput.addEventListener('input', (e) => {
+        const raw = e.target.value.replace(/\D/g, '');
+        e.target.value = raw ? parseInt(raw, 10).toLocaleString('es-CO') : '';
+        this.calculateRouteSuggestedQuota();
+      });
+    }
+
     if (this.formCreateRoute) {
       this.formCreateRoute.addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const routeName = document.getElementById('route-name').value.trim();
-        const capitalBase = parseFloat(document.getElementById('route-capital').value) || 0;
+        const capitalRaw = document.getElementById('route-capital').value.replace(/\D/g, '');
+        const capitalBase = parseFloat(capitalRaw) || 0;
         
         // Obtener todos los agentes definidos en el formulario
         const agentGroups = document.querySelectorAll('#route-agents-list .agent-fields-group');
@@ -272,7 +282,8 @@ const supervisorModule = {
 
     if (!capitalInput || !marginInput) return;
 
-    const base = parseFloat(capitalInput.value) || 0;
+    const baseRaw = capitalInput.value.replace(/\D/g, '');
+    const base = parseFloat(baseRaw) || 0;
     const marginPercent = parseFloat(marginInput.value) || 0;
 
     const total = Math.round(base * (1 + (marginPercent / 100)));
@@ -3449,7 +3460,7 @@ const supervisorModule = {
         html: `
           <div style="text-align: left; margin-bottom: 0.5rem;">
             <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Monto a Inyectar ($)</label>
-            <input id="swal-sup-inject-amount" type="number" class="swal2-input" placeholder="Ej. 1000000" style="width: 100%; margin: 0; font-size: 1.1rem; font-weight: bold;">
+            <input id="swal-sup-inject-amount" type="text" inputmode="numeric" class="swal2-input" placeholder="Ej. 1.000.000" style="width: 100%; margin: 0; font-size: 1.1rem; font-weight: bold;">
           </div>
           <div style="text-align: left; margin-bottom: 0.5rem; margin-top: 1rem;">
             <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Asignar a Ruta (Opcional)</label>
@@ -3467,15 +3478,25 @@ const supervisorModule = {
         confirmButtonText: 'Registrar Inyección',
         cancelButtonText: 'Cancelar',
         confirmButtonColor: '#10b981',
+        didOpen: () => {
+          const amountInput = document.getElementById('swal-sup-inject-amount');
+          if (amountInput) {
+            amountInput.addEventListener('input', (e) => {
+              const raw = e.target.value.replace(/\D/g, '');
+              e.target.value = raw ? parseInt(raw, 10).toLocaleString('es-CO') : '';
+            });
+          }
+        },
         preConfirm: () => {
-          const amount = document.getElementById('swal-sup-inject-amount').value;
+          const rawAmount = document.getElementById('swal-sup-inject-amount').value.replace(/\D/g, '');
+          const amount = parseFloat(rawAmount) || 0;
           const notes = document.getElementById('swal-sup-inject-notes').value;
           const routeId = document.getElementById('swal-sup-inject-route').value;
-          if (!amount || Number(amount) <= 0) {
+          if (!amount || amount <= 0) {
             Swal.showValidationMessage('Por favor ingresa un monto válido');
             return false;
           }
-          return { amount: Number(amount), notes, routeId };
+          return { amount, notes, routeId };
         }
       });
 
@@ -3500,7 +3521,7 @@ const supervisorModule = {
         title: '🔴 Sacar de Caja',
         text: 'Ingresa el monto que retirarás o gastarás de la Caja Global:',
         html: `
-          <input id="swal-sup-withdraw-amount" type="number" class="swal2-input" placeholder="Monto Ej. 200000" style="font-size: 1.1rem; font-weight: bold;">
+          <input id="swal-sup-withdraw-amount" type="text" inputmode="numeric" class="swal2-input" placeholder="Ej. 200.000" style="font-size: 1.1rem; font-weight: bold;">
           <input id="swal-sup-withdraw-notes" type="text" class="swal2-input" placeholder="Concepto o justificación de salida">
         `,
         focusConfirm: false,
@@ -3508,14 +3529,24 @@ const supervisorModule = {
         confirmButtonText: 'Registrar Salida',
         cancelButtonText: 'Cancelar',
         confirmButtonColor: '#ef4444',
+        didOpen: () => {
+          const withdrawInput = document.getElementById('swal-sup-withdraw-amount');
+          if (withdrawInput) {
+            withdrawInput.addEventListener('input', (e) => {
+              const raw = e.target.value.replace(/\D/g, '');
+              e.target.value = raw ? parseInt(raw, 10).toLocaleString('es-CO') : '';
+            });
+          }
+        },
         preConfirm: () => {
-          const amount = document.getElementById('swal-sup-withdraw-amount').value;
+          const rawAmount = document.getElementById('swal-sup-withdraw-amount').value.replace(/\D/g, '');
+          const amount = parseFloat(rawAmount) || 0;
           const notes = document.getElementById('swal-sup-withdraw-notes').value;
-          if (!amount || Number(amount) <= 0) {
+          if (!amount || amount <= 0) {
             Swal.showValidationMessage('Por favor ingresa un monto válido');
             return false;
           }
-          return { amount: Number(amount), notes };
+          return { amount, notes };
         }
       });
 
