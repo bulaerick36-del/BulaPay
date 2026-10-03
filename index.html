@@ -729,15 +729,12 @@
             </div>
           </div>
 
-          <!-- Tarjeta 3: Recaudado Hoy + Botón Cierre de Caja -->
-          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openKpiModal('collected')">
+          <!-- Tarjeta 3: Cierre de Caja Diario -->
+          <div class="card kpi-card kpi-card-clickable" onclick="supervisorModule.openCierreCajaModal()">
             <div class="kpi-icon">📈</div>
-            <div class="kpi-info" style="width: 100%; display: flex; flex-direction: column;">
-              <h4>Recaudado Hoy</h4>
-              <p id="kpi-total-collected" style="margin-bottom: 0.2rem;">$0</p>
-              <button type="button" class="btn btn-secondary" onclick="event.stopPropagation(); supervisorModule.openCierreCajaModal();" style="margin-top: 0.4rem; padding: 0.35rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 0.3rem; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; cursor: pointer;">
-                <span>🔒</span> Cierre de Caja
-              </button>
+            <div class="kpi-info">
+              <h4>CIERRE DE CAJA DIARIO</h4>
+              <p id="kpi-total-collected">$0</p>
             </div>
           </div>
 
