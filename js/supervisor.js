@@ -3380,9 +3380,37 @@ const supervisorModule = {
     if (modal) modal.style.display = 'none';
   },
 
+  selectedCajaRouteId: '',
+
+  async populateCajaRouteFilter() {
+    const filterSelect = document.getElementById('sup-caja-route-filter');
+    if (!filterSelect) return;
+
+    try {
+      const routes = await window.BulaPayDB.getRoutes();
+      let optionsHtml = '<option value="" style="background: #0f172a; color: white;">Todas las Rutas (Global)</option>';
+      if (routes && routes.length > 0) {
+        routes.forEach(r => {
+          const agentStr = r.agentName ? ` - ${r.agentName}` : '';
+          optionsHtml += `<option value="${r.id}" style="background: #0f172a; color: white;">Ruta: ${r.name}${agentStr}</option>`;
+        });
+      }
+      filterSelect.innerHTML = optionsHtml;
+      filterSelect.value = this.selectedCajaRouteId || '';
+    } catch (e) {
+      console.warn("Error al poblar filtro de rutas en caja global:", e);
+    }
+  },
+
+  async handleCajaRouteFilterChange(routeId) {
+    this.selectedCajaRouteId = routeId || '';
+    await this.renderCajaGlobalData();
+  },
+
   async renderCajaGlobalData() {
     const currentUser = window.BulaPayDB.getCurrentUser() || { username: 'admin' };
-    const data = await window.BulaPayDB.getSupervisorCajaGlobalData(currentUser.username);
+    await this.populateCajaRouteFilter();
+    const data = await window.BulaPayDB.getSupervisorCajaGlobalData(currentUser.username, this.selectedCajaRouteId);
 
     // Guardar datos en la instancia para modales interactivos
     this.cajaGlobalCacheData = data;
@@ -3393,7 +3421,9 @@ const supervisorModule = {
     const modalCartera = document.getElementById('sup-modal-cartera');
     const modalIntereses = document.getElementById('sup-modal-intereses');
 
-    if (kpiCajaVal) kpiCajaVal.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
+    if (!this.selectedCajaRouteId && kpiCajaVal) {
+      kpiCajaVal.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
+    }
     if (modalLiquid) modalLiquid.textContent = `$${data.liquidCash.toLocaleString('es-CO')}`;
     if (modalCartera) modalCartera.textContent = `$${data.carteraEnCalle.toLocaleString('es-CO')}`;
     if (modalIntereses) modalIntereses.textContent = `$${data.interesesActivos.toLocaleString('es-CO')}`;

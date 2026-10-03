@@ -5109,7 +5109,7 @@ const db = {
     }
   },
 
-  async getSupervisorCajaGlobalData(supervisorId) {
+  async getSupervisorCajaGlobalData(supervisorId, filterRouteId = null) {
     const supabase = await initSupabase();
     const todayStr = new Date().toISOString().split('T')[0];
     const supId = supervisorId || (this.getCurrentUser() ? this.getCurrentUser().username : 'admin');
@@ -5204,11 +5204,19 @@ const db = {
         capitalInjections = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
       }
 
-      const supervisorClients = clients.filter(c => 
+      let supervisorClients = clients.filter(c => 
         c.supervisor_id === supId || 
         (c.routeId && routeIds.includes(c.routeId)) ||
         (c.agent_id && agentUsernames.includes(c.agent_id))
       );
+
+      if (filterRouteId && String(filterRouteId).trim() !== '') {
+        supervisorClients = supervisorClients.filter(c => c.routeId === filterRouteId);
+        payments = payments.filter(p => p.routeId === filterRouteId || p.route_id === filterRouteId);
+        capitalInjections = capitalInjections.filter(i => i.routeId === filterRouteId || i.route_id === filterRouteId);
+        cajaMovimientos = cajaMovimientos.filter(m => m.routeId === filterRouteId || m.route_id === filterRouteId);
+        routesList = routesList.filter(r => r.id === filterRouteId);
+      }
 
       const hoyPayments = payments.filter(p => 
         (p.supervisor_id === supId || (p.agent_id && agentUsernames.includes(p.agent_id))) &&
