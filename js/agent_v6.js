@@ -1546,13 +1546,12 @@ const agentModule = {
       const cedulaBuscada = String(cedula || '').trim();
       const supabase = await window.BulaPayDB.initSupabase();
 
-      // 1. CONSULTA DIRECTA A SUPABASE DE CARTONES DEL CLIENTE (v152)
+      // 1. CONSULTA DIRECTA A SUPABASE DE CARTONES DEL CLIENTE
       let hasHistoricalLoss = false;
-      let hasCleanNewCredit = false;
       let hasActiveCredit = false;
+      let userCartons = [];
 
       try {
-        let userCartons = [];
         const { data: c1 } = await supabase.from('cartones').select('*').eq('cliente_id', cedulaBuscada);
         if (c1 && c1.length > 0) {
           userCartons = c1;
@@ -1560,24 +1559,27 @@ const agentModule = {
           const { data: c2 } = await supabase.from('cartones').select('*').eq('cedula', cedulaBuscada);
           if (c2 && c2.length > 0) userCartons = c2;
         }
-        
-        if (userCartons && userCartons.length > 0) {
-          userCartons.forEach(c => {
-            const st = String(c.estado || c.status || '').trim().toLowerCase();
-            const out = Number(c.outstanding || c.total_debt || 0);
-
-            // Si el cliente tiene algún cartón previo en liquidado_perdida, liquidado_mora, o liquidado_pagado
-            if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st === 'liquidado_pagado' || st.includes('perdida') || st.includes('mora') || st.includes('castigado')) {
-              hasHistoricalLoss = true;
-            } else if (st === 'activo' && out > 0) {
-              hasActiveCredit = true;
-            } else if ((st === 'pagado' || st === 'liquidado') && !st.includes('perdida') && !st.includes('mora') && st !== 'liquidado_pagado') {
-              hasCleanNewCredit = true;
-            }
-          });
-        }
       } catch (eCartonErr) {
         console.warn("Aviso al consultar cartones del cliente en historial:", eCartonErr);
+      }
+
+      // Clasificar cartones
+      const liquidadoCartons = [];
+      if (userCartons && userCartons.length > 0) {
+        userCartons.forEach(c => {
+          const st = String(c.estado || c.status || '').trim().toLowerCase();
+          const out = Number(c.outstanding || c.total_debt || 0);
+
+          if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st.includes('perdida') || st.includes('mora') || st.includes('castigado')) {
+            hasHistoricalLoss = true;
+          } else if (st === 'activo' || st === 'activo_por_renovacion' || out > 0) {
+            if (st === 'activo' || st === 'activo_por_renovacion') {
+              hasActiveCredit = true;
+            }
+          } else if (st === 'liquidado' || st === 'pagado' || st === 'liquidado_pagado') {
+            liquidadoCartons.push(c);
+          }
+        });
       }
 
       // 2. Consultar perfil del cliente en 'clients'
@@ -1588,8 +1590,11 @@ const agentModule = {
         .maybeSingle();
 
       const client = dbClient || (await window.BulaPayDB.getGlobalClientByCedula(cedulaBuscada));
+
+      // Verificar si el cliente existe en clients o cartones
+      const clientExists = !!client || (userCartons && userCartons.length > 0);
       
-      if (!client && !hasHistoricalLoss) {
+      if (!clientExists) {
         // Cliente NO existe: Ocultar resultados y mostrar error visual rojo
         this.historyResults.style.display = 'none';
         this.historyError.style.display = 'block';
@@ -1601,13 +1606,14 @@ const agentModule = {
       this.historyError.style.display = 'none';
       this.historyClientName.textContent = clientDisplayName;
 
-      // 3. REGLA PARCHE DEFINITIVO RIESGO EN ROJO (v152):
-      // Si tiene antecedentes de haber estado en liquidado_perdida o liquidado_pagado (recuperado), NO confiar ciegamente en risk='Verde'.
-      // Forzar a ROJO salvo que tenga un crédito NUEVO abierto desde cero y pagado limpio.
-      if (hasHistoricalLoss && !hasCleanNewCredit) {
+      // 3. REGLA DE EVALUACIÓN DE RIESGO:
+      
+      // REGLA A: ROJO (Moroso / Pérdida)
+      // Mantener la regla actual para liquidado_perdida o antecedentes de mora grave
+      if (hasHistoricalLoss) {
         if (client) client.risk = 'Rojo';
         this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Cliente de Riesgo / Antecedentes de Mora)';
+        this.historyRiskStatus.textContent = '🔴 ROJO (Cliente Moroso / Pérdida)';
         
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
@@ -1615,12 +1621,122 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#ef4444';
-          this.historyActiveCreditsAlert.innerHTML = `⚠️ ADVERTENCIA DE HISTORIAL: Este cliente cuenta con antecedentes de crédito en pérdida/mora pasada. Requiere evaluación estricta antes de autorizar un nuevo crédito.`;
+          this.historyActiveCreditsAlert.innerHTML = `⚠️ ADVERTENCIA DE HISTORIAL: Este cliente cuenta con antecedentes de crédito en liquidado_perdida (Moroso). Requiere evaluación estricta antes de autorizar un nuevo crédito.`;
         }
         return;
       }
 
-      // Flujo normal de evaluación para clientes sin antecedentes o con crédito nuevo limpio
+      // REGLA B: EVALUACIÓN DE DÍAS DE RETRASO EN CARTONES EN ESTADO LIQUIDADO
+      let maxDelayDays = 0;
+      let evaluatedLiquidado = false;
+
+      if (liquidadoCartons.length > 0) {
+        evaluatedLiquidado = true;
+        let allPayments = [];
+        try {
+          allPayments = await window.BulaPayDB.getPaymentsByClient(cedulaBuscada);
+        } catch (eP) {
+          console.warn("Error consultando pagos para evaluación de retraso:", eP);
+        }
+
+        liquidadoCartons.forEach(carton => {
+          const cartonStartDateStr = carton.fecha_apertura || carton.fecha_inicio || carton.created_at;
+          if (cartonStartDateStr) {
+            const startDate = new Date(cartonStartDateStr);
+            if (!isNaN(startDate.getTime())) {
+              const totalInstallments = Number(carton.installments_count || carton.installmentsCount || 30);
+              
+              // Calcular la fecha esperada de finalización agregando totalInstallments días hábiles (omitir domingos)
+              let expectedDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+              let daysAdded = 0;
+              while (daysAdded < totalInstallments) {
+                expectedDate.setDate(expectedDate.getDate() + 1);
+                if (expectedDate.getDay() !== 0) {
+                  daysAdded++;
+                }
+              }
+
+              // Buscar la fecha real de finalización (último pago o fecha de actualización del cartón)
+              let actualEndDate = null;
+              const cartonPayments = (allPayments || []).filter(p => {
+                if (p.carton_id && carton.id) {
+                  return String(p.carton_id).trim().toLowerCase() === String(carton.id).trim().toLowerCase();
+                }
+                return true;
+              });
+
+              if (cartonPayments.length > 0) {
+                let maxPaymentTime = 0;
+                cartonPayments.forEach(p => {
+                  let pDateObj = null;
+                  if (p.date) {
+                    const dStr = String(p.date).trim();
+                    pDateObj = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00');
+                  } else if (p.created_at) {
+                    pDateObj = new Date(p.created_at);
+                  }
+                  if (pDateObj && !isNaN(pDateObj.getTime()) && pDateObj.getTime() > maxPaymentTime) {
+                    maxPaymentTime = pDateObj.getTime();
+                  }
+                });
+                if (maxPaymentTime > 0) actualEndDate = new Date(maxPaymentTime);
+              }
+
+              if (!actualEndDate && carton.updated_at) actualEndDate = new Date(carton.updated_at);
+              if (!actualEndDate && carton.fecha_fin) actualEndDate = new Date(carton.fecha_fin);
+
+              if (actualEndDate) {
+                expectedDate.setHours(0, 0, 0, 0);
+                actualEndDate.setHours(0, 0, 0, 0);
+                if (actualEndDate > expectedDate) {
+                  const diffMs = actualEndDate.getTime() - expectedDate.getTime();
+                  const delayDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+                  if (delayDays > maxDelayDays) {
+                    maxDelayDays = delayDays;
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      if (evaluatedLiquidado) {
+        if (maxDelayDays >= 5) {
+          // Amarillo (Riesgo Medio / Liquidado con Retraso)
+          if (client) client.risk = 'Amarillo';
+          this.historyTrafficLight.className = 'traffic-light-header amarillo';
+          this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio / Liquidado con Retraso)';
+
+          if (this.historyActiveCreditsAlert) {
+            this.historyActiveCreditsAlert.style.display = 'flex';
+            this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+            this.historyActiveCreditsAlert.style.borderColor = 'var(--color-amarillo, #f59e0b)';
+            this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(245, 158, 11, 0.12)';
+            this.historyActiveCreditsAlert.style.color = '#d97706';
+            this.historyActiveCreditsAlert.innerHTML = `🟡 ADVERTENCIA DE RIESGO MEDIO: Este cliente liquidó su crédito anterior pero tuvo un retraso de ${maxDelayDays} días respecto a la fecha esperada de finalización.`;
+          }
+          return;
+        } else {
+          // Verde (Liquidado Exitoso / Buena Paga)
+          if (client) client.risk = 'Verde';
+          this.historyTrafficLight.className = 'traffic-light-header verde';
+          this.historyRiskStatus.textContent = '🟢 VERDE (Liquidado Exitoso / Cliente Excelente)';
+
+          if (this.historyActiveCreditsAlert) {
+            this.historyActiveCreditsAlert.style.display = 'flex';
+            this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+            this.historyActiveCreditsAlert.style.borderColor = 'var(--color-verde, #10b981)';
+            this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
+            this.historyActiveCreditsAlert.style.color = '#059669';
+            const delayNote = maxDelayDays > 0 ? ` con un retraso menor a 4 días (${maxDelayDays} días)` : ' a tiempo sin retrasos';
+            this.historyActiveCreditsAlert.innerHTML = `🟢 CLIENTE EXCELENTE: El cliente es un excelente pagador. Liquidó su crédito anterior${delayNote}.`;
+          }
+          return;
+        }
+      }
+
+      // Si no hay cartones liquidados, evaluación dinámica normal de créditos activos
       try {
         const payments = await window.BulaPayDB.getPaymentsByClient(cedulaBuscada);
         const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
@@ -1648,7 +1764,6 @@ const agentModule = {
         this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
       }
 
-      // Solo mostrar alerta de crédito activo si REALMENTE tiene un cartón activo con saldo pendiente
       if (hasActiveCredit) {
         let agentName = client?.agent_id || 'Desconocido';
         try {
@@ -1676,9 +1791,9 @@ const agentModule = {
     } catch (err) {
       console.error("Error al consultar Supabase:", err);
       alert('❌ Error al consultar la central de riesgos.');
-      this.historyPlaceholder.style.display = 'block';
-      this.historyResults.style.display = 'none';
-      this.historyError.style.display = 'none';
+      if (this.historyPlaceholder) this.historyPlaceholder.style.display = 'block';
+      if (this.historyResults) this.historyResults.style.display = 'none';
+      if (this.historyError) this.historyError.style.display = 'none';
     }
   },
 
@@ -2363,14 +2478,98 @@ const agentModule = {
     }
 
     try {
-      const client = await window.BulaPayDB.getClientByCedula(cedula);
-      if (!client) {
+      const supabase = await window.BulaPayDB.initSupabase();
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      const authUser = (await supabase.auth.getUser())?.data?.user;
+      const activeAgentId = authUser?.id || currentUser?.id || currentUser?.username;
+      const activeRouteId = currentUser?.routeId || currentUser?.route_id;
+
+      // 1. Verificar si el cliente existe en el sistema BulaPay (clients o cartones)
+      const { data: dbClientGlobal } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('cedula', cedula)
+        .maybeSingle();
+
+      const { data: dbCartonesGlobal } = await supabase
+        .from('cartones')
+        .select('*')
+        .or(`cliente_id.eq.${cedula},cedula.eq.${cedula}`);
+
+      const clientExistsInSystem = !!dbClientGlobal || (dbCartonesGlobal && dbCartonesGlobal.length > 0);
+
+      if (!clientExistsInSystem) {
         alert('❌ Cliente no registrado en el sistema BulaPay.');
         if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
         if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
         if (this.searchError) this.searchError.style.display = 'none';
+        this.currentClient = null;
         return;
       }
+
+      // 2. Consulta a Supabase con filtro estricto por el ID/Ruta del agente activo (.eq('agent_id', auth.uid()))
+      let activeCartonesData = [];
+
+      try {
+        let activeCartonQuery = supabase
+          .from('cartones')
+          .select('*')
+          .or(`cliente_id.eq.${cedula},cedula.eq.${cedula}`)
+          .in('estado', ['activo', 'activo_por_renovacion']);
+
+        if (activeAgentId) {
+          if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
+            if (activeRouteId) {
+              activeCartonQuery = activeCartonQuery.or(`agent_id.eq.${activeAgentId},agent_id.eq.${currentUser.username},route_id.eq.${activeRouteId}`);
+            } else {
+              activeCartonQuery = activeCartonQuery.or(`agent_id.eq.${activeAgentId},agent_id.eq.${currentUser.username}`);
+            }
+          } else if (currentUser && currentUser.username) {
+            activeCartonQuery = activeCartonQuery.or(`agent_id.eq.${activeAgentId},agent_id.eq.${currentUser.username}`);
+          } else {
+            activeCartonQuery = activeCartonQuery.eq('agent_id', activeAgentId);
+          }
+        }
+
+        const { data: qData } = await activeCartonQuery;
+        if (qData) activeCartonesData = qData;
+      } catch (eCartonQuery) {
+        console.warn("Aviso al consultar cartones activos con filtro de agente:", eCartonQuery);
+      }
+
+      // También verificar en la lista precargada de créditos activos del agente
+      const activeCredits = await window.BulaPayDB.loadActiveCredits();
+      const activeCreditLocal = activeCredits.find(c => String(c.cedula).trim() === String(cedula).trim());
+
+      const activeCarton = (activeCartonesData && activeCartonesData.length > 0) ? activeCartonesData[0] : (activeCreditLocal ? activeCreditLocal : null);
+
+      if (!activeCarton) {
+        // Si el cliente existe pero pertenece a otra ruta o no tiene créditos activos en esta ruta:
+        const errorMsg = 'Este cliente no tiene créditos activos en tu ruta';
+        if (this.searchError) {
+          this.searchError.style.display = 'block';
+          this.searchError.textContent = errorMsg;
+        }
+        alert(`⚠️ ${errorMsg}`);
+        if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
+        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
+        this.currentClient = null;
+        return;
+      }
+
+      // El cliente existe Y posee un cartón activo en la ruta del agente activo
+      const client = {
+        ...(dbClientGlobal || {}),
+        ...activeCarton,
+        carton_id: activeCarton.id,
+        cedula: cedula,
+        name: dbClientGlobal?.name || dbClientGlobal?.nombre || activeCarton.nombre_cliente || `Cliente ${cedula}`,
+        amount: Number(activeCarton.monto_prestado || activeCarton.amount || 0),
+        totalDebt: Number(activeCarton.total_debt || activeCarton.totalDebt || 0),
+        outstanding: Number(activeCarton.outstanding !== undefined ? activeCarton.outstanding : (activeCarton.total_debt || 0)),
+        installmentsCount: Number(activeCarton.installments_count || activeCarton.installmentsCount || 1),
+        installmentAmount: Number(activeCarton.installment_amount || activeCarton.installmentAmount || 0)
+      };
 
       if (this.searchError) this.searchError.style.display = 'none';
       
@@ -2429,8 +2628,6 @@ const agentModule = {
             dailyStatusList, 
             (status) => this.handleCartonPayment(status) // Callback interactivo solo aquí
           );
-
-
         } catch (e) {
           console.error("Error al preparar cartón interactivo:", e);
         }
@@ -2438,18 +2635,13 @@ const agentModule = {
       
     } catch (err) {
       console.error(err);
-      if (err.message === 'ACCESO_DENEGADO_OTRO_AGENTE') {
-        if (this.searchError) {
-          this.searchError.style.display = 'block';
-          this.searchError.textContent = 'Operación denegada: Este cliente pertenece a la ruta de otro asesor. No puedes gestionar sus cobros.';
-        } else {
-          alert('Operación denegada: Este cliente pertenece a la ruta de otro asesor. No puedes gestionar sus cobros.');
-        }
-        if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
-        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
-      } else {
-        alert('❌ Error al buscar cliente.');
+      const errorMsg = 'Este cliente no tiene créditos activos en tu ruta';
+      if (this.searchError) {
+        this.searchError.style.display = 'block';
+        this.searchError.textContent = errorMsg;
       }
+      if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
+      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
     }
   },
 
