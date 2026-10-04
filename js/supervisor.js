@@ -839,28 +839,12 @@ const supervisorModule = {
 
     if (!routeSelect) return;
     const routeId = routeSelect.value;
-    const routes = await window.BulaPayDB.getRoutes();
-    const route = routes.find(r => r.id === routeId);
+    const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const payments = await window.BulaPayDB.getPayments();
-    const clients = await window.BulaPayDB.getClients();
-
-    const cobradoHoy = payments
-      .filter(p => (p.routeId === routeId || p.route_id === routeId) && (p.date === todayStr || p.created_at?.startsWith(todayStr)))
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-    const nuevosClientesHoy = clients.filter(c => (c.routeId === routeId) && (c.created_at?.startsWith(todayStr) || c.date === todayStr));
-    const prestamosHoy = nuevosClientesHoy.reduce((sum, c) => sum + (Number(c.amount || c.monto_prestado) || 0), 0);
-
-    // Efectivo inicial en bolsillo (capital base de la ruta)
-    const efectivoInicial = route ? Number(route.capital || 0) : 0;
-    const efectivoEntregar = Math.max(0, efectivoInicial + cobradoHoy - prestamosHoy);
-
-    if (inicialEl) inicialEl.textContent = `$${efectivoInicial.toLocaleString('es-CO')}`;
-    if (cobradoHoyEl) cobradoHoyEl.textContent = `+$${cobradoHoy.toLocaleString('es-CO')}`;
-    if (prestamosHoyEl) prestamosHoyEl.textContent = `-$${prestamosHoy.toLocaleString('es-CO')}`;
-    if (entregarEl) entregarEl.textContent = `$${efectivoEntregar.toLocaleString('es-CO')}`;
+    if (inicialEl) inicialEl.textContent = `$${data.efectivoInicial.toLocaleString('es-CO')}`;
+    if (cobradoHoyEl) cobradoHoyEl.textContent = `+$${data.totalCobrado.toLocaleString('es-CO')}`;
+    if (prestamosHoyEl) prestamosHoyEl.textContent = `-$${data.totalPrestado.toLocaleString('es-CO')}`;
+    if (entregarEl) entregarEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
   },
 
   // 4. POPULATE MODAL: LISTA NEGRA (MOROSOS)

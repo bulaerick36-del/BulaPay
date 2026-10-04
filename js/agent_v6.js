@@ -4399,70 +4399,35 @@ const agentModule = {
       const currentUser = window.BulaPayDB.getCurrentUser();
       if (!currentUser) return;
 
-      const todayStr = this.getLocalDateString();
-      const allPayments = await window.BulaPayDB.getPayments();
-      
-      const allClients = await window.BulaPayDB.getClients();
-      const blacklistedCedulas = new Set(
-        allClients
-          .filter(c => {
-            const rawStatus = String(c.status || c.estado || '').toUpperCase();
-            return c.risk === 'Rojo' || String(c.risk || '').trim().toLowerCase() === 'rojo' || rawStatus.includes('NEGRA') || rawStatus.includes('MORA');
-          })
-          .map(c => String(c.cedula))
-      );
+      const activeRouteId = currentUser.routeId || currentUser.route_id || (await window.BulaPayDB.getActiveRouteIdForUser(currentUser));
+      const data = await window.BulaPayDB.getCierreCajaDataForRoute(activeRouteId, currentUser);
 
-      // Filtrar cobros por el cobrador actual y fecha de hoy estrictamente en hora local (excluyendo lista negra y mora)
-      const todayPayments = allPayments.filter(p => {
-        const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
-        const pStatusUpper = String(p.status || '').toUpperCase();
-        const isMoraPayment = pStatusUpper.includes('MORA') || pStatusUpper.includes('NEGRA') || (p.id && String(p.id).startsWith('pay_liq_') && blacklistedCedulas.has(pCedula));
-
-        return p.date === todayStr && 
-               Number(p.amount) > 0 && 
-               p.status !== 'No Pago' &&
-               p.status !== 'Pendiente' &&
-               !isMoraPayment &&
-               !blacklistedCedulas.has(pCedula) &&
-               p.agentName && p.agentName.toLowerCase().trim() === currentUser.name.toLowerCase().trim();
-      });
-      const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-
-      // Obtener clientes creados hoy por este cobrador
-      const todayClients = allClients.filter(c => {
-        if (!c.created_at) return false;
-        // Filtrado estricto convirtiendo c.created_at a la zona horaria local
-        const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
-        return clientLocalDate === todayStr;
-      });
-
-      // Sumar desembolso total del nuevo crédito prestado a la calle
-      const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.amount || c.monto_prestado || (Number(c.totalDebt || 0) / 1.2))), 0);
-      const netCash = totalCollected - totalLent;
-
-      // Poblar el modal tipo tirilla/factura
-      document.getElementById('cash-report-date').textContent = `Fecha: ${todayStr}`;
-      document.getElementById('cash-report-agent').textContent = `Cobrador: ${currentUser.name}`;
-      document.getElementById('cash-report-income').textContent = `+$${totalCollected.toLocaleString('es-CO')}`;
-      document.getElementById('cash-report-expenses').textContent = `-$${totalLent.toLocaleString('es-CO')}`;
-      
+      // Poblar el modal de Arqueo y Cierre de Caja Diario del Agente
+      const dateEl = document.getElementById('cash-report-date');
+      const agentEl = document.getElementById('cash-report-agent');
+      const routeEl = document.getElementById('cash-report-route');
+      const initialEl = document.getElementById('cash-report-initial');
+      const incomeEl = document.getElementById('cash-report-income');
+      const expensesEl = document.getElementById('cash-report-expenses');
       const netEl = document.getElementById('cash-report-net');
-      netEl.textContent = `$${netCash.toLocaleString('es-CO')}`;
-      
-      if (netCash < 0) {
-        netEl.style.color = '#dc2626';
-      } else {
-        netEl.style.color = '#111111';
-      }
 
-      // Mostrar el modal de reporte
+      if (dateEl) dateEl.textContent = `Fecha: ${data.dateStr}`;
+      if (agentEl) agentEl.textContent = `Cobrador: ${data.agentName}`;
+      if (routeEl) routeEl.textContent = `Ruta: ${data.routeName}`;
+
+      if (initialEl) initialEl.textContent = `$${data.efectivoInicial.toLocaleString('es-CO')}`;
+      if (incomeEl) incomeEl.textContent = `+$${data.totalCobrado.toLocaleString('es-CO')}`;
+      if (expensesEl) expensesEl.textContent = `-$${data.totalPrestado.toLocaleString('es-CO')}`;
+      if (netEl) netEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
+
+      // Mostrar el modal de Cierre de Caja Diario
       const reportModal = document.getElementById('agent-cash-report-modal');
       if (reportModal) {
         reportModal.style.display = 'flex';
       }
     } catch (e) {
-      console.error("Error al generar reporte de caja:", e);
-      alert("❌ Error al calcular el reporte de caja.");
+      console.error("Error al generar Cierre de Caja Diario para Agente:", e);
+      alert('❌ Error al calcular el Cierre de Caja Diario.');
     }
   },
 

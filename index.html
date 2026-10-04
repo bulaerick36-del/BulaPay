@@ -1046,7 +1046,7 @@
                 </div>
               </div>
               <button id="btn-agent-route-tracking" class="btn" style="padding: 0.3rem 0.45rem; font-size: 0.68rem; font-weight: bold; background-color: var(--color-rojo-bg); color: var(--color-rojo); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; display: none; align-items: center; gap: 0.2rem; cursor: pointer; transition: var(--transition-smooth); margin-left: auto; white-space: nowrap;">
-                <span>👥 Clientes:</span>
+                <span>🔒 Cierre de Caja Diario:</span>
                 <span id="agent-tracking-progress">0/0</span>
                 <span class="light-dot" id="agent-tracking-dot" style="width: 7px; height: 7px; border-radius: 50%; background-color: var(--color-rojo); display: inline-block;"></span>
               </button>
@@ -1504,14 +1504,14 @@
             </div>
           </div>
 
-          <!-- MODAL DE SEGUIMIENTO DE RUTA / CLIENTES DIARIOS -->
+          <!-- MODAL DE SEGUIMIENTO DE RUTA / CIERRE DE CAJA DIARIO -->
           <div class="overlay-modal" id="agent-route-tracking-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.85); z-index: 100;">
             <div class="modal-card" style="width: 90%; max-width: 360px; background-color: var(--bg-primary); border-radius: 16px; border: 1px solid var(--border-color); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; max-height: 80vh;">
               <!-- Header del Modal -->
               <div style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-secondary);">
                 <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: var(--primary);">BulaPay</h2>
                 <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
-                  <span>📋</span> Seguimiento Diario
+                  <span>🔒</span> Cierre de Caja Diario
                 </h4>
                 <span id="btn-close-route-tracking" style="font-size: 1.25rem; font-weight: bold; color: var(--text-secondary); cursor: pointer; line-height: 1;">&times;</span>
               </div>
@@ -1524,51 +1524,56 @@
               <!-- Footer del Modal con botón de Reporte -->
               <div style="padding: 1rem 1.25rem; border-top: 1px solid var(--border-color); background-color: var(--bg-secondary); display: flex; flex-direction: column; gap: 0.5rem;">
                 <button id="btn-generate-cash-report" class="btn btn-accent" style="width: 100%; padding: 0.6rem; font-weight: bold; font-size: 0.85rem; background-color: var(--accent); border-color: var(--accent); color: var(--bg-primary); display: flex; align-items: center; justify-content: center; gap: 0.5rem; border-radius: 8px; cursor: pointer;">
-                  <span>📊</span> Generar Reporte de Pago
+                  <span>🔒</span> Arqueo de Caja
                 </button>
               </div>
             </div>
           </div>
 
-          <!-- MODAL DE REPORTE DE CAJA DIARIO (FACTURA/TIRILLA) -->
+          <!-- MODAL DE REPORTE DE CAJA DIARIO (REPLICA VISUAL SUPERVISOR) -->
           <div class="overlay-modal" id="agent-cash-report-modal" style="display: none; justify-content: center; align-items: center; background-color: rgba(11, 19, 43, 0.85); z-index: 220;">
-            <div class="modal-card" style="width: 90%; max-width: 320px; background-color: #ffffff; color: #111111; border-radius: 8px; border: 2px dashed #999999; padding: 1.5rem; font-family: 'Courier New', Courier, monospace; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 0.75rem; position: relative;">
-              <!-- Cabecera de la Tirilla -->
-              <div style="text-align: center; border-bottom: 2px dashed #111111; padding-bottom: 0.75rem; margin-bottom: 0.5rem;">
-                <h4 style="margin: 0 0 0.25rem 0; font-size: 1.05rem; font-weight: bold; letter-spacing: 1px; color: #111111;">CUADRE DE CAJA DIARIO</h4>
-                <div style="font-size: 0.75rem; color: #555555;" id="cash-report-date">Fecha: -</div>
-                <div style="font-size: 0.75rem; color: #555555;" id="cash-report-agent">Cobrador: -</div>
-              </div>
-              
-              <!-- Detalles de Transacción -->
-              <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem; color: #111111;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span>(+) Total Recaudado:</span>
-                  <span id="cash-report-income" style="font-weight: bold; color: #10b981;">+$0</span>
+            <div class="modal-card" style="width: 90%; max-width: 480px; background-color: var(--bg-primary); border-radius: 16px; border: 1px solid var(--border-color); padding: 1.5rem; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 1.25rem; position: relative; color: var(--text-primary);">
+              <!-- Header del Modal -->
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                  <h3 class="title-gradient" style="margin: 0 0 0.3rem 0; font-size: 1.35rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>🔒</span> Arqueo y Cierre de Caja Diario
+                  </h3>
+                  <p style="margin: 0; color: var(--text-secondary); font-size: 0.82rem;">Matemática de cuadre físico del efectivo a entregar al supervisor.</p>
                 </div>
+                <button type="button" id="btn-close-cash-report-x" style="background: none; border: none; font-size: 1.5rem; font-weight: bold; color: var(--text-secondary); cursor: pointer; line-height: 1; padding: 0;" onclick="document.getElementById('agent-cash-report-modal').style.display='none'">&times;</button>
+              </div>
+
+              <!-- Badges de contexto (Fecha, Cobrador, Ruta) -->
+              <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; font-size: 0.78rem; color: var(--text-secondary);">
+                <div style="display: flex; align-items: center; gap: 0.3rem;" id="cash-report-date"><span>📅</span> Fecha: -</div>
+                <div style="display: flex; align-items: center; gap: 0.3rem; margin-left: auto;" id="cash-report-agent"><span>👤</span> Cobrador: -</div>
+                <div style="width: 100%; display: flex; align-items: center; gap: 0.3rem; margin-top: 0.2rem;" id="cash-report-route"><span>📍</span> Ruta: -</div>
+              </div>
+              
+              <!-- Desglose de Cierre (Estructura idéntica al Supervisor) -->
+              <div style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: grid; gap: 0.85rem; font-size: 0.9rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span>(-) Total Prestado:</span>
-                  <span id="cash-report-expenses" style="font-weight: bold; color: #dc2626;">-$0</span>
+                  <span style="color: var(--text-secondary);">💵 Efectivo en Bolsillo Inicial:</span>
+                  <strong id="cash-report-initial" style="color: var(--text-primary); font-size: 1rem;">$0</strong>
                 </div>
-              </div>
-              
-              <!-- Línea Divisoria -->
-              <div style="border-top: 2px dashed #111111; margin: 0.5rem 0;"></div>
-              
-              <!-- Total a Entregar -->
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; font-weight: bold; padding: 0.25rem 0; color: #111111;">
-                <span>TOTAL A ENTREGAR:</span>
-                <span id="cash-report-net" style="font-size: 1.15rem; color: #111111; font-weight: 900;">$0</span>
-              </div>
-              
-              <!-- Pie de la Tirilla -->
-              <div style="text-align: center; font-size: 0.7rem; color: #777777; margin-top: 0.5rem; border-top: 1px dashed #cccccc; padding-top: 0.5rem;">
-                BulaPay - Software de Gestión de Cartera
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+                  <span>➕ Total Cobrado Hoy:</span>
+                  <strong id="cash-report-income" style="font-size: 1rem;">+$0</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
+                  <span>➖ Total Prestado Hoy:</span>
+                  <strong id="cash-report-expenses" style="font-size: 1rem;">-$0</strong>
+                </div>
+                <div style="border-top: 1px dashed var(--border-color); padding-top: 0.85rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; font-weight: 800;">
+                  <span style="color: #34d399;">🏛️ TOTAL A ENTREGAR AL SUPERVISOR:</span>
+                  <strong id="cash-report-net" style="color: #34d399; font-size: 1.35rem; font-weight: 900;">$0</strong>
+                </div>
               </div>
               
               <!-- Botón de Cerrar -->
-              <button type="button" id="btn-close-cash-report" class="btn btn-secondary" style="margin-top: 1rem; width: 100%; padding: 0.6rem; font-weight: bold; font-size: 0.85rem; background-color: #111111; color: #ffffff; border: 1px solid #111111; border-radius: 6px; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">
-                Cerrar Reporte
+              <button type="button" id="btn-close-cash-report" class="btn btn-secondary" style="width: 100%; padding: 0.65rem; font-weight: bold; font-size: 0.85rem; background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: background-color 0.2s;">
+                Cerrar Cierre de Caja
               </button>
             </div>
           </div>
@@ -2381,11 +2386,11 @@
           <strong id="cierre-cobrado-hoy">+$0</strong>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
-          <span>➖ Nuevos Préstamos de Hoy:</span>
+          <span>➖ Total Prestado Hoy:</span>
           <strong id="cierre-prestamos-hoy">-$0</strong>
         </div>
         <div style="border-top: 1px dashed var(--border-color); padding-top: 0.85rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.1rem; font-weight: 800;">
-          <span style="color: #34d399;">🏛️ Efectivo a Entregar al Supervisor:</span>
+          <span style="color: #34d399;">🏛️ TOTAL A ENTREGAR AL SUPERVISOR:</span>
           <strong id="cierre-efectivo-entregar" style="color: #34d399; font-size: 1.35rem;">$0</strong>
         </div>
       </div>

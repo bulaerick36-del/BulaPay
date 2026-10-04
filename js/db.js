@@ -1263,6 +1263,93 @@ const db = {
     };
   },
 
+  async getCierreCajaDataForRoute(routeId = null, agentUserObj = null) {
+    const supabase = await initSupabase();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    let route = null;
+    let targetRouteId = routeId;
+
+    if (targetRouteId) {
+      route = await this.getRouteById(targetRouteId);
+    }
+
+    if (!route && agentUserObj) {
+      targetRouteId = agentUserObj.routeId || agentUserObj.route_id || (await this.getActiveRouteIdForUser(agentUserObj));
+      if (targetRouteId) {
+        route = await this.getRouteById(targetRouteId);
+      }
+    }
+
+    if (!route && agentUserObj) {
+      const routes = await this.getRoutes();
+      const uName = agentUserObj.username || agentUserObj.id;
+      const uFull = agentUserObj.name;
+      route = routes.find(r => r.agent_id === uName || r.agentName === uFull || r.agentName === uName);
+      if (route) targetRouteId = route.id;
+    }
+
+    const efectivoInicial = route ? Number(route.capital || route.monto_inicial || 0) : 0;
+    const agentName = route?.agentName || agentUserObj?.name || agentUserObj?.username || 'Agente de Ruta';
+    const routeName = route?.name || 'Ruta sin asignar';
+
+    // 1. Total Cobrado Hoy (payments)
+    const allPayments = await this.getPayments();
+    const todayPayments = (allPayments || []).filter(p => {
+      const pDate = p.date || (p.created_at ? p.created_at.split('T')[0] : '');
+      if (pDate !== todayStr) return false;
+
+      const pStatus = String(p.status || '').toUpperCase();
+      if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'CANCELADO' || pStatus === 'RECHAZADO') return false;
+      if (Number(p.amount || 0) <= 0) return false;
+
+      let belongs = false;
+      if (targetRouteId && (p.routeId === targetRouteId || p.route_id === targetRouteId)) {
+        belongs = true;
+      } else if (agentUserObj && (p.agent_id === agentUserObj.username || p.agentId === agentUserObj.username || p.agent_id === agentUserObj.id)) {
+        belongs = true;
+      } else if (agentName && p.agentName && String(p.agentName).toLowerCase().trim() === String(agentName).toLowerCase().trim()) {
+        belongs = true;
+      }
+      return belongs;
+    });
+
+    const totalCobrado = todayPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+
+    // 2. Total Prestado Hoy (clients/cartones creados hoy)
+    const allClients = await this.getClients();
+    const todayClients = (allClients || []).filter(c => {
+      let cDate = c.date || (c.created_at ? c.created_at.split('T')[0] : '');
+      if (cDate !== todayStr) return false;
+
+      let belongs = false;
+      if (targetRouteId && (c.routeId === targetRouteId || c.route_id === targetRouteId)) {
+        belongs = true;
+      } else if (agentUserObj && (c.agent_id === agentUserObj.username || c.agentId === agentUserObj.username || c.agent_id === agentUserObj.id)) {
+        belongs = true;
+      }
+      return belongs;
+    });
+
+    const totalPrestado = todayClients.reduce((sum, c) => {
+      const amt = Number(c.amount || c.monto_prestado || (c.totalDebt ? Math.round(Number(c.totalDebt) / 1.2) : 0));
+      return sum + Math.round(amt);
+    }, 0);
+
+    const totalEntregar = Math.max(0, efectivoInicial + totalCobrado - totalPrestado);
+
+    return {
+      routeId: targetRouteId || null,
+      routeName,
+      agentName,
+      dateStr: todayStr,
+      efectivoInicial: Math.round(efectivoInicial),
+      totalCobrado: Math.round(totalCobrado),
+      totalPrestado: Math.round(totalPrestado),
+      totalEntregar: Math.round(totalEntregar)
+    };
+  },
+
   async getGlobalClientByCedula(cedula) {
     const supabase = await initSupabase();
     const { data: client, error } = await supabase
