@@ -5400,6 +5400,63 @@ const db = {
     currentLocal.push(record);
     localStorage.setItem('bulapay_caja_movimientos', JSON.stringify(currentLocal));
     return record;
+  },
+
+  async injectCapitalToRoute(routeId, amount, notes = "Inyección de capital adicional") {
+    const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser();
+    const supId = this.getSupervisorId() || (currentUser ? currentUser.username : 'admin');
+    const cleanAmount = Math.round(parseFloat(amount) || 0);
+    if (cleanAmount <= 0) return;
+
+    // 1. Obtener la ruta actual y actualizar su capital
+    const route = await this.getRouteById(routeId);
+    let newCapital = cleanAmount;
+    if (route) {
+      newCapital = (Number(route.capital || route.capital_base || route.capital_asignado) || 0) + cleanAmount;
+    }
+
+    if (supabase) {
+      const { error: routeErr } = await supabase
+        .from('routes')
+        .update({ capital: newCapital })
+        .eq('id', routeId);
+      if (routeErr) console.error("Error al actualizar capital base de ruta:", routeErr);
+    }
+
+    // Actualizar local storage de rutas
+    const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+    const localRouteIndex = localRoutes.findIndex(r => r.id === routeId);
+    if (localRouteIndex !== -1) {
+      localRoutes[localRouteIndex].capital = newCapital;
+      localStorage.setItem('bulapay_routes', JSON.stringify(localRoutes));
+    }
+
+    // 2. Registrar inyección en capital_injections
+    const injectionRecord = {
+      id: 'inj_route_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      amount: cleanAmount,
+      supervisor_id: supId,
+      agent_id: supId,
+      route_id: String(routeId),
+      routeId: String(routeId),
+      notes: notes || "Inyección de capital adicional",
+      date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      const { error: injErr } = await supabase
+        .from('capital_injections')
+        .insert([injectionRecord]);
+      if (injErr) console.error("Error al insertar en capital_injections:", injErr);
+    }
+
+    const currentLocalInjections = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
+    currentLocalInjections.push(injectionRecord);
+    localStorage.setItem('bulapay_capital_injections', JSON.stringify(currentLocalInjections));
+
+    return { newCapital, injectionRecord };
   }
 };
 

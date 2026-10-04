@@ -1272,11 +1272,10 @@ const supervisorModule = {
     // Centrado por defecto en La Guajira, Colombia
     this.mapInstance = L.map('live-gps-map').setView([11.5444, -72.9069], 9);
 
-    // Tile server CartoDB Positron para una estética clara
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20
+    // Tile server público y gratuito OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
     }).addTo(this.mapInstance);
 
     setTimeout(() => {
@@ -1982,11 +1981,22 @@ const supervisorModule = {
       }
 
       routes.forEach(route => {
-        // Encontrar agentes asociados
-        const routeAgents = allUsers.filter(u => u.routeId === route.id && u.role === 'Agente de Ruta');
-        const agentsText = routeAgents.length > 0 
-          ? routeAgents.map(a => `${a.name} (${a.documentNumber || 'Sin Cédula'})`).join(', ') 
-          : 'Sin agentes asignados';
+        // Encontrar agentes asociados con mapeo seguro multi-campo
+        const routeAgents = allUsers.filter(u => 
+          (u.routeId === route.id || u.route_id === route.id || u.ruta_id === route.id) &&
+          (u.role === 'Agente de Ruta' || u.role === 'agent')
+        );
+
+        let agentsText = '';
+        if (routeAgents.length > 0) {
+          agentsText = routeAgents.map(a => `${a.name || a.username || 'Agente'} (${a.documentNumber || a.document_number || a.cedula || 'Sin Cédula'})`).join(', ');
+        } else if (route.agentName || route.agent_name) {
+          agentsText = route.agentName || route.agent_name;
+        } else {
+          agentsText = 'Sin agentes asignados';
+        }
+
+        const capBaseVal = Number(route.capital || route.capital_base || route.capital_asignado || 0);
 
         const card = document.createElement('div');
         card.style.background = 'rgba(255, 255, 255, 0.02)';
@@ -2010,7 +2020,7 @@ const supervisorModule = {
           <div style="font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.25rem;">
             <div>
               <span style="color: var(--text-secondary);">Capital Base:</span>
-              <strong style="color: white;">$${Number(route.capital).toLocaleString('es-CO')}</strong>
+              <strong style="color: white;">$${capBaseVal.toLocaleString('es-CO')}</strong>
             </div>
             <div>
               <span style="color: var(--text-secondary);">Agentes:</span>
@@ -2018,9 +2028,10 @@ const supervisorModule = {
             </div>
           </div>
 
-          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="supervisorModule.openEditRouteModal('${route.id}')" style="flex: 1; padding: 0.4rem; font-size: 0.75rem; border-color: rgba(0, 245, 212, 0.2); color: var(--accent);">👤 Editar Personal</button>
-            <button type="button" class="btn btn-danger btn-sm" onclick="supervisorModule.handleDeleteRoute('${route.id}', '${route.name}')" style="flex: 1; padding: 0.4rem; font-size: 0.75rem; background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--color-rojo);">🗑️ Eliminar</button>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="supervisorModule.openInjectRouteCapitalModal('${route.id}', '${route.name}')" style="flex: 1; min-width: 110px; padding: 0.4rem; font-size: 0.75rem; border-color: rgba(16, 185, 129, 0.4); color: #34d399; background: rgba(16, 185, 129, 0.1);">🟢 Inyectar Capital</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="supervisorModule.openEditRouteModal('${route.id}')" style="flex: 1; min-width: 110px; padding: 0.4rem; font-size: 0.75rem; border-color: rgba(0, 245, 212, 0.2); color: var(--accent);">👤 Editar Personal</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="supervisorModule.handleDeleteRoute('${route.id}', '${route.name}')" style="flex: 1; min-width: 90px; padding: 0.4rem; font-size: 0.75rem; background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--color-rojo);">🗑️ Eliminar</button>
           </div>
         `;
         
@@ -2042,6 +2053,73 @@ const supervisorModule = {
           ❌ Error al cargar las rutas.
         </div>
       `;
+    }
+  },
+
+  async openInjectRouteCapitalModal(routeId, routeName) {
+    if (!window.Swal) {
+      const amountStr = prompt(`Ingresa el monto a inyectar a la ruta "${routeName}" ($):`);
+      if (!amountStr) return;
+      const amount = parseFloat(amountStr.replace(/\D/g, '')) || 0;
+      if (amount <= 0) return alert('Monto inválido.');
+      try {
+        await window.BulaPayDB.injectCapitalToRoute(routeId, amount, "Inyección de capital adicional");
+        alert(`✅ Capital inyectado con éxito a la ruta "${routeName}".`);
+        await this.renderDashboard();
+        await this.renderManagedRoutesList();
+      } catch (e) {
+        alert('Error al inyectar capital: ' + (e.message || JSON.stringify(e)));
+      }
+      return;
+    }
+
+    const { value: formValues } = await Swal.fire({
+      title: `🟢 Inyectar Capital a Ruta`,
+      html: `
+        <div style="text-align: left; margin-bottom: 0.5rem;">
+          <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Ruta Seleccionada</label>
+          <input type="text" class="swal2-input" value="${routeName}" readonly style="width: 100%; margin: 0; font-size: 0.95rem; font-weight: bold; background: rgba(255,255,255,0.05); color: #fff;">
+        </div>
+        <div style="text-align: left; margin-bottom: 0.5rem; margin-top: 1rem;">
+          <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Monto Adicional a Inyectar ($)</label>
+          <input id="swal-route-inject-amount" type="text" inputmode="numeric" class="swal2-input" placeholder="Ej. 500.000" style="width: 100%; margin: 0; font-size: 1.1rem; font-weight: bold;">
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar Inyección',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#10b981',
+      didOpen: () => {
+        const amountInput = document.getElementById('swal-route-inject-amount');
+        if (amountInput) {
+          amountInput.focus();
+          amountInput.addEventListener('input', (e) => {
+            const raw = e.target.value.replace(/\D/g, '');
+            e.target.value = raw ? parseInt(raw, 10).toLocaleString('es-CO') : '';
+          });
+        }
+      },
+      preConfirm: () => {
+        const raw = document.getElementById('swal-route-inject-amount').value.replace(/\D/g, '');
+        const amount = parseInt(raw, 10) || 0;
+        if (amount <= 0) {
+          Swal.showValidationMessage('Por favor ingresa un monto válido mayor a 0');
+          return false;
+        }
+        return { amount };
+      }
+    });
+
+    if (formValues && formValues.amount > 0) {
+      try {
+        await window.BulaPayDB.injectCapitalToRoute(routeId, formValues.amount, "Inyección de capital adicional");
+        Swal.fire('✅ Capital Inyectado', `Se inyectaron $${formValues.amount.toLocaleString('es-CO')} a la ruta "${routeName}".`, 'success');
+        await this.renderDashboard();
+        await this.renderManagedRoutesList();
+      } catch (e) {
+        Swal.fire('❌ Error', 'No se pudo registrar la inyección: ' + (e.message || JSON.stringify(e)), 'error');
+      }
     }
   },
 
