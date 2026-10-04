@@ -605,7 +605,7 @@ const agentModule = {
           // Escenario A: Liquidación Exitosa con Pago Completo
           if (saldoRestante <= 0 || recaudoReal >= totalEsperado) {
             gananciaReal = Math.max(0, recaudoReal - capitalPrestado);
-            nuevoEstado = 'Liquidado_Pagado';
+            nuevoEstado = window.BulaPayDB.determineCartonLiquidationStatus(client, new Date());
           } 
           // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v103: liquidado_perdida)
           else {
@@ -651,8 +651,12 @@ const agentModule = {
             typeof this.renderPaymentCardGrid === 'function' ? this.renderPaymentCardGrid() : Promise.resolve()
           ]);
 
-          if (nuevoEstado === 'Liquidado_Pagado') {
-            alert('🎉 ¡Cartón Liquidado Exitosamente!');
+          if (nuevoEstado === 'liquidado_exitoso') {
+            alert('🎉 ¡Cartón Liquidado Exitosamente a tiempo (liquidado_exitoso)!');
+          } else if (nuevoEstado === 'liquidado_retraso') {
+            alert('⚠️ Cartón Liquidado con Retraso (liquidado_retraso) respecto a la fecha proyectada.');
+          } else if (nuevoEstado === 'liquidado_renovacion') {
+            alert('🔄 Cartón Liquidado por Renovación (liquidado_renovacion).');
           } else {
             alert(`⚠️ El cliente ha sido enviado a Lista Negra (Moroso) con saldo pendiente de $${saldoRestante.toLocaleString('es-CO')}.\nEl crédito se marca como 'liquidado_perdida': la Cartera en Calle se reduce y la deuda real se registra en Lista Negra.`);
           }
@@ -1534,235 +1538,57 @@ const agentModule = {
     }
 
     // Estado de Cargando...
-    this.historyPlaceholder.style.display = 'none';
-    this.historyError.style.display = 'none';
-    this.historyResults.style.display = 'block';
-    this.historyClientName.textContent = 'Cargando...';
-    this.historyActiveCreditsAlert.style.display = 'none';
-    this.historyTrafficLight.className = 'traffic-light-header';
-    this.historyRiskStatus.textContent = '⏳ Buscando historial...';
+    if (this.historyPlaceholder) this.historyPlaceholder.style.display = 'none';
+    if (this.historyError) this.historyError.style.display = 'none';
+    if (this.historyResults) this.historyResults.style.display = 'block';
+    if (this.historyClientName) this.historyClientName.textContent = 'Cargando...';
+    if (this.historyActiveCreditsAlert) this.historyActiveCreditsAlert.style.display = 'none';
+    if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header';
+    if (this.historyRiskStatus) this.historyRiskStatus.textContent = '⏳ Evaluando Modus Operandi...';
 
     try {
       const cedulaBuscada = String(cedula || '').trim();
-      const supabase = await window.BulaPayDB.initSupabase();
+      const modusResult = await window.BulaPayDB.evaluateClientModusOperandi(cedulaBuscada);
+      const client = await window.BulaPayDB.getGlobalClientByCedula(cedulaBuscada);
 
-      // 1. CONSULTA DIRECTA A SUPABASE DE CARTONES DEL CLIENTE
-      let hasHistoricalLoss = false;
-      let hasActiveCredit = false;
-      let userCartons = [];
-
-      try {
-        const { data: c1 } = await supabase.from('cartones').select('*').eq('cliente_id', cedulaBuscada);
-        if (c1 && c1.length > 0) {
-          userCartons = c1;
-        } else {
-          const { data: c2 } = await supabase.from('cartones').select('*').eq('cedula', cedulaBuscada);
-          if (c2 && c2.length > 0) userCartons = c2;
-        }
-      } catch (eCartonErr) {
-        console.warn("Aviso al consultar cartones del cliente en historial:", eCartonErr);
-      }
-
-      // Clasificar cartones
-      const liquidadoCartons = [];
-      if (userCartons && userCartons.length > 0) {
-        userCartons.forEach(c => {
-          const st = String(c.estado || c.status || '').trim().toLowerCase();
-          const out = Number(c.outstanding || c.total_debt || 0);
-
-          if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st.includes('perdida') || st.includes('mora') || st.includes('castigado')) {
-            hasHistoricalLoss = true;
-          } else if (st === 'activo' || st === 'activo_por_renovacion' || out > 0) {
-            if (st === 'activo' || st === 'activo_por_renovacion') {
-              hasActiveCredit = true;
-            }
-          } else if (st === 'liquidado' || st === 'pagado' || st === 'liquidado_pagado') {
-            liquidadoCartons.push(c);
-          }
-        });
-      }
-
-      // 2. Consultar perfil del cliente en 'clients'
-      const { data: dbClient } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('cedula', cedulaBuscada)
-        .maybeSingle();
-
-      const client = dbClient || (await window.BulaPayDB.getGlobalClientByCedula(cedulaBuscada));
-
-      // Verificar si el cliente existe en clients o cartones
-      const clientExists = !!client || (userCartons && userCartons.length > 0);
-      
+      const clientExists = !!client || (modusResult && modusResult.userCartons && modusResult.userCartons.length > 0);
       if (!clientExists) {
-        // Cliente NO existe: Ocultar resultados y mostrar error visual rojo
-        this.historyResults.style.display = 'none';
-        this.historyError.style.display = 'block';
+        if (this.historyResults) this.historyResults.style.display = 'none';
+        if (this.historyError) this.historyError.style.display = 'block';
         return;
       }
 
       const clientDisplayName = (client && (client.name || client.nombre)) ? (client.name || client.nombre) : `Cliente ${cedulaBuscada}`;
-      this.historyResults.style.display = 'block';
-      this.historyError.style.display = 'none';
-      this.historyClientName.textContent = clientDisplayName;
+      if (this.historyResults) this.historyResults.style.display = 'block';
+      if (this.historyError) this.historyError.style.display = 'none';
+      if (this.historyClientName) this.historyClientName.textContent = clientDisplayName;
 
-      // 3. REGLA DE EVALUACIÓN DE RIESGO:
-      
-      // REGLA A: ROJO (Moroso / Pérdida)
-      // Mantener la regla actual para liquidado_perdida o antecedentes de mora grave
-      if (hasHistoricalLoss) {
+      // 1. REGLA DE BLOQUEO GLOBAL (LISTA NEGRA):
+      if (modusResult.isBlacklisted) {
         if (client) client.risk = 'Rojo';
-        this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Cliente Moroso / Pérdida)';
-        
+        if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header rojo';
+        if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🔴 ROJO (Moroso / Lista Negra)';
+
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
           this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#ef4444';
-          this.historyActiveCreditsAlert.innerHTML = `⚠️ ADVERTENCIA DE HISTORIAL: Este cliente cuenta con antecedentes de crédito en liquidado_perdida (Moroso). Requiere evaluación estricta antes de autorizar un nuevo crédito.`;
+          this.historyActiveCreditsAlert.innerHTML = `⚠️ BLOQUEO GLOBAL (LISTA NEGRA):<br>` +
+            `Este cliente cuenta con al menos un (1) cartón en estado <strong>liquidado_perdida</strong> (Moroso).<br>` +
+            `Su estado es ROJO inamovible. El sistema prohíbe la creación de nuevos créditos.<br>` +
+            `<em>Debe comunicarse con el agente que generó el reporte para limpiar su historial.</em>`;
         }
         return;
       }
 
-      // REGLA B: EVALUACIÓN DE DÍAS DE RETRASO EN CARTONES EN ESTADO LIQUIDADO
-      let maxDelayDays = 0;
-      let evaluatedLiquidado = false;
-
-      if (liquidadoCartons.length > 0) {
-        evaluatedLiquidado = true;
-        let allPayments = [];
-        try {
-          allPayments = await window.BulaPayDB.getPaymentsByClient(cedulaBuscada);
-        } catch (eP) {
-          console.warn("Error consultando pagos para evaluación de retraso:", eP);
-        }
-
-        liquidadoCartons.forEach(carton => {
-          const cartonStartDateStr = carton.fecha_apertura || carton.fecha_inicio || carton.created_at;
-          if (cartonStartDateStr) {
-            const startDate = new Date(cartonStartDateStr);
-            if (!isNaN(startDate.getTime())) {
-              const totalInstallments = Number(carton.installments_count || carton.installmentsCount || 30);
-              
-              // Calcular la fecha esperada de finalización agregando totalInstallments días hábiles (omitir domingos)
-              let expectedDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-              let daysAdded = 0;
-              while (daysAdded < totalInstallments) {
-                expectedDate.setDate(expectedDate.getDate() + 1);
-                if (expectedDate.getDay() !== 0) {
-                  daysAdded++;
-                }
-              }
-
-              // Buscar la fecha real de finalización (último pago o fecha de actualización del cartón)
-              let actualEndDate = null;
-              const cartonPayments = (allPayments || []).filter(p => {
-                if (p.carton_id && carton.id) {
-                  return String(p.carton_id).trim().toLowerCase() === String(carton.id).trim().toLowerCase();
-                }
-                return true;
-              });
-
-              if (cartonPayments.length > 0) {
-                let maxPaymentTime = 0;
-                cartonPayments.forEach(p => {
-                  let pDateObj = null;
-                  if (p.date) {
-                    const dStr = String(p.date).trim();
-                    pDateObj = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00');
-                  } else if (p.created_at) {
-                    pDateObj = new Date(p.created_at);
-                  }
-                  if (pDateObj && !isNaN(pDateObj.getTime()) && pDateObj.getTime() > maxPaymentTime) {
-                    maxPaymentTime = pDateObj.getTime();
-                  }
-                });
-                if (maxPaymentTime > 0) actualEndDate = new Date(maxPaymentTime);
-              }
-
-              if (!actualEndDate && carton.updated_at) actualEndDate = new Date(carton.updated_at);
-              if (!actualEndDate && carton.fecha_fin) actualEndDate = new Date(carton.fecha_fin);
-
-              if (actualEndDate) {
-                expectedDate.setHours(0, 0, 0, 0);
-                actualEndDate.setHours(0, 0, 0, 0);
-                if (actualEndDate > expectedDate) {
-                  const diffMs = actualEndDate.getTime() - expectedDate.getTime();
-                  const delayDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-                  if (delayDays > maxDelayDays) {
-                    maxDelayDays = delayDays;
-                  }
-                }
-              }
-            }
-          }
-        });
-      }
-
-      if (evaluatedLiquidado) {
-        if (maxDelayDays >= 5) {
-          // Amarillo (Riesgo Medio / Liquidado con Retraso)
-          if (client) client.risk = 'Amarillo';
-          this.historyTrafficLight.className = 'traffic-light-header amarillo';
-          this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio / Liquidado con Retraso)';
-
-          if (this.historyActiveCreditsAlert) {
-            this.historyActiveCreditsAlert.style.display = 'flex';
-            this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
-            this.historyActiveCreditsAlert.style.borderColor = 'var(--color-amarillo, #f59e0b)';
-            this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(245, 158, 11, 0.12)';
-            this.historyActiveCreditsAlert.style.color = '#d97706';
-            this.historyActiveCreditsAlert.innerHTML = `🟡 ADVERTENCIA DE RIESGO MEDIO: Este cliente liquidó su crédito anterior pero tuvo un retraso de ${maxDelayDays} días respecto a la fecha esperada de finalización.`;
-          }
-          return;
-        } else {
-          // Verde (Liquidado Exitoso / Buena Paga)
-          if (client) client.risk = 'Verde';
-          this.historyTrafficLight.className = 'traffic-light-header verde';
-          this.historyRiskStatus.textContent = '🟢 VERDE (Liquidado Exitoso / Cliente Excelente)';
-
-          if (this.historyActiveCreditsAlert) {
-            this.historyActiveCreditsAlert.style.display = 'flex';
-            this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
-            this.historyActiveCreditsAlert.style.borderColor = 'var(--color-verde, #10b981)';
-            this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
-            this.historyActiveCreditsAlert.style.color = '#059669';
-            const delayNote = maxDelayDays > 0 ? ` con un retraso menor a 4 días (${maxDelayDays} días)` : ' a tiempo sin retrasos';
-            this.historyActiveCreditsAlert.innerHTML = `🟢 CLIENTE EXCELENTE: El cliente es un excelente pagador. Liquidó su crédito anterior${delayNote}.`;
-          }
-          return;
-        }
-      }
-
-      // Si no hay cartones liquidados, evaluación dinámica normal de créditos activos
-      try {
-        const payments = await window.BulaPayDB.getPaymentsByClient(cedulaBuscada);
-        const dailyStatus = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const overdueCount = dailyStatus.filter(s => s.isOverdue).length;
-        
-        if (overdueCount >= 3) {
-          client.risk = 'Rojo';
-        } else if (overdueCount > 0) {
-          client.risk = 'Amarillo';
-        } else {
-          client.risk = 'Verde';
-        }
-      } catch (e) {
-        console.error("Error al calcular riesgo dinámico en historial:", e);
-      }
-      
-      if (client.risk === 'Rojo') {
-        this.historyTrafficLight.className = 'traffic-light-header rojo';
-        this.historyRiskStatus.textContent = '🔴 ROJO (Alto Riesgo)';
-      } else if (client.risk === 'Amarillo') {
-        this.historyTrafficLight.className = 'traffic-light-header amarillo';
-        this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
-      } else {
-        this.historyTrafficLight.className = 'traffic-light-header verde';
-        this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
-      }
+      // 2. ALGORITMO DE MODUS OPERANDI (AMARILLO vs VERDE):
+      let activeCreditNote = '';
+      const hasActiveCredit = modusResult.userCartons.some(c => {
+        const st = String(c.estado || c.status || '').toLowerCase();
+        return st === 'activo' || st === 'activo_por_renovacion';
+      });
 
       if (hasActiveCredit) {
         let agentName = client?.agent_id || 'Desconocido';
@@ -1773,21 +1599,44 @@ const agentModule = {
           }
         } catch (e) {}
         const municipality = client?.city || 'Desconocido';
-        
+        activeCreditNote = `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed dashed var(--border-color); font-size: 0.8rem;">⚠️ Crédito Activo actual con el agente ${agentName} en el municipio ${municipality}.</div>`;
+      }
+
+      if (modusResult.risk === 'Amarillo') {
+        if (client) client.risk = 'Amarillo';
+        if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header amarillo';
+        if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
+
         if (this.historyActiveCreditsAlert) {
           this.historyActiveCreditsAlert.style.display = 'flex';
           this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
-          this.historyActiveCreditsAlert.style.borderColor = '';
-          this.historyActiveCreditsAlert.style.backgroundColor = '';
-          this.historyActiveCreditsAlert.style.color = '';
-          this.historyActiveCreditsAlert.innerHTML = `⚠️ Atención: Este cliente tiene un crédito activo con el agente ${agentName} en el municipio ${municipality}.`;
+          this.historyActiveCreditsAlert.style.borderColor = 'var(--color-amarillo, #f59e0b)';
+          this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(245, 158, 11, 0.12)';
+          this.historyActiveCreditsAlert.style.color = '#d97706';
+          this.historyActiveCreditsAlert.innerHTML = `🟡 ADVERTENCIA DE RIESGO MEDIO (MODUS OPERANDI):<br>` +
+            `Los <strong>Puntos de Advertencia (${modusResult.puntosAdvertencia})</strong> superan a los <strong>Puntos Positivos (${modusResult.puntosPositivos})</strong>.<br>` +
+            `• Puntos Positivos (liquidado_exitoso): <strong>${modusResult.cantExitoso}</strong><br>` +
+            `• Puntos de Advertencia: <strong>${modusResult.puntosAdvertencia}</strong> (${modusResult.cantRetraso} retraso(s) + ${modusResult.cantRenovacion} renovación(es))` +
+            activeCreditNote;
         }
       } else {
+        if (client) client.risk = 'Verde';
+        if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header verde';
+        if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
+
         if (this.historyActiveCreditsAlert) {
-          this.historyActiveCreditsAlert.style.display = 'none';
+          this.historyActiveCreditsAlert.style.display = 'flex';
+          this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+          this.historyActiveCreditsAlert.style.borderColor = 'var(--color-verde, #10b981)';
+          this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
+          this.historyActiveCreditsAlert.style.color = '#059669';
+          this.historyActiveCreditsAlert.innerHTML = `🟢 CLIENTE EXCELENTE (MODUS OPERANDI):<br>` +
+            `Los <strong>Puntos Positivos (${modusResult.puntosPositivos})</strong> son mayores o iguales a los <strong>Puntos de Advertencia (${modusResult.puntosAdvertencia})</strong>.<br>` +
+            `• Puntos Positivos (liquidado_exitoso): <strong>${modusResult.cantExitoso}</strong><br>` +
+            `• Puntos de Advertencia: <strong>${modusResult.puntosAdvertencia}</strong> (${modusResult.cantRetraso} retraso(s) + ${modusResult.cantRenovacion} renovación(es))` +
+            activeCreditNote;
         }
       }
-
     } catch (err) {
       console.error("Error al consultar Supabase:", err);
       alert('❌ Error al consultar la central de riesgos.');
@@ -3290,6 +3139,28 @@ const agentModule = {
       }
 
       console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
+
+      // REGLA DE BLOQUEO GLOBAL (LISTA NEGRA - REQUIREMENT 2)
+      const isBlacklisted = await window.BulaPayDB.isClientBlacklisted(cedula);
+      if (isBlacklisted) {
+        const blockMsg = `❌ OPERACIÓN DENEGADA: El cliente con Cédula N° ${cedula} se encuentra en LISTA NEGRA (estado liquidado_perdida) en el sistema.\n\nNo es posible crear nuevos créditos para esta cédula.\nDebe comunicarse con el agente que generó el reporte para limpiar su historial.`;
+        if (typeof Swal !== 'undefined') {
+          await Swal.fire({
+            title: 'Cliente Bloqueado (Lista Negra)',
+            text: blockMsg,
+            icon: 'error',
+            confirmButtonColor: '#ef4444'
+          });
+        } else {
+          alert(blockMsg);
+        }
+        if (btnGuardar) {
+          btnGuardar.disabled = false;
+          btnGuardar.innerText = btnGuardar.dataset.originalText || 'Guardar Cliente';
+        }
+        this.isRegisteringClient = false;
+        return;
+      }
 
       // BLOQUEO ASÍNCRONO ESTRICTO: Resolver al 100% el SELECT de validación ANTES de iniciar el INSERT
       const existing = await window.BulaPayDB.getGlobalClientByCedula(cedula);

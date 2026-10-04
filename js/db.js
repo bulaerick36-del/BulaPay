@@ -1078,6 +1078,191 @@ const db = {
     }
   },
 
+  determineCartonLiquidationStatus(carton, actualDate = new Date(), options = {}) {
+    if (options.isMora || options.isLoss || carton?.estado === 'liquidado_perdida' || carton?.status === 'liquidado_perdida') {
+      return 'liquidado_perdida';
+    }
+    if (options.isRenovacion || carton?.estado === 'liquidado_renovacion' || carton?.status === 'liquidado_renovacion' || carton?.estado === 'liquidado_por_renovacion') {
+      return 'liquidado_renovacion';
+    }
+
+    const cartonStartStr = carton?.fecha_apertura || carton?.fecha_inicio || carton?.created_at;
+    const startDate = cartonStartStr ? new Date(cartonStartStr) : new Date();
+    const totalInstallments = Number(carton?.installments_count || carton?.installmentsCount || 30);
+
+    let expectedEndDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    let daysAdded = 0;
+    while (daysAdded < totalInstallments) {
+      expectedEndDate.setDate(expectedEndDate.getDate() + 1);
+      if (expectedEndDate.getDay() !== 0) {
+        daysAdded++;
+      }
+    }
+
+    const endDate = actualDate ? new Date(actualDate) : new Date();
+    expectedEndDate.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+
+    let delayDays = 0;
+    if (endDate > expectedEndDate) {
+      delayDays = Math.floor((endDate.getTime() - expectedEndDate.getTime()) / (1000 * 60 * 60 * 24));
+    }
+
+    if (delayDays >= 5) {
+      return 'liquidado_retraso';
+    } else {
+      return 'liquidado_exitoso';
+    }
+  },
+
+  async isClientBlacklisted(cedula) {
+    if (!cedula) return false;
+    const cedStr = String(cedula).trim();
+    try {
+      const supabase = await initSupabase();
+      const { data: cartonesData } = await supabase
+        .from('cartones')
+        .select('id, estado, status')
+        .or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`);
+
+      if (cartonesData && cartonesData.length > 0) {
+        const hasLoss = cartonesData.some(c => {
+          const st = String(c.estado || c.status || '').trim().toLowerCase();
+          return st === 'liquidado_perdida' || st === 'liquidado_mora' || st.includes('perdida') || st.includes('castigado');
+        });
+        if (hasLoss) return true;
+      }
+
+      const { data: lnData } = await supabase
+        .from('lista_negra')
+        .select('id')
+        .or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`)
+        .maybeSingle();
+
+      if (lnData) return true;
+
+      return false;
+    } catch (e) {
+      console.warn("Aviso al verificar Lista Negra global:", e.message);
+      return false;
+    }
+  },
+
+  async evaluateClientModusOperandi(cedula) {
+    if (!cedula) return null;
+    const cedStr = String(cedula).trim();
+    const supabase = await initSupabase();
+
+    let userCartons = [];
+    try {
+      const { data: c1 } = await supabase.from('cartones').select('*').eq('cliente_id', cedStr);
+      if (c1 && c1.length > 0) {
+        userCartons = c1;
+      } else {
+        const { data: c2 } = await supabase.from('cartones').select('*').eq('cedula', cedStr);
+        if (c2 && c2.length > 0) userCartons = c2;
+      }
+    } catch (e) {
+      console.warn("Error al consultar cartones para Modus Operandi:", e);
+    }
+
+    // 1. REGLA DE BLOQUEO GLOBAL (LISTA NEGRA):
+    // Al consultar una cédula, si el cliente tiene al menos un (1) cartón en estado liquidado_perdida
+    // en toda la base de datos (sin importar de qué agente sea), su estado automático e inamovible es ROJO (Moroso).
+    let hasLoss = false;
+    userCartons.forEach(c => {
+      const st = String(c.estado || c.status || '').trim().toLowerCase();
+      if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st.includes('perdida') || st.includes('castigado')) {
+        hasLoss = true;
+      }
+    });
+
+    if (!hasLoss) {
+      try {
+        const { data: lnData } = await supabase.from('lista_negra').select('id').or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`).maybeSingle();
+        if (lnData) hasLoss = true;
+      } catch (eln) {}
+    }
+
+    if (hasLoss) {
+      return {
+        risk: 'Rojo',
+        riskLabel: '🔴 ROJO (Moroso / Lista Negra)',
+        isBlacklisted: true,
+        puntosPositivos: 0,
+        puntosAdvertencia: 0,
+        puntosPerdida: userCartons.filter(c => {
+          const st = String(c.estado || c.status || '').trim().toLowerCase();
+          return st === 'liquidado_perdida' || st === 'liquidado_mora' || st.includes('perdida');
+        }).length || 1,
+        cantExitoso: 0,
+        cantRetraso: 0,
+        cantRenovacion: 0,
+        userCartons: userCartons,
+        message: '⚠️ BLOQUEO GLOBAL POR LISTA NEGRA: El cliente cuenta con al menos un cartón en estado liquidado_perdida. Su estado automático e inamovible es ROJO (Moroso). Debe comunicarse con el agente que generó el reporte para limpiar su historial.'
+      };
+    }
+
+    // 2. ALGORITMO DE "MODUS OPERANDI" (PONDERACIÓN HISTÓRICA):
+    let cantExitoso = 0;
+    let cantRetraso = 0;
+    let cantRenovacion = 0;
+
+    userCartons.forEach(carton => {
+      const rawSt = String(carton.estado || carton.status || '').trim().toLowerCase();
+
+      if (rawSt === 'activo' || rawSt === 'activo_por_renovacion') {
+        return;
+      }
+
+      if (rawSt === 'liquidado_exitoso') {
+        cantExitoso++;
+      } else if (rawSt === 'liquidado_retraso') {
+        cantRetraso++;
+      } else if (rawSt === 'liquidado_renovacion' || rawSt === 'liquidado_por_renovacion' || rawSt.includes('renovac')) {
+        cantRenovacion++;
+      } else if (rawSt === 'liquidado' || rawSt === 'liquidado_pagado' || rawSt === 'pagado') {
+        const calcSt = this.determineCartonLiquidationStatus(carton);
+        if (calcSt === 'liquidado_retraso') {
+          cantRetraso++;
+        } else {
+          cantExitoso++;
+        }
+      }
+    });
+
+    const puntosPositivos = cantExitoso;
+    const puntosAdvertencia = cantRetraso + cantRenovacion;
+
+    let risk = 'Verde';
+    let riskLabel = '🟢 VERDE (Buen Cliente)';
+    let message = '';
+
+    if (puntosAdvertencia > puntosPositivos) {
+      risk = 'Amarillo';
+      riskLabel = '🟡 AMARILLO (Riesgo Medio)';
+      message = `🟡 RIESGO MEDIO: Puntos de Advertencia (${puntosAdvertencia}) superan a Puntos Positivos (${puntosPositivos}). (Retrasos: ${cantRetraso} + Renovaciones: ${cantRenovacion} vs Exitosos: ${cantExitoso}).`;
+    } else {
+      risk = 'Verde';
+      riskLabel = '🟢 VERDE (Buen Cliente)';
+      message = `🟢 BUEN CLIENTE: Puntos Positivos (${puntosPositivos}) son mayores o iguales a Puntos de Advertencia (${puntosAdvertencia}). (Exitosos: ${cantExitoso} vs Retrasos: ${cantRetraso} + Renovaciones: ${cantRenovacion}).`;
+    }
+
+    return {
+      risk,
+      riskLabel,
+      isBlacklisted: false,
+      puntosPositivos,
+      puntosAdvertencia,
+      puntosPerdida: 0,
+      cantExitoso,
+      cantRetraso,
+      cantRenovacion,
+      userCartons,
+      message
+    };
+  },
+
   async getGlobalClientByCedula(cedula) {
     const supabase = await initSupabase();
     const { data: client, error } = await supabase
@@ -1090,6 +1275,9 @@ const db = {
       return null;
     }
     if (!client) return null;
+
+    const modusOp = await this.evaluateClientModusOperandi(cedula);
+    const calculatedRisk = modusOp ? modusOp.risk : (client.risk || 'Verde');
 
     // Verificar cartón activo en la tabla 'cartones'
     try {
@@ -1115,11 +1303,11 @@ const db = {
           installmentsCount: Number(carton.installments_count || 1),
           installmentAmount: Number(carton.installment_amount || 0),
           status: 'Activo',
-          estado: 'activo'
+          estado: 'activo',
+          risk: calculatedRisk
         };
       } else {
-        const rawSt = String(client.status || client.estado || '').toUpperCase();
-        const isLoss = rawSt.includes('PERDIDA') || rawSt.includes('MORA') || rawSt.includes('NEGRA') || client.risk === 'Rojo';
+        const isLoss = modusOp ? modusOp.isBlacklisted : (client.risk === 'Rojo');
         let moraDebt = Number(client.totalToPay || client.totalDebt || client.monto_total || client.total_debt || 0);
 
         if (isLoss) {
@@ -1168,6 +1356,8 @@ const db = {
           }
         }
 
+        const fallbackStatus = isLoss ? 'liquidado_perdida' : (modusOp?.risk === 'Amarillo' ? 'liquidado_retraso' : 'liquidado_exitoso');
+
         return {
           ...client,
           cedula: client.cedula,
@@ -1179,12 +1369,13 @@ const db = {
           amount: Number(client.amount || 0),
           installmentsCount: 1,
           installmentAmount: 0,
-          status: isLoss ? 'liquidado_perdida' : (client.status || client.estado || 'Sin deuda activa'),
-          estado: isLoss ? 'liquidado_perdida' : (client.estado || client.status || 'Sin deuda activa')
+          status: isLoss ? 'liquidado_perdida' : fallbackStatus,
+          estado: isLoss ? 'liquidado_perdida' : fallbackStatus,
+          risk: calculatedRisk
         };
       }
     } catch (eCarton) {
-      return client;
+      return { ...client, risk: calculatedRisk };
     }
   },
 
@@ -1244,6 +1435,19 @@ const db = {
       const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
       
       const cedulaStr = String(client.cedula).trim();
+
+      // REGLA DE BLOQUEO GLOBAL (LISTA NEGRA - REQUIREMENT 2)
+      if (await this.isClientBlacklisted(cedulaStr)) {
+        const blockMsg = `❌ OPERACIÓN DENEGADA: El cliente con Cédula N° ${cedulaStr} se encuentra en LISTA NEGRA por morosidad (estado liquidado_perdida). El sistema prohíbe la creación de nuevos créditos. Debe comunicarse con el agente que generó el reporte para limpiar su historial.`;
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: 'Cliente en Lista Negra',
+            text: blockMsg,
+            icon: 'error'
+          });
+        }
+        throw new Error(blockMsg);
+      }
 
       // 1. Inserción de datos personales limpios únicamente en la tabla 'clients' (sin mezcla con campos de crédito)
       const clientPayload = {
@@ -1494,8 +1698,8 @@ const db = {
     try {
       const cedStr = String(clientId).trim();
       const cartonUpdateOld = { 
-        estado: 'liquidado_por_renovacion', 
-        status: 'liquidado_por_renovacion',
+        estado: 'liquidado_renovacion', 
+        status: 'liquidado_renovacion',
         outstanding: 0,
         total_debt: 0,
         fecha_cierre: nowIso
@@ -3050,8 +3254,31 @@ const db = {
     }
 
     // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE VIA RPC v134)
-    const cartonEstadoTarget = isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'liquidado' : (isMora ? 'liquidado_perdida' : 'liquidado'));
-    const cartonStatusTarget = isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : (isMora ? 'liquidado_perdida' : 'Liquidado_Pagado'));
+    let cartonEstadoTarget = status;
+    if (status === 'liquidado_exitoso' || status === 'liquidado_retraso' || status === 'liquidado_renovacion' || status === 'liquidado_perdida') {
+      cartonEstadoTarget = status;
+    } else if (isMora) {
+      cartonEstadoTarget = 'liquidado_perdida';
+    } else if (isRenovacion) {
+      cartonEstadoTarget = 'liquidado_renovacion';
+    } else if (isPaid) {
+      let targetCarton = null;
+      const isValidUuidCheck = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      if (cartonId && isValidUuidCheck(cartonId)) {
+        try {
+          const { data: cData } = await supabase.from('cartones').select('*').eq('id', cartonId).maybeSingle();
+          if (cData) targetCarton = cData;
+        } catch(e){}
+      }
+      if (!targetCarton && cedula) {
+        try {
+          const { data: cData } = await supabase.from('cartones').select('*').eq('cliente_id', String(cedula)).in('estado', ['activo', 'activo_por_renovacion']).maybeSingle();
+          if (cData) targetCarton = cData;
+        } catch(e){}
+      }
+      cartonEstadoTarget = this.determineCartonLiquidationStatus(targetCarton || clientData);
+    }
+
     try {
       const cedStr = String(cedula || '').trim();
       const moraOutstanding = isMora ? ((outstanding !== undefined && outstanding !== null && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0))) : 0;
@@ -3068,7 +3295,7 @@ const db = {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
       }
       if (cedStr) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado', 'Liquidado_Pagado']);
       }
 
       if (isMora && cedStr) {
@@ -3101,9 +3328,10 @@ const db = {
 
     // 4. Actualizar tabla 'clients'
     try {
+      const modusOp = await this.evaluateClientModusOperandi(cedula);
       const clientUpdatePayload = {
-        risk: isMora ? 'Rojo' : 'Verde',
-        status: isMora ? 'liquidado_perdida' : (isRenovacion ? 'liquidado_por_renovacion' : (isPaid ? 'Liquidado_Pagado' : 'liquidado'))
+        risk: modusOp ? modusOp.risk : (isMora ? 'Rojo' : 'Verde'),
+        status: cartonEstadoTarget
       };
 
       if (isPaid) {
