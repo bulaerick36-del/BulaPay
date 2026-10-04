@@ -1570,15 +1570,17 @@ const agentModule = {
         if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🔴 ROJO (Moroso / Lista Negra)';
 
         if (this.historyActiveCreditsAlert) {
-          this.historyActiveCreditsAlert.style.display = 'flex';
+          this.historyActiveCreditsAlert.style.display = 'block';
           this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#ef4444';
-          this.historyActiveCreditsAlert.innerHTML = `⚠️ BLOQUEO GLOBAL (LISTA NEGRA):<br>` +
-            `Este cliente cuenta con al menos un (1) cartón en estado <strong>liquidado_perdida</strong> (Moroso).<br>` +
-            `Su estado es ROJO inamovible. El sistema prohíbe la creación de nuevos créditos.<br>` +
-            `<em>Debe comunicarse con el agente que generó el reporte para limpiar su historial.</em>`;
+          this.historyActiveCreditsAlert.innerHTML = `
+            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; text-transform: uppercase;">⚠️ BLOQUEO GLOBAL (LISTA NEGRA)</div>
+            <div style="margin-bottom: 0.4rem; line-height: 1.4;">Este cliente cuenta con al menos un (1) cartón en estado <strong>liquidado_perdida</strong> (Moroso).</div>
+            <div style="margin-bottom: 0.4rem; line-height: 1.4;">Su estado automático e inamovible es <strong>ROJO</strong>. El sistema prohíbe la creación de nuevos créditos.</div>
+            <div style="font-style: italic; opacity: 0.9; margin-top: 0.5rem;">Debe comunicarse con el agente que generó el reporte para limpiar su historial.</div>
+          `;
         }
         return;
       }
@@ -1599,7 +1601,7 @@ const agentModule = {
           }
         } catch (e) {}
         const municipality = client?.city || 'Desconocido';
-        activeCreditNote = `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed dashed var(--border-color); font-size: 0.8rem;">⚠️ Crédito Activo actual con el agente ${agentName} en el municipio ${municipality}.</div>`;
+        activeCreditNote = `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); font-size: 0.8rem; font-weight: 600;">⚠️ Crédito Activo actual con el agente ${agentName} en el municipio ${municipality}.</div>`;
       }
 
       if (modusResult.risk === 'Amarillo') {
@@ -1608,16 +1610,20 @@ const agentModule = {
         if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
 
         if (this.historyActiveCreditsAlert) {
-          this.historyActiveCreditsAlert.style.display = 'flex';
+          this.historyActiveCreditsAlert.style.display = 'block';
           this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-amarillo, #f59e0b)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(245, 158, 11, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#d97706';
-          this.historyActiveCreditsAlert.innerHTML = `🟡 ADVERTENCIA DE RIESGO MEDIO (MODUS OPERANDI):<br>` +
-            `Los <strong>Puntos de Advertencia (${modusResult.puntosAdvertencia})</strong> superan a los <strong>Puntos Positivos (${modusResult.puntosPositivos})</strong>.<br>` +
-            `• Puntos Positivos (liquidado_exitoso): <strong>${modusResult.cantExitoso}</strong><br>` +
-            `• Puntos de Advertencia: <strong>${modusResult.puntosAdvertencia}</strong> (${modusResult.cantRetraso} retraso(s) + ${modusResult.cantRenovacion} renovación(es))` +
-            activeCreditNote;
+          this.historyActiveCreditsAlert.innerHTML = `
+            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; text-transform: uppercase;">🟡 ADVERTENCIA DE RIESGO MEDIO (MODUS OPERANDI)</div>
+            <div style="margin-bottom: 0.5rem; line-height: 1.4;">Los <strong>Puntos de Advertencia (${modusResult.puntosAdvertencia})</strong> superan a los <strong>Puntos Positivos (${modusResult.puntosPositivos})</strong>.</div>
+            <div style="background: rgba(255,255,255,0.4); padding: 0.6rem 0.8rem; border-radius: 6px; margin: 0.5rem 0; font-size: 0.82rem;">
+              <div style="margin-bottom: 0.25rem;">• Puntos Positivos (liquidado_exitoso): <strong>${modusResult.cantExitoso}</strong></div>
+              <div>• Puntos de Advertencia: <strong>${modusResult.puntosAdvertencia}</strong> (${modusResult.cantRetraso} retraso(s) + ${modusResult.cantRenovacion} renovación(es))</div>
+            </div>
+            ${activeCreditNote}
+          `;
         }
       } else {
         if (client) client.risk = 'Verde';
@@ -1625,16 +1631,20 @@ const agentModule = {
         if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
 
         if (this.historyActiveCreditsAlert) {
-          this.historyActiveCreditsAlert.style.display = 'flex';
+          this.historyActiveCreditsAlert.style.display = 'block';
           this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
           this.historyActiveCreditsAlert.style.borderColor = 'var(--color-verde, #10b981)';
           this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
           this.historyActiveCreditsAlert.style.color = '#059669';
-          this.historyActiveCreditsAlert.innerHTML = `🟢 CLIENTE EXCELENTE (MODUS OPERANDI):<br>` +
-            `Los <strong>Puntos Positivos (${modusResult.puntosPositivos})</strong> son mayores o iguales a los <strong>Puntos de Advertencia (${modusResult.puntosAdvertencia})</strong>.<br>` +
-            `• Puntos Positivos (liquidado_exitoso): <strong>${modusResult.cantExitoso}</strong><br>` +
-            `• Puntos de Advertencia: <strong>${modusResult.puntosAdvertencia}</strong> (${modusResult.cantRetraso} retraso(s) + ${modusResult.cantRenovacion} renovación(es))` +
-            activeCreditNote;
+          this.historyActiveCreditsAlert.innerHTML = `
+            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; text-transform: uppercase;">🟢 CLIENTE EXCELENTE (MODUS OPERANDI)</div>
+            <div style="margin-bottom: 0.5rem; line-height: 1.4;">Los <strong>Puntos Positivos (${modusResult.puntosPositivos})</strong> son mayores o iguales a los <strong>Puntos de Advertencia (${modusResult.puntosAdvertencia})</strong>.</div>
+            <div style="background: rgba(255,255,255,0.4); padding: 0.6rem 0.8rem; border-radius: 6px; margin: 0.5rem 0; font-size: 0.82rem;">
+              <div style="margin-bottom: 0.25rem;">• Puntos Positivos (liquidado_exitoso): <strong>${modusResult.cantExitoso}</strong></div>
+              <div>• Puntos de Advertencia: <strong>${modusResult.puntosAdvertencia}</strong> (${modusResult.cantRetraso} retraso(s) + ${modusResult.cantRenovacion} renovación(es))</div>
+            </div>
+            ${activeCreditNote}
+          `;
         }
       }
     } catch (err) {
