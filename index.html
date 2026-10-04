@@ -1551,22 +1551,46 @@
                 <div style="width: 100%; display: flex; align-items: center; gap: 0.3rem; margin-top: 0.2rem;" id="cash-report-route"><span>📍</span> Ruta: -</div>
               </div>
               
-              <!-- Desglose de Cierre (Estructura idéntica al Supervisor) -->
+              <!-- Desglose de Cierre (Estructura idéntica al Supervisor con métricas contables avanzadas) -->
               <div style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: grid; gap: 0.85rem; font-size: 0.9rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span style="color: var(--text-secondary);">💵 Efectivo en Bolsillo Inicial:</span>
                   <strong id="cash-report-initial" style="color: var(--text-primary); font-size: 1rem;">$0</strong>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
-                  <span>➕ Total Cobrado Hoy:</span>
-                  <strong id="cash-report-income" style="font-size: 1rem;">+$0</strong>
+                
+                <div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+                    <span>➕ Total Cobrado Hoy:</span>
+                    <strong id="cash-report-income" style="font-size: 1rem;">+$0</strong>
+                  </div>
+                  <div style="font-size: 0.78rem; color: var(--text-secondary); margin-left: 1.2rem; margin-top: 0.2rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span>↳ Incluye Pagos Masivos:</span>
+                    <strong id="cash-report-mass" style="color: var(--text-secondary); font-weight: 600;">$0</strong>
+                  </div>
                 </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+                  <span>➕ Entradas por Renovación Hoy:</span>
+                  <strong id="cash-report-renov-in" style="font-size: 1rem;">+$0</strong>
+                </div>
+
                 <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
                   <span>➖ Total Prestado Hoy:</span>
                   <strong id="cash-report-expenses" style="font-size: 1rem;">-$0</strong>
                 </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
+                  <span>➖ Desembolsos por Renovación:</span>
+                  <strong id="cash-report-renov-out" style="font-size: 1rem;">-$0</strong>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+                  <span>➕ Descuentos Retenidos (Seguro/Software):</span>
+                  <strong id="cash-report-retained" style="font-size: 1rem;">+$0</strong>
+                </div>
+
                 <div style="border-top: 1px dashed var(--border-color); padding-top: 0.85rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; font-weight: 800;">
-                  <span style="color: #34d399;">🏛️ TOTAL A ENTREGAR AL SUPERVISOR:</span>
+                  <span style="color: #34d399;">🏛️ TOTAL EFECTIVO:</span>
                   <strong id="cash-report-net" style="color: #34d399; font-size: 1.35rem; font-weight: 900;">$0</strong>
                 </div>
               </div>
@@ -2381,16 +2405,40 @@
           <span style="color: var(--text-secondary);">💵 Efectivo en Bolsillo Inicial:</span>
           <strong id="cierre-efectivo-inicial" style="color: var(--text-primary);">$0</strong>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
-          <span>➕ Total Cobrado Hoy:</span>
-          <strong id="cierre-cobrado-hoy">+$0</strong>
+
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+            <span>➕ Total Cobrado Hoy:</span>
+            <strong id="cierre-cobrado-hoy">+$0</strong>
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-secondary); margin-left: 1.2rem; margin-top: 0.2rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>↳ Incluye Pagos Masivos:</span>
+            <strong id="cierre-pagos-masivos" style="color: var(--text-secondary); font-weight: 600;">$0</strong>
+          </div>
         </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+          <span>➕ Entradas por Renovación Hoy:</span>
+          <strong id="cierre-renov-in">+$0</strong>
+        </div>
+
         <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
           <span>➖ Total Prestado Hoy:</span>
           <strong id="cierre-prestamos-hoy">-$0</strong>
         </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
+          <span>➖ Desembolsos por Renovación:</span>
+          <strong id="cierre-renov-out">-$0</strong>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+          <span>➕ Descuentos Retenidos (Seguro/Software):</span>
+          <strong id="cierre-descuentos-retenidos">+$0</strong>
+        </div>
+
         <div style="border-top: 1px dashed var(--border-color); padding-top: 0.85rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.1rem; font-weight: 800;">
-          <span style="color: #34d399;">🏛️ TOTAL A ENTREGAR AL SUPERVISOR:</span>
+          <span style="color: #34d399;">🏛️ TOTAL A ENTREGAR:</span>
           <strong id="cierre-efectivo-entregar" style="color: #34d399; font-size: 1.35rem;">$0</strong>
         </div>
       </div>

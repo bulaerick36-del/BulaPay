@@ -834,7 +834,11 @@ const supervisorModule = {
     const routeSelect = document.getElementById('modal-cierre-route-select');
     const inicialEl = document.getElementById('cierre-efectivo-inicial');
     const cobradoHoyEl = document.getElementById('cierre-cobrado-hoy');
+    const pagosMasivosEl = document.getElementById('cierre-pagos-masivos');
+    const renovInEl = document.getElementById('cierre-renov-in');
     const prestamosHoyEl = document.getElementById('cierre-prestamos-hoy');
+    const renovOutEl = document.getElementById('cierre-renov-out');
+    const retenidosEl = document.getElementById('cierre-descuentos-retenidos');
     const entregarEl = document.getElementById('cierre-efectivo-entregar');
 
     if (!routeSelect) return;
@@ -843,7 +847,11 @@ const supervisorModule = {
 
     if (inicialEl) inicialEl.textContent = `$${data.efectivoInicial.toLocaleString('es-CO')}`;
     if (cobradoHoyEl) cobradoHoyEl.textContent = `+$${data.totalCobrado.toLocaleString('es-CO')}`;
+    if (pagosMasivosEl) pagosMasivosEl.textContent = `$${(data.pagosMasivos || 0).toLocaleString('es-CO')}`;
+    if (renovInEl) renovInEl.textContent = `+$${(data.entradasRenovacion || 0).toLocaleString('es-CO')}`;
     if (prestamosHoyEl) prestamosHoyEl.textContent = `-$${data.totalPrestado.toLocaleString('es-CO')}`;
+    if (renovOutEl) renovOutEl.textContent = `-$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
+    if (retenidosEl) retenidosEl.textContent = `+$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
     if (entregarEl) entregarEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
   },
 

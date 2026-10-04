@@ -1293,7 +1293,7 @@ const db = {
     const agentName = route?.agentName || agentUserObj?.name || agentUserObj?.username || 'Agente de Ruta';
     const routeName = route?.name || 'Ruta sin asignar';
 
-    // 1. Total Cobrado Hoy (payments)
+    // 1. Total Cobrado Hoy (payments) & Pagos Masivos
     const allPayments = await this.getPayments();
     const todayPayments = (allPayments || []).filter(p => {
       const pDate = p.date || (p.created_at ? p.created_at.split('T')[0] : '');
@@ -1316,7 +1316,12 @@ const db = {
 
     const totalCobrado = todayPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    // 2. Total Prestado Hoy (clients/cartones creados hoy)
+    const pagosMasivos = todayPayments.filter(p => {
+      const pStatus = String(p.status || '').toLowerCase();
+      return p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('masivo');
+    }).reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+
+    // 2. Créditos creados hoy (clients/cartones creados hoy)
     const allClients = await this.getClients();
     const todayClients = (allClients || []).filter(c => {
       let cDate = c.date || (c.created_at ? c.created_at.split('T')[0] : '');
@@ -1331,12 +1336,34 @@ const db = {
       return belongs;
     });
 
-    const totalPrestado = todayClients.reduce((sum, c) => {
-      const amt = Number(c.amount || c.monto_prestado || (c.totalDebt ? Math.round(Number(c.totalDebt) / 1.2) : 0));
-      return sum + Math.round(amt);
-    }, 0);
+    let totalPrestado = 0;
+    let desembolsosRenovacion = 0;
+    let entradasRenovacion = 0;
+    let descuentosRetenidos = 0;
 
-    const totalEntregar = Math.max(0, efectivoInicial + totalCobrado - totalPrestado);
+    todayClients.forEach(c => {
+      const amt = Math.round(Number(c.amount || c.monto_prestado || (c.totalDebt ? Number(c.totalDebt) / 1.2 : 0)));
+      const isRenov = !!(c.isRenewal || c.is_renewal || String(c.status || c.estado || '').toLowerCase().includes('renovacion') || Number(c.rollover_amount || c.saldo_anterior || 0) > 0);
+
+      if (isRenov) {
+        desembolsosRenovacion += amt;
+        const rollVal = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+        entradasRenovacion += rollVal;
+      } else {
+        totalPrestado += amt;
+      }
+
+      const seg = Number(c.segVal || 0);
+      const pap = Number(c.papVal || 0);
+      let ret = Number(c.retained_fees || c.retained_amount || (seg + pap));
+      if (ret <= 0 && c.discount_amount && !isRenov) {
+        ret = Number(c.discount_amount);
+      }
+      descuentosRetenidos += Math.round(ret);
+    });
+
+    // Fórmula Matemática: Bolsillo Inicial + Total Cobrado + Entradas Renovación - Total Prestado - Desembolsos Renovación + Descuentos Retenidos = TOTAL
+    const totalEntregar = Math.max(0, efectivoInicial + totalCobrado + entradasRenovacion - totalPrestado - desembolsosRenovacion + descuentosRetenidos);
 
     return {
       routeId: targetRouteId || null,
@@ -1345,7 +1372,11 @@ const db = {
       dateStr: todayStr,
       efectivoInicial: Math.round(efectivoInicial),
       totalCobrado: Math.round(totalCobrado),
+      pagosMasivos: Math.round(pagosMasivos),
+      entradasRenovacion: Math.round(entradasRenovacion),
       totalPrestado: Math.round(totalPrestado),
+      desembolsosRenovacion: Math.round(desembolsosRenovacion),
+      descuentosRetenidos: Math.round(descuentosRetenidos),
       totalEntregar: Math.round(totalEntregar)
     };
   },

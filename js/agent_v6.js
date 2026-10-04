@@ -4408,7 +4408,11 @@ const agentModule = {
       const routeEl = document.getElementById('cash-report-route');
       const initialEl = document.getElementById('cash-report-initial');
       const incomeEl = document.getElementById('cash-report-income');
+      const massEl = document.getElementById('cash-report-mass');
+      const renovInEl = document.getElementById('cash-report-renov-in');
       const expensesEl = document.getElementById('cash-report-expenses');
+      const renovOutEl = document.getElementById('cash-report-renov-out');
+      const retainedEl = document.getElementById('cash-report-retained');
       const netEl = document.getElementById('cash-report-net');
 
       if (dateEl) dateEl.textContent = `Fecha: ${data.dateStr}`;
@@ -4417,7 +4421,11 @@ const agentModule = {
 
       if (initialEl) initialEl.textContent = `$${data.efectivoInicial.toLocaleString('es-CO')}`;
       if (incomeEl) incomeEl.textContent = `+$${data.totalCobrado.toLocaleString('es-CO')}`;
+      if (massEl) massEl.textContent = `$${(data.pagosMasivos || 0).toLocaleString('es-CO')}`;
+      if (renovInEl) renovInEl.textContent = `+$${(data.entradasRenovacion || 0).toLocaleString('es-CO')}`;
       if (expensesEl) expensesEl.textContent = `-$${data.totalPrestado.toLocaleString('es-CO')}`;
+      if (renovOutEl) renovOutEl.textContent = `-$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
+      if (retainedEl) retainedEl.textContent = `+$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
       if (netEl) netEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
 
       // Mostrar el modal de Cierre de Caja Diario
