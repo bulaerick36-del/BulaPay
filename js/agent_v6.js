@@ -223,6 +223,7 @@ const agentModule = {
 
     // Geolocalización y monitoreo constante en tiempo real (cada 30 segundos con watchPosition)
     this.startLocationMonitoring();
+    this.startMidnightCheck();
 
     // Si el acceso está bloqueado, aplicar el bloqueo visual de inmediato
     if (window.gpsBlocked) {
@@ -230,6 +231,32 @@ const agentModule = {
       const blockedPanel = document.getElementById('gps-blocked-panel');
       if (blockedPanel) blockedPanel.style.display = 'flex';
     }
+  },
+
+  getLocalDateString(date = new Date()) {
+    if (window.BulaPayDB && typeof window.BulaPayDB.getColombiaLocalDateStr === 'function') {
+      return window.BulaPayDB.getColombiaLocalDateStr(date);
+    }
+    return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Bogota' });
+  },
+
+  startMidnightCheck() {
+    if (this._midnightInterval) clearInterval(this._midnightInterval);
+    this._lastActiveDateStr = this.getLocalDateString();
+
+    this._midnightInterval = setInterval(async () => {
+      const currentDateStr = this.getLocalDateString();
+      if (this._lastActiveDateStr && currentDateStr !== this._lastActiveDateStr) {
+        console.log(`[REINICIO DIARIO] Cambio de día detectado (${this._lastActiveDateStr} -> ${currentDateStr}). Reiniciando contadores diarios a $0.`);
+        this._lastActiveDateStr = currentDateStr;
+        if (typeof this.updateCashViews === 'function') {
+          await this.updateCashViews();
+        }
+        if (typeof this.renderFinancialDashboard === 'function') {
+          await this.renderFinancialDashboard();
+        }
+      }
+    }, 30000);
   },
 
   bindEvents() {

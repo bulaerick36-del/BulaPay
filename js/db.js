@@ -44,6 +44,43 @@ async function initSupabase() {
 }
 
 const db = {
+  getColombiaLocalDateStr(rawInput = new Date()) {
+    if (!rawInput) rawInput = new Date();
+
+    if (typeof rawInput === 'string') {
+      const s = rawInput.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return s;
+      }
+    }
+
+    try {
+      const d = rawInput instanceof Date ? rawInput : new Date(rawInput);
+      if (!isNaN(d.getTime())) {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Bogota',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(d);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(parts)) {
+          return parts;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const d = rawInput instanceof Date ? rawInput : new Date(rawInput);
+      if (!isNaN(d.getTime())) {
+        const bogotaMs = d.getTime() - (5 * 60 * 60 * 1000);
+        const bd = new Date(bogotaMs);
+        return bd.toISOString().split('T')[0];
+      }
+    } catch (e) {}
+
+    return new Date().toISOString().split('T')[0];
+  },
+
   async initSupabase() {
     return await initSupabase();
   },
@@ -1265,7 +1302,7 @@ const db = {
 
   async getCierreCajaDataForRoute(routeId = null, agentUserObj = null) {
     const supabase = await initSupabase();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = this.getColombiaLocalDateStr(new Date());
 
     let route = null;
     let targetRouteId = routeId;
@@ -1296,7 +1333,7 @@ const db = {
     // 1. Total Cobrado Hoy (payments) & Pagos Masivos
     const allPayments = await this.getPayments();
     const todayPayments = (allPayments || []).filter(p => {
-      const pDate = p.date || (p.created_at ? p.created_at.split('T')[0] : '');
+      const pDate = this.getColombiaLocalDateStr(p.created_at || p.date);
       if (pDate !== todayStr) return false;
 
       const pStatus = String(p.status || '').toUpperCase();
@@ -1324,7 +1361,7 @@ const db = {
     // 2. Créditos creados hoy (clients/cartones creados hoy)
     const allClients = await this.getClients();
     const todayClients = (allClients || []).filter(c => {
-      let cDate = c.date || (c.created_at ? c.created_at.split('T')[0] : '');
+      let cDate = this.getColombiaLocalDateStr(c.created_at || c.date || c.fecha_apertura);
       if (cDate !== todayStr) return false;
 
       let belongs = false;
@@ -3927,8 +3964,7 @@ const db = {
       const clients = await this.getClients();
       const movements = await this.getCashMovements();
       
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const todayStr = this.getColombiaLocalDateStr(new Date());
       
       const currentUser = this.getCurrentUser();
       if (!currentUser) return { baseCapital: 0, totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
@@ -3940,20 +3976,7 @@ const db = {
       const agentNameLower = (currentUser.name || '').trim().toLowerCase();
       const supId = await this.getSupervisorIdForUser(currentUser);
 
-      const getCleanDateStr = (raw) => {
-        if (!raw) return '';
-        const str = String(raw).trim();
-        const datePart = str.split('T')[0].split(' ')[0];
-        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-          return datePart;
-        }
-        const d = new Date(str);
-        if (isNaN(d.getTime())) return '';
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-      };
+      const getCleanDateStr = (raw) => this.getColombiaLocalDateStr(raw);
 
       // Mapa/Set de cédulas de clientes en Lista Negra / Mora (risk === 'Rojo')
       const blacklistedCedulas = new Set(
@@ -3970,8 +3993,9 @@ const db = {
 
       // Cobrado hoy (EXCLUYENDO transacciones de clientes en Lista Negra o liquidaciones por mora)
       const todaysPayments = payments.filter(p => {
-         if (!p.date) return false;
-         const pDate = getCleanDateStr(p.date);
+         const pRawDate = p.created_at || p.date;
+         if (!pRawDate) return false;
+         const pDate = getCleanDateStr(pRawDate);
          const isToday = pDate === todayStr;
          
          const pAgentNameLower = (p.agentName || '').trim().toLowerCase();
@@ -4005,8 +4029,9 @@ const db = {
       
       // Prestado hoy (Desembolso Neto Real entregado de caja)
       const todaysClients = clients.filter(c => {
-         if (!c.created_at && !c.date) return false;
-         const cDate = getCleanDateStr(c.created_at || c.date);
+         const cRawDate = c.created_at || c.date || c.fecha_apertura;
+         if (!cRawDate) return false;
+         const cDate = getCleanDateStr(cRawDate);
          const isToday = cDate === todayStr;
          
          const belongsToAgent = (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor')
@@ -4034,8 +4059,9 @@ const db = {
         const { data: cartonesData } = await q;
         if (cartonesData && cartonesData.length > 0) {
           secondaryCartonesToday = cartonesData.filter(c => {
-            if (!c.fecha_apertura && !c.fecha_inicio && !c.created_at) return false;
-            const cDate = getCleanDateStr(c.fecha_apertura || c.fecha_inicio || c.created_at);
+            const cRawDate = c.fecha_apertura || c.fecha_inicio || c.created_at;
+            if (!cRawDate) return false;
+            const cDate = getCleanDateStr(cRawDate);
             return cDate === todayStr;
           });
         }
@@ -4071,7 +4097,10 @@ const db = {
       }
 
       // Movimientos de caja
-      const todaysMovements = movements.filter(m => m.date && getCleanDateStr(m.date) === todayStr);
+      const todaysMovements = movements.filter(m => {
+        const mRawDate = m.created_at || m.date;
+        return mRawDate && getCleanDateStr(mRawDate) === todayStr;
+      });
       const totalIn = Math.round(todaysMovements.filter(m => {
         if (m.type !== 'entrada') return false;
         const concept = String(m.concept || m.concepto || m.description || '').toLowerCase();
