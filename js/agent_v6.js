@@ -1577,8 +1577,11 @@ const agentModule = {
       const cedulaBuscada = String(cedula || '').trim();
       const modusResult = await window.BulaPayDB.evaluateClientModusOperandi(cedulaBuscada);
       const client = await window.BulaPayDB.getGlobalClientByCedula(cedulaBuscada);
+      const activeDetails = (modusResult && modusResult.activeCartonesDetails && modusResult.activeCartonesDetails.length > 0) 
+        ? modusResult.activeCartonesDetails 
+        : (await window.BulaPayDB.getActiveCartonesForHistory(cedulaBuscada));
 
-      const clientExists = !!client || (modusResult && modusResult.userCartons && modusResult.userCartons.length > 0);
+      const clientExists = !!client || (modusResult && modusResult.userCartons && modusResult.userCartons.length > 0) || (activeDetails && activeDetails.length > 0);
       if (!clientExists) {
         if (this.historyResults) this.historyResults.style.display = 'none';
         if (this.historyError) this.historyError.style.display = 'block';
@@ -1590,33 +1593,9 @@ const agentModule = {
       if (this.historyError) this.historyError.style.display = 'none';
       if (this.historyClientName) this.historyClientName.textContent = clientDisplayName;
 
-      // 1. REGLA DE BLOQUEO GLOBAL (LISTA NEGRA):
-      if (modusResult.isBlacklisted) {
-        if (client) client.risk = 'Rojo';
-        if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header rojo';
-        if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🔴 ROJO (Moroso / Lista Negra)';
-
-        if (this.historyActiveCreditsAlert) {
-          this.historyActiveCreditsAlert.style.display = 'block';
-          this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
-          this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
-          this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
-          this.historyActiveCreditsAlert.style.color = '#ef4444';
-          this.historyActiveCreditsAlert.innerHTML = `
-            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; text-transform: uppercase;">⚠️ BLOQUEO GLOBAL (LISTA NEGRA)</div>
-            <div style="margin-bottom: 0.4rem; line-height: 1.4;">Este cliente cuenta con al menos un (1) cartón en estado <strong>liquidado_perdida</strong> (Moroso).</div>
-            <div style="margin-bottom: 0.4rem; line-height: 1.4;">Su estado automático e inamovible es <strong>ROJO</strong>. El sistema prohíbe la creación de nuevos créditos.</div>
-            <div style="font-style: italic; opacity: 0.9; margin-top: 0.5rem;">Debe comunicarse con el agente que generó el reporte para limpiar su historial.</div>
-          `;
-        }
-        return;
-      }
-
-      // 2. CENTRAL DE RIESGO INTERNA: ALERTA DE CRÉDITOS ACTIVOS MULTI-RUTA
+      // 1. CENTRAL DE RIESGO INTERNA: ALERTA DE CRÉDITOS ACTIVOS MULTI-RUTA (Formato Dinámico Estricto)
       let activeCreditNote = '';
-      const activeDetails = modusResult.activeCartonesDetails || [];
-
-      if (activeDetails.length > 0) {
+      if (activeDetails && activeDetails.length > 0) {
         let alertContentHtml = '';
         if (activeDetails.length === 1) {
           const single = activeDetails[0];
@@ -1635,7 +1614,31 @@ const agentModule = {
         `;
       }
 
-      if (modusResult.risk === 'Amarillo') {
+      // 2. REGLA DE BLOQUEO GLOBAL (LISTA NEGRA / ROJO):
+      if (modusResult && modusResult.isBlacklisted) {
+        if (client) client.risk = 'Rojo';
+        if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header rojo';
+        if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🔴 ROJO (Moroso / Lista Negra)';
+
+        if (this.historyActiveCreditsAlert) {
+          this.historyActiveCreditsAlert.style.display = 'block';
+          this.historyActiveCreditsAlert.className = 'risk-alert-box warning';
+          this.historyActiveCreditsAlert.style.borderColor = 'var(--color-rojo, #ef4444)';
+          this.historyActiveCreditsAlert.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
+          this.historyActiveCreditsAlert.style.color = '#ef4444';
+          this.historyActiveCreditsAlert.innerHTML = `
+            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; text-transform: uppercase;">⚠️ BLOQUEO GLOBAL (LISTA NEGRA)</div>
+            <div style="margin-bottom: 0.4rem; line-height: 1.4;">Este cliente cuenta con al menos un (1) cartón en estado <strong>liquidado_perdida</strong> (Moroso).</div>
+            <div style="margin-bottom: 0.4rem; line-height: 1.4;">Su estado automático e inamovible es <strong>ROJO</strong>. El sistema prohíbe la creación de nuevos créditos.</div>
+            <div style="font-style: italic; opacity: 0.9; margin-top: 0.5rem;">Debe comunicarse con el agente que generó el reporte para limpiar su historial.</div>
+            ${activeCreditNote}
+          `;
+        }
+        return;
+      }
+
+      // 3. RIESGO AMARILLO (MEDIO)
+      if (modusResult && modusResult.risk === 'Amarillo') {
         if (client) client.risk = 'Amarillo';
         if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header amarillo';
         if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🟡 AMARILLO (Riesgo Medio)';
@@ -1656,7 +1659,9 @@ const agentModule = {
             ${activeCreditNote}
           `;
         }
-      } else {
+      } 
+      // 4. RIESGO VERDE (BUEN CLIENTE)
+      else {
         if (client) client.risk = 'Verde';
         if (this.historyTrafficLight) this.historyTrafficLight.className = 'traffic-light-header verde';
         if (this.historyRiskStatus) this.historyRiskStatus.textContent = '🟢 VERDE (Buen Cliente)';
@@ -1669,10 +1674,10 @@ const agentModule = {
           this.historyActiveCreditsAlert.style.color = '#059669';
           this.historyActiveCreditsAlert.innerHTML = `
             <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; text-transform: uppercase;">🟢 CLIENTE EXCELENTE (MODUS OPERANDI)</div>
-            <div style="margin-bottom: 0.5rem; line-height: 1.4;">Los <strong>Puntos Positivos (${modusResult.puntosPositivos})</strong> son mayores o iguales a los <strong>Puntos de Advertencia (${modusResult.puntosAdvertencia})</strong>.</div>
+            <div style="margin-bottom: 0.5rem; line-height: 1.4;">Los <strong>Puntos Positivos (${modusResult ? modusResult.puntosPositivos : 0})</strong> son mayores o iguales a los <strong>Puntos de Advertencia (${modusResult ? modusResult.puntosAdvertencia : 0})</strong>.</div>
             <div style="background: rgba(255,255,255,0.4); padding: 0.6rem 0.8rem; border-radius: 6px; margin: 0.5rem 0; font-size: 0.82rem;">
-              <div style="margin-bottom: 0.25rem;">• Puntos Positivos (liquidado_exitoso): <strong>${modusResult.cantExitoso}</strong></div>
-              <div>• Puntos de Advertencia: <strong>${modusResult.puntosAdvertencia}</strong> (${modusResult.cantRetraso} retraso(s) + ${modusResult.cantRenovacion} renovación(es))</div>
+              <div style="margin-bottom: 0.25rem;">• Puntos Positivos (liquidado_exitoso): <strong>${modusResult ? modusResult.cantExitoso : 0}</strong></div>
+              <div>• Puntos de Advertencia: <strong>${modusResult ? modusResult.puntosAdvertencia : 0}</strong> (${modusResult ? modusResult.cantRetraso : 0} retraso(s) + ${modusResult ? modusResult.cantRenovacion : 0} renovación(es))</div>
             </div>
             ${activeCreditNote}
           `;

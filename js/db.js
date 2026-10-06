@@ -1273,31 +1273,58 @@ const db = {
     }
   },
 
-  async evaluateClientModusOperandi(cedula) {
-    if (!cedula) return null;
+  async getActiveCartonesForHistory(cedula) {
+    if (!cedula) return [];
     const cedStr = String(cedula).trim();
     const supabase = await initSupabase();
 
     let userCartons = [];
+
+    // 1. Consulta limpia a la tabla 'cartones' ignorando cualquier filtro de route_id / supervisor_id / agent_id
     try {
+      let queryOr = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+      if (!isNaN(Number(cedStr))) {
+        const numVal = Number(cedStr);
+        queryOr += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
+      }
+
       const { data: cData } = await supabase
         .from('cartones')
         .select('*')
-        .or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`);
+        .or(queryOr);
+
       if (cData && cData.length > 0) {
         userCartons = cData;
       }
     } catch (e) {
-      console.warn("Error al consultar cartones para Modus Operandi:", e);
+      console.warn("Aviso en consulta por cédula en getActiveCartonesForHistory:", e);
     }
 
-    // Resolver detalles de cartones activos (Central de Riesgo interna Multi-Ruta)
+    // 2. Fallback: Si la consulta .or() no trajo registros, realizar escaneo directo sobre la tabla 'cartones'
+    if (!userCartons || userCartons.length === 0) {
+      try {
+        const { data: allCartons } = await supabase
+          .from('cartones')
+          .select('*');
+
+        if (allCartons && allCartons.length > 0) {
+          userCartons = allCartons.filter(c => {
+            const cId = String(c.cliente_id || c.client_id || c.cedula || c.clienteCedula || c.clientCedula || '').trim();
+            return cId === cedStr || (!isNaN(Number(cedStr)) && Number(cId) === Number(cedStr));
+          });
+        }
+      } catch (eAll) {
+        console.warn("Aviso en fallback getActiveCartonesForHistory:", eAll);
+      }
+    }
+
+    // 3. Filtrar únicamente cartones activos
     const activeCartons = userCartons.filter(c => {
       const st = String(c.estado || c.status || '').trim().toLowerCase();
       return st === 'activo' || st === 'activo_por_renovacion';
     });
 
-    const activeCartonesDetails = [];
+    const activeDetails = [];
     if (activeCartons.length > 0) {
       for (const carton of activeCartons) {
         const agentId = carton.agent_id || carton.agentId || carton.agentName || null;
@@ -1336,17 +1363,58 @@ const db = {
           routeName = carton.city || carton.zone;
         }
 
-        activeCartonesDetails.push({
+        // Devolver metadatos de alerta SIN saldos ni interacción de cobro
+        activeDetails.push({
           carton_id: carton.id,
           agent_id: agentId,
           agentName: agentName,
           route_id: routeId,
-          routeName: routeName,
-          monto_prestado: Number(carton.monto_prestado || carton.amount || 0),
-          outstanding: Number(carton.outstanding || carton.total_debt || 0)
+          routeName: routeName
         });
       }
     }
+
+    return activeDetails;
+  },
+
+  async evaluateClientModusOperandi(cedula) {
+    if (!cedula) return null;
+    const cedStr = String(cedula).trim();
+    const supabase = await initSupabase();
+
+    let userCartons = [];
+    try {
+      let queryOr = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+      if (!isNaN(Number(cedStr))) {
+        const numVal = Number(cedStr);
+        queryOr += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
+      }
+
+      const { data: cData } = await supabase
+        .from('cartones')
+        .select('*')
+        .or(queryOr);
+      if (cData && cData.length > 0) {
+        userCartons = cData;
+      }
+    } catch (e) {
+      console.warn("Error al consultar cartones para Modus Operandi:", e);
+    }
+
+    if (!userCartons || userCartons.length === 0) {
+      try {
+        const { data: allCartons } = await supabase.from('cartones').select('*');
+        if (allCartons && allCartons.length > 0) {
+          userCartons = allCartons.filter(c => {
+            const cId = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+            return cId === cedStr || (!isNaN(Number(cedStr)) && Number(cId) === Number(cedStr));
+          });
+        }
+      } catch (eAll) {}
+    }
+
+    // Resolver detalles de cartones activos (Central de Riesgo interna Multi-Ruta) sin restricciones de route_id
+    const activeCartonesDetails = await this.getActiveCartonesForHistory(cedStr);
 
     // 1. REGLA DE BLOQUEO GLOBAL (LISTA NEGRA):
     let hasLoss = false;
@@ -1359,7 +1427,12 @@ const db = {
 
     if (!hasLoss) {
       try {
-        const { data: lnData } = await supabase.from('lista_negra').select('id').or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`).maybeSingle();
+        let queryOrLN = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+        if (!isNaN(Number(cedStr))) {
+          const numVal = Number(cedStr);
+          queryOrLN += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
+        }
+        const { data: lnData } = await supabase.from('lista_negra').select('id').or(queryOrLN).maybeSingle();
         if (lnData) hasLoss = true;
       } catch (eln) {}
     }
@@ -1564,16 +1637,52 @@ const db = {
   },
 
   async getGlobalClientByCedula(cedula) {
+    if (!cedula) return null;
+    const cedStr = String(cedula).trim();
     const supabase = await initSupabase();
-    const { data: client, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('cedula', String(cedula))
-      .maybeSingle();
-    if (error) {
-      console.error(`Error al obtener cliente global por cédula "${cedula}":`, error);
-      return null;
+
+    let client = null;
+    try {
+      let queryOr = `cedula.eq.${cedStr},cliente_id.eq.${cedStr},client_id.eq.${cedStr}`;
+      if (!isNaN(Number(cedStr))) {
+        const numVal = Number(cedStr);
+        queryOr += `,cedula.eq.${numVal},cliente_id.eq.${numVal},client_id.eq.${numVal}`;
+      }
+      const { data: clientData, error } = await supabase
+        .from('clients')
+        .select('*')
+        .or(queryOr);
+
+      if (clientData && clientData.length > 0) {
+        client = clientData[0];
+      }
+    } catch (e) {
+      console.warn("Error al obtener cliente global por cédula:", e);
     }
+
+    if (!client) {
+      try {
+        const { data: cSingle } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('cedula', cedStr)
+          .maybeSingle();
+        if (cSingle) client = cSingle;
+      } catch (eS) {}
+    }
+
+    if (!client) {
+      try {
+        const allClients = await this.getClients();
+        if (allClients && allClients.length > 0) {
+          client = allClients.find(c => {
+            const cCed = String(c.cedula || c.cliente_id || c.client_id || c.documentNumber || '').trim();
+            return cCed === cedStr || (!isNaN(Number(cedStr)) && Number(cCed) === Number(cedStr));
+          });
+        }
+      } catch (eCl) {}
+    }
+
     if (!client) return null;
 
     const modusOp = await this.evaluateClientModusOperandi(cedula);
