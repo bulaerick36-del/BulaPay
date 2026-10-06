@@ -469,26 +469,71 @@ const db = {
     if (!username) return null;
     try {
       const cleanInput = String(username).trim();
+      const lowerInput = cleanInput.toLowerCase();
       const supabase = await initSupabase();
 
-      // 1. Buscar en la tabla 'users' de Supabase por nombre de usuario (sin importar mayúsculas/minúsculas)
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .ilike('username', cleanInput);
-
       let foundUser = null;
-      if (!error && data && data.length > 0) {
-        foundUser = data[0];
-      } else {
-        // 2. Búsqueda alternativa por número de documento o correo electrónico
-        const { data: dataAlt, error: errAlt } = await supabase
+
+      if (supabase) {
+        // 1. Buscar en la tabla 'users' de Supabase por nombre de usuario (sin importar mayúsculas/minúsculas)
+        const { data, error } = await supabase
           .from('users')
           .select('*')
-          .or(`username.eq."${cleanInput}",documentNumber.eq."${cleanInput}",email.ilike."${cleanInput}"`);
+          .ilike('username', cleanInput);
 
-        if (!errAlt && dataAlt && dataAlt.length > 0) {
-          foundUser = dataAlt[0];
+        if (!error && data && data.length > 0) {
+          foundUser = data[0];
+        } else {
+          // 2. Búsqueda alternativa por número de documento o correo electrónico en 'users'
+          const { data: dataAlt } = await supabase
+            .from('users')
+            .select('*')
+            .or(`username.eq."${cleanInput}",documentNumber.eq."${cleanInput}",email.ilike."${cleanInput}",username.ilike."${cleanInput}"`);
+
+          if (dataAlt && dataAlt.length > 0) {
+            foundUser = dataAlt[0];
+          }
+        }
+
+        // 3. Búsqueda en la tabla 'agentes_ruta' si no se halló en 'users'
+        if (!foundUser) {
+          try {
+            const { data: dataAgent } = await supabase
+              .from('agentes_ruta')
+              .select('*')
+              .or(`username.ilike."${cleanInput}",cedula.eq."${cleanInput}",phone.eq."${cleanInput}"`);
+
+            if (dataAgent && dataAgent.length > 0) {
+              const ag = dataAgent[0];
+              foundUser = {
+                id: ag.id || ag.username,
+                username: ag.username || ag.cedula || cleanInput,
+                password: ag.password || ag.clave || ag.pin || '123456',
+                name: ag.name || ag.nombre || ag.username,
+                role: 'Agente de Ruta',
+                supervisor: ag.supervisor_id || ag.supervisor || null,
+                supervisor_id: ag.supervisor_id || ag.supervisor || null,
+                routeId: ag.ruta_id || ag.route_id || ag.routeId || null,
+                route_id: ag.ruta_id || ag.route_id || ag.routeId || null,
+                phone: ag.phone || ag.telefono || null
+              };
+            }
+          } catch (eAg) {
+            console.warn("Aviso consultando tabla agentes_ruta en getUserByUsername:", eAg);
+          }
+        }
+      }
+
+      // 4. Fallback a caché local (bulapay_users)
+      if (!foundUser) {
+        const localUsers = JSON.parse(localStorage.getItem('bulapay_users') || '[]');
+        const localMatch = localUsers.find(u => 
+          String(u.username || '').toLowerCase() === lowerInput ||
+          String(u.documentNumber || '').trim() === cleanInput ||
+          String(u.email || '').toLowerCase() === lowerInput
+        );
+        if (localMatch) {
+          foundUser = localMatch;
         }
       }
 
@@ -497,6 +542,8 @@ const db = {
         const uDoc = String(foundUser.documentNumber || '').trim();
         if (uName === 'erick26' || uDoc === '1121338578' || uName === 'admin') {
           foundUser.role = 'Usuario Supervisor';
+        } else if (!foundUser.role) {
+          foundUser.role = 'Agente de Ruta';
         }
       }
       return foundUser;
@@ -1017,9 +1064,9 @@ const db = {
                                 (!cartonSupervisorId && (!cartonAgentId || cartonAgentId === currentUser.username));
             if (!matchesUser) return;
           } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
-            const matchesRouteAgent = (cartonSupervisorId && cartonSupervisorId === supId) ||
-                                      (cartonAgentId && cartonAgentId === currentUser.username) ||
-                                      (currentUser.routeId && cartonRouteId === currentUser.routeId);
+            const userRouteId = currentUser.routeId || currentUser.route_id;
+            const matchesRouteAgent = (userRouteId && cartonRouteId && String(cartonRouteId) === String(userRouteId)) ||
+                                      (cartonAgentId && (cartonAgentId === currentUser.username || cartonAgentId === currentUser.id));
             if (!matchesRouteAgent) return;
           } else if (supId) {
             const matchesSupervisor = (cartonSupervisorId && cartonSupervisorId === supId) ||

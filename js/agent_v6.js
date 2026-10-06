@@ -2393,44 +2393,51 @@ const agentModule = {
         return;
       }
 
-      // 2. Consulta a Supabase con filtro estricto por el ID/Ruta del agente activo (.eq('agent_id', auth.uid()))
-      let activeCartonesData = [];
+      // 2. REGLA ESTRICTA DE PRIVACIDAD: Verificar si el cliente tiene cartón activo globalmente en Supabase
+      const allActiveGlobalCartones = (dbCartonesGlobal || []).filter(c => {
+        const st = String(c.estado || c.status || '').toLowerCase();
+        return st === 'activo' || st === 'activo_por_renovacion';
+      });
 
-      try {
-        let activeCartonQuery = supabase
-          .from('cartones')
-          .select('*')
-          .or(`cliente_id.eq.${cedula},cedula.eq.${cedula}`)
-          .in('estado', ['activo', 'activo_por_renovacion']);
+      const globalActiveCarton = allActiveGlobalCartones.length > 0 ? allActiveGlobalCartones[0] : null;
 
-        if (activeAgentId) {
-          if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
-            if (activeRouteId) {
-              activeCartonQuery = activeCartonQuery.or(`agent_id.eq.${activeAgentId},agent_id.eq.${currentUser.username},route_id.eq.${activeRouteId}`);
-            } else {
-              activeCartonQuery = activeCartonQuery.or(`agent_id.eq.${activeAgentId},agent_id.eq.${currentUser.username}`);
-            }
-          } else if (currentUser && currentUser.username) {
-            activeCartonQuery = activeCartonQuery.or(`agent_id.eq.${activeAgentId},agent_id.eq.${currentUser.username}`);
-          } else {
-            activeCartonQuery = activeCartonQuery.eq('agent_id', activeAgentId);
+      let effectiveRouteId = currentUser?.routeId || currentUser?.route_id;
+      if (!effectiveRouteId && currentUser && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
+        effectiveRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
+      }
+      const effectiveAgentId = currentUser?.username || currentUser?.id;
+
+      if (globalActiveCarton) {
+        const cartonRouteId = globalActiveCarton.route_id || globalActiveCarton.routeId;
+        const cartonAgentId = globalActiveCarton.agent_id || globalActiveCarton.agentId;
+
+        const isMine = (
+          (effectiveRouteId && cartonRouteId && String(cartonRouteId) === String(effectiveRouteId)) ||
+          (effectiveAgentId && cartonAgentId && (String(cartonAgentId) === String(effectiveAgentId) || String(cartonAgentId) === String(currentUser?.username)))
+        );
+
+        if (!isMine) {
+          const crossRouteMsg = 'Este cliente tiene un crédito activo en otra ruta';
+          if (this.searchError) {
+            this.searchError.style.display = 'block';
+            this.searchError.textContent = crossRouteMsg;
           }
+          alert(`⚠️ ${crossRouteMsg}`);
+          if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
+          if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
+          this.currentClient = null;
+          return;
         }
-
-        const { data: qData } = await activeCartonQuery;
-        if (qData) activeCartonesData = qData;
-      } catch (eCartonQuery) {
-        console.warn("Aviso al consultar cartones activos con filtro de agente:", eCartonQuery);
       }
 
       // También verificar en la lista precargada de créditos activos del agente
       const activeCredits = await window.BulaPayDB.loadActiveCredits();
       const activeCreditLocal = activeCredits.find(c => String(c.cedula).trim() === String(cedula).trim());
 
-      const activeCarton = (activeCartonesData && activeCartonesData.length > 0) ? activeCartonesData[0] : (activeCreditLocal ? activeCreditLocal : null);
+      const activeCarton = globalActiveCarton || activeCreditLocal;
 
       if (!activeCarton) {
-        // Si el cliente existe pero pertenece a otra ruta o no tiene créditos activos en esta ruta:
+        // Si el cliente existe pero no tiene créditos activos en esta ruta:
         const errorMsg = 'Este cliente no tiene créditos activos en tu ruta';
         if (this.searchError) {
           this.searchError.style.display = 'block';

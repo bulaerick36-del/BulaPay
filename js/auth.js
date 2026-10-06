@@ -172,10 +172,14 @@ const authModule = {
             return;
           }
 
-          if (user && String(user.password).trim() === String(passwordInput).trim() && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente')) {
+          const storedPwd = user ? String(user.password || user.clave || user.pin || '').trim() : '';
+          const inputPwd = String(passwordInput).trim();
+
+          if (user && storedPwd === inputPwd && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente Independiente' || !user.role)) {
+            if (!user.role) user.role = 'Agente de Ruta';
             this.loginUser(user);
-          } else if (user && String(user.password).trim() === String(passwordInput).trim()) {
-            alert('❌ Acceso denegado. Este portal es exclusivo para Agentes.');
+          } else if (user && storedPwd === inputPwd) {
+            this.loginUser(user);
           } else {
             alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
           }
