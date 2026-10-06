@@ -1612,23 +1612,27 @@ const agentModule = {
         return;
       }
 
-      // 2. ALGORITMO DE MODUS OPERANDI (AMARILLO vs VERDE):
+      // 2. CENTRAL DE RIESGO INTERNA: ALERTA DE CRÉDITOS ACTIVOS MULTI-RUTA
       let activeCreditNote = '';
-      const hasActiveCredit = modusResult.userCartons.some(c => {
-        const st = String(c.estado || c.status || '').toLowerCase();
-        return st === 'activo' || st === 'activo_por_renovacion';
-      });
+      const activeDetails = modusResult.activeCartonesDetails || [];
 
-      if (hasActiveCredit) {
-        let agentName = client?.agent_id || 'Desconocido';
-        try {
-          if (client?.agent_id) {
-            const agentUser = await window.BulaPayDB.getUserByUsername(client.agent_id);
-            if (agentUser) agentName = agentUser.name || agentUser.username;
-          }
-        } catch (e) {}
-        const municipality = client?.city || 'Desconocido';
-        activeCreditNote = `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); font-size: 0.8rem; font-weight: 600;">⚠️ Crédito Activo actual con el agente ${agentName} en el municipio ${municipality}.</div>`;
+      if (activeDetails.length > 0) {
+        let alertContentHtml = '';
+        if (activeDetails.length === 1) {
+          const single = activeDetails[0];
+          alertContentHtml = `⚠️ Crédito Activo actual con el agente <strong>${single.agentName}</strong> en la ruta <strong>${single.routeName}</strong>.`;
+        } else {
+          const itemsList = activeDetails
+            .map((item, idx) => `<strong>${idx + 1}.</strong> [${item.agentName} - ${item.routeName}]`)
+            .join(', ');
+          alertContentHtml = `⚠️ Atención: Este cliente tiene <strong>[${activeDetails.length}]</strong> créditos activos actualmente con los agentes: ${itemsList}.`;
+        }
+
+        activeCreditNote = `
+          <div class="active-credits-multi-route-warning" style="margin-top: 0.75rem; padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.18); border: 1.5px solid #f59e0b; border-radius: 10px; color: #b45309; font-size: 0.88rem; font-weight: 600; line-height: 1.5; box-shadow: 0 2px 6px rgba(245,158,11,0.12);">
+            ${alertContentHtml}
+          </div>
+        `;
       }
 
       if (modusResult.risk === 'Amarillo') {

@@ -1233,6 +1233,46 @@ const db = {
     }
   },
 
+  async getRouteByIdGlobal(routeId) {
+    if (!routeId) return null;
+    try {
+      const supabase = await initSupabase();
+      const { data } = await supabase
+        .from('routes')
+        .select('*')
+        .eq('id', String(routeId))
+        .maybeSingle();
+      return data || null;
+    } catch (e) {
+      console.warn("Aviso al consultar ruta global:", e);
+      return null;
+    }
+  },
+
+  async getAgentInfoGlobal(agentId) {
+    if (!agentId) return null;
+    try {
+      const cleanInput = String(agentId).trim();
+      const supabase = await initSupabase();
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .or(`username.ilike."${cleanInput}",id.eq."${cleanInput}"`);
+      if (userData && userData.length > 0) return userData[0];
+
+      const { data: agentData } = await supabase
+        .from('agentes_ruta')
+        .select('*')
+        .or(`username.ilike."${cleanInput}",cedula.eq."${cleanInput}"`);
+      if (agentData && agentData.length > 0) return agentData[0];
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  },
+
   async evaluateClientModusOperandi(cedula) {
     if (!cedula) return null;
     const cedStr = String(cedula).trim();
@@ -1240,20 +1280,75 @@ const db = {
 
     let userCartons = [];
     try {
-      const { data: c1 } = await supabase.from('cartones').select('*').eq('cliente_id', cedStr);
-      if (c1 && c1.length > 0) {
-        userCartons = c1;
-      } else {
-        const { data: c2 } = await supabase.from('cartones').select('*').eq('cedula', cedStr);
-        if (c2 && c2.length > 0) userCartons = c2;
+      const { data: cData } = await supabase
+        .from('cartones')
+        .select('*')
+        .or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`);
+      if (cData && cData.length > 0) {
+        userCartons = cData;
       }
     } catch (e) {
       console.warn("Error al consultar cartones para Modus Operandi:", e);
     }
 
+    // Resolver detalles de cartones activos (Central de Riesgo interna Multi-Ruta)
+    const activeCartons = userCartons.filter(c => {
+      const st = String(c.estado || c.status || '').trim().toLowerCase();
+      return st === 'activo' || st === 'activo_por_renovacion';
+    });
+
+    const activeCartonesDetails = [];
+    if (activeCartons.length > 0) {
+      for (const carton of activeCartons) {
+        const agentId = carton.agent_id || carton.agentId || carton.agentName || null;
+        const routeId = carton.route_id || carton.routeId || carton.ruta_id || null;
+
+        let agentName = 'Cobrador Desconocido';
+        let routeName = 'Ruta Desconocida';
+
+        if (agentId) {
+          try {
+            const agentUser = await this.getAgentInfoGlobal(agentId);
+            if (agentUser) {
+              agentName = agentUser.name || agentUser.nombre || agentUser.username || agentId;
+            } else {
+              agentName = agentId;
+            }
+          } catch (eAg) {
+            agentName = agentId;
+          }
+        }
+
+        if (routeId) {
+          try {
+            const routeData = await this.getRouteByIdGlobal(routeId);
+            if (routeData) {
+              const rName = routeData.name || routeData.nombre || 'Ruta';
+              const rCity = routeData.city || routeData.municipio || routeData.department || '';
+              routeName = rCity ? `${rName} (${rCity})` : rName;
+            } else {
+              routeName = routeId;
+            }
+          } catch (eRt) {
+            routeName = routeId;
+          }
+        } else if (carton.city || carton.zone) {
+          routeName = carton.city || carton.zone;
+        }
+
+        activeCartonesDetails.push({
+          carton_id: carton.id,
+          agent_id: agentId,
+          agentName: agentName,
+          route_id: routeId,
+          routeName: routeName,
+          monto_prestado: Number(carton.monto_prestado || carton.amount || 0),
+          outstanding: Number(carton.outstanding || carton.total_debt || 0)
+        });
+      }
+    }
+
     // 1. REGLA DE BLOQUEO GLOBAL (LISTA NEGRA):
-    // Al consultar una cédula, si el cliente tiene al menos un (1) cartón en estado liquidado_perdida
-    // en toda la base de datos (sin importar de qué agente sea), su estado automático e inamovible es ROJO (Moroso).
     let hasLoss = false;
     userCartons.forEach(c => {
       const st = String(c.estado || c.status || '').trim().toLowerCase();
@@ -1284,6 +1379,7 @@ const db = {
         cantRetraso: 0,
         cantRenovacion: 0,
         userCartons: userCartons,
+        activeCartonesDetails: activeCartonesDetails,
         message: '⚠️ BLOQUEO GLOBAL POR LISTA NEGRA: El cliente cuenta con al menos un cartón en estado liquidado_perdida. Su estado automático e inamovible es ROJO (Moroso). Debe comunicarse con el agente que generó el reporte para limpiar su historial.'
       };
     }
@@ -1344,6 +1440,7 @@ const db = {
       cantRetraso,
       cantRenovacion,
       userCartons,
+      activeCartonesDetails: activeCartonesDetails,
       message
     };
   },
