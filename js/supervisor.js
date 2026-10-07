@@ -651,59 +651,217 @@ const supervisorModule = {
 
     if (!ledgerContainer || !gridEl) return;
 
+    const cedStr = String(cedula || '').trim();
+    if (!cedStr) return;
+
+    // Mostrar contenedor e indicador de carga fresca
+    ledgerContainer.style.display = 'block';
+    gridEl.innerHTML = '<div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 1.5rem; grid-column: 1 / -1;">⏳ Cargando datos del cartón en tiempo real...</div>';
+
     try {
-      const client = await window.BulaPayDB.getClientByCedula(cedula);
-      if (!client) return;
+      const supabase = await window.BulaPayDB.initSupabase();
 
+      // 1. FORZAR REFRESCO DE DATOS (FETCH FRESCO DIRECTO A SUPABASE DE CLIENTE Y CARTÓN)
+      const client = await window.BulaPayDB.getClientByCedula(cedStr);
+      if (!client) {
+        gridEl.innerHTML = '<div style="color: var(--color-rojo); text-align: center; font-size: 0.85rem; padding: 1rem; grid-column: 1 / -1;">❌ Cliente no encontrado.</div>';
+        return;
+      }
+
+      let activeCarton = null;
+      try {
+        let qOrCarton = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+        if (!isNaN(Number(cedStr))) {
+          const numVal = Number(cedStr);
+          qOrCarton += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
+        }
+        const { data: cData } = await supabase
+          .from('cartones')
+          .select('*')
+          .or(qOrCarton)
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (cData && cData.length > 0) {
+          activeCarton = cData[0];
+        }
+      } catch (eC) {
+        console.warn("Aviso al obtener cartón en vivo para auditoría:", eC);
+      }
+
+      if (activeCarton) {
+        client.carton_id = activeCarton.id;
+        client.id = activeCarton.id;
+        client.installmentsCount = Number(activeCarton.installments_count || activeCarton.installmentsCount || client.installmentsCount || client.installments_count || 30);
+        client.installmentAmount = Number(activeCarton.installment_amount || activeCarton.installmentAmount || client.installmentAmount || client.installment_amount || 0);
+        client.monto_prestado = Number(activeCarton.monto_prestado || activeCarton.amount || client.monto_prestado || client.amount || 0);
+        client.totalDebt = Number(activeCarton.total_debt || activeCarton.totalDebt || client.totalDebt || client.total_debt || 0);
+        client.outstanding = Number(activeCarton.outstanding || client.outstanding || 0);
+        if (activeCarton.fecha_apertura) client.fecha_apertura = activeCarton.fecha_apertura;
+        if (activeCarton.fecha_inicio) client.fecha_inicio = activeCarton.fecha_inicio;
+        if (activeCarton.created_at) client.created_at = activeCarton.created_at;
+      }
+
+      // 2. FETCH FRESCO DE PAGOS DESDE SUPABASE SIN FILTROS RESTRICTIVOS DE ROUTE/SUPERVISOR
+      let freshPayments = [];
+      try {
+        let queryOrPayments = `clientCedula.eq.${cedStr},client_cedula.eq.${cedStr},cedula.eq.${cedStr}`;
+        if (!isNaN(Number(cedStr))) {
+          const numVal = Number(cedStr);
+          queryOrPayments += `,clientCedula.eq.${numVal},client_cedula.eq.${numVal},cedula.eq.${numVal}`;
+        }
+        const { data: pData } = await supabase
+          .from('payments')
+          .select('*')
+          .or(queryOrPayments);
+
+        if (pData && pData.length > 0) {
+          freshPayments = pData;
+        }
+      } catch (eP) {
+        console.warn("Aviso al obtener pagos en vivo para auditoría:", eP);
+      }
+
+      if (freshPayments.length === 0) {
+        freshPayments = await window.BulaPayDB.getPaymentsByClient(cedStr);
+      }
+
+      // 3. ACTUALIZAR ENCABEZADO Y METADATOS DEL CLIENTE
       const allUsers = await this.getCachedUsers();
-      const associatedAgent = allUsers.find(u => u.username === client.agent_id);
-      const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+      const associatedAgent = allUsers.find(u => u.username === client.agent_id || u.username === activeCarton?.agent_id);
+      const agentNameLabel = associatedAgent ? associatedAgent.name : (client.agent_id || 'No asignado');
 
-      nameEl.textContent = client.name;
-      metaEl.textContent = `Cédula: ${client.cedula} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
+      nameEl.textContent = client.name || client.nombre || `Cliente ${cedStr}`;
+      metaEl.textContent = `Cédula: ${client.cedula || cedStr} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
 
-      const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+      // 4. ESTRUCTURAR EL ESTADO DIARIO CON LA LÓGICA DE NEGOCIO GLOBAL DE BULAPAY
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, freshPayments);
+      const dailyStatusMap = new Map();
+      if (dailyStatusList && Array.isArray(dailyStatusList)) {
+        dailyStatusList.forEach(ds => {
+          dailyStatusMap.set(ds.dayNumber, ds);
+        });
+      }
 
       gridEl.innerHTML = '';
-      const totalSlots = client.installmentsCount;
-      
+      const totalSlots = Number(client.installmentsCount || client.installments_count || 30);
+
+      // Pre-mapear pagos válidos por número de cuota
+      const validPaymentsMap = new Map();
+      const cartonId = client.carton_id || client.id;
+      const cartonStartStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+      const clientCreatedTime = cartonStartStr ? new Date(cartonStartStr).getTime() : 0;
+
+      freshPayments.forEach(p => {
+        let pTime = 0;
+        if (p.created_at) pTime = new Date(p.created_at).getTime();
+        else if (p.date) {
+          const dStr = String(p.date).trim();
+          pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
+        }
+
+        let belongsToCurrentCarton = true;
+        if (p.liquidado === true || p.liquidado === 'true') {
+          belongsToCurrentCarton = false;
+        } else if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
+          belongsToCurrentCarton = false;
+        } else if (!p.carton_id && clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000)) {
+          belongsToCurrentCarton = false;
+        }
+
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || rawStatus.includes('liquidado') || rawStatus.includes('cancelado') || rawStatus.includes('rechazado');
+
+        if (belongsToCurrentCarton && !isLiquidationRecord) {
+          if (p.installmentNumber && !isNaN(Number(p.installmentNumber))) {
+            validPaymentsMap.set(Number(p.installmentNumber), p);
+          }
+        }
+      });
+
+      // 5. RENDEREAR CUADRÍCULA CON EVALUACIÓN PRECISA (Pagado 🟢, Abonado 🟡, Atrasado 🔴, Pendiente ⚪/🔵)
       for (let i = 1; i <= totalSlots; i++) {
-        const payment = payments.find(p => p.installmentNumber === i);
+        const payment = validPaymentsMap.get(i);
+        const dayStatus = dailyStatusMap.get(i);
+        const hasPaid = dayStatus ? dayStatus.hasPaid : (payment && Number(payment.amount) > 0 && payment.status !== 'No Pago');
+        const isOverdue = dayStatus ? dayStatus.isOverdue : false;
+        const isToday = dayStatus ? dayStatus.isToday : false;
+
         const slotCard = document.createElement('div');
-        slotCard.className = 'ledger-slot-card'; // Reusar clases
+        slotCard.className = 'ledger-slot-card';
         slotCard.style.padding = '0.5rem';
         slotCard.style.fontSize = '0.7rem';
         slotCard.style.minHeight = '70px';
+        slotCard.style.borderRadius = '8px';
+        slotCard.style.position = 'relative';
+        slotCard.style.border = '1px solid var(--border-color)';
+        slotCard.style.transition = 'all 0.2s ease';
 
-        if (payment) {
-          const isAbonado = payment.status === 'Abonado';
-          const isNoPago = payment.status === 'No Pago';
-          
+        if (hasPaid || (payment && Number(payment.amount) > 0 && payment.status !== 'No Pago')) {
+          const rawSt = String(payment ? payment.status : '').trim().toLowerCase();
+          const isAbonado = rawSt === 'abonado' || (payment && Number(payment.amount) < client.installmentAmount && Number(payment.amount) > 0);
+          const isNoPago = rawSt === 'no pago';
+
           if (isNoPago) {
             slotCard.classList.add('nopago');
-            slotCard.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+            slotCard.style.borderColor = 'rgba(239, 68, 68, 0.4)';
             slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
+            slotCard.innerHTML = `
+              <span class="slot-num" style="font-size: 0.55rem; font-weight: 700;">CUOTA ${i}</span>
+              <span class="slot-amount" style="font-size: 0.75rem; color: #ef4444; font-weight: 800;">$0</span>
+              <span class="slot-date" style="font-size: 0.5rem; display:block; color: var(--text-secondary);">${payment?.date || dayStatus?.dateStr || ''}</span>
+              <div class="slot-stamp" style="font-size: 0.75rem; position: absolute; bottom: 2px; right: 4px;">🔴</div>
+            `;
+          } else if (isAbonado) {
+            slotCard.classList.add('abonado');
+            slotCard.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+            slotCard.style.backgroundColor = 'rgba(245, 158, 11, 0.12)';
+            slotCard.innerHTML = `
+              <span class="slot-num" style="font-size: 0.55rem; font-weight: 700; color: #b45309;">CUOTA ${i}</span>
+              <span class="slot-amount" style="font-size: 0.75rem; color: #b45309; font-weight: 800;">$${Number(payment?.amount || 0).toLocaleString('es-CO')}</span>
+              <span class="slot-date" style="font-size: 0.5rem; display:block; color: #b45309;">${payment?.date || dayStatus?.dateStr || ''}</span>
+              <div class="slot-stamp" style="font-size: 0.75rem; position: absolute; bottom: 2px; right: 4px;">🟡</div>
+            `;
           } else {
-            slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
+            // PAGADO COMPLETO
+            slotCard.classList.add('paid');
+            slotCard.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            slotCard.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
+            slotCard.innerHTML = `
+              <span class="slot-num" style="font-size: 0.55rem; font-weight: 700; color: #059669;">CUOTA ${i}</span>
+              <span class="slot-amount" style="font-size: 0.75rem; color: #059669; font-weight: 800;">$${Number(payment?.amount || client.installmentAmount).toLocaleString('es-CO')}</span>
+              <span class="slot-date" style="font-size: 0.5rem; display:block; color: #059669;">${payment?.date || dayStatus?.dateStr || ''}</span>
+              <div class="slot-stamp" style="font-size: 0.75rem; position: absolute; bottom: 2px; right: 4px;">🟢</div>
+            `;
           }
-          
+
+          if (payment) {
+            slotCard.style.cursor = 'pointer';
+            slotCard.addEventListener('click', () => {
+              window.showBulaPayReceipt(payment, client);
+            });
+          }
+        } else if (isOverdue) {
+          // ATRASADO (Fecha pasada sin pago registrado)
+          slotCard.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+          slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.04)';
           slotCard.innerHTML = `
-            <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
-            <span class="slot-amount" style="font-size: 0.75rem;">$${Number(payment.amount).toLocaleString('es-CO')}</span>
-            <span class="slot-date" style="font-size: 0.5rem; display:block;">${payment.date}</span>
-            <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
+            <span class="slot-num" style="font-size: 0.55rem; font-weight: 700; color: #ef4444;">CUOTA ${i}</span>
+            <span class="slot-amount" style="color: #ef4444; font-size: 0.7rem; font-weight: 700;">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
+            <span class="slot-empty-text" style="font-size: 0.55rem; color: #ef4444; font-weight: 700; display:block;">Atrasado</span>
+            <div class="slot-stamp" style="font-size: 0.75rem; position: absolute; bottom: 2px; right: 4px;">🔴</div>
           `;
-          slotCard.addEventListener('click', () => {
-            window.showBulaPayReceipt(payment, client);
-          });
         } else {
+          // PENDIENTE (Cuota de Hoy sin cobrar o Cuota futura)
+          const stateLabel = isToday ? 'Hoy' : 'Pendiente';
+          const labelColor = isToday ? '#3b82f6' : 'var(--text-muted)';
+          slotCard.style.borderColor = isToday ? 'rgba(59, 130, 246, 0.3)' : 'var(--border-color)';
+          slotCard.style.backgroundColor = isToday ? 'rgba(59, 130, 246, 0.04)' : 'rgba(255, 255, 255, 0.02)';
           slotCard.innerHTML = `
-            <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
-            <span class="slot-amount" style="color: var(--text-muted); font-size: 0.7rem;">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
-            <span class="slot-empty-text" style="font-size: 0.55rem;">Atrasado</span>
+            <span class="slot-num" style="font-size: 0.55rem; font-weight: 700; color: ${labelColor};">CUOTA ${i}</span>
+            <span class="slot-amount" style="color: var(--text-secondary); font-size: 0.7rem;">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
+            <span class="slot-empty-text" style="font-size: 0.55rem; color: ${labelColor}; display:block;">${stateLabel}</span>
           `;
-          slotCard.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-          slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.02)';
         }
 
         gridEl.appendChild(slotCard);
@@ -718,10 +876,9 @@ const supervisorModule = {
         }
       });
 
-      ledgerContainer.style.display = 'block';
     } catch (err) {
-      console.error(err);
-      alert('❌ Error al cargar el historial del cliente.');
+      console.error("Error en showAgentClientAuditLedger:", err);
+      gridEl.innerHTML = '<div style="color: var(--color-rojo); text-align: center; font-size: 0.85rem; padding: 1rem; grid-column: 1 / -1;">❌ Error al cargar el cartón solo lectura.</div>';
     }
   },
 
