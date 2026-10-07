@@ -1046,7 +1046,11 @@ const db = {
 
         const montoPrestado = Number(carton.monto_prestado || (joinedClient ? joinedClient.amount : 0) || 0);
         const totalDebt = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
-        const outstanding = Number((carton.outstanding !== undefined && carton.outstanding !== null && carton.outstanding !== 0) ? carton.outstanding : (totalDebt || montoPrestado));
+        const outstanding = Number(
+          (carton.outstanding !== undefined && carton.outstanding !== null) ? carton.outstanding :
+          ((carton.saldo_pendiente !== undefined && carton.saldo_pendiente !== null) ? carton.saldo_pendiente :
+          (totalDebt || montoPrestado))
+        );
         const installmentsCount = Number(carton.installments_count || 1);
         const installmentAmount = Number(carton.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
         const discountAmount = Number(carton.discount_amount || 0);
@@ -2426,41 +2430,161 @@ const db = {
     return data ? data[0] : payload;
   },
 
-  async updateClientOutstanding(cedula, amountPaid) {
+  async updateClientOutstanding(cedula, amountPaid, installmentNumber = null, paymentObj = null) {
     const supabase = await initSupabase();
-    const client = await this.getGlobalClientByCedula(cedula);
-    if (client) {
-      const currentUser = this.getCurrentUser();
-      const newOutstanding = Math.max(0, Math.round(Number(client.outstanding || 0)) - Math.round(Number(amountPaid || 0)));
-      
-      // Actualizar el semáforo/riesgo del cliente basado en su saldo deudor pendiente
-      let newRisk = client.risk;
-      const clientUpdatePayload = { outstanding: newOutstanding, risk: newRisk };
-      if (newOutstanding === 0) {
-        newRisk = 'Verde'; // Se pone al día al cancelar crédito
-        clientUpdatePayload.risk = 'Verde';
-        clientUpdatePayload.status = 'Liquidado_Pagado';
-      }
+    const cedStr = String(cedula || '').trim();
+    if (!cedStr) return;
 
-      const { error } = await supabase
-        .from('clients')
-        .update(clientUpdatePayload)
-        .eq('cedula', String(cedula));
-         // Actualizar la tabla cartones en tiempo real para mantener sincronización total
-      try {
-        const cartonStateUpdate = { outstanding: newOutstanding };
-        if (newOutstanding === 0) {
-          cartonStateUpdate.estado = 'liquidado';
-          cartonStateUpdate.status = 'Liquidado_Pagado';
-        }
-        await supabase
-          .from('cartones')
-          .update(cartonStateUpdate)
-          .eq('cliente_id', String(cedula))
-          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
-      } catch (eCarton) {
-        console.warn(`Aviso actualizando saldo en cartón para "${cedula}":`, eCarton);
+    // 1. Obtener cartón activo actual directamente de Supabase en 'cartones'
+    let activeCarton = null;
+    try {
+      let q = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+      if (!isNaN(Number(cedStr))) {
+        const numVal = Number(cedStr);
+        q += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
       }
+      const { data: cData } = await supabase
+        .from('cartones')
+        .select('*')
+        .or(q)
+        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (cData && cData.length > 0) activeCarton = cData[0];
+    } catch (eC) {
+      console.warn("Aviso al consultar cartón en updateClientOutstanding:", eC);
+    }
+
+    const client = await this.getGlobalClientByCedula(cedStr);
+
+    // 2. Determinar saldo actual exacto antes del pago
+    let currentBalance = 0;
+    if (activeCarton) {
+      currentBalance = Number(
+        (activeCarton.outstanding !== undefined && activeCarton.outstanding !== null && !isNaN(Number(activeCarton.outstanding))) ? activeCarton.outstanding :
+        ((activeCarton.saldo_pendiente !== undefined && activeCarton.saldo_pendiente !== null && !isNaN(Number(activeCarton.saldo_pendiente))) ? activeCarton.saldo_pendiente :
+        (activeCarton.total_debt || (client ? (client.outstanding ?? client.totalDebt) : 0)))
+      );
+    } else if (client) {
+      currentBalance = Number(client.outstanding ?? client.saldo_pendiente ?? client.totalDebt ?? client.monto_total ?? 0);
+    }
+
+    const paidAmt = Math.round(Number(amountPaid || 0));
+    const newBalance = Math.max(0, Math.round(currentBalance - paidAmt));
+
+    // 3. Obtener o inicializar el arreglo/JSON de cuotas del cartón
+    let cuotasArray = [];
+    const totalInstallments = activeCarton ? Number(activeCarton.installments_count || 30) : 30;
+    const installmentAmt = activeCarton ? Number(activeCarton.installment_amount || (totalInstallments ? Math.round(currentBalance / totalInstallments) : 0)) : 0;
+
+    if (activeCarton) {
+      const rawCuotas = activeCarton.cuotas || activeCarton.cuotas_json;
+      if (rawCuotas) {
+        try {
+          cuotasArray = typeof rawCuotas === 'string' ? JSON.parse(rawCuotas) : rawCuotas;
+        } catch (eJ) {}
+      }
+    }
+
+    if (!Array.isArray(cuotasArray) || cuotasArray.length === 0) {
+      cuotasArray = [];
+      for (let i = 1; i <= totalInstallments; i++) {
+        cuotasArray.push({
+          cuota: i,
+          numero: i,
+          monto: installmentAmt,
+          estado: 'pendiente',
+          status: 'pendiente',
+          fecha_pago: null
+        });
+      }
+    }
+
+    // Actualizar el estado de la cuota específica pagada a 'pagado' (Punto 2)
+    const targetIdx = installmentNumber ? Number(installmentNumber) : null;
+    const paymentDateStr = paymentObj?.date || new Date().toISOString().split('T')[0];
+
+    if (targetIdx && !isNaN(targetIdx)) {
+      let targetCuota = cuotasArray.find(c => Number(c.numero || c.cuota || c.installmentNumber) === targetIdx);
+      if (targetCuota) {
+        targetCuota.estado = 'pagado';
+        targetCuota.status = 'pagado';
+        targetCuota.fecha_pago = paymentDateStr;
+        targetCuota.monto_pagado = paidAmt;
+      } else {
+        cuotasArray.push({
+          cuota: targetIdx,
+          numero: targetIdx,
+          monto: paidAmt,
+          estado: 'pagado',
+          status: 'pagado',
+          fecha_pago: paymentDateStr,
+          monto_pagado: paidAmt
+        });
+      }
+    }
+
+    // 4. Preparar la actualización obligatoria a la tabla 'cartones' (Punto 1 y 2)
+    const cartonUpdatePayload = {
+      outstanding: newBalance,
+      saldo_pendiente: newBalance,
+      cuotas: cuotasArray,
+      cuotas_json: cuotasArray
+    };
+
+    if (newBalance === 0) {
+      cartonUpdatePayload.estado = 'liquidado';
+      cartonUpdatePayload.status = 'Liquidado_Pagado';
+    }
+
+    // UPDATE A LA TABLA CARTONES (Por ID específico si existe)
+    if (activeCarton && activeCarton.id) {
+      try {
+        const { error: errId } = await supabase
+          .from('cartones')
+          .update(cartonUpdatePayload)
+          .eq('id', activeCarton.id);
+
+        if (errId) {
+          console.warn("Aviso al actualizar cartón por ID en Supabase, reintentando sin columnas JSON:", errId.message);
+          const fallbackPayload = { outstanding: newBalance, saldo_pendiente: newBalance };
+          if (newBalance === 0) { fallbackPayload.estado = 'liquidado'; fallbackPayload.status = 'Liquidado_Pagado'; }
+          await supabase.from('cartones').update(fallbackPayload).eq('id', activeCarton.id);
+        }
+      } catch (eCId) {
+        console.error("Error al hacer UPDATE en tabla cartones por ID:", eCId);
+      }
+    }
+
+    // UPDATE A LA TABLA CARTONES por cliente_id / client_id / cedula para garantizar consistencia
+    try {
+      const { error: errCl } = await supabase
+        .from('cartones')
+        .update(cartonUpdatePayload)
+        .eq('cliente_id', cedStr)
+        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion']);
+
+      if (errCl) {
+        const fallbackPayload = { outstanding: newBalance, saldo_pendiente: newBalance };
+        if (newBalance === 0) { fallbackPayload.estado = 'liquidado'; fallbackPayload.status = 'Liquidado_Pagado'; }
+        await supabase.from('cartones').update(fallbackPayload).eq('cliente_id', cedStr);
+      }
+    } catch (eCartonAll) {
+      console.warn("Aviso al hacer UPDATE en tabla cartones por cliente_id:", eCartonAll);
+    }
+
+    // 5. UPDATE A LA TABLA 'clients'
+    let newRisk = client ? client.risk : 'Verde';
+    const clientUpdatePayload = { outstanding: newBalance, saldo_pendiente: newBalance, risk: newRisk };
+    if (newBalance === 0) {
+      clientUpdatePayload.risk = 'Verde';
+      clientUpdatePayload.status = 'Liquidado_Pagado';
+    }
+
+    try {
+      await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedStr);
+    } catch (eCl) {
+      console.warn("Aviso al hacer UPDATE en tabla clients:", eCl);
     }
   },
 
@@ -2740,8 +2864,8 @@ const db = {
       }
     }
 
-    // 2. Actualizar saldo pendiente del cliente (Redondeo estricto a números enteros)
-    await this.updateClientOutstanding(payment.clientCedula, amountPaid);
+    // 2. Actualizar saldo pendiente del cliente (Redondeo estricto a números enteros) y arreglo de cuotas en cartones
+    await this.updateClientOutstanding(payment.clientCedula, amountPaid, payment.installmentNumber || installmentNumber, newPayment);
 
     // 3. Registrar abono a la ruta del cliente (Redondeo estricto a números enteros)
     if (client && client.routeId) {

@@ -218,6 +218,9 @@ CREATE TABLE IF NOT EXISTS cartones (
 
 ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "saldo_anterior" NUMERIC DEFAULT 0;
 ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "rollover_amount" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "saldo_pendiente" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "cuotas" JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "cuotas_json" JSONB DEFAULT '[]'::jsonb;
 
 ALTER TABLE cartones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir todo a anonimos en cartones" ON cartones;

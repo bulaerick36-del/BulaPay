@@ -662,7 +662,17 @@ const supervisorModule = {
       const supabase = await window.BulaPayDB.initSupabase();
 
       // 1. FORZAR REFRESCO DE DATOS (FETCH FRESCO DIRECTO A SUPABASE DE CLIENTE Y CARTÓN)
-      const client = await window.BulaPayDB.getClientByCedula(cedStr);
+      let freshClientData = null;
+      try {
+        const { data: clData } = await supabase
+          .from('clients')
+          .select('*')
+          .or(`cedula.eq.${cedStr},cliente_id.eq.${cedStr},client_id.eq.${cedStr}`)
+          .maybeSingle();
+        if (clData) freshClientData = clData;
+      } catch (eCl) {}
+
+      let client = freshClientData || (await window.BulaPayDB.getClientByCedula(cedStr));
       if (!client) {
         gridEl.innerHTML = '<div style="color: var(--color-rojo); text-align: center; font-size: 0.85rem; padding: 1rem; grid-column: 1 / -1;">❌ Cliente no encontrado.</div>';
         return;
@@ -679,7 +689,7 @@ const supervisorModule = {
           .from('cartones')
           .select('*')
           .or(qOrCarton)
-          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO'])
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'liquidado', 'Liquidado_Pagado'])
           .order('created_at', { ascending: false })
           .limit(1);
         if (cData && cData.length > 0) {
@@ -696,10 +706,36 @@ const supervisorModule = {
         client.installmentAmount = Number(activeCarton.installment_amount || activeCarton.installmentAmount || client.installmentAmount || client.installment_amount || 0);
         client.monto_prestado = Number(activeCarton.monto_prestado || activeCarton.amount || client.monto_prestado || client.amount || 0);
         client.totalDebt = Number(activeCarton.total_debt || activeCarton.totalDebt || client.totalDebt || client.total_debt || 0);
-        client.outstanding = Number(activeCarton.outstanding || client.outstanding || 0);
+        client.outstanding = Number(
+          (activeCarton.outstanding !== undefined && activeCarton.outstanding !== null && !isNaN(Number(activeCarton.outstanding))) ? activeCarton.outstanding :
+          ((activeCarton.saldo_pendiente !== undefined && activeCarton.saldo_pendiente !== null && !isNaN(Number(activeCarton.saldo_pendiente))) ? activeCarton.saldo_pendiente :
+          (client.outstanding ?? 0))
+        );
         if (activeCarton.fecha_apertura) client.fecha_apertura = activeCarton.fecha_apertura;
         if (activeCarton.fecha_inicio) client.fecha_inicio = activeCarton.fecha_inicio;
         if (activeCarton.created_at) client.created_at = activeCarton.created_at;
+      }
+
+      // Parsear arreglo/JSON de cuotas fresco guardado en el cartón de la BD
+      let cartonCuotasArray = [];
+      if (activeCarton) {
+        const rawCuotas = activeCarton.cuotas || activeCarton.cuotas_json;
+        if (rawCuotas) {
+          try {
+            cartonCuotasArray = typeof rawCuotas === 'string' ? JSON.parse(rawCuotas) : rawCuotas;
+          } catch (eJson) {}
+        }
+      }
+
+      const jsonPaidCuotasMap = new Map();
+      if (Array.isArray(cartonCuotasArray)) {
+        cartonCuotasArray.forEach(cq => {
+          const num = Number(cq.numero || cq.cuota || cq.installmentNumber);
+          const st = String(cq.estado || cq.status || '').toLowerCase();
+          if (num > 0 && (st === 'pagado' || cq.pagado === true)) {
+            jsonPaidCuotasMap.set(num, cq);
+          }
+        });
       }
 
       // 2. FETCH FRESCO DE PAGOS DESDE SUPABASE SIN FILTROS RESTRICTIVOS DE ROUTE/SUPERVISOR
@@ -783,8 +819,10 @@ const supervisorModule = {
       for (let i = 1; i <= totalSlots; i++) {
         const payment = validPaymentsMap.get(i);
         const dayStatus = dailyStatusMap.get(i);
-        const hasPaid = dayStatus ? dayStatus.hasPaid : (payment && Number(payment.amount) > 0 && payment.status !== 'No Pago');
-        const isOverdue = dayStatus ? dayStatus.isOverdue : false;
+        const jsonCuotaPaid = jsonPaidCuotasMap.has(i);
+
+        const hasPaid = jsonCuotaPaid || (dayStatus ? dayStatus.hasPaid : false) || (payment && Number(payment.amount) > 0 && payment.status !== 'No Pago');
+        const isOverdue = jsonCuotaPaid ? false : (dayStatus ? dayStatus.isOverdue : false);
         const isToday = dayStatus ? dayStatus.isToday : false;
 
         const slotCard = document.createElement('div');
