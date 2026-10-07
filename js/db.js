@@ -2469,8 +2469,10 @@ const db = {
       currentBalance = Number(client.outstanding ?? client.saldo_pendiente ?? client.totalDebt ?? client.monto_total ?? 0);
     }
 
-    const paidAmt = Math.round(Number(amountPaid || 0));
-    const newBalance = Math.max(0, Math.round(currentBalance - paidAmt));
+    const paidAmt = Math.round(parseFloat(amountPaid) || 0);
+    const rawNewBalance = Math.max(0, Math.round(currentBalance - paidAmt));
+    // Garantizar tipo numérico estricto (no String) para prevenir Error 400 Type Mismatch
+    const newBalanceNum = Number(rawNewBalance);
 
     // 3. Obtener o inicializar el arreglo/JSON de cuotas del cartón
     let cuotasArray = [];
@@ -2492,7 +2494,7 @@ const db = {
         cuotasArray.push({
           cuota: i,
           numero: i,
-          monto: installmentAmt,
+          monto: Number(installmentAmt),
           estado: 'pendiente',
           status: 'pendiente',
           fecha_pago: null
@@ -2500,7 +2502,7 @@ const db = {
       }
     }
 
-    // Actualizar el estado de la cuota específica pagada a 'pagado' (Punto 2)
+    // Actualizar el estado de la cuota específica pagada a 'pagado'
     const targetIdx = installmentNumber ? Number(installmentNumber) : null;
     const paymentDateStr = paymentObj?.date || new Date().toISOString().split('T')[0];
 
@@ -2524,67 +2526,120 @@ const db = {
       }
     }
 
-    // 4. Preparar la actualización obligatoria a la tabla 'cartones' (Punto 1 y 2)
-    const cartonUpdatePayload = {
-      outstanding: newBalance,
-      saldo_pendiente: newBalance,
+    // 4. Preparar la actualización a la tabla 'cartones' con tipos de datos limpios
+    const essentialCartonPayload = {
+      outstanding: newBalanceNum
+    };
+
+    if (newBalanceNum === 0) {
+      essentialCartonPayload.estado = 'liquidado';
+      essentialCartonPayload.status = 'Liquidado_Pagado';
+    }
+
+    // A) UPDATE ESENCIAL (Garantizado sin columnas extras de Supabase)
+    if (activeCarton && activeCarton.id) {
+      const { error: errEssentialId } = await supabase
+        .from('cartones')
+        .update(essentialCartonPayload)
+        .eq('id', activeCarton.id);
+
+      if (errEssentialId) {
+        console.error("❌ Error Supabase 400/DB al actualizar saldo esencial por ID en cartones:",
+          errEssentialId.message, errEssentialId.details, errEssentialId.hint, errEssentialId.code);
+      }
+    }
+
+    try {
+      const { error: errEssentialCed } = await supabase
+        .from('cartones')
+        .update(essentialCartonPayload)
+        .eq('cliente_id', cedStr)
+        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion']);
+
+      if (errEssentialCed) {
+        console.error("❌ Error Supabase 400/DB al actualizar saldo esencial por cliente_id en cartones:",
+          errEssentialCed.message, errEssentialCed.details, errEssentialCed.hint, errEssentialCed.code);
+      }
+    } catch (eEss) {
+      console.error("❌ Excepción al actualizar saldo esencial en cartones:", eEss);
+    }
+
+    // B) UPDATE EXTENDIDO (saldo_pendiente, cuotas, cuotas_json) con manejo explícito de errores Supabase
+    const extendedPayload = {
+      saldo_pendiente: newBalanceNum,
       cuotas: cuotasArray,
       cuotas_json: cuotasArray
     };
 
-    if (newBalance === 0) {
-      cartonUpdatePayload.estado = 'liquidado';
-      cartonUpdatePayload.status = 'Liquidado_Pagado';
+    if (newBalanceNum === 0) {
+      extendedPayload.estado = 'liquidado';
+      extendedPayload.status = 'Liquidado_Pagado';
     }
 
-    // UPDATE A LA TABLA CARTONES (Por ID específico si existe)
     if (activeCarton && activeCarton.id) {
-      try {
-        const { error: errId } = await supabase
-          .from('cartones')
-          .update(cartonUpdatePayload)
-          .eq('id', activeCarton.id);
+      const { error: errExtId } = await supabase
+        .from('cartones')
+        .update(extendedPayload)
+        .eq('id', activeCarton.id);
 
-        if (errId) {
-          console.warn("Aviso al actualizar cartón por ID en Supabase, reintentando sin columnas JSON:", errId.message);
-          const fallbackPayload = { outstanding: newBalance, saldo_pendiente: newBalance };
-          if (newBalance === 0) { fallbackPayload.estado = 'liquidado'; fallbackPayload.status = 'Liquidado_Pagado'; }
-          await supabase.from('cartones').update(fallbackPayload).eq('id', activeCarton.id);
-        }
-      } catch (eCId) {
-        console.error("Error al hacer UPDATE en tabla cartones por ID:", eCId);
+      if (errExtId) {
+        console.error("⚠️ Error 400/Detalle Supabase en update de columnas extendidas por ID (saldo_pendiente/cuotas):",
+          errExtId.message, "Detalles:", errExtId.details, "Hint:", errExtId.hint, "Code:", errExtId.code);
+        // Reintentar solo con saldo_pendiente por si cuotas JSON provocó fallo de esquema
+        try {
+          const { error: errSaldoOnly } = await supabase
+            .from('cartones')
+            .update({ saldo_pendiente: newBalanceNum })
+            .eq('id', activeCarton.id);
+          if (errSaldoOnly) {
+            console.error("⚠️ Columna saldo_pendiente en cartones retornó aviso:", errSaldoOnly.message, errSaldoOnly.details);
+          }
+        } catch (eS) {}
       }
     }
 
-    // UPDATE A LA TABLA CARTONES por cliente_id / client_id / cedula para garantizar consistencia
     try {
-      const { error: errCl } = await supabase
+      const { error: errExtCed } = await supabase
         .from('cartones')
-        .update(cartonUpdatePayload)
+        .update(extendedPayload)
         .eq('cliente_id', cedStr)
         .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion']);
 
-      if (errCl) {
-        const fallbackPayload = { outstanding: newBalance, saldo_pendiente: newBalance };
-        if (newBalance === 0) { fallbackPayload.estado = 'liquidado'; fallbackPayload.status = 'Liquidado_Pagado'; }
-        await supabase.from('cartones').update(fallbackPayload).eq('cliente_id', cedStr);
+      if (errExtCed) {
+        console.error("⚠️ Error 400/Detalle Supabase en update de columnas extendidas por cliente_id:",
+          errExtCed.message, "Detalles:", errExtCed.details, "Hint:", errExtCed.hint, "Code:", errExtCed.code);
       }
-    } catch (eCartonAll) {
-      console.warn("Aviso al hacer UPDATE en tabla cartones por cliente_id:", eCartonAll);
+    } catch (eExt) {
+      console.error("⚠️ Excepción al actualizar columnas extendidas en cartones:", eExt);
     }
 
     // 5. UPDATE A LA TABLA 'clients'
     let newRisk = client ? client.risk : 'Verde';
-    const clientUpdatePayload = { outstanding: newBalance, saldo_pendiente: newBalance, risk: newRisk };
-    if (newBalance === 0) {
-      clientUpdatePayload.risk = 'Verde';
-      clientUpdatePayload.status = 'Liquidado_Pagado';
+    const clientPayload = {
+      outstanding: newBalanceNum,
+      risk: newRisk
+    };
+    if (newBalanceNum === 0) {
+      clientPayload.risk = 'Verde';
+      clientPayload.status = 'Liquidado_Pagado';
     }
 
     try {
-      await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedStr);
+      const { error: errClient } = await supabase
+        .from('clients')
+        .update(clientPayload)
+        .eq('cedula', cedStr);
+
+      if (errClient) {
+        console.error("❌ Error 400/DB al actualizar cliente en 'clients':",
+          errClient.message, "Detalles:", errClient.details, "Hint:", errClient.hint, "Code:", errClient.code);
+      } else {
+        try {
+          await supabase.from('clients').update({ saldo_pendiente: newBalanceNum }).eq('cedula', cedStr);
+        } catch (eSp) {}
+      }
     } catch (eCl) {
-      console.warn("Aviso al hacer UPDATE en tabla clients:", eCl);
+      console.error("❌ Excepción al hacer UPDATE en tabla clients:", eCl);
     }
   },
 
