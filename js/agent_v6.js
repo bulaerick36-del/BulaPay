@@ -4261,6 +4261,9 @@ const agentModule = {
     btn.style.display = 'inline-flex';
 
     try {
+      const currentAgentId = currentUser ? (currentUser.username || currentUser.id) : null;
+      const userRouteId = currentUser ? (currentUser.routeId || currentUser.route_id) : null;
+
       const allClients = await window.BulaPayDB.getClients();
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
@@ -4268,6 +4271,17 @@ const agentModule = {
       const clientMap = new Map(allClients.map(c => [String(c.cedula), c]));
       const todayPaymentsMap = new Set();
       allPayments.forEach(p => {
+        // Filtro estricto por agent_id / route_id para evitar heredar cobros cruzados de otros agentes por cédula
+        const pAgentId = String(p.agent_id || p.agentId || p.agent_username || p.agentUsername || '').trim();
+        const pRouteId = p.routeId || p.route_id;
+
+        if (currentAgentId && pAgentId) {
+          const isMatch = (pAgentId === String(currentAgentId).trim() || pAgentId === String(currentUser.id).trim() || pAgentId === String(currentUser.username).trim());
+          if (!isMatch) return;
+        } else if (userRouteId && pRouteId) {
+          if (String(pRouteId) !== String(userRouteId)) return;
+        }
+
         const clientCedula = String(p.clientCedula || p.client_cedula || '');
         const client = clientMap.get(clientCedula);
         
@@ -4278,6 +4292,11 @@ const agentModule = {
                               
         if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
           if (client) {
+            const cartonId = client.carton_id || client.id;
+            if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
+              return;
+            }
+
             const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
             const clientTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
             let pTime = 0;
@@ -4296,7 +4315,13 @@ const agentModule = {
         }
       });
 
-      const activeClients = allClients.filter(c => this.isClientActiveAndValid(c));
+      const activeClients = allClients.filter(c => {
+        if (!this.isClientActiveAndValid(c)) return false;
+        if (currentAgentId && c.agent_id) {
+          return String(c.agent_id).trim() === String(currentAgentId).trim() || String(c.agent_id).trim() === String(currentUser.id).trim() || String(c.agent_id).trim() === String(currentUser.username).trim();
+        }
+        return true;
+      });
 
       const totalClientsCount = activeClients.length;
       let paidClientsCount = 0;
@@ -4413,6 +4438,10 @@ const agentModule = {
     modal.style.display = 'flex';
 
     try {
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      const currentAgentId = currentUser ? (currentUser.username || currentUser.id) : null;
+      const userRouteId = currentUser ? (currentUser.routeId || currentUser.route_id) : null;
+
       const allClients = await window.BulaPayDB.getClients();
       const todayStr = this.getLocalDateString();
       const allPayments = await window.BulaPayDB.getPayments();
@@ -4420,6 +4449,17 @@ const agentModule = {
       const clientMap = new Map(allClients.map(c => [String(c.cedula), c]));
       const todayPaymentsMap = new Set();
       allPayments.forEach(p => {
+        // Filtro estricto por agent_id / route_id para evitar heredar cobros cruzados de otros agentes por cédula
+        const pAgentId = String(p.agent_id || p.agentId || p.agent_username || p.agentUsername || '').trim();
+        const pRouteId = p.routeId || p.route_id;
+
+        if (currentAgentId && pAgentId) {
+          const isMatch = (pAgentId === String(currentAgentId).trim() || pAgentId === String(currentUser.id).trim() || pAgentId === String(currentUser.username).trim());
+          if (!isMatch) return;
+        } else if (userRouteId && pRouteId) {
+          if (String(pRouteId) !== String(userRouteId)) return;
+        }
+
         const clientCedula = String(p.clientCedula || p.client_cedula || '');
         const client = clientMap.get(clientCedula);
         
@@ -4430,6 +4470,11 @@ const agentModule = {
                               
         if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
           if (client) {
+            const cartonId = client.carton_id || client.id;
+            if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
+              return;
+            }
+
             const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
             const clientTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
             let pTime = 0;
@@ -4449,7 +4494,13 @@ const agentModule = {
       });
 
       // Excluir estrictamente clientes con cartón liquidado, cancelado o en Lista Negra / Mora (v106)
-      const clients = allClients.filter(c => this.isClientActiveAndValid(c));
+      const clients = allClients.filter(c => {
+        if (!this.isClientActiveAndValid(c)) return false;
+        if (currentAgentId && c.agent_id) {
+          return String(c.agent_id).trim() === String(currentAgentId).trim() || String(c.agent_id).trim() === String(currentUser.id).trim() || String(c.agent_id).trim() === String(currentUser.username).trim();
+        }
+        return true;
+      });
 
       if (clients.length === 0) {
         content.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No tiene clientes activos pendientes de cobro.</p>';

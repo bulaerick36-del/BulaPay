@@ -554,6 +554,8 @@ const supervisorModule = {
         return;
       }
 
+      this.currentAuditAgentId = username;
+
       const routes = await window.BulaPayDB.getRoutes();
       const route = routes.find(r => r.id === agent.routeId);
       const routeName = route ? route.name : 'Sin ruta asignada';
@@ -633,7 +635,7 @@ const supervisorModule = {
           item.style.backgroundColor = bgLight;
         });
 
-        item.addEventListener('click', () => this.showAgentClientAuditLedger(client.cedula));
+        item.addEventListener('click', () => this.showAgentClientAuditLedger(client.cedula, client.agent_id || agent.username || username, client.carton_id || client.id));
         listContainer.appendChild(item);
       });
 
@@ -643,7 +645,7 @@ const supervisorModule = {
     }
   },
 
-  async showAgentClientAuditLedger(cedula) {
+  async showAgentClientAuditLedger(cedula, agentId = null, cartonId = null) {
     const ledgerContainer = document.getElementById('agent-audit-ledger-container');
     const nameEl = document.getElementById('agent-audit-client-name');
     const metaEl = document.getElementById('agent-audit-client-meta');
@@ -653,6 +655,9 @@ const supervisorModule = {
 
     const cedStr = String(cedula || '').trim();
     if (!cedStr) return;
+
+    const targetAgentId = agentId || this.currentAuditAgentId;
+    const targetCartonId = cartonId;
 
     // Mostrar contenedor e indicador de carga fresca
     ledgerContainer.style.display = 'block';
@@ -664,11 +669,14 @@ const supervisorModule = {
       // 1. FORZAR REFRESCO DE DATOS (FETCH FRESCO DIRECTO A SUPABASE DE CLIENTE Y CARTÓN)
       let freshClientData = null;
       try {
-        const { data: clData } = await supabase
+        let clientQuery = supabase
           .from('clients')
           .select('*')
-          .or(`cedula.eq.${cedStr},cliente_id.eq.${cedStr},client_id.eq.${cedStr}`)
-          .maybeSingle();
+          .or(`cedula.eq.${cedStr},cliente_id.eq.${cedStr},client_id.eq.${cedStr}`);
+        if (targetAgentId) {
+          clientQuery = clientQuery.eq('agent_id', targetAgentId);
+        }
+        const { data: clData } = await clientQuery.maybeSingle();
         if (clData) freshClientData = clData;
       } catch (eCl) {}
 
@@ -680,20 +688,36 @@ const supervisorModule = {
 
       let activeCarton = null;
       try {
-        let qOrCarton = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
-        if (!isNaN(Number(cedStr))) {
-          const numVal = Number(cedStr);
-          qOrCarton += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
+        if (targetCartonId) {
+          const { data: cDataId } = await supabase
+            .from('cartones')
+            .select('*')
+            .eq('id', targetCartonId)
+            .limit(1);
+          if (cDataId && cDataId.length > 0) {
+            activeCarton = cDataId[0];
+          }
         }
-        const { data: cData } = await supabase
-          .from('cartones')
-          .select('*')
-          .or(qOrCarton)
-          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'liquidado', 'Liquidado_Pagado'])
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (cData && cData.length > 0) {
-          activeCarton = cData[0];
+        if (!activeCarton) {
+          let qOrCarton = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+          if (!isNaN(Number(cedStr))) {
+            const numVal = Number(cedStr);
+            qOrCarton += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
+          }
+          let cartonQuery = supabase
+            .from('cartones')
+            .select('*')
+            .or(qOrCarton)
+            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'liquidado', 'Liquidado_Pagado'])
+            .order('created_at', { ascending: false });
+
+          if (targetAgentId) {
+            cartonQuery = cartonQuery.eq('agent_id', targetAgentId);
+          }
+          const { data: cData } = await cartonQuery.limit(1);
+          if (cData && cData.length > 0) {
+            activeCarton = cData[0];
+          }
         }
       } catch (eC) {
         console.warn("Aviso al obtener cartón en vivo para auditoría:", eC);
@@ -746,10 +770,16 @@ const supervisorModule = {
           const numVal = Number(cedStr);
           queryOrPayments += `,clientCedula.eq.${numVal},client_cedula.eq.${numVal},cedula.eq.${numVal}`;
         }
-        const { data: pData } = await supabase
+        let payQuery = supabase
           .from('payments')
           .select('*')
           .or(queryOrPayments);
+
+        if (targetAgentId) {
+          payQuery = payQuery.eq('agent_id', targetAgentId);
+        }
+
+        const { data: pData } = await payQuery;
 
         if (pData && pData.length > 0) {
           freshPayments = pData;

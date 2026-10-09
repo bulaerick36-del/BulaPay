@@ -2795,16 +2795,25 @@ const db = {
     let rawCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || (this.isValidUuid(cedula.id) ? cedula.id : null)) : null);
     let targetCartonId = (rawCartonId && this.isValidUuid(rawCartonId)) ? String(rawCartonId).trim() : null;
 
+    const targetAgentId = (typeof cedula === 'object' && cedula !== null) ? (cedula.agent_id || cedula.agentId) : null;
+    const currentUser = this.getCurrentUser();
+    const currentAgentId = targetAgentId || (currentUser ? (currentUser.username || currentUser.id) : null);
+
     // Si no se proporcionó cartonId explícito, obtener el ID del cartón activo actual desde la tabla 'cartones'
     if (!targetCartonId && cedStr) {
       try {
-        const { data: cartonData } = await supabase
+        let cartonQuery = supabase
           .from('cartones')
           .select('id')
           .eq('cliente_id', cedStr)
           .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO'])
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .order('created_at', { ascending: false });
+
+        if (currentAgentId && currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
+          cartonQuery = cartonQuery.eq('agent_id', currentAgentId);
+        }
+
+        const { data: cartonData } = await cartonQuery.limit(1);
 
         if (cartonData && cartonData.length > 0 && cartonData[0].id && this.isValidUuid(cartonData[0].id)) {
           targetCartonId = cartonData[0].id;
