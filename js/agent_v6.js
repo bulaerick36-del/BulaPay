@@ -1841,10 +1841,14 @@ const agentModule = {
         return;
       }
 
-      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
+      const currentDebt = Math.round(Number(
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
+        ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
+      ));
       const amountPaid = Math.round(Number(amount || 0));
       const newBalance = Math.max(0, currentDebt - amountPaid);
-      const isFinalPayment = newBalance <= 0;
+      const isFinalPayment = (currentDebt > 0 && newBalance <= 0);
 
       const newPayment = {
         clientCedula: this.currentClient.cedula,
@@ -1933,7 +1937,11 @@ const agentModule = {
       this.btnProcessMassPayment.disabled = true;
       this.btnProcessMassPayment.innerText = 'Procesando...';
       
-      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
+      const currentDebt = Math.round(Number(
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
+        ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
+      ));
       let totalAmount = 0;
       let lastPayment = null;
       
@@ -1951,13 +1959,13 @@ const agentModule = {
           agentName: currentUser.name,
           status: 'Pagado Masivo',
           is_mass_payment: true,
-          liquidado: tempRem <= 0
+          liquidado: (currentDebt > 0 && tempRem <= 0)
         };
         lastPayment = await window.BulaPayDB.addPayment(newPayment);
       }
 
       const newBalance = Math.max(0, currentDebt - Math.round(totalAmount));
-      const isFinalPayment = newBalance <= 0;
+      const isFinalPayment = (currentDebt > 0 && newBalance <= 0);
 
       // 2. Date Shifting (Corrimiento de Fechas) Estricto
       await window.BulaPayDB.shiftPendingDates(this.currentClient.cedula);
@@ -2596,7 +2604,11 @@ const agentModule = {
       
       const todayStr = this.getLocalDateString();
       const firstPending = dailyStatusList.find(c => !c.hasPaid);
-      const currentOutstanding = Number(this.currentClient.outstanding || 0);
+      const currentOutstanding = Math.round(Number(
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
+        ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
+      ));
 
       // Búsqueda de la primera cuota pendiente o residuo de saldo pendiente general
       if (!firstPending && currentOutstanding <= 0) {
@@ -2619,7 +2631,7 @@ const agentModule = {
 
       const amountPaid = Math.round(Number(amount || 0));
       const newBalance = Math.max(0, currentOutstanding - amountPaid);
-      const isFinalPayment = newBalance <= 0;
+      const isFinalPayment = (currentOutstanding > 0 && newBalance <= 0);
 
       // Ejecución del pago apuntando a la primera cuota pendiente (o a la última si es un residuo)
       const newPayment = {
@@ -2774,10 +2786,14 @@ const agentModule = {
         return;
       }
 
-      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
+      const currentDebt = Math.round(Number(
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
+        ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
+      ));
       const amountToPayNum = Math.round(Number(amountToPay || 0));
       const newBalance = Math.max(0, currentDebt - amountToPayNum);
-      const isFinalPayment = newBalance <= 0;
+      const isFinalPayment = (currentDebt > 0 && newBalance <= 0);
 
       const newPayment = {
         clientCedula: this.currentClient.cedula,
@@ -2979,10 +2995,14 @@ const agentModule = {
         return;
       }
 
-      const currentDebt = Math.round(Number(this.currentClient.outstanding || 0));
+      const currentDebt = Math.round(Number(
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
+        ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
+      ));
       const amountNum = Math.round(Number(amount || 0));
       const newBalance = Math.max(0, currentDebt - amountNum);
-      const isFinalPayment = newBalance <= 0;
+      const isFinalPayment = (currentDebt > 0 && newBalance <= 0);
 
       const newPayment = {
         clientCedula: this.currentClient.cedula,
