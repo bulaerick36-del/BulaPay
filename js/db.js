@@ -2444,6 +2444,10 @@ const db = {
     return data ? data[0] : payload;
   },
 
+  isValidUuid(str) {
+    return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+  },
+
   async updateClientOutstanding(cedula, amountPaid, installmentNumber = null, paymentObj = null) {
     const supabase = await initSupabase();
     const cedStr = String(cedula || '').trim();
@@ -2788,7 +2792,8 @@ const db = {
     const supId = this.getSupervisorId();
 
     const cedStr = String(typeof cedula === 'object' && cedula !== null ? (cedula.cedula || cedula.clientCedula || '') : (cedula || ''));
-    let targetCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || cedula.id || null) : null);
+    let rawCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || (this.isValidUuid(cedula.id) ? cedula.id : null)) : null);
+    let targetCartonId = (rawCartonId && this.isValidUuid(rawCartonId)) ? String(rawCartonId).trim() : null;
 
     // Si no se proporcionó cartonId explícito, obtener el ID del cartón activo actual desde la tabla 'cartones'
     if (!targetCartonId && cedStr) {
@@ -2801,7 +2806,7 @@ const db = {
           .order('created_at', { ascending: false })
           .limit(1);
 
-        if (cartonData && cartonData.length > 0 && cartonData[0].id) {
+        if (cartonData && cartonData.length > 0 && cartonData[0].id && this.isValidUuid(cartonData[0].id)) {
           targetCartonId = cartonData[0].id;
         }
       } catch (e) {
@@ -2811,7 +2816,7 @@ const db = {
 
     let queryBase = supabase.from('payments').select('*').eq('clientCedula', cedStr);
 
-    if (targetCartonId) {
+    if (targetCartonId && this.isValidUuid(targetCartonId)) {
       queryBase = queryBase.eq('carton_id', String(targetCartonId));
     }
 
@@ -4206,8 +4211,8 @@ const db = {
       let updateErrors = [];
       let updateExecuted = false;
 
-      // A) Si se recibe cartonId, actualizar directamente por ID
-      if (cartonId) {
+      // A) Si se recibe cartonId válido, actualizar directamente por ID
+      if (cartonId && this.isValidUuid(cartonId)) {
         const { error: errId } = await supabase
           .from('cartones')
           .update(cartonUpdatePayload)
@@ -4248,12 +4253,8 @@ const db = {
       };
 
       const { error: errClient } = await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedStr);
-      if (errClient) {
-        await supabase.from('clients').update(clientUpdatePayload).eq('id', cedStr);
-        if (!isNaN(Number(cedStr))) {
-          await supabase.from('clients').update(clientUpdatePayload).eq('cedula', Number(cedStr));
-          await supabase.from('clients').update(clientUpdatePayload).eq('id', Number(cedStr));
-        }
+      if (errClient && !isNaN(Number(cedStr))) {
+        await supabase.from('clients').update(clientUpdatePayload).eq('cedula', Number(cedStr));
       }
 
       // SI SUPABASE DEVOLVIÓ ERROR Y NINGÚN UPDATE SE EJECUTÓ SIN ERROR: MOSTRAR ALERTA Y ABORTAR (v149)

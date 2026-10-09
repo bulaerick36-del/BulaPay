@@ -432,9 +432,11 @@ const agentModule = {
 
           const supabase = await window.BulaPayDB.initSupabase();
 
+          const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+
           // 1. LECTURA EN TIEMPO REAL: Consultar obligatoriamente el cartón activo y cliente en la base de datos
           let cartonQuery = supabase.from('cartones').select('*');
-          if (cartonId) {
+          if (cartonId && isValidUuid(cartonId)) {
             cartonQuery = cartonQuery.eq('id', cartonId);
           } else if (numeroCarton) {
             cartonQuery = cartonQuery.eq('numero_carton', Number(numeroCarton));
@@ -460,7 +462,7 @@ const agentModule = {
             .select('amount, status, carton_id, liquidado')
             .eq('clientCedula', cedulaStr);
 
-          if (activeCartonId) {
+          if (activeCartonId && isValidUuid(activeCartonId)) {
             paymentsQuery = paymentsQuery.eq('carton_id', String(activeCartonId));
           }
 
@@ -520,7 +522,8 @@ const agentModule = {
           if (btn) btn.textContent = 'Procesando...';
 
           // 3. REGISTRO EN BASE DE DATOS Y LISTA NEGRA CON EL SALDO PENDIENTE REAL
-          const targetCartonId = activeCarton?.id || cartonId;
+          const rawTargetCartonId = activeCarton?.id || cartonId;
+          const targetCartonId = (rawTargetCartonId && isValidUuid(rawTargetCartonId)) ? rawTargetCartonId : null;
 
           // Actualizar 'cartones' registrando el saldo pendiente real
           if (targetCartonId) {
