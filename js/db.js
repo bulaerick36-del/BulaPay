@@ -2449,12 +2449,14 @@ const db = {
     const cedStr = String(cedula || '').trim();
     if (!cedStr || cedStr === 'undefined' || cedStr === 'null') return;
 
+    const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+    const paymentCartonId = (paymentObj?.carton_id && isValidUuid(paymentObj.carton_id)) ? String(paymentObj.carton_id).trim() :
+                          ((paymentObj?.cartonId && isValidUuid(paymentObj.cartonId)) ? String(paymentObj.cartonId).trim() : null);
+
     // 1. Obtener cartón activo actual directamente de Supabase en 'cartones'
     let activeCarton = null;
-    const paymentCartonId = paymentObj?.carton_id || paymentObj?.cartonId || null;
-    const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-    if (paymentCartonId && isValidUuid(paymentCartonId)) {
+    if (paymentCartonId) {
       try {
         const { data: cById } = await supabase
           .from('cartones')
@@ -2467,7 +2469,7 @@ const db = {
 
     if (!activeCarton) {
       try {
-        let q = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+        let q = `cliente_id.eq."${cedStr}",client_id.eq."${cedStr}",cedula.eq."${cedStr}"`;
         if (!isNaN(Number(cedStr))) {
           const numVal = Number(cedStr);
           q += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
@@ -2483,7 +2485,18 @@ const db = {
         if (cErr) {
           console.error("❌ Error al consultar cartón en updateClientOutstanding:", cErr.message, cErr.details, cErr.hint, cErr.code);
         }
-        if (cData && cData.length > 0) activeCarton = cData[0];
+        if (cData && cData.length > 0) {
+          activeCarton = cData[0];
+        } else {
+          const { data: cDataFallback } = await supabase
+            .from('cartones')
+            .select('*')
+            .eq('cliente_id', cedStr)
+            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (cDataFallback && cDataFallback.length > 0) activeCarton = cDataFallback[0];
+        }
       } catch (eC) {
         console.warn("Excepción al consultar cartón en updateClientOutstanding:", eC);
       }
@@ -2577,6 +2590,10 @@ const db = {
       ? String(activeCarton.id).trim()
       : (paymentCartonId && isValidUuid(String(paymentCartonId).trim()) ? String(paymentCartonId).trim() : null);
 
+    if (!validCartonId) {
+      throw new Error(`Fallo de actualización: No se pudo determinar el UUID del cartón activo para la cédula ${cedStr}. Por favor recargue el perfil del cliente.`);
+    }
+
     const validClienteId = (cedStr && String(cedStr).trim() !== '' && String(cedStr).trim() !== 'undefined' && String(cedStr).trim() !== 'null') ? String(cedStr).trim() : null;
 
     // 4. CONDICIÓN DE LIQUIDACIÓN: SI Y SOLO SI saldo_pendiente - monto_pago <= 0
@@ -2593,28 +2610,48 @@ const db = {
     }
 
     // UPDATE A LA TABLA CARTONES: ESTRICTAMENTE usando el UUID del cartón (.eq('id', validCartonId))
-    // PROHIBIDO actualizar la tabla cartones usando .eq('cliente_id', cedula) para no alterar otros cartones de la cédula
-    if (validCartonId) {
-      const { error: errId } = await supabase
-        .from('cartones')
-        .update(cartonUpdatePayload)
-        .eq('id', validCartonId);
+    // CONTROL DE ERRORES ESTRICTO: Exigir modificación de exactamente 1 o más filas con .select()
+    let updateSuccess = false;
+    let updateErrorMsg = '';
 
-      if (errId) {
-        console.error("❌ Error 400/DB en update de cartón por ID:", errId.message, errId.details, errId.hint, errId.code);
-        try {
-          const stringifiedPayload = {
-            ...cartonUpdatePayload,
-            cuotas: JSON.stringify(cuotasArray),
-            cuotas_json: JSON.stringify(cuotasArray)
-          };
-          await supabase.from('cartones').update(stringifiedPayload).eq('id', validCartonId);
-        } catch (eStr) {}
-      } else {
-        console.log(`✅ Cartón (${validCartonId}) actualizado estrictamente por ID: saldo = $${newBalanceNum}, estado = ${isLiquidado ? 'liquidado' : 'activo'}`);
+    const { data: updatedRows, error: errId } = await supabase
+      .from('cartones')
+      .update(cartonUpdatePayload)
+      .eq('id', validCartonId)
+      .select();
+
+    if (errId) {
+      console.error("❌ Error 400/DB en update de cartón por ID:", errId.message, errId.details, errId.hint, errId.code);
+      try {
+        const stringifiedPayload = {
+          ...cartonUpdatePayload,
+          cuotas: JSON.stringify(cuotasArray),
+          cuotas_json: JSON.stringify(cuotasArray)
+        };
+        const { data: retryRows, error: retryErr } = await supabase
+          .from('cartones')
+          .update(stringifiedPayload)
+          .eq('id', validCartonId)
+          .select();
+
+        if (!retryErr && retryRows && retryRows.length > 0) {
+          updateSuccess = true;
+        } else {
+          updateErrorMsg = retryErr?.message || errId.message;
+        }
+      } catch (eStr) {
+        updateErrorMsg = eStr?.message || errId.message;
       }
+    } else if (updatedRows && updatedRows.length > 0) {
+      updateSuccess = true;
+      console.log(`✅ Cartón (${validCartonId}) actualizado correctamente en Supabase por ID (Filas modificadas: ${updatedRows.length}). Nuevo saldo: $${newBalanceNum}`);
     } else {
-      console.warn("⚠️ Advertencia: No se encontró validCartonId (UUID) para actualizar el cartón en modo estricto.");
+      updateErrorMsg = `La consulta de actualización en cartones (.eq('id', '${validCartonId}')) retornó 0 filas modificadas.`;
+    }
+
+    if (!updateSuccess) {
+      console.error(`❌ Fallo estricto en updateClientOutstanding para cartón ${validCartonId}: ${updateErrorMsg}`);
+      throw new Error(`Fallo en la base de datos al guardar saldo de cartón (${validCartonId}): ${updateErrorMsg}`);
     }
 
     // 5. UPDATE A LA TABLA 'clients'
@@ -2851,7 +2888,23 @@ const db = {
     const amountPaid = Math.round(Number(payment.amount) || 0);
 
     // Obtener cartón activo para vincular el pago e independizar cuotas de créditos anteriores
-    const cartonId = payment.carton_id || client.carton_id || client.id || null;
+    const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+
+    let cartonId = (payment.carton_id && isValidUuid(payment.carton_id)) ? String(payment.carton_id).trim() :
+                   ((client.carton_id && isValidUuid(client.carton_id)) ? String(client.carton_id).trim() :
+                   ((client.cartonId && isValidUuid(client.cartonId)) ? String(client.cartonId).trim() :
+                   (isValidUuid(client.id) ? String(client.id).trim() : null)));
+
+    if (!cartonId) {
+      const activeCartonDb = await this.getActiveCartonByClient(payment.clientCedula);
+      if (activeCartonDb && activeCartonDb.id && isValidUuid(activeCartonDb.id)) {
+        cartonId = String(activeCartonDb.id).trim();
+      }
+    }
+
+    if (!cartonId) {
+      throw new Error(`Fallo de registro: No se pudo determinar el UUID del cartón activo para la cédula ${payment.clientCedula}. Reintente la búsqueda del cliente.`);
+    }
     const cartonStartDate = client.fecha_apertura || client.created_at;
     const cartonStartTime = cartonStartDate ? new Date(cartonStartDate).getTime() : 0;
 

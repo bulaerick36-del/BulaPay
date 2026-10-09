@@ -1850,9 +1850,29 @@ const agentModule = {
       const newBalance = Math.max(0, currentDebt - amountPaid);
       const isFinalPayment = (currentDebt > 0 && newBalance <= 0);
 
+      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+      let cartonId = (this.currentClient.carton_id && isValidUuid(this.currentClient.carton_id)) ? this.currentClient.carton_id :
+                     ((this.currentClient.cartonId && isValidUuid(this.currentClient.cartonId)) ? this.currentClient.cartonId :
+                     (isValidUuid(this.currentClient.id) ? this.currentClient.id : null));
+
+      if (!cartonId) {
+        const activeCartonDb = await window.BulaPayDB.getActiveCartonByClient(this.currentClient.cedula);
+        if (activeCartonDb && activeCartonDb.id && isValidUuid(activeCartonDb.id)) {
+          cartonId = activeCartonDb.id;
+          this.currentClient.carton_id = cartonId;
+          this.currentClient.cartonId = cartonId;
+        }
+      }
+
+      if (!cartonId) {
+        alert('⚠️ Error crítico: No se encontró el UUID del cartón activo para este cliente. Por favor recargue el cliente.');
+        return;
+      }
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
+        carton_id: cartonId,
+        credit_id: cartonId,
         installmentNumber: installmentNumber,
         amount: amountPaid,
         date: this.getLocalDateString(),
@@ -1870,7 +1890,7 @@ const agentModule = {
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
-          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          cartonId: cartonId,
           numeroCarton: this.currentClient.numero_carton || null
         });
       }
@@ -1942,6 +1962,26 @@ const agentModule = {
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
+      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+      let cartonId = (this.currentClient.carton_id && isValidUuid(this.currentClient.carton_id)) ? this.currentClient.carton_id :
+                     ((this.currentClient.cartonId && isValidUuid(this.currentClient.cartonId)) ? this.currentClient.cartonId :
+                     (isValidUuid(this.currentClient.id) ? this.currentClient.id : null));
+
+      if (!cartonId) {
+        const activeCartonDb = await window.BulaPayDB.getActiveCartonByClient(this.currentClient.cedula);
+        if (activeCartonDb && activeCartonDb.id && isValidUuid(activeCartonDb.id)) {
+          cartonId = activeCartonDb.id;
+          this.currentClient.carton_id = cartonId;
+          this.currentClient.cartonId = cartonId;
+        }
+      }
+
+      if (!cartonId) {
+        alert('⚠️ Error crítico: No se encontró el UUID del cartón activo para este cliente. Por favor recargue el cliente.');
+        if (this.btnProcessMassPayment) this.btnProcessMassPayment.disabled = false;
+        return;
+      }
+
       let totalAmount = 0;
       let lastPayment = null;
       
@@ -1952,7 +1992,8 @@ const agentModule = {
         const tempRem = Math.max(0, currentDebt - totalAmount);
         const newPayment = {
           clientCedula: this.currentClient.cedula,
-          carton_id: this.currentClient.carton_id || this.currentClient.id || null,
+          carton_id: cartonId,
+          credit_id: cartonId,
           installmentNumber: cuota.number,
           amount: cuotaAmt,
           date: todayStr, // La instrucción dice: usar fecha de HOY
@@ -1976,7 +2017,7 @@ const agentModule = {
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
-          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          cartonId: cartonId,
           numeroCarton: this.currentClient.numero_carton || null
         });
       }
@@ -2633,10 +2674,32 @@ const agentModule = {
       const newBalance = Math.max(0, currentOutstanding - amountPaid);
       const isFinalPayment = (currentOutstanding > 0 && newBalance <= 0);
 
+      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+      let cartonId = (this.currentClient.carton_id && isValidUuid(this.currentClient.carton_id)) ? this.currentClient.carton_id :
+                     ((this.currentClient.cartonId && isValidUuid(this.currentClient.cartonId)) ? this.currentClient.cartonId :
+                     (isValidUuid(this.currentClient.id) ? this.currentClient.id : null));
+
+      if (!cartonId) {
+        const activeCartonDb = await window.BulaPayDB.getActiveCartonByClient(this.currentClient.cedula);
+        if (activeCartonDb && activeCartonDb.id && isValidUuid(activeCartonDb.id)) {
+          cartonId = activeCartonDb.id;
+          this.currentClient.carton_id = cartonId;
+          this.currentClient.cartonId = cartonId;
+        }
+      }
+
+      if (!cartonId) {
+        alert('⚠️ Error crítico: No se encontró el UUID del cartón activo para este cliente. Por favor recargue el perfil.');
+        if (this.btnInvoiceConfirm) this.btnInvoiceConfirm.disabled = false;
+        if (this.cobroInvoiceModal) this.cobroInvoiceModal.style.display = 'none';
+        return;
+      }
+
       // Ejecución del pago apuntando a la primera cuota pendiente (o a la última si es un residuo)
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
+        carton_id: cartonId,
+        credit_id: cartonId,
         installmentNumber: targetInstallment,
         amount: amountPaid,
         date: todayStr,
@@ -2653,7 +2716,7 @@ const agentModule = {
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
-          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          cartonId: cartonId,
           numeroCarton: this.currentClient.numero_carton || null
         });
       }
@@ -2795,9 +2858,29 @@ const agentModule = {
       const newBalance = Math.max(0, currentDebt - amountToPayNum);
       const isFinalPayment = (currentDebt > 0 && newBalance <= 0);
 
+      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+      let cartonId = (this.currentClient.carton_id && isValidUuid(this.currentClient.carton_id)) ? this.currentClient.carton_id :
+                     ((this.currentClient.cartonId && isValidUuid(this.currentClient.cartonId)) ? this.currentClient.cartonId :
+                     (isValidUuid(this.currentClient.id) ? this.currentClient.id : null));
+
+      if (!cartonId) {
+        const activeCartonDb = await window.BulaPayDB.getActiveCartonByClient(this.currentClient.cedula);
+        if (activeCartonDb && activeCartonDb.id && isValidUuid(activeCartonDb.id)) {
+          cartonId = activeCartonDb.id;
+          this.currentClient.carton_id = cartonId;
+          this.currentClient.cartonId = cartonId;
+        }
+      }
+
+      if (!cartonId) {
+        alert('⚠️ Error crítico: No se encontró el UUID del cartón activo para este cliente. Por favor recargue el cliente.');
+        return;
+      }
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
+        carton_id: cartonId,
+        credit_id: cartonId,
         installmentNumber: status.dayNumber, // Insertar asignado al dia exacto
         amount: amountToPayNum,
         date: todayStr, // La fecha de pago es hoy
@@ -2813,7 +2896,7 @@ const agentModule = {
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
-          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          cartonId: cartonId,
           numeroCarton: this.currentClient.numero_carton || null
         });
       }
@@ -3004,9 +3087,29 @@ const agentModule = {
       const newBalance = Math.max(0, currentDebt - amountNum);
       const isFinalPayment = (currentDebt > 0 && newBalance <= 0);
 
+      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+      let cartonId = (this.currentClient.carton_id && isValidUuid(this.currentClient.carton_id)) ? this.currentClient.carton_id :
+                     ((this.currentClient.cartonId && isValidUuid(this.currentClient.cartonId)) ? this.currentClient.cartonId :
+                     (isValidUuid(this.currentClient.id) ? this.currentClient.id : null));
+
+      if (!cartonId) {
+        const activeCartonDb = await window.BulaPayDB.getActiveCartonByClient(this.currentClient.cedula);
+        if (activeCartonDb && activeCartonDb.id && isValidUuid(activeCartonDb.id)) {
+          cartonId = activeCartonDb.id;
+          this.currentClient.carton_id = cartonId;
+          this.currentClient.cartonId = cartonId;
+        }
+      }
+
+      if (!cartonId) {
+        alert('⚠️ Error crítico: No se encontró el UUID del cartón activo para este cliente. Por favor recargue el cliente.');
+        return;
+      }
+
       const newPayment = {
         clientCedula: this.currentClient.cedula,
-        carton_id: this.currentClient.carton_id || this.currentClient.id || null,
+        carton_id: cartonId,
+        credit_id: cartonId,
         installmentNumber: payments.length + 1,
         amount: amountNum,
         date: this.getLocalDateString(),
@@ -3023,7 +3126,7 @@ const agentModule = {
           cedula: this.currentClient.cedula,
           status: 'Liquidado_Pagado',
           outstanding: 0,
-          cartonId: this.currentClient.carton_id || this.currentClient.id || null,
+          cartonId: cartonId,
           numeroCarton: this.currentClient.numero_carton || null
         });
       }
