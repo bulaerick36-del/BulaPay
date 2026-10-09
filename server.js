@@ -32,6 +32,58 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.url.split('?')[0] === '/api/register') {
+    try {
+      const registerFn = require('./api/register.js');
+      res.status = (code) => {
+        res.statusCode = code;
+        res.setHeader('Content-Type', 'application/json');
+        return res;
+      };
+      res.json = (data) => {
+        res.end(JSON.stringify(data));
+      };
+      let bodyData = '';
+      req.on('data', chunk => {
+        bodyData += chunk.toString();
+      });
+      req.on('end', () => {
+        req.body = bodyData;
+        registerFn(req, res);
+      });
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Error interno: ' + e.message }));
+    }
+    return;
+  }
+
+  if (req.url.split('?')[0] === '/api/restaurants') {
+    try {
+      const restaurantsFn = require('./api/restaurants.js');
+      res.status = (code) => {
+        res.statusCode = code;
+        res.setHeader('Content-Type', 'application/json');
+        return res;
+      };
+      res.json = (data) => {
+        res.end(JSON.stringify(data));
+      };
+      let bodyData = '';
+      req.on('data', chunk => {
+        bodyData += chunk.toString();
+      });
+      req.on('end', () => {
+        req.body = bodyData;
+        restaurantsFn(req, res);
+      });
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Error interno: ' + e.message }));
+    }
+    return;
+  }
+
   if (req.url.split('?')[0] === '/api/send-email') {
     try {
       const sendEmailFn = require('./api/send-email.js');

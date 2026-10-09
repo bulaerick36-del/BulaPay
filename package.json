@@ -5,6 +5,7 @@
   "description": "BulaPay Backend con Neon PostgreSQL",
   "main": "api/restaurants.js",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "pg": "^8.11.3"
   }
 }

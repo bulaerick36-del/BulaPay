@@ -1,6 +1,7 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/api/register", "destination": "/api/register.js" },
     { "source": "/api/restaurants", "destination": "/api/restaurants.js" },
     { "source": "/api/config", "destination": "/api/config.js" }
   ],

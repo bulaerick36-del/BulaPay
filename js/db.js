@@ -437,6 +437,11 @@ const db = {
   async saveRestaurant(restaurantData) {
     if (!restaurantData) return null;
     const payload = {
+      nombre: String(restaurantData.name || restaurantData.nombre || restaurantData.company || restaurantData.username || 'Nueva Vitrina Digital').trim(),
+      correo: String(restaurantData.email || restaurantData.correo || '').trim(),
+      password: String(restaurantData.password || restaurantData.contrasena || '').trim(),
+      rol: 'dueño',
+      restaurant_name: String(restaurantData.name || restaurantData.nombre || restaurantData.company || restaurantData.username || 'Nueva Vitrina Digital').trim(),
       name: String(restaurantData.name || restaurantData.nombre || restaurantData.company || restaurantData.username || 'Nueva Vitrina Digital').trim(),
       whatsapp: String(restaurantData.whatsapp || restaurantData.phone || restaurantData.telefono || restaurantData.celular || '').trim(),
       delivery_time: String(restaurantData.delivery_time || restaurantData.deliveryTime || restaurantData.tiempoEntrega || '20-30 min').trim(),
@@ -446,10 +451,11 @@ const db = {
       image: String(restaurantData.image || restaurantData.logo_url || restaurantData.logo || restaurantData.logoUrl || restaurantData.cover_url || '').trim()
     };
 
-    console.log('📡 [BulaPay DB saveRestaurant] Enviando vitrina a /api/restaurants (Neon PostgreSQL):', payload);
+    const endpoint = (payload.correo && payload.password) ? '/api/register' : '/api/restaurants';
+    console.log(`📡 [BulaPay DB saveRestaurant] Enviando registro de vitrina a ${endpoint} (Neon PostgreSQL):`, payload);
 
     try {
-      const response = await fetch('/api/restaurants', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -457,10 +463,10 @@ const db = {
         body: JSON.stringify(payload)
       });
       const resData = await response.json();
-      console.log('✅ [BulaPay DB saveRestaurant] Respuesta de /api/restaurants:', resData);
+      console.log(`✅ [BulaPay DB saveRestaurant] Respuesta de ${endpoint}:`, resData);
       return resData;
     } catch (err) {
-      console.error('❌ [BulaPay DB saveRestaurant] Error en fetch /api/restaurants:', err);
+      console.error(`❌ [BulaPay DB saveRestaurant] Error en fetch ${endpoint}:`, err);
       throw err;
     }
   },

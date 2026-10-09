@@ -650,3 +650,44 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en agentes_ruta" 
 CREATE POLICY "Permitir todo a anonimos y autenticados en agentes_ruta" ON agentes_ruta FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE agentes_ruta TO anon, authenticated, service_role;
 
+-- ==============================================================================
+-- 15. TABLAS DE AUTENTICACIÓN Y VITRINAS (usuarios y restaurants para BulaFood)
+-- ==============================================================================
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS usuarios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nombre TEXT NOT NULL,
+    correo TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    rol TEXT NOT NULL DEFAULT 'dueño',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en usuarios" ON usuarios;
+CREATE POLICY "Permitir todo a anonimos y autenticados en usuarios" ON usuarios FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE usuarios TO anon, authenticated, service_role;
+
+CREATE TABLE IF NOT EXISTS restaurants (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    whatsapp TEXT,
+    delivery_time TEXT DEFAULT '20-30 min',
+    delivery_price NUMERIC DEFAULT 0,
+    rating NUMERIC DEFAULT 5.0,
+    reviews_count INTEGER DEFAULT 0,
+    image TEXT,
+    category TEXT DEFAULT 'Restaurante',
+    dueño_id UUID REFERENCES usuarios(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dueño_id UUID REFERENCES usuarios(id) ON DELETE CASCADE;
+
+ALTER TABLE restaurants ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en restaurants" ON restaurants;
+CREATE POLICY "Permitir todo a anonimos y autenticados en restaurants" ON restaurants FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE restaurants TO anon, authenticated, service_role;
+
+
