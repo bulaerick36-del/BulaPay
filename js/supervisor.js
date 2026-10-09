@@ -811,6 +811,18 @@ const supervisorModule = {
 
       gridEl.innerHTML = '';
       const totalSlots = Number(client.installmentsCount || client.installments_count || 30);
+      const valorCuota = Number(client.installmentAmount || client.installment_amount || 0);
+
+      // LÓGICA DE EQUIVALENCIA REAL DE CUOTAS PAGADAS CON PAGO MASIVO
+      // Fórmula: Math.floor((monto_prestado - saldo_pendiente) / valor_cuota)
+      const montoTotalBase = (client.totalDebt && Number(client.totalDebt) > 0)
+        ? Number(client.totalDebt)
+        : (client.monto_prestado && Number(client.monto_prestado) > 0
+            ? Number(client.monto_prestado)
+            : (totalSlots * valorCuota));
+      const saldoPendiente = Math.max(0, Number(client.outstanding ?? 0));
+      const montoRecaudadoCalculado = Math.max(0, montoTotalBase - saldoPendiente);
+      const paidCuotasByBalance = (valorCuota > 0) ? Math.floor(montoRecaudadoCalculado / valorCuota) : 0;
 
       // Pre-mapear pagos válidos por número de cuota
       const validPaymentsMap = new Map();
@@ -851,8 +863,8 @@ const supervisorModule = {
         const dayStatus = dailyStatusMap.get(i);
         const jsonCuotaPaid = jsonPaidCuotasMap.has(i);
 
-        const hasPaid = jsonCuotaPaid || (dayStatus ? dayStatus.hasPaid : false) || (payment && Number(payment.amount) > 0 && payment.status !== 'No Pago');
-        const isOverdue = jsonCuotaPaid ? false : (dayStatus ? dayStatus.isOverdue : false);
+        const hasPaid = (i <= paidCuotasByBalance) || jsonCuotaPaid || (dayStatus ? dayStatus.hasPaid : false) || (payment && Number(payment.amount) > 0 && payment.status !== 'No Pago');
+        const isOverdue = (i <= paidCuotasByBalance) ? false : (jsonCuotaPaid ? false : (dayStatus ? dayStatus.isOverdue : false));
         const isToday = dayStatus ? dayStatus.isToday : false;
 
         const slotCard = document.createElement('div');
@@ -895,10 +907,12 @@ const supervisorModule = {
             slotCard.classList.add('paid');
             slotCard.style.borderColor = 'rgba(16, 185, 129, 0.4)';
             slotCard.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
+            const displayAmt = (payment && Number(payment.amount) > 0) ? Number(payment.amount) : (client.installmentAmount || valorCuota);
+            const displayDateStr = payment?.date || dayStatus?.dateStr || 'Pagado';
             slotCard.innerHTML = `
               <span class="slot-num" style="font-size: 0.55rem; font-weight: 700; color: #059669;">CUOTA ${i}</span>
-              <span class="slot-amount" style="font-size: 0.75rem; color: #059669; font-weight: 800;">$${Number(payment?.amount || client.installmentAmount).toLocaleString('es-CO')}</span>
-              <span class="slot-date" style="font-size: 0.5rem; display:block; color: #059669;">${payment?.date || dayStatus?.dateStr || ''}</span>
+              <span class="slot-amount" style="font-size: 0.75rem; color: #059669; font-weight: 800;">$${Number(displayAmt).toLocaleString('es-CO')}</span>
+              <span class="slot-date" style="font-size: 0.5rem; display:block; color: #059669;">${displayDateStr}</span>
               <div class="slot-stamp" style="font-size: 0.75rem; position: absolute; bottom: 2px; right: 4px;">🟢</div>
             `;
           }
@@ -1409,19 +1423,31 @@ const supervisorModule = {
     const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
 
     gridEl.innerHTML = '';
-    const totalSlots = client.installmentsCount;
-    
+    const totalSlots = Number(client.installmentsCount || client.installments_count || 30);
+    const valorCuota = Number(client.installmentAmount || client.installment_amount || 0);
+
+    const baseMonto = (client.totalDebt && Number(client.totalDebt) > 0)
+      ? Number(client.totalDebt)
+      : (client.monto_prestado && Number(client.monto_prestado) > 0
+          ? Number(client.monto_prestado)
+          : (totalSlots * valorCuota));
+    const saldoPendiente = Math.max(0, Number(client.outstanding ?? 0));
+    const montoRecaudadoCalculado = Math.max(0, baseMonto - saldoPendiente);
+    const paidCuotasByBalance = (valorCuota > 0) ? Math.floor(montoRecaudadoCalculado / valorCuota) : 0;
+
     for (let i = 1; i <= totalSlots; i++) {
-      const payment = payments.find(p => p.installmentNumber === i);
+      const payment = payments.find(p => Number(p.installmentNumber) === i);
+      const hasPaid = (i <= paidCuotasByBalance) || !!payment;
+
       const slotCard = document.createElement('div');
       slotCard.className = 'ledger-slot-card'; // Reusar clases
       slotCard.style.padding = '0.5rem';
       slotCard.style.fontSize = '0.7rem';
       slotCard.style.minHeight = '70px';
 
-      if (payment) {
-        const isAbonado = payment.status === 'Abonado';
-        const isNoPago = payment.status === 'No Pago';
+      if (hasPaid) {
+        const isAbonado = payment && payment.status === 'Abonado';
+        const isNoPago = payment && payment.status === 'No Pago';
         
         if (isNoPago) {
           slotCard.classList.add('nopago');
@@ -1431,20 +1457,25 @@ const supervisorModule = {
           slotCard.classList.add(isAbonado ? 'abonado' : 'paid');
         }
         
+        const displayAmt = (payment && Number(payment.amount) > 0) ? Number(payment.amount) : (client.installmentAmount || valorCuota);
+        const displayDateStr = payment?.date || 'Pagado';
+
         slotCard.innerHTML = `
           <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
-          <span class="slot-amount" style="font-size: 0.75rem;">$${Number(payment.amount).toLocaleString('es-CO')}</span>
-          <span class="slot-date" style="font-size: 0.5rem; display:block;">${payment.date}</span>
+          <span class="slot-amount" style="font-size: 0.75rem;">$${Number(displayAmt).toLocaleString('es-CO')}</span>
+          <span class="slot-date" style="font-size: 0.5rem; display:block;">${displayDateStr}</span>
           <div class="slot-stamp" style="font-size: 0.75rem; bottom:2px; right:4px;">${isNoPago ? '🔴' : (isAbonado ? '🟡' : '🟢')}</div>
         `;
-        slotCard.addEventListener('click', () => {
-          window.showBulaPayReceipt(payment, client);
-        });
+        if (payment) {
+          slotCard.addEventListener('click', () => {
+            window.showBulaPayReceipt(payment, client);
+          });
+        }
       } else {
         slotCard.innerHTML = `
           <span class="slot-num" style="font-size: 0.55rem;">CUOTA ${i}</span>
-          <span class="slot-amount" style="color: var(--text-muted); font-size: 0.7rem;">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
-          <span class="slot-empty-text" style="font-size: 0.55rem;">Atrasado</span>
+          <span class="slot-amount" style="color: var(--text-muted); font-size: 0.7rem;">$${Number(client.installmentAmount || valorCuota).toLocaleString('es-CO')}</span>
+          <span class="slot-empty-text" style="font-size: 0.55rem;">Pendiente</span>
         `;
         slotCard.style.borderColor = 'rgba(239, 68, 68, 0.2)';
         slotCard.style.backgroundColor = 'rgba(239, 68, 68, 0.02)';
@@ -3329,7 +3360,9 @@ const supervisorModule = {
       const outstandingVal = Number(client.outstanding || 0);
       const installmentAmountVal = Number(client.installmentAmount || 0);
       
-      const paidCount = payments ? payments.filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0).length : 0;
+      const paidCountFromPayments = payments ? payments.filter(p => p.status === 'Pagado' || p.status === 'Abonado' || Number(p.amount) > 0).length : 0;
+      const paidCountByBalance = (installmentAmountVal > 0) ? Math.floor(Math.max(0, totalDebtVal - outstandingVal) / installmentAmountVal) : 0;
+      const paidCount = Math.max(paidCountFromPayments, paidCountByBalance);
       const remaining = Math.max(0, installmentsCountVal - paidCount);
       const progressPercent = Math.min(100, Math.round((paidCount / installmentsCountVal) * 100));
       
