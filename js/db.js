@@ -2601,9 +2601,7 @@ const db = {
 
     const cartonUpdatePayload = {
       outstanding: newBalanceNum,
-      saldo_pendiente: newBalanceNum,
-      cuotas: cuotasArray,
-      cuotas_json: cuotasArray
+      saldo_pendiente: newBalanceNum
     };
     if (isLiquidado) {
       cartonUpdatePayload.estado = 'liquidado';
@@ -2623,14 +2621,14 @@ const db = {
     if (errId) {
       console.error("❌ Error 400/DB en update de cartón por ID:", errId.message, errId.details, errId.hint, errId.code);
       try {
-        const stringifiedPayload = {
-          ...cartonUpdatePayload,
-          cuotas: JSON.stringify(cuotasArray),
-          cuotas_json: JSON.stringify(cuotasArray)
+        const essentialPayload = {
+          outstanding: newBalanceNum
         };
+        if (isLiquidado) essentialPayload.estado = 'liquidado';
+
         const { data: retryRows, error: retryErr } = await supabase
           .from('cartones')
-          .update(stringifiedPayload)
+          .update(essentialPayload)
           .eq('id', validCartonId)
           .select();
 
