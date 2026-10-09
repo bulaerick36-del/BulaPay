@@ -62,10 +62,11 @@ async function ensureTables(client) {
     );
   `);
 
-  // Asegurar que la columna relacional dueño_id exista si restaurants fue creada previamente
+  // Asegurar que la columna relacional dueño_id / dueno_id exista si restaurants fue creada previamente
   try {
     await client.query(`
       ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dueño_id UUID REFERENCES usuarios(id) ON DELETE CASCADE;
+      ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dueno_id UUID REFERENCES usuarios(id) ON DELETE CASCADE;
     `);
   } catch (e) {
     console.warn('Aviso agregando columna relacional dueño_id a restaurants:', e.message);

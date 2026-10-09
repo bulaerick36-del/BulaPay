@@ -684,6 +684,7 @@ CREATE TABLE IF NOT EXISTS restaurants (
 );
 
 ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dueño_id UUID REFERENCES usuarios(id) ON DELETE CASCADE;
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS dueno_id UUID REFERENCES usuarios(id) ON DELETE CASCADE;
 
 ALTER TABLE restaurants ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir todo a anonimos y autenticados en restaurants" ON restaurants;
