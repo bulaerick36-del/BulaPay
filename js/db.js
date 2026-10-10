@@ -1744,11 +1744,53 @@ const db = {
       if (route) targetRouteId = route.id;
     }
 
-    const efectivoInicial = route ? Number(route.capital || route.monto_inicial || 0) : 0;
-    const agentName = route?.agentName || agentUserObj?.name || agentUserObj?.username || 'Agente de Ruta';
-    const routeName = route?.name || 'Ruta sin asignar';
+    // 1. Capital Base (Inversión)
+    let capitalBase = 0;
+    if (route) {
+      capitalBase = Number(route.capital || route.monto_inicial || 0);
+    } else if (targetRouteId === 'ALL') {
+      const allRoutes = await this.getRoutes();
+      capitalBase = (allRoutes || []).reduce((sum, r) => sum + Number(r.capital || r.monto_inicial || 0), 0);
+    }
 
-    // 1. Total Cobrado Hoy (payments) & Pagos Masivos
+    const agentName = route?.agentName || agentUserObj?.name || agentUserObj?.username || 'Agente de Ruta';
+    const routeName = route?.name || (targetRouteId === 'ALL' ? 'Consolidado General' : 'Ruta sin asignar');
+
+    // 2. En Calle (Cartera activa en poder de los clientes)
+    const allClients = await this.getClients();
+    const routeClients = (allClients || []).filter(c => {
+      let belongs = false;
+      if (targetRouteId === 'ALL') {
+        belongs = true;
+      } else if (targetRouteId && (c.routeId === targetRouteId || c.route_id === targetRouteId)) {
+        belongs = true;
+      } else if (agentUserObj && (c.agent_id === agentUserObj.username || c.agentId === agentUserObj.username || c.agent_id === agentUserObj.id)) {
+        belongs = true;
+      }
+      return belongs;
+    });
+
+    let enCalle = routeClients
+      .filter(c => {
+        const risk = String(c.risk || '').trim();
+        const status = String(c.status || c.estado || '').toUpperCase();
+        return risk !== 'Rojo' && risk !== 'Lista Negra' && status !== 'BLACKLISTED' && !status.includes('LIQUIDADO');
+      })
+      .reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
+
+    if (enCalle <= 0) {
+      try {
+        const metrics = await this.calculateRealFinancialMetrics(targetRouteId, agentUserObj);
+        if (metrics && Number(metrics.carteraEnCalle) > 0) {
+          enCalle = Number(metrics.carteraEnCalle);
+        }
+      } catch (eM) {}
+    }
+
+    // FÓRMULA SOLICITADA: Efectivo en Bolsillo Inicial = (Capital Base - En Calle)
+    const efectivoInicial = Math.max(0, capitalBase - enCalle);
+
+    // 3. Total Cobrado Hoy (payments) & Pagos Masivos
     const allPayments = await this.getPayments();
     const todayPayments = (allPayments || []).filter(p => {
       const pDate = this.getColombiaLocalDateStr(p.created_at || p.date);
@@ -1759,7 +1801,9 @@ const db = {
       if (Number(p.amount || 0) <= 0) return false;
 
       let belongs = false;
-      if (targetRouteId && (p.routeId === targetRouteId || p.route_id === targetRouteId)) {
+      if (targetRouteId === 'ALL') {
+        belongs = true;
+      } else if (targetRouteId && (p.routeId === targetRouteId || p.route_id === targetRouteId)) {
         belongs = true;
       } else if (agentUserObj && (p.agent_id === agentUserObj.username || p.agentId === agentUserObj.username || p.agent_id === agentUserObj.id)) {
         belongs = true;
@@ -1776,14 +1820,15 @@ const db = {
       return p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('masivo');
     }).reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    // 2. Créditos creados hoy (clients/cartones creados hoy)
-    const allClients = await this.getClients();
+    // 4. Créditos creados hoy (clients/cartones creados hoy)
     const todayClients = (allClients || []).filter(c => {
       let cDate = this.getColombiaLocalDateStr(c.created_at || c.date || c.fecha_apertura);
       if (cDate !== todayStr) return false;
 
       let belongs = false;
-      if (targetRouteId && (c.routeId === targetRouteId || c.route_id === targetRouteId)) {
+      if (targetRouteId === 'ALL') {
+        belongs = true;
+      } else if (targetRouteId && (c.routeId === targetRouteId || c.route_id === targetRouteId)) {
         belongs = true;
       } else if (agentUserObj && (c.agent_id === agentUserObj.username || c.agentId === agentUserObj.username || c.agent_id === agentUserObj.id)) {
         belongs = true;
@@ -1817,14 +1862,16 @@ const db = {
       descuentosRetenidos += Math.round(ret);
     });
 
-    // Fórmula Matemática: Bolsillo Inicial + Total Cobrado + Entradas Renovación - Total Prestado - Desembolsos Renovación + Descuentos Retenidos = TOTAL
-    const totalEntregar = Math.max(0, efectivoInicial + totalCobrado + entradasRenovacion - totalPrestado - desembolsosRenovacion + descuentosRetenidos);
+    // Fórmula Final: (En Bolsillo Inicial + Total Cobrado Hoy + Entradas por Renovación Hoy) - (Total Prestado Hoy + Desembolsos por Renovación) + Descuentos Retenidos = TOTAL A ENTREGAR
+    const totalEntregar = Math.max(0, (efectivoInicial + totalCobrado + entradasRenovacion) - (totalPrestado + desembolsosRenovacion) + descuentosRetenidos);
 
     return {
       routeId: targetRouteId || null,
       routeName,
       agentName,
       dateStr: todayStr,
+      capitalBase: Math.round(capitalBase),
+      enCalle: Math.round(enCalle),
       efectivoInicial: Math.round(efectivoInicial),
       totalCobrado: Math.round(totalCobrado),
       pagosMasivos: Math.round(pagosMasivos),
