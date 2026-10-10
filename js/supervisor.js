@@ -469,6 +469,60 @@ const supervisorModule = {
 
   selectedAuditAgentUsername: null,
 
+  async getAgentRecaudoHoyReal(agentUsername, routeId = null) {
+    try {
+      const allPayments = await window.BulaPayDB.getPayments();
+      const allClients = await window.BulaPayDB.getClients();
+
+      const routeClients = routeId ? allClients.filter(c => c.routeId === routeId || c.agent_id === agentUsername) : [];
+      const clientCedulas = new Set(routeClients.map(c => String(c.cedula).trim()));
+
+      const now = new Date();
+      const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      const isDateToday = (dateVal) => {
+        if (!dateVal) return false;
+        if (typeof dateVal === 'string') {
+          const trimmed = dateVal.trim();
+          if (trimmed.startsWith(todayLocalStr) || (trimmed.length === 10 && trimmed === todayLocalStr)) return true;
+        }
+        try {
+          const d = new Date(dateVal);
+          if (isNaN(d.getTime())) return false;
+          return d.getFullYear() === now.getFullYear() &&
+                 d.getMonth() === now.getMonth() &&
+                 d.getDate() === now.getDate();
+        } catch (e) {
+          return false;
+        }
+      };
+
+      const agentPaymentsToday = (allPayments || []).filter(p => {
+        const pAgentId = String(p.agent_id || p.agentId || p.agentUsername || '').trim();
+        const pAgentName = String(p.agentName || '').trim();
+        const pCedula = String(p.clientCedula || p.client_cedula || '').trim();
+        const pRouteId = String(p.routeId || p.route_id || '').trim();
+
+        const matchesAgent = agentUsername && (pAgentId === agentUsername || pAgentName === agentUsername);
+        const matchesRoute = routeId && (pRouteId === routeId);
+        const matchesClient = clientCedulas.size > 0 && clientCedulas.has(pCedula);
+
+        if (!matchesAgent && !matchesRoute && !matchesClient) return false;
+
+        const amount = Number(p.amount || 0);
+        const status = String(p.status || '').toUpperCase();
+        if (amount <= 0 || status === 'NO PAGO') return false;
+
+        return isDateToday(p.date) || isDateToday(p.created_at) || isDateToday(p.fecha_pago);
+      });
+
+      return agentPaymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    } catch (e) {
+      console.error("Error al calcular recaudo real del agente:", e);
+      return 0;
+    }
+  },
+
   async showModalAgentDetail(username) {
     this.selectedAuditAgentUsername = username;
     const detailSection = document.getElementById('modal-agent-detail-section');
@@ -487,18 +541,18 @@ const supervisorModule = {
 
     // Obtener clientes asignados a la ruta del agente
     const allClients = await window.BulaPayDB.getClients();
-    const clients = allClients.filter(c => c.routeId === agent.routeId);
+    const clients = allClients.filter(c => c.routeId === agent.routeId || c.agent_id === username);
     clientsCountEl.textContent = `${clients.length} cliente(s)`;
 
-    // Obtener capital y recaudo
+    // Obtener capital y recaudo real sumado de las transacciones reales de hoy
     const routes = await window.BulaPayDB.getRoutes();
     const r = routes.find(rt => rt.id === agent.routeId);
     
     const capital = r ? r.capital : 0;
-    const collected = r ? r.collected : 0;
+    const collectedReal = await this.getAgentRecaudoHoyReal(username, agent.routeId);
 
     routeCapitalEl.textContent = `$${Number(capital).toLocaleString('es-CO')}`;
-    routeCollectedEl.textContent = `$${Number(collected).toLocaleString('es-CO')}`;
+    routeCollectedEl.textContent = `$${Number(collectedReal).toLocaleString('es-CO')}`;
 
     // Calcular proporciones de la cartera (Riesgo)
     let totalRisk = clients.length || 1;
@@ -1200,14 +1254,20 @@ const supervisorModule = {
     container.innerHTML = '';
     const routes = await window.BulaPayDB.getRoutes();
 
-    // Ordenar de mayor a menor recaudo
-    const sortedRoutes = [...routes].sort((a, b) => Number(b.collected) - Number(a.collected));
+    // Calcular el recaudo real de hoy agregando transacciones
+    const routesWithCollected = await Promise.all(routes.map(async (route) => {
+      const collectedToday = await this.getAgentRecaudoHoyReal(route.agentUsername, route.id);
+      return { ...route, collectedToday };
+    }));
+
+    // Ordenar de mayor a menor recaudo real de hoy
+    const sortedRoutes = routesWithCollected.sort((a, b) => Number(b.collectedToday) - Number(a.collectedToday));
 
     // Encontrar recaudo máximo para normalizar barra al 100%
-    const maxCollected = sortedRoutes[0] ? Number(sortedRoutes[0].collected) : 1;
+    const maxCollected = sortedRoutes[0] ? Number(sortedRoutes[0].collectedToday) : 1;
 
     sortedRoutes.forEach((route, index) => {
-      const percentage = maxCollected > 0 ? Math.round((Number(route.collected) / maxCollected) * 100) : 0;
+      const percentage = maxCollected > 0 ? Math.round((Number(route.collectedToday) / maxCollected) * 100) : 0;
       const rank = index + 1;
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏃';
 
@@ -1217,7 +1277,7 @@ const supervisorModule = {
       wrapper.innerHTML = `
         <div class="ranking-bar-info">
           <span>${medal} <strong>#${rank} ${route.name}</strong> (${route.agentName})</span>
-          <span style="color: var(--color-verde); font-weight: 700;">$${Number(route.collected).toLocaleString('es-CO')}</span>
+          <span style="color: var(--color-verde); font-weight: 700;">$${Number(route.collectedToday).toLocaleString('es-CO')}</span>
         </div>
         <div class="ranking-bar-container">
           <div class="ranking-bar-fill" id="rank-bar-${route.id}"></div>

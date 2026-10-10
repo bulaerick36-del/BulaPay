@@ -4659,7 +4659,7 @@ const db = {
 
          if (isRehabPayment && isToday && isMine && isRealPayment) return true;
 
-         return isToday && isMine && isRealPayment && (!isBlacklistedClient || isRehabPayment) && !isMoraPayment && !isRenovationPayment;
+         return isToday && isMine && isRealPayment && (!isBlacklistedClient || isRehabPayment) && !isMoraPayment;
       });
       
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
