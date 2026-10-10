@@ -2308,6 +2308,12 @@
               <span style="color: var(--text-secondary);">Recaudado Hoy:</span>
               <span id="modal-agent-route-collected" style="font-weight: 600; color: var(--color-verde);">$0</span>
             </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <span style="color: var(--text-secondary);">Liquidados Hoy:</span>
+              <div id="modal-agent-route-liquidated" style="cursor: pointer; display: inline-flex; align-items: center;" title="Ver cartones liquidados hoy">
+                <span id="modal-agent-liquidated-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); transition: transform 0.2s, box-shadow 0.2s; user-select: none;">0</span>
+              </div>
+            </div>
           </div>
           
           <!-- Gráfico circular rápido en SVG -->
@@ -2454,6 +2460,29 @@
 
       <div id="modal-blacklist-container" style="max-height: 350px; overflow-y: auto; display: grid; gap: 0.75rem;">
         <!-- Creado dinámicamente -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CARTONES LIQUIDADOS HOY (LiquidatedCardsModal) -->
+  <div class="supervisor-modal-overlay" id="modal-liquidated-cards">
+    <div class="supervisor-modal-card" style="max-width: 650px; width: 100%;">
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeLiquidatedCardsModal()">&times;</button>
+      <h3 class="title-gradient" style="margin-bottom: 0.3rem; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>📋</span> Cartones Liquidados Hoy
+      </h3>
+      <p id="liquidated-cards-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
+        Auditoría de cartones liquidados por el agente durante el día actual.
+      </p>
+
+      <!-- Resumen de Totales por Categoría -->
+      <div id="liquidated-cards-summary-pills" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+        <!-- Inyectado dinámicamente con píldoras de colores -->
+      </div>
+
+      <!-- Contenedor del listado con código de colores -->
+      <div id="liquidated-cards-container" style="max-height: 420px; overflow-y: auto; display: grid; gap: 0.75rem; padding-right: 0.25rem;">
+        <!-- Se inyecta dinámicamente -->
       </div>
     </div>
   </div>

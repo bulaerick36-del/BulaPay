@@ -512,6 +512,41 @@ const supervisorModule = {
     routeCapitalEl.textContent = `$${Number(capital).toLocaleString('es-CO')}`;
     routeCollectedEl.textContent = `$${Number(collectedReal).toLocaleString('es-CO')}`;
 
+    // Obtener cartones liquidados hoy por este agente
+    const liquidatedContainer = document.getElementById('modal-agent-route-liquidated');
+    const liquidatedBadge = document.getElementById('modal-agent-liquidated-badge');
+    let liquidatedCards = [];
+    try {
+      liquidatedCards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, agent.routeId);
+    } catch (eLiq) {
+      console.warn("Aviso al obtener cartones liquidados hoy:", eLiq);
+    }
+
+    const liqCount = liquidatedCards.length;
+    if (liquidatedBadge) {
+      if (liqCount > 0) {
+        liquidatedBadge.innerHTML = `🔔 ${liqCount}`;
+        liquidatedBadge.title = `${liqCount} cartón(es) liquidado(s) hoy. Clic para ver detalles.`;
+        liquidatedBadge.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+        liquidatedBadge.style.color = '#ffffff';
+        liquidatedBadge.style.border = '1px solid #f87171';
+        liquidatedBadge.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.6)';
+        liquidatedBadge.style.padding = '2px 8px';
+      } else {
+        liquidatedBadge.innerHTML = '0';
+        liquidatedBadge.title = '0 cartones liquidados hoy. Clic para ver detalles.';
+        liquidatedBadge.style.background = 'rgba(148, 163, 184, 0.15)';
+        liquidatedBadge.style.color = '#94a3b8';
+        liquidatedBadge.style.border = '1px solid rgba(148, 163, 184, 0.25)';
+        liquidatedBadge.style.boxShadow = 'none';
+        liquidatedBadge.style.padding = '0 6px';
+      }
+    }
+
+    if (liquidatedContainer) {
+      liquidatedContainer.onclick = () => this.openLiquidatedCardsModal(username, agent.routeId);
+    }
+
     // Calcular proporciones de la cartera (Riesgo)
     let totalRisk = clients.length || 1;
     let greenCount = clients.filter(c => c.risk === 'Verde').length;
@@ -1253,6 +1288,111 @@ const supervisorModule = {
       console.error("Error al indultar cliente:", e);
       alert('❌ Error al procesar indulto: ' + (e.message || e));
     }
+  },
+
+  async openLiquidatedCardsModal(username, routeId = null) {
+    const overlay = document.getElementById('modal-liquidated-cards');
+    const subtitle = document.getElementById('liquidated-cards-modal-subtitle');
+    const summaryPills = document.getElementById('liquidated-cards-summary-pills');
+    const container = document.getElementById('liquidated-cards-container');
+
+    if (!overlay || !container) return;
+
+    overlay.classList.add('active');
+    container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem; font-size: 0.85rem;">⏳ Consultando cartones liquidados de hoy...</div>';
+    if (summaryPills) summaryPills.innerHTML = '';
+
+    try {
+      const allUsers = await this.getCachedUsers();
+      const agent = (allUsers || []).find(u => u.username === username || u.id === username);
+      const agentName = agent ? agent.name : (username || 'Agente');
+
+      if (subtitle) {
+        subtitle.textContent = `Cartones liquidados hoy por ${agentName} (${this.getLocalDateString()})`;
+      }
+
+      const cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, routeId || agent?.routeId);
+
+      const totalCount = cards.length;
+      const blueCount = cards.filter(c => c.category === 'blue').length;
+      const greenCount = cards.filter(c => c.category === 'green').length;
+      const redCount = cards.filter(c => c.category === 'red').length;
+
+      if (summaryPills) {
+        summaryPills.innerHTML = `
+          <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(255,255,255,0.06); font-size: 0.75rem; font-weight: 700; color: #f8fafc; border: 1px solid rgba(255,255,255,0.1);">
+            Total: ${totalCount}
+          </div>
+          <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(59, 130, 246, 0.15); font-size: 0.75rem; font-weight: 700; color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+            🔵 Renovaciones: ${blueCount}
+          </div>
+          <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); font-size: 0.75rem; font-weight: 700; color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+            🟢 Exitosos: ${greenCount}
+          </div>
+          <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(239, 68, 68, 0.15); font-size: 0.75rem; font-weight: 700; color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">
+            🔴 En Mora / Lista Negra: ${redCount}
+          </div>
+        `;
+      }
+
+      if (cards.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--text-secondary); padding: 2.5rem 1rem; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color);">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">✅</div>
+            <strong style="color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Sin cartones liquidados hoy</strong>
+            <span style="font-size: 0.8rem;">Este cobrador no tiene registros de cierre o liquidación en la fecha actual.</span>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = cards.map(c => {
+        const timeStr = c.fechaLiquidacion ? new Date(c.fechaLiquidacion).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : 'Hoy';
+        return `
+          <div style="padding: 0.9rem 1rem; background: ${c.categoryBg}; border: 1.5px solid ${c.categoryBorder}; border-radius: 12px; display: flex; flex-direction: column; gap: 0.6rem; transition: transform 0.15s ease;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
+              <div>
+                <strong style="color: #ffffff; font-size: 0.95rem; display: block; word-break: break-word;">${c.clientName}</strong>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem;">
+                  C.C. ${c.cedula || 'N/A'} • <span style="color: #cbd5e1; font-weight: 600;">Cartón #${c.numeroCarton}</span>
+                </div>
+              </div>
+              <span style="padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                ${c.categoryIcon} ${c.categoryLabel}
+              </span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.75rem;">
+              <div>
+                <span style="color: #94a3b8; display: block; font-size: 0.68rem;">Monto Prestado</span>
+                <strong style="color: #ffffff;">$${Number(c.montoPrestado || 0).toLocaleString('es-CO')}</strong>
+              </div>
+              <div>
+                <span style="color: #94a3b8; display: block; font-size: 0.68rem;">Deuda Total</span>
+                <strong style="color: #ffffff;">$${Number(c.totalDeuda || 0).toLocaleString('es-CO')}</strong>
+              </div>
+              <div>
+                <span style="color: #94a3b8; display: block; font-size: 0.68rem;">Saldo al Cierre</span>
+                <strong style="color: ${c.saldoPendiente > 0 ? '#f87171' : '#34d399'};">$${Number(c.saldoPendiente || 0).toLocaleString('es-CO')}</strong>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.4rem;">
+              <span style="color: ${c.categoryColor}; font-weight: 500;">ℹ️ ${c.explanation}</span>
+              <span style="white-space: nowrap; color: #cbd5e1;">⏰ ${timeStr}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } catch(err) {
+      console.error("Error al renderizar modal de cartones liquidados:", err);
+      container.innerHTML = `<div style="text-align: center; color: #ef4444; padding: 2rem;">❌ Error al cargar los cartones liquidados: ${err.message}</div>`;
+    }
+  },
+
+  closeLiquidatedCardsModal() {
+    const overlay = document.getElementById('modal-liquidated-cards');
+    if (overlay) overlay.classList.remove('active');
   },
 
   // 3. POPULATE MODAL: RECAUDO HOY (RANKING)
@@ -4306,3 +4446,7 @@ const supervisorModule = {
 };
 
 window.supervisorModule = supervisorModule;
+window.LiquidatedCardsModal = {
+  open: (username, routeId) => supervisorModule.openLiquidatedCardsModal(username, routeId),
+  close: () => supervisorModule.closeLiquidatedCardsModal()
+};

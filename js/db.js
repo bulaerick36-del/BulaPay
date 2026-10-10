@@ -824,6 +824,191 @@ const db = {
     }
   },
 
+  async getAgentLiquidatedCartonesToday(agentUsername, routeId = null) {
+    if (!agentUsername && !routeId) return [];
+    try {
+      const supabase = await initSupabase();
+      const allUsers = await this.getCachedUsers();
+      const cleanUser = agentUsername ? String(agentUsername).trim().toLowerCase() : '';
+      const agentUser = (allUsers || []).find(u => 
+        String(u.username || '').toLowerCase() === cleanUser ||
+        String(u.id || '').toLowerCase() === cleanUser
+      );
+
+      const targetRouteId = routeId || agentUser?.routeId || null;
+      const targetAgentId = agentUser?.id || agentUsername;
+      const targetAgentUsername = agentUser?.username || agentUsername;
+
+      const now = new Date();
+      const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      // Helper para verificar si la fecha coincide con HOY
+      const isToday = (dVal) => {
+        if (!dVal) return false;
+        const str = String(dVal).trim();
+        if (str.startsWith(todayLocalStr)) return true;
+        const d = new Date(dVal);
+        if (isNaN(d.getTime())) return false;
+        const localStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        return localStr === todayLocalStr;
+      };
+
+      // 1. Consultar cartones en Supabase
+      let cartones = [];
+      try {
+        let q = supabase.from('cartones').select('*');
+        if (targetRouteId && targetAgentUsername) {
+          q = q.or(`route_id.eq.${targetRouteId},agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId},agent_username.eq.${targetAgentUsername}`);
+        } else if (targetRouteId) {
+          q = q.eq('route_id', targetRouteId);
+        } else if (targetAgentUsername) {
+          q = q.or(`agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId},agent_username.eq.${targetAgentUsername}`);
+        }
+
+        const { data, error } = await q;
+        if (!error && data) {
+          cartones = data;
+        }
+      } catch (eQ) {
+        console.warn("Aviso al consultar cartones por agente:", eQ?.message);
+      }
+
+      // Si no trajo de Supabase o hubo error de red, consultar memoria/caché local
+      if (!cartones || cartones.length === 0) {
+        try {
+          const localCartones = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
+          cartones = localCartones;
+        } catch(e) {}
+      }
+
+      // 2. Mapear clientes para obtener nombre y datos de contacto
+      const allClients = await this.getClients();
+      const clientMap = new Map();
+      (allClients || []).forEach(cl => {
+        const cCed = String(cl.cedula || '').trim();
+        if (cCed) clientMap.set(cCed, cl);
+      });
+
+      // 3. Filtrar estrictamente cartones que pertenecen al agente y fueron liquidados HOY
+      const liquidatedList = [];
+      const seenCartonIds = new Set();
+
+      (cartones || []).forEach(c => {
+        if (!c) return;
+        const cId = String(c.id || `${c.cliente_id}_${c.numero_carton}_${c.updated_at}`);
+        if (seenCartonIds.has(cId)) return;
+
+        // Verificar si pertenece al agente / ruta
+        const cRoute = String(c.route_id || c.ruta_id || '');
+        const cAgent = String(c.agent_id || c.agent_username || c.agentId || '').toLowerCase();
+        let belongsToAgent = false;
+        if (targetRouteId && cRoute && cRoute === String(targetRouteId)) {
+          belongsToAgent = true;
+        }
+        if (targetAgentUsername && (cAgent === String(targetAgentUsername).toLowerCase() || cAgent === String(targetAgentId).toLowerCase())) {
+          belongsToAgent = true;
+        }
+        if (!belongsToAgent && !targetRouteId && !targetAgentUsername) {
+          belongsToAgent = true;
+        }
+        if (!belongsToAgent) return;
+
+        // Verificar si está liquidado / cerrado
+        const rawEstado = String(c.estado || c.status || '').trim().toLowerCase();
+        const rawReason = String(c.liquidation_reason || c.motivo || c.motivo_liquidacion || '').trim().toLowerCase();
+        const isLiquidatedStatus = rawEstado.startsWith('liquidado') || 
+                                   rawEstado.includes('liquid') || 
+                                   rawEstado.includes('castig') || 
+                                   rawEstado === 'renovado' || 
+                                   rawEstado === 'pagado' ||
+                                   Boolean(c.liquidation_reason);
+
+        if (!isLiquidatedStatus) return;
+
+        // Verificar fecha de cierre o liquidación coincidente con HOY: DATE(updated_at) = HOY o fecha_cierre = HOY
+        const updatedMatches = isToday(c.updated_at);
+        const cierreMatches = isToday(c.fecha_cierre || c.closed_at || c.fecha_liquidacion);
+        if (!updatedMatches && !cierreMatches) return;
+
+        // Clasificar motivo y color exacto
+        // 1. ROJO: En Mora / Lista Negra
+        const isMora = rawEstado.includes('perdida') || 
+                       rawEstado.includes('mora') || 
+                       rawEstado.includes('castig') || 
+                       rawEstado.includes('negra') ||
+                       rawReason.includes('mora') ||
+                       rawReason.includes('perdida') ||
+                       rawReason.includes('castigo') ||
+                       rawReason.includes('incobrable') ||
+                       rawReason.includes('negra') ||
+                       (Number(c.outstanding || c.saldo_pendiente || 0) > 0 && !rawEstado.includes('renovac'));
+
+        // 2. AZUL: Renovación (Retanqueo)
+        const isRenovacion = !isMora && (
+          rawEstado.includes('renovac') || 
+          rawReason.includes('renovac') || 
+          rawReason.includes('retanqueo') || 
+          Number(c.saldo_anterior || c.rollover_amount || 0) > 0
+        );
+
+        // 3. VERDE: Exitoso (Pago natural completo)
+        let category = 'green';
+        let categoryLabel = 'Exitoso';
+        let categoryColor = '#10b981';
+        let categoryBg = 'rgba(16, 185, 129, 0.12)';
+        let categoryBorder = '#10b981';
+        let categoryIcon = '🟢';
+        let explanation = 'El cliente pagó la totalidad del crédito de forma natural.';
+
+        if (isMora) {
+          category = 'red';
+          categoryLabel = 'En Mora / Lista Negra';
+          categoryColor = '#ef4444';
+          categoryBg = 'rgba(239, 68, 68, 0.12)';
+          categoryBorder = '#ef4444';
+          categoryIcon = '🔴';
+          explanation = 'El cartón fue liquidado por castigo, incobrable o enviado a lista negra.';
+        } else if (isRenovacion) {
+          category = 'blue';
+          categoryLabel = 'Renovación';
+          categoryColor = '#3b82f6';
+          categoryBg = 'rgba(59, 130, 246, 0.12)';
+          categoryBorder = '#3b82f6';
+          categoryIcon = '🔵';
+          explanation = 'El cliente canceló el saldo anterior usando un nuevo crédito (Retanqueo).';
+        }
+
+        const cedStr = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+        const clientObj = clientMap.get(cedStr) || {};
+        const clientName = clientObj.name || clientObj.nombre || c.client_name || c.cliente_nombre || (cedStr ? `Cliente C.C. ${cedStr}` : 'Cliente Sin Nombre');
+
+        seenCartonIds.add(cId);
+        liquidatedList.push({
+          ...c,
+          clientName,
+          cedula: cedStr,
+          numeroCarton: c.numero_carton || c.numeroCarton || 'S/N',
+          montoPrestado: Number(c.monto_prestado || c.amount || clientObj.amount || 0),
+          totalDeuda: Number(c.total_debt || c.totalDebt || clientObj.totalDebt || 0),
+          saldoPendiente: Number(c.outstanding || c.saldo_pendiente || 0),
+          category,
+          categoryLabel,
+          categoryColor,
+          categoryBg,
+          categoryBorder,
+          categoryIcon,
+          explanation,
+          fechaLiquidacion: c.updated_at || c.fecha_cierre || new Date().toISOString()
+        });
+      });
+
+      return liquidatedList;
+    } catch (e) {
+      console.error("Error al obtener cartones liquidados hoy:", e);
+      return [];
+    }
+  },
+
   async getSupervisorIdForUser(user) {
     if (!user) return null;
     if (
@@ -2507,7 +2692,9 @@ const db = {
         status: 'liquidado_renovacion',
         outstanding: 0,
         total_debt: 0,
-        fecha_cierre: nowIso
+        fecha_cierre: nowIso,
+        updated_at: nowIso,
+        liquidation_reason: 'Renovación'
       };
 
       await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
@@ -2940,6 +3127,9 @@ const db = {
     };
     if (isLiquidado) {
       cartonUpdatePayload.estado = 'liquidado';
+      cartonUpdatePayload.updated_at = new Date().toISOString();
+      cartonUpdatePayload.fecha_cierre = new Date().toISOString();
+      cartonUpdatePayload.liquidation_reason = 'Pago Exitoso';
     }
 
     // UPDATE A LA TABLA CARTONES: ESTRICTAMENTE usando el UUID del cartón (.eq('id', validCartonId))
@@ -4332,7 +4522,10 @@ const db = {
       const moraOutstanding = isMora ? ((outstanding !== undefined && outstanding !== null && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0))) : 0;
       const cartonUpdatePayload = { 
         estado: cartonEstadoTarget, 
-        outstanding: moraOutstanding
+        outstanding: moraOutstanding,
+        updated_at: new Date().toISOString(),
+        fecha_cierre: new Date().toISOString(),
+        liquidation_reason: isMora ? 'Liquidado por Mora' : (isRenovacion ? 'Renovación' : 'Pago Exitoso')
       };
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -4545,7 +4738,10 @@ const db = {
       const cartonUpdatePayload = {
         estado: 'liquidado_pagado',
         outstanding: 0,
-        total_debt: 0
+        total_debt: 0,
+        updated_at: new Date().toISOString(),
+        fecha_cierre: new Date().toISOString(),
+        liquidation_reason: 'Liquidación Anticipada por Supervisor'
       };
 
       let updateErrors = [];
