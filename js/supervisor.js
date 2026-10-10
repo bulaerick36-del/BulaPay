@@ -471,69 +471,10 @@ const supervisorModule = {
 
   async getAgentRecaudoHoyReal(agentUsername, routeId = null) {
     try {
-      if (agentUsername && window.BulaPayDB && typeof window.BulaPayDB.getAgentRecaudoHoyDirect === 'function') {
-        const directVal = await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername);
-        if (directVal > 0) return directVal;
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAgentRecaudoHoyDirect === 'function') {
+        return await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername, null, routeId);
       }
-
-      const allPayments = await window.BulaPayDB.getPayments();
-      const allClients = await window.BulaPayDB.getClients();
-
-      const routeClients = routeId ? allClients.filter(c => c.routeId === routeId || c.agent_id === agentUsername) : [];
-      const clientCedulas = new Set(routeClients.map(c => String(c.cedula).trim()));
-
-      const now = new Date();
-      const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-      const isDateToday = (dateVal) => {
-        if (!dateVal) return false;
-        if (typeof dateVal === 'string') {
-          const trimmed = dateVal.trim();
-          if (trimmed.startsWith(todayLocalStr) || (trimmed.length === 10 && trimmed === todayLocalStr)) return true;
-        }
-        try {
-          const d = new Date(dateVal);
-          if (isNaN(d.getTime())) return false;
-          return d.getFullYear() === now.getFullYear() &&
-                 d.getMonth() === now.getMonth() &&
-                 d.getDate() === now.getDate();
-        } catch (e) {
-          return false;
-        }
-      };
-
-      // Deduplicación estricta por ID para evitar acumuladores duplicados o productos cartesianos
-      const seenPaymentIds = new Set();
-      let totalMontoAgregado = 0;
-
-      (allPayments || []).forEach(p => {
-        if (!p) return;
-        const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
-        if (seenPaymentIds.has(pId)) return;
-
-        const pAgentId = String(p.agent_id || p.agentId || p.agentUsername || '').trim();
-        const pAgentName = String(p.agentName || '').trim();
-        const pCedula = String(p.clientCedula || p.client_cedula || '').trim();
-        const pRouteId = String(p.routeId || p.route_id || '').trim();
-
-        const matchesAgent = agentUsername && (pAgentId === agentUsername || pAgentName === agentUsername);
-        const matchesRoute = routeId && (pRouteId === routeId);
-        const matchesClient = clientCedulas.size > 0 && clientCedulas.has(pCedula);
-
-        if (!matchesAgent && !matchesRoute && !matchesClient) return;
-
-        const amount = Number(p.amount || 0);
-        const status = String(p.status || '').toUpperCase();
-        if (amount <= 0 || status === 'NO PAGO') return;
-
-        const isToday = isDateToday(p.date) || isDateToday(p.created_at) || isDateToday(p.fecha_pago);
-        if (isToday) {
-          seenPaymentIds.add(pId);
-          totalMontoAgregado += Math.round(amount);
-        }
-      });
-
-      return totalMontoAgregado;
+      return 0;
     } catch (e) {
       console.error("Error al calcular recaudo real del agente:", e);
       return 0;

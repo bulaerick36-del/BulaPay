@@ -724,49 +724,79 @@ const db = {
     }
   },
 
-  async getAgentRecaudoHoyDirect(agentId, dateStr = null) {
-    if (!agentId) return 0;
+  async getAgentRecaudoHoyDirect(agentId, dateStr = null, routeId = null) {
+    if (!agentId && !routeId) return 0;
     try {
       const supabase = await initSupabase();
       const now = new Date();
       const targetDate = dateStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      const startOfDay = `${targetDate}T00:00:00.000Z`;
-      const endOfDay = `${targetDate}T23:59:59.999Z`;
-
-      // 1. Consulta directa a Supabase con filtro de fecha estricto
+      let paymentList = [];
       const { data, error } = await supabase
         .from('payments')
-        .select('id, amount, status, date, created_at, agent_id, agentName')
-        .or(`date.eq."${targetDate}",and(created_at.gte."${startOfDay}",created_at.lte."${endOfDay}")`);
+        .select('*');
 
-      let paymentList = data;
-      if (error || !paymentList) {
+      if (!error && data && Array.isArray(data)) {
+        paymentList = data;
+      } else {
         paymentList = await this.getPayments();
       }
 
-      const cleanAgentId = String(agentId).trim().toLowerCase();
-      
-      // 2. Deduplicación estricta por ID para evitar productos cartesianos o filas duplicadas
+      const cleanAgentId = agentId ? String(agentId).trim().toLowerCase() : null;
+      const cleanRouteId = routeId ? String(routeId).trim().toLowerCase() : null;
+
+      let userObj = null;
+      if (cleanAgentId) {
+        userObj = await this.getUserByUsername(agentId);
+      }
+      const agentUsername = cleanAgentId;
+      const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
+
       const seenIds = new Set();
       let totalMontoReal = 0;
 
       (paymentList || []).forEach(p => {
         if (!p) return;
-        const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
-        if (seenIds.has(pId)) return;
 
-        const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
-        const pAgentName = String(p.agentName || '').trim().toLowerCase();
+        // Validar fecha estricta: debe ser del día objetivo
+        const pDateStr = String(p.date || p.created_at || p.fecha_pago || p.fecha || '').trim();
+        let isToday = false;
+        if (pDateStr.startsWith(targetDate)) {
+          isToday = true;
+        } else if (pDateStr) {
+          try {
+            const d = new Date(pDateStr);
+            if (!isNaN(d.getTime())) {
+              const localD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              if (localD === targetDate) isToday = true;
+            }
+          } catch (e) {}
+        }
+        if (!isToday) return;
 
-        if (pAgentId !== cleanAgentId && pAgentName !== cleanAgentId) return;
-
+        // Validar estado y monto
         const amount = Number(p.amount || 0);
         const status = String(p.status || '').toUpperCase();
-        if (amount > 0 && status !== 'NO PAGO') {
-          seenIds.add(pId);
-          totalMontoReal += Math.round(amount);
-        }
+        if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE') return;
+
+        // Validar pertenencia al agente o ruta
+        const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
+        const pAgentName = String(p.agentName || '').trim().toLowerCase();
+        const pRouteId = String(p.routeId || p.route_id || '').trim().toLowerCase();
+
+        let matches = false;
+        if (agentUsername && (pAgentId === agentUsername || pAgentName === agentUsername)) matches = true;
+        if (agentNameLower && pAgentName === agentNameLower) matches = true;
+        if (cleanRouteId && pRouteId === cleanRouteId) matches = true;
+
+        if (!matches) return;
+
+        // Deduplicación estricta por ID único de pago
+        const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.installmentNumber || ''}_${amount}_${targetDate}`;
+        if (seenIds.has(pId)) return;
+        seenIds.add(pId);
+
+        totalMontoReal += Math.round(amount);
       });
 
       return totalMontoReal;
