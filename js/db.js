@@ -1862,8 +1862,9 @@ const db = {
       descuentosRetenidos += Math.round(ret);
     });
 
-    // Fórmula Final: (En Bolsillo Inicial + Total Cobrado Hoy + Entradas por Renovación Hoy) - (Total Prestado Hoy + Desembolsos por Renovación) + Descuentos Retenidos = TOTAL A ENTREGAR
-    const totalEntregar = Math.max(0, (efectivoInicial + totalCobrado + entradasRenovacion) - (totalPrestado + desembolsosRenovacion) + descuentosRetenidos);
+    // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda solo como dato informativo en la UI):
+    // TOTAL A ENTREGAR = (Total Cobrado Hoy + Entradas por Renovación Hoy + Descuentos Retenidos) - (Total Prestado Hoy + Desembolsos por Renovación)
+    const totalEntregar = Math.max(0, (totalCobrado + entradasRenovacion + descuentosRetenidos) - (totalPrestado + desembolsosRenovacion));
 
     return {
       routeId: targetRouteId || null,
