@@ -1619,10 +1619,9 @@ const db = {
     try {
       const supabase = await initSupabase();
 
-      // 1. Restaurar cliente en la tabla 'clients'
+      // 1. Restaurar cliente en la tabla 'clients' (tabla clients no tiene status)
       const clientUpdate = {
-        risk: 'Verde',
-        status: 'Activo'
+        risk: 'Verde'
       };
       await supabase
         .from('clients')
@@ -1636,11 +1635,11 @@ const db = {
           .eq('cedula', Number(cedStr));
       }
 
-      // 2. Restaurar cartones del cliente en la tabla 'cartones'
+      // 2. Restaurar cartones del cliente en la tabla 'cartones' (usando cliente_id)
       const { data: cartones } = await supabase
         .from('cartones')
         .select('*')
-        .or(`cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`);
+        .eq('cliente_id', cedStr);
 
       if (cartones && cartones.length > 0) {
         for (const carton of cartones) {
@@ -2722,24 +2721,48 @@ const db = {
 
     if (isRenov) {
       console.log('🔄 Ejecutando transacción atómica de renovación (RPC renovar_carton) para cliente:', clientId, 'Saldo a liquidar:', rolloverVal);
+      
+      const safeNum = (v, def = 0) => {
+        const n = Number(v);
+        return isNaN(n) ? def : n;
+      };
+      const safeInt = (v, def = 0) => {
+        const n = parseInt(v, 10);
+        return isNaN(n) ? def : n;
+      };
+
+      const rpcPayload = {
+        p_cliente_id: String(clientId).trim(),
+        p_old_carton_id: payload.old_carton_id ? String(payload.old_carton_id).trim() : null,
+        p_saldo_restante: safeNum(rolloverVal, 0),
+        p_monto_prestado: safeNum(newMontoPrestado, 0),
+        p_total_debt: safeNum(newTotalDebt, 0),
+        p_installments_count: safeInt(payload.installmentsCount || 30, 30),
+        p_installment_amount: safeNum(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30)), 0),
+        p_discount_amount: safeNum(discountVal, 0),
+        p_net_cash: safeNum(netCashVal, 0),
+        p_route_id: routeId ? String(routeId).trim() : null,
+        p_agent_id: agentId ? String(agentId).trim() : null,
+        p_supervisor_id: supervisorId ? String(supervisorId).trim() : null,
+        p_new_numero_carton: safeInt(newNumeroCarton, Math.floor(Date.now() % 100000000)),
+        p_new_carton_id: (newCartonUuid && String(newCartonUuid).length === 36) ? String(newCartonUuid).trim() : null
+      };
+
+      console.log('📦 Payload enviado al RPC renovar_carton (14 parámetros):', rpcPayload);
       let rpcSucceeded = false;
       try {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('renovar_carton', {
-          p_cliente_id: String(clientId),
-          p_old_carton_id: payload.old_carton_id ? String(payload.old_carton_id) : null,
-          p_saldo_restante: rolloverVal,
-          p_monto_prestado: newMontoPrestado,
-          p_total_debt: newTotalDebt,
-          p_installments_count: Number(payload.installmentsCount || 30),
-          p_installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
-          p_discount_amount: discountVal,
-          p_net_cash: netCashVal,
-          p_route_id: routeId ? String(routeId) : null,
-          p_agent_id: agentId ? String(agentId) : null,
-          p_supervisor_id: supervisorId ? String(supervisorId) : null,
-          p_new_numero_carton: newNumeroCarton,
-          p_new_carton_id: (newCartonUuid && String(newCartonUuid).length === 36) ? String(newCartonUuid) : null
-        });
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('renovar_carton', rpcPayload);
+
+        if (rpcErr) {
+          console.error('❌ ERROR CRUDO DE SUPABASE RPC (renovar_carton):', {
+            message: rpcErr.message,
+            details: rpcErr.details,
+            hint: rpcErr.hint,
+            code: rpcErr.code,
+            payload: rpcPayload,
+            rawError: rpcErr
+          });
+        }
 
         if (!rpcErr && rpcRes && rpcRes.success) {
           console.log('✅ Transacción atómica renovar_carton completada exitosamente en Supabase:', rpcRes);
@@ -2748,7 +2771,7 @@ const db = {
           if (rpcRes.new_numero_carton) newNumeroCarton = rpcRes.new_numero_carton;
           insertedCartonRecord = {
             id: newCartonUuid,
-            cliente_id: String(clientId),
+            cliente_id: String(clientId).trim(),
             numero_carton: newNumeroCarton,
             estado: 'activo_por_renovacion',
             status: 'activo_por_renovacion',
@@ -2762,10 +2785,15 @@ const db = {
             supervisor_id: supervisorId
           };
         } else {
-          console.warn('⚠️ RPC renovar_carton retornó error o no está disponible. Ejecutando fallback atómico en cliente:', rpcErr);
+          console.warn('⚠️ RPC renovar_carton retornó fallo o no está disponible. Ejecutando fallback atómico en cliente:', rpcErr || rpcRes);
         }
       } catch (eRpc) {
-        console.warn('⚠️ Excepción al invocar RPC renovar_carton. Ejecutando fallback atómico en cliente:', eRpc?.message);
+        console.error('❌ EXCEPCIÓN AL INVOCAR RPC renovar_carton:', {
+          message: eRpc?.message,
+          stack: eRpc?.stack,
+          payload: rpcPayload,
+          rawException: eRpc
+        });
       }
 
       if (!rpcSucceeded) {
@@ -2775,7 +2803,7 @@ const db = {
           const todayStr = nowIso.split('T')[0];
           const renovPayRecord = {
             id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-            clientCedula: String(clientId),
+            clientCedula: String(clientId).trim(),
             carton_id: payload.old_carton_id || null,
             installmentNumber: 999,
             amount: rolloverVal,
@@ -2806,41 +2834,45 @@ const db = {
         }
 
         // PASO 2: UPDATE al cartón viejo cambiando su estado a RENOVADO y deuda 0
-        const cartonUpdateOld = { 
-          estado: 'RENOVADO', 
-          status: 'RENOVADO',
-          outstanding: 0,
-          saldo_pendiente: 0,
-          fecha_cierre: nowIso,
-          updated_at: nowIso,
-          liquidation_reason: 'Renovación'
-        };
-
+        // REGLA ESTRICTA: Filtrar ÚNICAMENTE por cliente_id (NO client_id ni cedula) y usar columnas nativas
         try {
           const cedStr = String(clientId).trim();
           if (payload.old_carton_id) {
-            const { error: errOldId } = await supabase.from('cartones').update(cartonUpdateOld).eq('id', payload.old_carton_id);
-            if (errOldId) {
-              await supabase.from('cartones').update({ estado: 'RENOVADO', outstanding: 0 }).eq('id', payload.old_carton_id);
-            }
+            await supabase
+              .from('cartones')
+              .update({ estado: 'RENOVADO', outstanding: 0 })
+              .eq('id', payload.old_carton_id);
           }
-          const { error: errCed } = await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+          const { error: errCed } = await supabase
+            .from('cartones')
+            .update({ estado: 'RENOVADO', outstanding: 0 })
+            .eq('cliente_id', cedStr)
+            .in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+
           if (errCed) {
-            await supabase.from('cartones').update({ estado: 'RENOVADO', outstanding: 0 }).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+            console.warn("Aviso al actualizar cartones viejos por cliente_id:", errCed.message);
+          } else {
+            // Actualización secundaria no bloqueante de columnas añadidas en migraciones si existen
+            try {
+              await supabase
+                .from('cartones')
+                .update({ status: 'RENOVADO', liquidation_reason: 'Renovación' })
+                .eq('cliente_id', cedStr)
+                .eq('estado', 'RENOVADO');
+            } catch (_) {}
           }
         } catch (eOld) {
           console.warn("Aviso al actualizar cartón viejo a RENOVADO:", eOld?.message);
         }
 
-        // PASO 3: INSERT del nuevo cartón refinanciado
+        // PASO 3: INSERT del nuevo cartón refinanciado usando columnas estándar
         try {
           const cartonPayload = {
-            cliente_id: String(clientId),
+            cliente_id: String(clientId).trim(),
             numero_carton: newNumeroCarton,
             fecha_apertura: nowIso,
             monto_prestado: newMontoPrestado,
             estado: 'activo_por_renovacion',
-            status: 'activo_por_renovacion',
             saldo_anterior: rolloverVal,
             rollover_amount: rolloverVal,
             total_debt: newTotalDebt,
@@ -2852,8 +2884,7 @@ const db = {
             route_id: routeId,
             agent_id: agentId,
             supervisor_id: supervisorId,
-            created_at: nowIso,
-            updated_at: nowIso
+            created_at: nowIso
           };
 
           const { data: insertedCarton, error: cartonErr } = await supabase
@@ -2862,10 +2893,8 @@ const db = {
             .select();
 
           if (cartonErr) {
-            console.warn("⚠️ Reintentando inserción de nuevo cartón sin columnas opcionales...", cartonErr);
-            delete cartonPayload.status;
+            console.warn("⚠️ Reintentando inserción de nuevo cartón sin rollover_amount...", cartonErr);
             delete cartonPayload.rollover_amount;
-            delete cartonPayload.updated_at;
             const { data: retryData, error: retryErr } = await supabase
               .from('cartones')
               .insert([cartonPayload])
@@ -2955,6 +2984,7 @@ const db = {
     }
 
     // 6. Actualizar únicamente la información de contacto/perfil del cliente en la tabla 'clients'
+    // REGLA ESTRICTA: La tabla 'clients' NO contiene columna 'status' ni 'estado'. NUNCA incluirlos aquí.
     const clientUpdatePayload = {
       name: payload.name || '',
       phone: payload.phone || '',
@@ -2967,6 +2997,9 @@ const db = {
       supervisor_id: supervisorId
     };
 
+    delete clientUpdatePayload.status;
+    delete clientUpdatePayload.estado;
+
     Object.keys(clientUpdatePayload).forEach(key => {
       if (clientUpdatePayload[key] === undefined) {
         clientUpdatePayload[key] = null;
@@ -2976,7 +3009,7 @@ const db = {
     const { error: clientUpdateErr } = await supabase
       .from('clients')
       .update(clientUpdatePayload)
-      .eq('cedula', clientId);
+      .eq('cedula', String(clientId).trim());
 
     if (clientUpdateErr) {
       console.error("❌ Error de Supabase al actualizar cliente en 'clients':", clientUpdateErr);
@@ -3146,15 +3179,10 @@ const db = {
 
     if (!activeCarton) {
       try {
-        let q = `cliente_id.eq."${cedStr}",client_id.eq."${cedStr}",cedula.eq."${cedStr}"`;
-        if (!isNaN(Number(cedStr))) {
-          const numVal = Number(cedStr);
-          q += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
-        }
         const { data: cData, error: cErr } = await supabase
           .from('cartones')
           .select('*')
-          .or(q)
+          .eq('cliente_id', cedStr)
           .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
           .order('created_at', { ascending: false })
           .limit(1);
@@ -4753,17 +4781,16 @@ const db = {
     }
 
     // 4. Actualizar tabla 'clients'
+    // REGLA ESTRICTA: La tabla 'clients' NO contiene columna 'status', 'estado' ni 'amount'.
     try {
       const modusOp = await this.evaluateClientModusOperandi(cedula);
       const clientUpdatePayload = {
-        risk: modusOp ? modusOp.risk : (isMora ? 'Rojo' : 'Verde'),
-        status: cartonEstadoTarget
+        risk: modusOp ? modusOp.risk : (isMora ? 'Rojo' : 'Verde')
       };
 
       if (isPaid) {
         clientUpdatePayload.outstanding = 0;
         clientUpdatePayload.totalDebt = 0;
-        clientUpdatePayload.amount = 0;
       } else if (isMora) {
         const moraOutstanding = (outstanding !== undefined && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0));
         clientUpdatePayload.outstanding = moraOutstanding;
@@ -4771,16 +4798,20 @@ const db = {
         clientUpdatePayload.outstanding = Math.round(Number(outstanding || 0));
       }
 
+      delete clientUpdatePayload.status;
+      delete clientUpdatePayload.estado;
+      delete clientUpdatePayload.amount;
+
       const { error: clientErr } = await supabase
         .from('clients')
         .update(clientUpdatePayload)
-        .eq('cedula', String(cedula));
+        .eq('cedula', String(cedula).trim());
 
       if (clientErr) {
         await supabase
           .from('clients')
-          .update({ risk: isMora ? 'Rojo' : 'Verde', status: isMora ? 'liquidado_perdida' : 'Liquidado_Pagado' })
-          .eq('cedula', String(cedula));
+          .update({ risk: isMora ? 'Rojo' : 'Verde' })
+          .eq('cedula', String(cedula).trim());
       }
     } catch (eClient) {
       console.warn("Excepción al actualizar tabla clients:", eClient.message);
@@ -4948,30 +4979,17 @@ const db = {
         }
       }
 
-      // B) Actualizar cartones por cliente_id / client_id / cedula
+      // B) Actualizar cartones usando estrictamente cliente_id
       const { error: err1 } = await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr);
       if (err1) updateErrors.push(err1.message); else updateExecuted = true;
-
-      const { error: err2 } = await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', cedStr);
-      if (err2) updateErrors.push(err2.message); else updateExecuted = true;
-
-      const { error: err3 } = await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', cedStr);
-      if (!err3) updateExecuted = true;
-
-      if (!isNaN(Number(cedStr))) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', Number(cedStr));
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('client_id', Number(cedStr));
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cedula', Number(cedStr));
-      }
 
       // C) Intentar actualización opcional en 'historial_creditos' y 'creditos'
       try { await supabase.from('historial_creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
       try { await supabase.from('creditos').update(cartonUpdatePayload).eq('cedula', cedStr); } catch(e){}
 
-      // D) Actualizar cliente en tabla 'clients'
+      // D) Actualizar cliente en tabla 'clients' (tabla clients no tiene columna status)
       const clientUpdatePayload = {
         risk: 'Verde',
-        status: 'Liquidado_Pagado',
         outstanding: 0
       };
 

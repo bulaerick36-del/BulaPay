@@ -102,15 +102,16 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    v_old_carton RECORD;
-    v_target_old_id uuid;
-    v_saldo_liquidar numeric;
+    v_old_carton cartones%ROWTYPE;
+    v_target_old_id uuid := NULL;
+    v_saldo_liquidar numeric := 0;
     v_new_id uuid;
     v_new_numero bigint;
     v_today_str text;
     v_payment_id text;
     v_agent_name text;
     v_now timestamptz := NOW();
+    v_route_final text := NULL;
 BEGIN
     v_today_str := to_char(CURRENT_DATE, 'YYYY-MM-DD');
 
@@ -147,6 +148,9 @@ BEGIN
     IF v_saldo_liquidar <= 0 AND v_old_carton.id IS NOT NULL THEN
         v_saldo_liquidar := COALESCE(v_old_carton.outstanding, v_old_carton.saldo_pendiente, 0);
     END IF;
+
+    -- Determinar ruta
+    v_route_final := COALESCE(p_route_id, v_old_carton.route_id);
 
     -- Resolver nombre de agente para payments
     SELECT COALESCE(name, username, 'Sistema') INTO v_agent_name 
@@ -191,7 +195,7 @@ BEGIN
                 'Renovacion',
                 v_agent_name,
                 p_agent_id,
-                COALESCE(p_route_id, v_old_carton.route_id),
+                v_route_final,
                 'BulaPay-SIG-' || p_cliente_id || '-RENOV',
                 p_supervisor_id,
                 v_now,

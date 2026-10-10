@@ -533,11 +533,10 @@ const agentModule = {
             }).eq('cliente_id', cedulaStr).eq('estado', 'activo');
           }
 
-          // Actualizar 'clients' con estado en mora y el saldo pendiente real
+          // Actualizar 'clients' con riesgo Rojo y el saldo pendiente real (tabla clients no tiene columna status)
           if (cedulaStr) {
             await supabase.from('clients').update({
               risk: 'Rojo',
-              status: 'liquidado_perdida',
               outstanding: saldoPendienteReal
             }).eq('cedula', cedulaStr);
           }
