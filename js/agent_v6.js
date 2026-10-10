@@ -363,25 +363,19 @@ const agentModule = {
         const saldoTotalInicial = Math.round(Number(client.totalDebt || client.total_debt || client.monto_total || (Number(client.amount || client.monto_prestado || 0) * 1.2)));
         const saldoRealRemanente = Math.max(0, saldoTotalInicial - totalPagadoReal);
 
-        const confirmMsg = `¿Estás seguro de liquidar para renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nSaldo real a refinanciar: $${saldoRealRemanente.toLocaleString('es-CO')}.\nEsto marcará las cuotas y liquidará el cartón sin alterar la caja.`;
+        const confirmMsg = `¿Estás seguro de renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nSaldo real a refinanciar: $${saldoRealRemanente.toLocaleString('es-CO')}.\nSe habilitará el formulario de registro para el nuevo crédito y la transacción atómica se ejecutará al guardar.`;
         if (!(await window.showCrediConfirm(confirmMsg, "BulaPay"))) return;
 
         try {
-          // Liquidar cartón anterior con estado 'liquidado_por_renovacion' y marcar cuotas restantes (v160)
-          await window.BulaPayDB.liquidateCredit({
-            cedula: client.cedula,
-            status: 'liquidado_por_renovacion',
-            outstanding: 0,
-            cartonId: client.carton_id || client.id || null,
-            numeroCarton: client.numero_carton || null
-          });
+          const oldCartonId = client.carton_id || client.id || null;
+          const oldNumeroCarton = client.numero_carton || null;
 
           // Alerta con el Saldo Real Remanente (v177)
           const formattedMonto = saldoRealRemanente.toLocaleString('es-CO');
-          alert(`¡Liquidación exitosa para renovación! Saldo restante: $${formattedMonto}. No olvide descontarlo del nuevo crédito.`);
+          alert(`¡Modo Renovación Activado! Saldo restante a refinanciar: $${formattedMonto}.\nDiligencie el nuevo monto y guarde para ejecutar la liquidación y renovación atómica.`);
 
           this.switchTab('register');
-          this.setRenewalMode(true, saldoRealRemanente);
+          this.setRenewalMode(true, saldoRealRemanente, oldCartonId, oldNumeroCarton);
 
           const inputName = document.getElementById('new-client-name');
           const inputCedula = document.getElementById('new-client-cedula');
@@ -3526,8 +3520,11 @@ const agentModule = {
         discount_amount: discountAmount, // Guardamos el descuento inicial total
         retained_amount: Math.round(segVal + papVal), // Campo legado
         retained_fees: Math.round(segVal + papVal), // AISLADO: Únicamente cobros por Seguro y Papelería
-        rollover_amount: Math.round(otrVal), // AISLADO: Saldo refinanciado / cartón anterior
-        saldo_anterior: Math.round(otrVal),
+        rollover_amount: Math.round(otrVal || this.currentRenewalOutstanding || 0), // AISLADO: Saldo refinanciado / cartón anterior
+        saldo_anterior: Math.round(otrVal || this.currentRenewalOutstanding || 0),
+        old_carton_id: this.currentRenewalCartonId || null,
+        old_numero_carton: this.currentRenewalNumeroCarton || null,
+        old_outstanding: Math.round(this.currentRenewalOutstanding || otrVal || 0),
         segVal: Math.round(segVal),
         papVal: Math.round(papVal),
         discount_reason: discountReason, // Motivo del descuento
@@ -3900,10 +3897,16 @@ const agentModule = {
     }
   },
 
-  setRenewalMode(isRenewal, oldOutstanding = 0) {
+  setRenewalMode(isRenewal, oldOutstanding = 0, oldCartonId = null, oldNumeroCarton = null) {
     this.isRenewalMode = !!isRenewal;
     if (oldOutstanding > 0) {
       this.currentRenewalOutstanding = Math.round(Number(oldOutstanding));
+    }
+    if (oldCartonId) {
+      this.currentRenewalCartonId = oldCartonId;
+    }
+    if (oldNumeroCarton) {
+      this.currentRenewalNumeroCarton = oldNumeroCarton;
     }
     const effectiveOutstanding = Math.round(Number(oldOutstanding || this.currentRenewalOutstanding || 0));
 
@@ -3965,6 +3968,8 @@ const agentModule = {
       }
     } else {
       this.currentRenewalOutstanding = 0;
+      this.currentRenewalCartonId = null;
+      this.currentRenewalNumeroCarton = null;
       if (discountCheckbox) {
         discountCheckbox.disabled = false;
       }

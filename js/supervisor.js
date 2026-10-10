@@ -249,8 +249,12 @@ const supervisorModule = {
           await this.showAgentClientAuditLedger(this.currentAuditCedula, null, this.currentAuditCartonId);
         }
       }
+      if (this.selectedAuditAgentUsername) {
+        await this.showModalAgentDetail(this.selectedAuditAgentUsername);
+      }
     };
     window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
+    window.addEventListener('bulapay-client-updated', this.handlePaymentRegistered);
 
     // Calculadora en tiempo real para el valor de cuota en el registro de venta del comercio
     const salePriceInput = document.getElementById('sale-product-price');
@@ -4432,6 +4436,7 @@ const supervisorModule = {
     }
     if (this.handlePaymentRegistered) {
       window.removeEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
+      window.removeEventListener('bulapay-client-updated', this.handlePaymentRegistered);
       this.handlePaymentRegistered = null;
     }
     if (this.mapInstance) {

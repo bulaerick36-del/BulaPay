@@ -858,19 +858,27 @@ const db = {
       try {
         let q = supabase.from('cartones').select('*');
         if (targetRouteId && targetAgentUsername) {
-          q = q.or(`route_id.eq.${targetRouteId},agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId},agent_username.eq.${targetAgentUsername}`);
+          q = q.or(`route_id.eq.${targetRouteId},agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId}`);
         } else if (targetRouteId) {
           q = q.eq('route_id', targetRouteId);
         } else if (targetAgentUsername) {
-          q = q.or(`agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId},agent_username.eq.${targetAgentUsername}`);
+          q = q.or(`agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId}`);
         }
 
         const { data, error } = await q;
         if (!error && data) {
           cartones = data;
+        } else if (error) {
+          console.warn("Aviso en consulta filtrada de cartones, obteniendo lista completa:", error?.message);
+          const { data: allData } = await supabase.from('cartones').select('*');
+          if (allData) cartones = allData;
         }
       } catch (eQ) {
         console.warn("Aviso al consultar cartones por agente:", eQ?.message);
+        try {
+          const { data: fallbackData } = await supabase.from('cartones').select('*');
+          if (fallbackData) cartones = fallbackData;
+        } catch(e) {}
       }
 
       // Si no trajo de Supabase o hubo error de red, consultar memoria/caché local
@@ -919,7 +927,7 @@ const db = {
         const isLiquidatedStatus = rawEstado.startsWith('liquidado') || 
                                    rawEstado.includes('liquid') || 
                                    rawEstado.includes('castig') || 
-                                   rawEstado === 'renovado' || 
+                                   rawEstado.includes('renov') || 
                                    rawEstado === 'pagado' ||
                                    Boolean(c.liquidation_reason);
 
@@ -941,12 +949,12 @@ const db = {
                        rawReason.includes('castigo') ||
                        rawReason.includes('incobrable') ||
                        rawReason.includes('negra') ||
-                       (Number(c.outstanding || c.saldo_pendiente || 0) > 0 && !rawEstado.includes('renovac'));
+                       (Number(c.outstanding || c.saldo_pendiente || 0) > 0 && !rawEstado.includes('renov'));
 
         // 2. AZUL: Renovación (Retanqueo)
         const isRenovacion = !isMora && (
-          rawEstado.includes('renovac') || 
-          rawReason.includes('renovac') || 
+          rawEstado.includes('renov') || 
+          rawReason.includes('renov') || 
           rawReason.includes('retanqueo') || 
           Number(c.saldo_anterior || c.rollover_amount || 0) > 0
         );
@@ -2099,7 +2107,19 @@ const db = {
       return belongs;
     });
 
-    const totalCobrado = todayPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    const renewalPayments = todayPayments.filter(p => {
+      const pType = String(p.payment_type || '').toLowerCase();
+      const pId = String(p.id || '').toLowerCase();
+      return pType.includes('renov') || pId.startsWith('pay_renov_');
+    });
+    const normalPayments = todayPayments.filter(p => {
+      const pType = String(p.payment_type || '').toLowerCase();
+      const pId = String(p.id || '').toLowerCase();
+      return !pType.includes('renov') && !pId.startsWith('pay_renov_');
+    });
+
+    const totalCobrado = normalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    const renewalPaymentsTotal = renewalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
     const pagosMasivos = todayPayments.filter(p => {
       const pStatus = String(p.status || '').toLowerCase();
@@ -2129,7 +2149,7 @@ const db = {
 
     todayClients.forEach(c => {
       const amt = Math.round(Number(c.amount || c.monto_prestado || (c.totalDebt ? Number(c.totalDebt) / 1.2 : 0)));
-      const isRenov = !!(c.isRenewal || c.is_renewal || String(c.status || c.estado || '').toLowerCase().includes('renovacion') || Number(c.rollover_amount || c.saldo_anterior || 0) > 0);
+      const isRenov = !!(c.isRenewal || c.is_renewal || String(c.status || c.estado || '').toLowerCase().includes('renov') || Number(c.rollover_amount || c.saldo_anterior || 0) > 0);
 
       if (isRenov) {
         desembolsosRenovacion += amt;
@@ -2147,6 +2167,10 @@ const db = {
       }
       descuentosRetenidos += Math.round(ret);
     });
+
+    if (entradasRenovacion <= 0 && renewalPaymentsTotal > 0) {
+      entradasRenovacion = renewalPaymentsTotal;
+    }
 
     // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda solo como dato informativo en la UI):
     // TOTAL A ENTREGAR = (Total Cobrado Hoy + Entradas por Renovación Hoy + Descuentos Retenidos) - (Total Prestado Hoy + Desembolsos por Renovación)
@@ -2684,77 +2708,189 @@ const db = {
     console.log('-> ID/Cédula del cliente recuperado:', clientId);
     console.log('-> Generando nuevo crédito independiente ID:', newCreditId, 'Cartón UUID:', newCartonUuid);
 
-    // 2. CIERRE CONTABLE DEL ANTERIOR: Marcar explícitamente los cartones anteriores como 'liquidado_por_renovacion' con outstanding: 0
-    try {
-      const cedStr = String(clientId).trim();
-      const cartonUpdateOld = { 
-        estado: 'liquidado_renovacion', 
-        status: 'liquidado_renovacion',
-        outstanding: 0,
-        total_debt: 0,
-        fecha_cierre: nowIso,
-        updated_at: nowIso,
-        liquidation_reason: 'Renovación'
-      };
-
-      await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
-      await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
-      await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
-      if (!isNaN(Number(cedStr))) {
-        await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
-        await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
-        await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', Number(cedStr)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo']);
-      }
-    } catch (e) {
-      console.warn("Aviso al cerrar cartones anteriores:", e.message);
-    }
-    
-    // 3. CÁLCULO DE VALORES Y FLUJO NETO (Net Cash)
-    const rolloverVal = Math.round(Number(payload.rollover_amount || payload.saldo_anterior || 0));
+    // 2. CÁLCULO DE VALORES Y FLUJO NETO (Net Cash)
+    const rolloverVal = Math.round(Number(payload.rollover_amount || payload.saldo_anterior || payload.old_outstanding || 0));
     const discountVal = Math.round(Number(payload.discount_amount || payload.descuento || 0));
-    const isRenov = payload.isRenewal || payload.is_renewal || rolloverVal > 0;
+    const isRenov = !!(payload.isRenewal || payload.is_renewal || rolloverVal > 0 || String(payload.status || '').toLowerCase().includes('renov'));
     const newState = isRenov ? 'activo_por_renovacion' : 'activo';
     const newTotalDebt = Math.round(Number(payload.totalDebt || 0));
     const newMontoPrestado = Math.round(Number(payload.amount || payload.monto_prestado || 0));
     const netCashVal = Math.max(0, newMontoPrestado - discountVal - rolloverVal);
 
-    // 4. REGISTRO 100% NUEVO: Registrar nuevo cartón independiente con validación estricta de respuesta de Supabase
     let insertedCartonRecord = null;
     let cartonError = null;
 
-    try {
-      const cartonPayload = {
-        cliente_id: String(clientId),
-        numero_carton: newNumeroCarton,
-        fecha_apertura: nowIso,
-        monto_prestado: newMontoPrestado,
-        estado: newState,
-        saldo_anterior: rolloverVal,
-        total_debt: newTotalDebt,
-        outstanding: newTotalDebt, // Saldo inicial 100% igual a la nueva deuda total
-        installments_count: Number(payload.installmentsCount || 30),
-        installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
-        discount_amount: discountVal,
-        net_cash: netCashVal,
-        route_id: routeId,
-        agent_id: agentId,
-        supervisor_id: supervisorId,
-        created_at: nowIso
-      };
+    if (isRenov) {
+      console.log('🔄 Ejecutando transacción atómica de renovación (RPC renovar_carton) para cliente:', clientId, 'Saldo a liquidar:', rolloverVal);
+      let rpcSucceeded = false;
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('renovar_carton', {
+          p_cliente_id: String(clientId),
+          p_old_carton_id: payload.old_carton_id ? String(payload.old_carton_id) : null,
+          p_saldo_restante: rolloverVal,
+          p_monto_prestado: newMontoPrestado,
+          p_total_debt: newTotalDebt,
+          p_installments_count: Number(payload.installmentsCount || 30),
+          p_installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
+          p_discount_amount: discountVal,
+          p_net_cash: netCashVal,
+          p_route_id: routeId,
+          p_agent_id: agentId,
+          p_supervisor_id: supervisorId,
+          p_new_numero_carton: newNumeroCarton,
+          p_new_carton_id: (newCartonUuid && newCartonUuid.length === 36) ? newCartonUuid : null
+        });
 
-      const { data: insertedCarton, error: cartonErr } = await supabase
-        .from('cartones')
-        .insert([cartonPayload])
-        .select();
+        if (!rpcErr && rpcRes && rpcRes.success) {
+          console.log('✅ Transacción atómica renovar_carton completada exitosamente en Supabase:', rpcRes);
+          rpcSucceeded = true;
+          if (rpcRes.new_carton_id) newCartonUuid = rpcRes.new_carton_id;
+          if (rpcRes.new_numero_carton) newNumeroCarton = rpcRes.new_numero_carton;
+          insertedCartonRecord = {
+            id: newCartonUuid,
+            cliente_id: String(clientId),
+            numero_carton: newNumeroCarton,
+            estado: 'activo_por_renovacion',
+            status: 'activo_por_renovacion',
+            monto_prestado: newMontoPrestado,
+            total_debt: newTotalDebt,
+            outstanding: newTotalDebt,
+            saldo_anterior: rolloverVal,
+            rollover_amount: rolloverVal,
+            route_id: routeId,
+            agent_id: agentId,
+            supervisor_id: supervisorId
+          };
+        } else {
+          console.warn('⚠️ RPC renovar_carton retornó error o no está disponible. Ejecutando fallback atómico en cliente:', rpcErr);
+        }
+      } catch (eRpc) {
+        console.warn('⚠️ Excepción al invocar RPC renovar_carton. Ejecutando fallback atómico en cliente:', eRpc?.message);
+      }
 
-      if (cartonErr) {
-        console.warn("⚠️ Error al insertar cartón completo en 'cartones'. Reintentando con payload esencial...", cartonErr);
-        const essentialPayload = {
+      if (!rpcSucceeded) {
+        console.log('⚡ Ejecutando bloque atómico de 3 pasos en cliente (Fallback)...');
+        // PASO 1: INSERT a la tabla payments liquidando el saldo restante del cartón viejo
+        if (rolloverVal > 0) {
+          const todayStr = nowIso.split('T')[0];
+          const renovPayRecord = {
+            id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            clientCedula: String(clientId),
+            carton_id: payload.old_carton_id || null,
+            installmentNumber: 999,
+            amount: rolloverVal,
+            date: todayStr,
+            status: 'Pagado',
+            payment_type: 'Renovacion',
+            agentName: currentUser ? (currentUser.name || currentUser.username) : (agentId || 'Sistema'),
+            agent_id: agentId,
+            routeId: routeId,
+            route_id: routeId,
+            signature: `BulaPay-SIG-${clientId}-RENOV`,
+            supervisor_id: supervisorId,
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+          try {
+            const { error: pErr } = await supabase.from('payments').insert([renovPayRecord]);
+            if (pErr) {
+              console.warn("Reintentando pago de renovación sin columnas opcionales:", pErr.message);
+              delete renovPayRecord.route_id;
+              delete renovPayRecord.payment_type;
+              delete renovPayRecord.updated_at;
+              await supabase.from('payments').insert([renovPayRecord]);
+            }
+          } catch (ePay) {
+            console.warn("Aviso al insertar pago de renovación en payments:", ePay?.message);
+          }
+        }
+
+        // PASO 2: UPDATE al cartón viejo cambiando su estado a RENOVADO y deuda 0
+        const cartonUpdateOld = { 
+          estado: 'RENOVADO', 
+          status: 'RENOVADO',
+          outstanding: 0,
+          saldo_pendiente: 0,
+          fecha_cierre: nowIso,
+          updated_at: nowIso,
+          liquidation_reason: 'Renovación'
+        };
+
+        try {
+          const cedStr = String(clientId).trim();
+          if (payload.old_carton_id) {
+            await supabase.from('cartones').update(cartonUpdateOld).eq('id', payload.old_carton_id);
+          }
+          await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+          await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+          await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+        } catch (eOld) {
+          console.warn("Aviso al actualizar cartón viejo a RENOVADO:", eOld?.message);
+        }
+
+        // PASO 3: INSERT del nuevo cartón refinanciado
+        try {
+          const cartonPayload = {
+            cliente_id: String(clientId),
+            numero_carton: newNumeroCarton,
+            fecha_apertura: nowIso,
+            monto_prestado: newMontoPrestado,
+            estado: 'activo_por_renovacion',
+            status: 'activo_por_renovacion',
+            saldo_anterior: rolloverVal,
+            rollover_amount: rolloverVal,
+            total_debt: newTotalDebt,
+            outstanding: newTotalDebt,
+            installments_count: Number(payload.installmentsCount || 30),
+            installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
+            discount_amount: discountVal,
+            net_cash: netCashVal,
+            route_id: routeId,
+            agent_id: agentId,
+            supervisor_id: supervisorId,
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+
+          const { data: insertedCarton, error: cartonErr } = await supabase
+            .from('cartones')
+            .insert([cartonPayload])
+            .select();
+
+          if (cartonErr) {
+            console.warn("⚠️ Reintentando inserción de nuevo cartón sin columnas opcionales...", cartonErr);
+            delete cartonPayload.status;
+            delete cartonPayload.rollover_amount;
+            delete cartonPayload.updated_at;
+            const { data: retryData, error: retryErr } = await supabase
+              .from('cartones')
+              .insert([cartonPayload])
+              .select();
+
+            if (retryErr) {
+              cartonError = retryErr;
+            } else if (retryData && retryData.length > 0) {
+              insertedCartonRecord = retryData[0];
+            }
+          } else if (insertedCarton && insertedCarton.length > 0) {
+            insertedCartonRecord = insertedCarton[0];
+          }
+        } catch (eCarton) {
+          console.error("Excepción al insertar nuevo cartón en fallback:", eCarton);
+          cartonError = eCarton;
+        }
+      }
+    } else {
+      // 3. REGISTRO NUEVO NO RENOVACIÓN: Registrar cartón independiente
+      try {
+        const cartonPayload = {
           cliente_id: String(clientId),
           numero_carton: newNumeroCarton,
           fecha_apertura: nowIso,
           monto_prestado: newMontoPrestado,
           estado: newState,
+          status: newState,
+          saldo_anterior: 0,
           total_debt: newTotalDebt,
           outstanding: newTotalDebt,
           installments_count: Number(payload.installmentsCount || 30),
@@ -2763,26 +2899,33 @@ const db = {
           net_cash: netCashVal,
           route_id: routeId,
           agent_id: agentId,
-          supervisor_id: supervisorId
+          supervisor_id: supervisorId,
+          created_at: nowIso
         };
 
-        const { data: retryData, error: retryErr } = await supabase
+        const { data: insertedCarton, error: cartonErr } = await supabase
           .from('cartones')
-          .insert([essentialPayload])
+          .insert([cartonPayload])
           .select();
 
-        if (retryErr) {
-          console.error("❌ Error definitivo al insertar nuevo cartón en 'cartones':", retryErr);
-          cartonError = retryErr;
-        } else if (retryData && retryData.length > 0) {
-          insertedCartonRecord = retryData[0];
+        if (cartonErr) {
+          delete cartonPayload.status;
+          const { data: retryData, error: retryErr } = await supabase
+            .from('cartones')
+            .insert([cartonPayload])
+            .select();
+
+          if (retryErr) {
+            cartonError = retryErr;
+          } else if (retryData && retryData.length > 0) {
+            insertedCartonRecord = retryData[0];
+          }
+        } else if (insertedCarton && insertedCarton.length > 0) {
+          insertedCartonRecord = insertedCarton[0];
         }
-      } else if (insertedCarton && insertedCarton.length > 0) {
-        insertedCartonRecord = insertedCarton[0];
+      } catch (e) {
+        cartonError = e;
       }
-    } catch (e) {
-      console.error("Excepción al insertar nuevo cartón en 'cartones':", e);
-      cartonError = e;
     }
 
     if (cartonError || !insertedCartonRecord) {
@@ -2875,6 +3018,14 @@ const db = {
       }
     } catch (e) {
       console.warn("Excepción al registrar cuotas pendientes iniciales:", e.message);
+    }
+
+    // Notificar eventos para que la lista izquierda, el recaudo y liquidados se sincronicen de inmediato
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('bulapay-payment-registered', { detail: { clientId, amount: rolloverVal, type: isRenov ? 'renovacion' : 'credito' } }));
+        window.dispatchEvent(new CustomEvent('bulapay-client-updated', { detail: { clientId } }));
+      } catch (eEvt) {}
     }
     
     return { 
@@ -4424,8 +4575,38 @@ const db = {
     let gananciaReal = 0;
     let originalAmount = 0;
 
-    // 2. Si el crédito fue liquidado/cancelado con PAGO REAL EN EFECTIVO o saldo final 0, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments.
-    // REGLA CONTABLE ABSOLUTA v173: En RENOVACIÓN no se insertan cuotas pagadas en payments porque el saldo anterior es puramente simbólico/referencial.
+    // 2. Si es RENOVACIÓN, registrar el pago del saldo remanente en payments para cuadre de caja
+    if (isRenovacion && clientData) {
+      const remainingDebt = Math.round(Number(outstanding !== undefined && outstanding !== null && Number(outstanding) > 0 ? outstanding : (clientData?.outstanding || 0)));
+      if (remainingDebt > 0) {
+        try {
+          const currentUser = this.getCurrentUser();
+          const supId = this.getSupervisorId();
+          const now = new Date();
+          const todayStr = now.toISOString().split('T')[0];
+          const renovPayment = {
+            id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            clientCedula: String(cedula),
+            carton_id: cartonId || null,
+            installmentNumber: 999,
+            amount: remainingDebt,
+            date: todayStr,
+            agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
+            agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
+            status: 'Pagado',
+            payment_type: 'Renovacion',
+            signature: `BulaPay-SIG-${cedula}-RENOV`,
+            supervisor_id: supId,
+            created_at: now.toISOString()
+          };
+          await supabase.from('payments').insert([renovPayment]);
+        } catch (errPay) {
+          console.warn("Aviso al registrar pago de renovación en liquidateCredit:", errPay);
+        }
+      }
+    }
+
+    // Si el crédito fue liquidado/cancelado con PAGO REAL EN EFECTIVO o saldo final 0, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments.
     if ((isPaidRealCash || isPaid) && !isRenovacion && clientData) {
       try {
         const totalDebt = Math.round(Number(clientData?.totalDebt || clientData?.monto_total || 0));
@@ -4493,12 +4674,12 @@ const db = {
 
     // 3. Actualizar la tabla 'cartones' (GARANTIZAR CAMBIO DE ESTADO EN SUPABASE VIA RPC v134)
     let cartonEstadoTarget = status;
-    if (status === 'liquidado_exitoso' || status === 'liquidado_retraso' || status === 'liquidado_renovacion' || status === 'liquidado_perdida') {
+    if (isRenovacion || status === 'RENOVADO' || status === 'renovado') {
+      cartonEstadoTarget = 'RENOVADO';
+    } else if (status === 'liquidado_exitoso' || status === 'liquidado_retraso' || status === 'liquidado_renovacion' || status === 'liquidado_perdida') {
       cartonEstadoTarget = status;
     } else if (isMora) {
       cartonEstadoTarget = 'liquidado_perdida';
-    } else if (isRenovacion) {
-      cartonEstadoTarget = 'liquidado_renovacion';
     } else if (isPaid) {
       let targetCarton = null;
       const isValidUuidCheck = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -4522,7 +4703,9 @@ const db = {
       const moraOutstanding = isMora ? ((outstanding !== undefined && outstanding !== null && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0))) : 0;
       const cartonUpdatePayload = { 
         estado: cartonEstadoTarget, 
+        status: cartonEstadoTarget,
         outstanding: moraOutstanding,
+        saldo_pendiente: moraOutstanding,
         updated_at: new Date().toISOString(),
         fecha_cierre: new Date().toISOString(),
         liquidation_reason: isMora ? 'Liquidado por Mora' : (isRenovacion ? 'Renovación' : 'Pago Exitoso')
