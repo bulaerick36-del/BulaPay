@@ -664,6 +664,66 @@ const db = {
     return null;
   },
 
+  async getRouteForCurrentUser(forceRefresh = false) {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) return null;
+
+    const now = Date.now();
+    if (!forceRefresh && this._currentUserRouteCache && (now - (this._currentUserRouteCacheTime || 0) < 3000)) {
+      return this._currentUserRouteCache;
+    }
+
+    try {
+      const supabase = await initSupabase();
+      let routeId = currentUser.routeId || currentUser.route_id;
+      if (!routeId && typeof this.getActiveRouteIdForUser === 'function') {
+        routeId = await this.getActiveRouteIdForUser(currentUser);
+      }
+      
+      let route = null;
+      if (routeId && supabase) {
+        const { data, error } = await supabase
+          .from('routes')
+          .select('*')
+          .eq('id', routeId)
+          .maybeSingle();
+        if (!error && data) {
+          route = data;
+        }
+      }
+
+      if (!route && supabase) {
+        const username = currentUser.username || currentUser.id;
+        const supId = this.getSupervisorId();
+        let query = supabase.from('routes').select('*');
+        if (supId) query = query.eq('supervisor_id', supId);
+        const { data: routes } = await query;
+        if (routes && routes.length > 0) {
+          route = routes.find(r => 
+            r.agentUsername && r.agentUsername.split(',').map(u => u.trim()).includes(username)
+          ) || routes[0];
+        }
+      }
+
+      if (!route) {
+        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+        if (localRoutes.length > 0) {
+          const username = currentUser.username || currentUser.id;
+          route = localRoutes.find(r => r.id === currentUser.routeId || (r.agentUsername && r.agentUsername.includes(username))) || localRoutes[0];
+        }
+      }
+
+      if (route) {
+        this._currentUserRouteCache = route;
+        this._currentUserRouteCacheTime = now;
+      }
+      return route;
+    } catch (e) {
+      console.warn("Error al recuperar ruta para el usuario actual:", e);
+      return this._currentUserRouteCache || null;
+    }
+  },
+
   async getSupervisorIdForUser(user) {
     if (!user) return null;
     if (
@@ -944,13 +1004,35 @@ const db = {
 
   async toggleRouteExtension(routeId, hasExtension) {
     const supabase = await initSupabase();
+    const boolValue = Boolean(hasExtension);
     const { error } = await supabase
       .from('routes')
-      .update({ has_extension: hasExtension })
+      .update({ has_extension: boolValue })
       .eq('id', routeId);
     if (error) {
       console.error(`Error al cambiar prórroga de la ruta "${routeId}":`, error);
       throw error;
+    }
+
+    // Invalida cache de la ruta actual
+    this._currentUserRouteCache = null;
+    this._currentUserRouteCacheTime = 0;
+
+    // Actualizar en localStorage fallback
+    try {
+      const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+      const idx = localRoutes.findIndex(r => r.id === routeId);
+      if (idx !== -1) {
+        localRoutes[idx].has_extension = boolValue;
+        localStorage.setItem('bulapay_routes', JSON.stringify(localRoutes));
+      }
+    } catch (e) {}
+
+    // Notificar en tiempo real a la aplicación
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('bulapay-route-extension-updated', {
+        detail: { routeId, hasExtension: boolValue }
+      }));
     }
   },
 

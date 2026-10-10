@@ -534,10 +534,24 @@ const app = {
         } else if (currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent')) {
           routeStatusElement.style.display = 'inline';
           
-          // Lógica de Bloqueo Estricto (Hard Lock)
-          const day = now.getDay();
-          const hours = now.getHours();
-          const isClosed = (day === 0 || hours < 6 || hours >= 18);
+          let route = null;
+          if (window.BulaPayDB && typeof window.BulaPayDB.getRouteForCurrentUser === 'function') {
+            route = await window.BulaPayDB.getRouteForCurrentUser();
+          }
+          
+          let isClosed = false;
+          let hasProrroga = false;
+          
+          if (route) {
+            hasProrroga = !!route.has_extension;
+            const isOutsideSchedule = !window.BulaPayDB.isRouteOpen({ ...route, has_extension: false }, now);
+            // Si está fuera de horario Y NO tiene prórroga activa -> Ruta Cerrada
+            isClosed = isOutsideSchedule && !hasProrroga;
+          } else {
+            const day = now.getDay();
+            const hours = now.getHours();
+            isClosed = (day === 0 || hours < 6 || hours >= 18);
+          }
           
           const registerBtn = document.getElementById('btn-agent-register-installment');
           const submitCollectBtn = document.getElementById('btn-submit-collect');
@@ -554,17 +568,23 @@ const app = {
             // Mantener saveClientBtn activo para permitir la retroalimentación al presionar el botón
             if (saveClientBtn) saveClientBtn.disabled = false;
           } else {
-            // Operando dentro del horario permitido, mostrar tiempo para el cierre (18:00)
-            const closingTime = new Date(now);
-            closingTime.setHours(18, 0, 0, 0);
-            
-            const diffMs = closingTime - now;
-            const diffMinutesTotal = Math.ceil(diffMs / 60000);
-            const hrsDiff = Math.floor(diffMinutesTotal / 60);
-            const minsDiff = diffMinutesTotal % 60;
-            
-            routeStatusElement.textContent = `Cierra en: ${hrsDiff}h ${minsDiff}m`;
-            routeStatusElement.style.color = 'var(--color-verde)';
+            if (hasProrroga) {
+              routeStatusElement.textContent = '🟢 Prórroga Activa';
+              routeStatusElement.style.color = 'var(--color-verde)';
+            } else {
+              const closingTimeStr = (route && route.closing_time) ? route.closing_time : '18:00';
+              const [cHrs, cMins] = closingTimeStr.split(':').map(Number);
+              const closingTime = new Date(now);
+              closingTime.setHours(cHrs || 18, cMins || 0, 0, 0);
+              
+              const diffMs = closingTime - now;
+              const diffMinutesTotal = Math.max(0, Math.ceil(diffMs / 60000));
+              const hrsDiff = Math.floor(diffMinutesTotal / 60);
+              const minsDiff = diffMinutesTotal % 60;
+              
+              routeStatusElement.textContent = `Cierra en: ${hrsDiff}h ${minsDiff}m`;
+              routeStatusElement.style.color = 'var(--color-verde)';
+            }
             
             if (registerBtn) registerBtn.disabled = false;
             if (submitCollectBtn) submitCollectBtn.disabled = false;
@@ -578,8 +598,13 @@ const app = {
       }
     };
 
-    // Exponer el actualizador para llamadas manuales inmediatas tras el login
+    // Exponer el actualizador para llamadas manuales inmediatas tras el login o cambios de prórroga
     this.updateClockAndTime = updateClockAndTime;
+
+    // Escuchar actualizaciones de prórrogas en tiempo real
+    window.addEventListener('bulapay-route-extension-updated', () => {
+      this.updateClockAndTime();
+    });
 
     // Inicializar reloj y temporizador de inmediato y actualizar cada minuto
     this.updateClockAndTime();

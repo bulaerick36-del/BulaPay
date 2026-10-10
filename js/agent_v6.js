@@ -2599,8 +2599,8 @@ const agentModule = {
     }
   },
 
-  handleInvoiceRequest() {
-    if (this.isRouteClosed()) {
+  async handleInvoiceRequest() {
+    if (await this.isRouteClosed()) {
       alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
       return;
     }
@@ -2772,7 +2772,7 @@ const agentModule = {
   },
 
   async handleCartonPayment(status) {
-    if (this.isRouteClosed()) {
+    if (await this.isRouteClosed()) {
       alert('Operación denegada: La ruta se encuentra cerrada.');
       return;
     }
@@ -3032,7 +3032,7 @@ const agentModule = {
     }
   },
 
-  isRouteClosed() {
+  async isRouteClosed() {
     const currentUser = window.BulaPayDB.getCurrentUser();
     if (!currentUser) return false;
     
@@ -3042,17 +3042,33 @@ const agentModule = {
     // Si es Agente de Ruta estándar o rol general de agente
     if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
       const now = new Date();
+      let route = null;
+      if (window.BulaPayDB && typeof window.BulaPayDB.getRouteForCurrentUser === 'function') {
+        route = await window.BulaPayDB.getRouteForCurrentUser(true);
+      }
+      
+      if (route) {
+        const hasActiveProrroga = !!route.has_extension;
+        const isOutsideSchedule = !window.BulaPayDB.isRouteOpen({ ...route, has_extension: false }, now);
+        
+        // Bypass de prórroga: si está fuera del horario pero tiene prórroga activa, permite operar
+        if (isOutsideSchedule && !hasActiveProrroga) {
+          return true;
+        }
+        return false;
+      }
+
+      // Fallback si no hay ruta local ni en Supabase
       const day = now.getDay();
       const hours = now.getHours();
-      if (day === 0 || hours < 6 || hours >= 18) {
-        return true;
-      }
+      const isOutsideSchedule = (day === 0 || hours < 6 || hours >= 18);
+      return isOutsideSchedule;
     }
     return false;
   },
 
   async registerPayment() {
-    if (this.isRouteClosed()) {
+    if (await this.isRouteClosed()) {
       alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
       return;
     }
@@ -3174,7 +3190,7 @@ const agentModule = {
   },
 
   async registerNoPayment() {
-    if (this.isRouteClosed()) {
+    if (await this.isRouteClosed()) {
       alert('Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.');
       return;
     }
@@ -3262,7 +3278,7 @@ const agentModule = {
         }
       }
 
-      if (this.isRouteClosed()) {
+      if (await this.isRouteClosed()) {
         if (typeof Swal !== 'undefined') {
           Swal.fire('Ruta Cerrada', 'Operación denegada: La ruta se encuentra cerrada. Horario: Lunes a Sábado, 6 AM - 6 PM.', 'warning');
         } else {
