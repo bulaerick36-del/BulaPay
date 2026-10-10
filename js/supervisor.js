@@ -241,6 +241,14 @@ const supervisorModule = {
       await this.renderDashboard();
       await this.renderLiveFeed();
       await this.updateMapMarkers();
+
+      const overlay = document.getElementById('modal-agent-audit-portfolio');
+      if (overlay && overlay.classList.contains('active')) {
+        await this.openAgentAuditView(true);
+        if (this.currentAuditCedula) {
+          await this.showAgentClientAuditLedger(this.currentAuditCedula, null, this.currentAuditCartonId);
+        }
+      }
     };
     window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
 
@@ -529,8 +537,8 @@ const supervisorModule = {
     detailSection.style.display = 'block';
   },
 
-  async openAgentAuditView() {
-    const username = this.selectedAuditAgentUsername;
+  async openAgentAuditView(preserveLedger = false) {
+    const username = this.selectedAuditAgentUsername || this.currentAuditAgentId;
     if (!username) return;
 
     const overlay = document.getElementById('modal-agent-audit-portfolio');
@@ -540,8 +548,10 @@ const supervisorModule = {
 
     if (!overlay || !listContainer) return;
 
-    if (ledgerContainer) ledgerContainer.style.display = 'none';
-    listContainer.innerHTML = '<div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 1rem;">Cargando cartera...</div>';
+    if (!preserveLedger && ledgerContainer) ledgerContainer.style.display = 'none';
+    if (!preserveLedger) {
+      listContainer.innerHTML = '<div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 1rem;">Cargando cartera...</div>';
+    }
 
     overlay.classList.add('active');
 
@@ -568,10 +578,28 @@ const supervisorModule = {
       const allClients = await window.BulaPayDB.getClients();
       const clients = allClients.filter(c => c.routeId === agent.routeId);
 
-      // Obtener todos los pagos de hoy
-      const todayStr = new Date().toISOString().split('T')[0];
+      // Obtener todos los pagos frescos
       const allPayments = await window.BulaPayDB.getPayments();
-      const todayPayments = allPayments.filter(p => p.date === todayStr);
+
+      // Función helper para determinar si una fecha corresponde al día de hoy en la zona horaria local
+      const isDateToday = (dateVal) => {
+        if (!dateVal) return false;
+        const now = new Date();
+        const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        if (typeof dateVal === 'string') {
+          const trimmed = dateVal.trim();
+          if (trimmed.startsWith(todayLocalStr) || (trimmed.length === 10 && trimmed === todayLocalStr)) return true;
+        }
+        try {
+          const d = new Date(dateVal);
+          if (isNaN(d.getTime())) return false;
+          return d.getFullYear() === now.getFullYear() &&
+                 d.getMonth() === now.getMonth() &&
+                 d.getDate() === now.getDate();
+        } catch (e) {
+          return false;
+        }
+      };
 
       listContainer.innerHTML = '';
       if (clients.length === 0) {
@@ -580,22 +608,46 @@ const supervisorModule = {
       }
 
       clients.forEach(client => {
-        // Verificar si el cliente hizo un abono hoy en su crédito activo
-        const clientTodayPayments = todayPayments.filter(p => {
-          if (String(p.clientCedula || p.client_cedula) !== String(client.cedula)) return false;
-          const isLiquidation = (p.id && String(p.id).startsWith('pay_liq_')) || String(p.status || '').includes('Liquidado');
-          if (isLiquidation) return false;
-          const clientTime = client.created_at ? new Date(client.created_at).getTime() : 0;
-          let pTime = 0;
-          if (p.created_at) {
-            pTime = new Date(p.created_at).getTime();
-          } else if (p.date) {
-            const dStr = String(p.date).trim();
-            pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
-          }
-          return !clientTime || !pTime || (pTime >= clientTime - 2000);
+        const clientCedStr = String(client.cedula || '').trim();
+        const clientCartonIdStr = String(client.carton_id || client.cartonId || client.id || '').trim();
+
+        // 1. Filtrar los pagos que correspondan al cliente en el día de hoy
+        const clientTodayPayments = (allPayments || []).filter(p => {
+          const pCedula = String(p.clientCedula || p.client_cedula || '').trim();
+          const pCartonId = String(p.carton_id || p.cartonId || '').trim();
+
+          const isClientMatch = clientCedStr && pCedula && (clientCedStr === pCedula);
+          const isCartonMatch = clientCartonIdStr && pCartonId && (clientCartonIdStr === pCartonId);
+          if (!isClientMatch && !isCartonMatch) return false;
+
+          // Excluir registros con monto 0 o con estado 'No Pago'
+          const amount = Number(p.amount || 0);
+          const pStatus = String(p.status || '').toUpperCase();
+          if (amount <= 0 || pStatus === 'NO PAGO') return false;
+
+          // Verificar si la fecha de pago o created_at o fecha_pago corresponde al día de hoy (local)
+          return isDateToday(p.date) || isDateToday(p.created_at) || isDateToday(p.fecha_pago);
         });
-        const madePaymentToday = clientTodayPayments.some(p => (p.status === 'Pagado' || p.status === 'Abonado') && Number(p.amount) > 0);
+
+        let madePaymentToday = clientTodayPayments.length > 0;
+
+        // 2. Si no se encontró en la tabla de pagos, revisar en el arreglo cuotas de la entidad del cliente / cartón
+        if (!madePaymentToday && (client.cuotas || client.cuotas_json)) {
+          try {
+            const rawCuotas = client.cuotas || client.cuotas_json;
+            const cuotasArr = typeof rawCuotas === 'string' ? JSON.parse(rawCuotas) : rawCuotas;
+            if (Array.isArray(cuotasArr)) {
+              madePaymentToday = cuotasArr.some(c => {
+                if (!c) return false;
+                const isPaid = c.paid || c.pagado || String(c.status || '').toLowerCase() === 'pagado' || String(c.status || '').toLowerCase() === 'abonado';
+                if (!isPaid) return false;
+                const cDate = c.fecha_pago || c.created_at || c.date || c.paid_at;
+                return isDateToday(cDate);
+              });
+            }
+          } catch(eJson) {}
+        }
+
         const statusIcon = madePaymentToday ? '✅' : '❌';
         const statusColor = madePaymentToday ? 'var(--color-verde)' : 'var(--color-rojo)';
         const statusLabel = madePaymentToday ? 'Recaudado Hoy' : 'Sin Cobro Hoy';
@@ -604,7 +656,7 @@ const supervisorModule = {
 
         // Buscar nombre del agente por agent_id
         const associatedAgent = allUsers.find(u => u.username === client.agent_id);
-        const agentNameLabel = associatedAgent ? associatedAgent.name : 'No asignado';
+        const agentNameLabel = associatedAgent ? associatedAgent.name : (agent.name || 'No asignado');
 
         const item = document.createElement('div');
         item.style.padding = '0.75rem 1rem';
@@ -658,6 +710,9 @@ const supervisorModule = {
 
     const targetAgentId = agentId || this.currentAuditAgentId;
     const targetCartonId = cartonId;
+
+    this.currentAuditCedula = cedStr;
+    this.currentAuditCartonId = targetCartonId;
 
     // Mostrar contenedor e indicador de carga fresca
     ledgerContainer.style.display = 'block';
