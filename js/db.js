@@ -724,6 +724,58 @@ const db = {
     }
   },
 
+  async getAgentRecaudoHoyDirect(agentId, dateStr = null) {
+    if (!agentId) return 0;
+    try {
+      const supabase = await initSupabase();
+      const now = new Date();
+      const targetDate = dateStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      const startOfDay = `${targetDate}T00:00:00.000Z`;
+      const endOfDay = `${targetDate}T23:59:59.999Z`;
+
+      // 1. Consulta directa a Supabase con filtro de fecha estricto
+      const { data, error } = await supabase
+        .from('payments')
+        .select('id, amount, status, date, created_at, agent_id, agentName')
+        .or(`date.eq."${targetDate}",and(created_at.gte."${startOfDay}",created_at.lte."${endOfDay}")`);
+
+      let paymentList = data;
+      if (error || !paymentList) {
+        paymentList = await this.getPayments();
+      }
+
+      const cleanAgentId = String(agentId).trim().toLowerCase();
+      
+      // 2. Deduplicación estricta por ID para evitar productos cartesianos o filas duplicadas
+      const seenIds = new Set();
+      let totalMontoReal = 0;
+
+      (paymentList || []).forEach(p => {
+        if (!p) return;
+        const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
+        if (seenIds.has(pId)) return;
+
+        const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
+        const pAgentName = String(p.agentName || '').trim().toLowerCase();
+
+        if (pAgentId !== cleanAgentId && pAgentName !== cleanAgentId) return;
+
+        const amount = Number(p.amount || 0);
+        const status = String(p.status || '').toUpperCase();
+        if (amount > 0 && status !== 'NO PAGO') {
+          seenIds.add(pId);
+          totalMontoReal += Math.round(amount);
+        }
+      });
+
+      return totalMontoReal;
+    } catch (e) {
+      console.error("Error al calcular recaudo real directo de Supabase:", e);
+      return 0;
+    }
+  },
+
   async getSupervisorIdForUser(user) {
     if (!user) return null;
     if (

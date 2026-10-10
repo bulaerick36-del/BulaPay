@@ -471,6 +471,11 @@ const supervisorModule = {
 
   async getAgentRecaudoHoyReal(agentUsername, routeId = null) {
     try {
+      if (agentUsername && window.BulaPayDB && typeof window.BulaPayDB.getAgentRecaudoHoyDirect === 'function') {
+        const directVal = await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername);
+        if (directVal > 0) return directVal;
+      }
+
       const allPayments = await window.BulaPayDB.getPayments();
       const allClients = await window.BulaPayDB.getClients();
 
@@ -497,7 +502,15 @@ const supervisorModule = {
         }
       };
 
-      const agentPaymentsToday = (allPayments || []).filter(p => {
+      // Deduplicación estricta por ID para evitar acumuladores duplicados o productos cartesianos
+      const seenPaymentIds = new Set();
+      let totalMontoAgregado = 0;
+
+      (allPayments || []).forEach(p => {
+        if (!p) return;
+        const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
+        if (seenPaymentIds.has(pId)) return;
+
         const pAgentId = String(p.agent_id || p.agentId || p.agentUsername || '').trim();
         const pAgentName = String(p.agentName || '').trim();
         const pCedula = String(p.clientCedula || p.client_cedula || '').trim();
@@ -507,16 +520,20 @@ const supervisorModule = {
         const matchesRoute = routeId && (pRouteId === routeId);
         const matchesClient = clientCedulas.size > 0 && clientCedulas.has(pCedula);
 
-        if (!matchesAgent && !matchesRoute && !matchesClient) return false;
+        if (!matchesAgent && !matchesRoute && !matchesClient) return;
 
         const amount = Number(p.amount || 0);
         const status = String(p.status || '').toUpperCase();
-        if (amount <= 0 || status === 'NO PAGO') return false;
+        if (amount <= 0 || status === 'NO PAGO') return;
 
-        return isDateToday(p.date) || isDateToday(p.created_at) || isDateToday(p.fecha_pago);
+        const isToday = isDateToday(p.date) || isDateToday(p.created_at) || isDateToday(p.fecha_pago);
+        if (isToday) {
+          seenPaymentIds.add(pId);
+          totalMontoAgregado += Math.round(amount);
+        }
       });
 
-      return agentPaymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+      return totalMontoAgregado;
     } catch (e) {
       console.error("Error al calcular recaudo real del agente:", e);
       return 0;
@@ -1945,11 +1962,25 @@ const supervisorModule = {
     const end6AM = new Date(start6AM);
     end6AM.setDate(end6AM.getDate() + 1);
 
-    const paymentsToday = payments.filter(p => {
+    const seenMainPaymentIds = new Set();
+    const paymentsToday = (payments || []).filter(p => {
+      if (!p) return false;
+      const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
+      if (seenMainPaymentIds.has(pId)) return false;
+
+      const amount = Number(p.amount || 0);
+      const status = String(p.status || '').toUpperCase();
+      if (amount <= 0 || status === 'NO PAGO') return false;
+
       const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
-      return pDate >= start6AM && pDate < end6AM;
+      const isWindow = pDate >= start6AM && pDate < end6AM;
+      if (isWindow) {
+        seenMainPaymentIds.add(pId);
+        return true;
+      }
+      return false;
     });
-    const totalCollectedToday = paymentsToday.reduce((sum, p) => sum + Number(p.amount), 0);
+    const totalCollectedToday = paymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
     const expectedClients = clients.filter(c => {
       if (!c.routeId || !routeIds.has(c.routeId)) return false;
@@ -2039,9 +2070,23 @@ const supervisorModule = {
     const end6AM = new Date(start6AM);
     end6AM.setDate(end6AM.getDate() + 1);
 
-    const paymentsToday = payments.filter(p => {
+    const seenTablePaymentIds = new Set();
+    const paymentsToday = (payments || []).filter(p => {
+      if (!p) return false;
+      const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
+      if (seenTablePaymentIds.has(pId)) return false;
+
+      const amount = Number(p.amount || 0);
+      const status = String(p.status || '').toUpperCase();
+      if (amount <= 0 || status === 'NO PAGO') return false;
+
       const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
-      return pDate >= start6AM && pDate < end6AM;
+      const isWindow = pDate >= start6AM && pDate < end6AM;
+      if (isWindow) {
+        seenTablePaymentIds.add(pId);
+        return true;
+      }
+      return false;
     });
 
     for (const name in groupedRoutes) {
@@ -2051,8 +2096,17 @@ const supervisorModule = {
       const routeClients = clients.filter(c => c.routeId && rIds.includes(c.routeId));
       const clientCedulas = new Set(routeClients.map(c => c.cedula));
       
-      const routePaymentsToday = paymentsToday.filter(p => clientCedulas.has(p.clientCedula));
-      const totalCollectedToday = routePaymentsToday.reduce((sum, p) => sum + Number(p.amount), 0);
+      const seenRoutePaymentIds = new Set();
+      const routePaymentsToday = paymentsToday.filter(p => {
+        const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
+        if (seenRoutePaymentIds.has(pId)) return false;
+        if (clientCedulas.has(p.clientCedula)) {
+          seenRoutePaymentIds.add(pId);
+          return true;
+        }
+        return false;
+      });
+      const totalCollectedToday = routePaymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
       const expectedClients = routeClients.filter(c => {
         const hasPaymentToday = routePaymentsToday.some(p => p.clientCedula === c.cedula);
