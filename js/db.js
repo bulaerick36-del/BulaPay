@@ -2734,11 +2734,11 @@ const db = {
           p_installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
           p_discount_amount: discountVal,
           p_net_cash: netCashVal,
-          p_route_id: routeId,
-          p_agent_id: agentId,
-          p_supervisor_id: supervisorId,
+          p_route_id: routeId ? String(routeId) : null,
+          p_agent_id: agentId ? String(agentId) : null,
+          p_supervisor_id: supervisorId ? String(supervisorId) : null,
           p_new_numero_carton: newNumeroCarton,
-          p_new_carton_id: (newCartonUuid && newCartonUuid.length === 36) ? newCartonUuid : null
+          p_new_carton_id: (newCartonUuid && String(newCartonUuid).length === 36) ? String(newCartonUuid) : null
         });
 
         if (!rpcErr && rpcRes && rpcRes.success) {
@@ -2819,11 +2819,15 @@ const db = {
         try {
           const cedStr = String(clientId).trim();
           if (payload.old_carton_id) {
-            await supabase.from('cartones').update(cartonUpdateOld).eq('id', payload.old_carton_id);
+            const { error: errOldId } = await supabase.from('cartones').update(cartonUpdateOld).eq('id', payload.old_carton_id);
+            if (errOldId) {
+              await supabase.from('cartones').update({ estado: 'RENOVADO', outstanding: 0 }).eq('id', payload.old_carton_id);
+            }
           }
-          await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
-          await supabase.from('cartones').update(cartonUpdateOld).eq('client_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
-          await supabase.from('cartones').update(cartonUpdateOld).eq('cedula', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+          const { error: errCed } = await supabase.from('cartones').update(cartonUpdateOld).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+          if (errCed) {
+            await supabase.from('cartones').update({ estado: 'RENOVADO', outstanding: 0 }).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+          }
         } catch (eOld) {
           console.warn("Aviso al actualizar cartón viejo a RENOVADO:", eOld?.message);
         }

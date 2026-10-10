@@ -808,7 +808,7 @@ BEGIN
     IF v_old_carton.id IS NULL THEN
         SELECT * INTO v_old_carton 
         FROM cartones 
-        WHERE (cliente_id = p_cliente_id OR client_id = p_cliente_id OR cedula = p_cliente_id)
+        WHERE cliente_id = p_cliente_id
           AND estado IN ('activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO')
         ORDER BY created_at DESC 
         LIMIT 1;
@@ -827,7 +827,7 @@ BEGIN
     -- Resolver nombre de agente para payments
     SELECT COALESCE(name, username, 'Sistema') INTO v_agent_name 
     FROM users 
-    WHERE username = p_agent_id OR id::text = p_agent_id 
+    WHERE username = p_agent_id 
     LIMIT 1;
     IF v_agent_name IS NULL THEN
         v_agent_name := COALESCE(p_agent_id, 'Sistema');
@@ -928,7 +928,7 @@ BEGIN
         fecha_cierre = v_now,
         updated_at = v_now,
         liquidation_reason = 'Renovación'
-    WHERE (cliente_id = p_cliente_id OR client_id = p_cliente_id OR cedula = p_cliente_id)
+    WHERE cliente_id = p_cliente_id
       AND estado IN ('activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'ACTIVO')
       AND (v_target_old_id IS NULL OR id != v_target_old_id);
 
