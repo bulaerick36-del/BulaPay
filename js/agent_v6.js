@@ -639,6 +639,15 @@ const agentModule = {
           } 
           // Escenario B: Default / Pérdida por Mora (Mala Paga -> Lista Negra - v103: liquidado_perdida)
           else {
+            const confirmLoss = await window.showCrediConfirm(
+              `⚠️ ADVERTENCIA: Este crédito aún tiene un saldo pendiente de $${saldoRestante.toLocaleString('es-CO')}.\n\nSi lo liquidas sin haber completado los pagos, se registrará como PÉRDIDA POR MORA y el cliente pasará a la LISTA NEGRA.\n\n¿Estás seguro de registrar este crédito como pérdida por mora?`,
+              "Confirmar Pérdida por Mora"
+            );
+            if (!confirmLoss) {
+              this.btnLiquidarCarton.disabled = false;
+              this.btnLiquidarCarton.textContent = 'Liquidar Cartón';
+              return;
+            }
             nuevoEstado = 'liquidado_perdida';
           }
 
@@ -2970,11 +2979,12 @@ const agentModule = {
 
     const rawStatusDetail = String(client.status || client.estado || '').trim().toUpperCase();
     const isDbBlacklistedDetail = isLossRecordInDetail ||
-                                  client.risk === 'Rojo' || 
-                                  String(client.risk || '').trim().toLowerCase() === 'rojo' || 
-                                  rawStatusDetail.includes('NEGRA') || 
-                                  rawStatusDetail.includes('MORA') ||
-                                  rawStatusDetail.includes('PERDIDA');
+                                  client.risk === 'Lista Negra' || 
+                                  rawStatusDetail === 'BLACKLISTED' || 
+                                  rawStatusDetail === 'LISTA NEGRA' || 
+                                  rawStatusDetail === 'LIQUIDADO_PERDIDA' || 
+                                  rawStatusDetail === 'LIQUIDADO_MORA' ||
+                                  (String(client.risk || '').trim().toUpperCase() === 'ROJO' && rawStatusDetail !== 'ACTIVO');
 
     if (isDbBlacklistedDetail) {
       client.risk = 'Rojo';
@@ -2984,7 +2994,8 @@ const agentModule = {
         dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
         const overdueCount = dailyStatusList.filter(s => s.isOverdue).length;
         
-        if (overdueCount >= 3) {
+        // Umbral justo de mora: hasta 6 días con retrasos es Amarillo; a partir de 7 días es Rojo (mora severa)
+        if (overdueCount >= 7) {
           client.risk = 'Rojo';
         } else if (overdueCount > 0) {
           client.risk = 'Amarillo';
@@ -3008,7 +3019,7 @@ const agentModule = {
         if (this.riskStatus) this.riskStatus.textContent = '🟡 Pago con Retrasos (Riesgo Medio)';
       } else if (client.risk === 'Rojo') {
         this.riskHeader.classList.add('rojo');
-        if (this.riskStatus) this.riskStatus.textContent = '🔴 ROJO (Mal Cliente / Lista Negra)';
+        if (this.riskStatus) this.riskStatus.textContent = isDbBlacklistedDetail ? '🔴 ROJO (Bloqueado / Lista Negra)' : '🔴 ROJO (Mora Severa ≥7 días)';
       }
     }
 

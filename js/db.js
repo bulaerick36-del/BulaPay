@@ -1400,6 +1400,107 @@ const db = {
     }
   },
 
+  isBlacklistedClient(client) {
+    if (!client) return false;
+    const status = String(client.status || client.estado || '').trim().toUpperCase();
+    const risk = String(client.risk || '').trim();
+    const riskUpper = risk.toUpperCase();
+
+    // Si el estado es explícitamente activo y no tiene marca explícita de lista negra, no es lista negra
+    if (status === 'ACTIVO' && riskUpper !== 'LISTA NEGRA') {
+      return false;
+    }
+
+    return riskUpper === 'LISTA NEGRA' || 
+           status === 'BLACKLISTED' || 
+           status === 'LISTA NEGRA' || 
+           status === 'LIQUIDADO_PERDIDA' || 
+           status === 'LIQUIDADO_MORA' ||
+           status === 'CASTIGADO' ||
+           (riskUpper === 'ROJO' && status !== 'ACTIVO');
+  },
+
+  async indultarClientFromBlacklist(cedula) {
+    if (!cedula) return { success: false, message: 'Cédula requerida' };
+    const cedStr = String(cedula).trim();
+    try {
+      const supabase = await initSupabase();
+
+      // 1. Restaurar cliente en la tabla 'clients'
+      const clientUpdate = {
+        risk: 'Verde',
+        status: 'Activo'
+      };
+      await supabase
+        .from('clients')
+        .update(clientUpdate)
+        .eq('cedula', cedStr);
+
+      if (!isNaN(Number(cedStr))) {
+        await supabase
+          .from('clients')
+          .update(clientUpdate)
+          .eq('cedula', Number(cedStr));
+      }
+
+      // 2. Restaurar cartones del cliente en la tabla 'cartones'
+      const { data: cartones } = await supabase
+        .from('cartones')
+        .select('*')
+        .or(`cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`);
+
+      if (cartones && cartones.length > 0) {
+        for (const carton of cartones) {
+          const rawEst = String(carton.estado || carton.status || '').toLowerCase();
+          if (rawEst.includes('perdida') || rawEst.includes('mora') || rawEst.includes('castigado')) {
+            const newEstado = Number(carton.outstanding || carton.saldo_pendiente || 0) > 0 ? 'activo' : 'liquidado_pagado';
+            await supabase
+              .from('cartones')
+              .update({ estado: newEstado, status: newEstado })
+              .eq('id', carton.id);
+          }
+        }
+      }
+
+      // 3. Eliminar de la tabla 'lista_negra' si existe
+      try {
+        await supabase
+          .from('lista_negra')
+          .delete()
+          .or(`cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`);
+
+        if (!isNaN(Number(cedStr))) {
+          await supabase
+            .from('lista_negra')
+            .delete()
+            .or(`cliente_id.eq.${Number(cedStr)},client_id.eq.${Number(cedStr)},cedula.eq.${Number(cedStr)}`);
+        }
+      } catch (eLn) {
+        console.warn("Aviso al eliminar de tabla lista_negra:", eLn?.message);
+      }
+
+      // 4. Sincronizar caché local
+      try {
+        const localClients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
+        localClients.forEach(c => {
+          if (String(c.cedula).trim() === cedStr) {
+            c.risk = 'Verde';
+            c.status = 'Activo';
+          }
+        });
+        localStorage.setItem('bulapay_clients', JSON.stringify(localClients));
+      } catch (eCache) {}
+
+      // 5. Recargar clientes activos en memoria
+      await this.loadActiveCredits();
+
+      return { success: true };
+    } catch (e) {
+      console.error("Error al indultar cliente de lista negra:", e);
+      return { success: false, message: e.message || String(e) };
+    }
+  },
+
   async isClientBlacklisted(cedula) {
     if (!cedula) return false;
     const cedStr = String(cedula).trim();
@@ -6493,9 +6594,7 @@ const db = {
       const liquidCash = Math.max(0, inyeccionesTotales + entradasExtra + recaudoHoy - salidasTotales);
       const patrimonioReal = Math.round(liquidCash + carteraEnCalle + interesesActivos);
 
-      const listaNegra = supervisorClients.filter(c => 
-        c.risk === 'Rojo' || c.risk === 'Lista Negra' || Number(c.outstanding) > Number(c.totalDebt || 0) * 0.8
-      );
+      const listaNegra = supervisorClients.filter(c => this.isBlacklistedClient(c));
 
       return {
         supervisorId: supId,

@@ -1082,7 +1082,7 @@ const supervisorModule = {
 
     // 2. En Calle (Saldos Pendientes de clientes activos)
     const enCalle = selectedClients
-      .filter(c => c.risk !== 'Rojo' && c.risk !== 'Lista Negra' && c.status !== 'Blacklisted')
+      .filter(c => !window.BulaPayDB.isBlacklistedClient(c) && !String(c.status || '').toUpperCase().includes('LIQUIDADO'))
       .reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
 
     // 3. En Bolsillo (Efectivo) = Capital Base + Total Recaudado - Total Préstamos Realizados
@@ -1093,7 +1093,7 @@ const supervisorModule = {
 
     // 4. Ganancias Proyectadas (Intereses esperados de cartera activa)
     const gananciasProyectadas = selectedClients
-      .filter(c => c.risk !== 'Rojo' && c.risk !== 'Lista Negra' && c.status !== 'Blacklisted')
+      .filter(c => !window.BulaPayDB.isBlacklistedClient(c) && !String(c.status || '').toUpperCase().includes('LIQUIDADO'))
       .reduce((sum, c) => {
         const totalDebt = Number(c.totalDebt || 0);
         const amount = Number(c.amount || 0);
@@ -1102,7 +1102,7 @@ const supervisorModule = {
 
     // 5. Pérdidas (Saldos de incobrables en Lista Negra / Mora grave)
     const perdidas = selectedClients
-      .filter(c => c.risk === 'Rojo' || c.risk === 'Lista Negra' || c.status === 'Blacklisted')
+      .filter(c => window.BulaPayDB.isBlacklistedClient(c))
       .reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
 
     if (baseEl) baseEl.textContent = `$${capitalBase.toLocaleString('es-CO')}`;
@@ -1170,9 +1170,13 @@ const supervisorModule = {
     const allClients = await window.BulaPayDB.getClients();
     const routes = await window.BulaPayDB.getRoutes();
 
-    const morosos = allClients.filter(c => 
-      c.risk === 'Rojo' || c.risk === 'Lista Negra' || c.status === 'Blacklisted' || Number(c.outstanding) > Number(c.totalDebt || 0) * 0.8
-    );
+    // Sincronización estricta: filtro idéntico para tarjeta y modal
+    const morosos = allClients.filter(c => window.BulaPayDB.isBlacklistedClient(c));
+
+    const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
+    if (kpiBlacklistEl) {
+      kpiBlacklistEl.textContent = morosos.length;
+    }
 
     if (morosos.length === 0) {
       container.innerHTML = `<div style="text-align: center; color: var(--text-secondary); font-size: 0.85rem; padding: 2rem;">✅ No hay clientes registrados en Lista Negra o Mora severa.</div>`;
@@ -1189,19 +1193,66 @@ const supervisorModule = {
       item.style.display = 'flex';
       item.style.justifyContent = 'space-between';
       item.style.alignItems = 'center';
+      item.style.gap = '0.75rem';
 
       item.innerHTML = `
-        <div>
-          <strong style="color: #f87171; font-size: 0.95rem;">${client.name}</strong>
+        <div style="flex: 1; min-width: 0;">
+          <strong style="color: #f87171; font-size: 0.95rem; display: block; word-break: break-word;">${client.name}</strong>
           <div style="font-size: 0.75rem; color: var(--text-secondary);">C.C. ${client.cedula || 'N/A'} | Ruta: ${route.name}</div>
         </div>
-        <div style="text-align: right;">
-          <span style="font-size: 0.7rem; color: #f87171; font-weight: bold; display: block;">Saldo Deuda</span>
-          <strong style="color: #ffffff; font-size: 1rem;">$${Number(client.outstanding || 0).toLocaleString('es-CO')}</strong>
+        <div style="display: flex; align-items: center; gap: 0.85rem; flex-shrink: 0;">
+          <div style="text-align: right;">
+            <span style="font-size: 0.7rem; color: #f87171; font-weight: bold; display: block;">Saldo Deuda</span>
+            <strong style="color: #ffffff; font-size: 1rem;">$${Number(client.outstanding || 0).toLocaleString('es-CO')}</strong>
+          </div>
+          <button class="btn-indultar-action" data-cedula="${client.cedula}" style="padding: 0.45rem 0.85rem; background-color: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; transition: background 0.2s;">
+            <span>🕊️</span> Indultar
+          </button>
         </div>
       `;
+
+      const btnIndultar = item.querySelector('.btn-indultar-action');
+      if (btnIndultar) {
+        btnIndultar.addEventListener('click', () => this.indultarClient(client.cedula, client.name));
+      }
+
       container.appendChild(item);
     });
+  },
+
+  async indultarClient(cedula, name = '') {
+    if (!cedula) return;
+    const clientLabel = name ? `${name} (C.C. ${cedula})` : `C.C. ${cedula}`;
+    const confirmed = await window.showCrediConfirm(
+      `¿Deseas indultar a ${clientLabel} y retirarlo de la Lista Negra?\n\nSu estado se restaurará a Verde (Activo) y su crédito vigente podrá seguir cobrándose normalmente sin bloqueos.`,
+      "Indultar Cliente"
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await window.BulaPayDB.indultarClientFromBlacklist(cedula);
+      if (res && res.success) {
+        if (window.Swal) {
+          Swal.fire({
+            icon: 'success',
+            title: '✅ Cliente Indultado',
+            text: `${clientLabel} ha sido retirado de la Lista Negra y restaurado a estado Activo.`
+          });
+        } else {
+          alert(`✅ ${clientLabel} ha sido retirado de la Lista Negra exitosamente.`);
+        }
+        await this.renderDashboard();
+        await this.populateKpiBlacklistModal();
+        if (typeof this.renderCajaGlobalData === 'function') {
+          await this.renderCajaGlobalData().catch(() => {});
+        }
+      } else {
+        alert('❌ Error al indultar cliente: ' + (res?.message || 'Intente nuevamente'));
+      }
+    } catch (e) {
+      console.error("Error al indultar cliente:", e);
+      alert('❌ Error al procesar indulto: ' + (e.message || e));
+    }
   },
 
   // 3. POPULATE MODAL: RECAUDO HOY (RANKING)
@@ -1942,7 +1993,7 @@ const supervisorModule = {
     
     const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
     if (kpiBlacklistEl) {
-      const blacklistedCount = clients.filter(c => c.risk === 'Rojo' || c.risk === 'Lista Negra' || c.status === 'Blacklisted' || Number(c.outstanding) > Number(c.totalDebt || 0) * 0.8).length;
+      const blacklistedCount = clients.filter(c => window.BulaPayDB.isBlacklistedClient(c)).length;
       kpiBlacklistEl.textContent = blacklistedCount;
     }
     
@@ -4153,13 +4204,19 @@ const supervisorModule = {
       const htmlList = lista.length === 0
         ? `<div style="padding: 1rem; color: #10b981;">🟢 No hay clientes en mora o lista negra en tus rutas.</div>`
         : lista.map(c => `
-            <div style="padding: 0.75rem; background: #1e293b; border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <strong style="color: #f8fafc;">${c.name}</strong>
+            <div style="padding: 0.75rem; background: #1e293b; border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+              <div style="flex: 1; min-width: 0; text-align: left;">
+                <strong style="color: #f8fafc; display: block; word-break: break-word;">${c.name}</strong>
                 <div style="font-size: 0.75rem; color: #94a3b8;">Cédula: ${c.cedula}</div>
               </div>
-              <div style="text-align: right;">
-                <span style="font-weight: 800; color: #ef4444; font-size: 0.95rem;">$${(Number(c.outstanding) || 0).toLocaleString('es-CO')}</span>
+              <div style="display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
+                <div style="text-align: right;">
+                  <span style="font-size: 0.7rem; color: #f87171; font-weight: bold; display: block;">Saldo Deuda</span>
+                  <span style="font-weight: 800; color: #ef4444; font-size: 0.95rem;">$${(Number(c.outstanding) || 0).toLocaleString('es-CO')}</span>
+                </div>
+                <button onclick="window.supervisorModule.indultarClient('${c.cedula}', '${(c.name || '').replace(/'/g, "\\'")}')" style="padding: 0.45rem 0.75rem; background-color: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+                  🕊️ Indultar
+                </button>
               </div>
             </div>
           `).join('');
