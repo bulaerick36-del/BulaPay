@@ -730,32 +730,50 @@ const db = {
       const supabase = await initSupabase();
       const now = new Date();
       const targetDate = dateStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const cleanAgentId = agentId ? String(agentId).trim() : null;
+      const cleanRouteId = routeId ? String(routeId).trim() : null;
 
-      let paymentList = [];
+      // Intento 1: Llamada RPC SECURITY DEFINER en Supabase (evita 401 / RLS)
+      try {
+        const { data: rpcVal, error: rpcErr } = await supabase.rpc('get_agent_recaudo_hoy', {
+          p_agent_id: cleanAgentId,
+          p_date: targetDate,
+          p_route_id: cleanRouteId
+        });
+
+        if (!rpcErr && rpcVal !== null && rpcVal !== undefined) {
+          console.log(`✅ [Supabase RPC get_agent_recaudo_hoy] Recaudo obtenido via SECURITY DEFINER: $${rpcVal}`);
+          return Math.round(Number(rpcVal));
+        }
+      } catch (eRpc) {
+        console.warn("⚠️ Aviso al llamar RPC get_agent_recaudo_hoy:", eRpc);
+      }
+
+      // Intento 2: Consulta directa a la tabla payments
       const { data, error } = await supabase
         .from('payments')
         .select('*');
 
-      if (!error && data && Array.isArray(data)) {
-        paymentList = data;
-      } else {
-        paymentList = await this.getPayments();
+      if (error) {
+        console.error("❌ Error 401 / Permisos RLS en Supabase al consultar tabla 'payments':", error);
+        // Manejo estricto de errores: NO sumar a lo ciego sobre arrays cacheados
+        return 0;
       }
 
-      const cleanAgentId = agentId ? String(agentId).trim().toLowerCase() : null;
-      const cleanRouteId = routeId ? String(routeId).trim().toLowerCase() : null;
+      const paymentList = data || [];
+      const lowerAgentId = cleanAgentId ? cleanAgentId.toLowerCase() : null;
+      const lowerRouteId = cleanRouteId ? cleanRouteId.toLowerCase() : null;
 
       let userObj = null;
       if (cleanAgentId) {
-        userObj = await this.getUserByUsername(agentId);
+        userObj = await this.getUserByUsername(cleanAgentId);
       }
-      const agentUsername = cleanAgentId;
       const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
 
       const seenIds = new Set();
       let totalMontoReal = 0;
 
-      (paymentList || []).forEach(p => {
+      paymentList.forEach(p => {
         if (!p) return;
 
         // Validar fecha estricta: debe ser del día objetivo
@@ -785,9 +803,9 @@ const db = {
         const pRouteId = String(p.routeId || p.route_id || '').trim().toLowerCase();
 
         let matches = false;
-        if (agentUsername && (pAgentId === agentUsername || pAgentName === agentUsername)) matches = true;
+        if (lowerAgentId && (pAgentId === lowerAgentId || pAgentName === lowerAgentId)) matches = true;
         if (agentNameLower && pAgentName === agentNameLower) matches = true;
-        if (cleanRouteId && pRouteId === cleanRouteId) matches = true;
+        if (lowerRouteId && pRouteId === lowerRouteId) matches = true;
 
         if (!matches) return;
 
@@ -801,7 +819,7 @@ const db = {
 
       return totalMontoReal;
     } catch (e) {
-      console.error("Error al calcular recaudo real directo de Supabase:", e);
+      console.error("❌ Excepción inesperada en getAgentRecaudoHoyDirect:", e);
       return 0;
     }
   },
