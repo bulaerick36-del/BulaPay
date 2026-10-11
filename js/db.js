@@ -234,6 +234,35 @@ const db = {
     localStorage.removeItem(DB_KEYS.CURRENT_USER);
   },
 
+  cachedUsers: null,
+
+  async getCachedUsers(forceRefresh = false) {
+    if (!this.cachedUsers || forceRefresh) {
+      try {
+        let users = [];
+        if (typeof this.getUsers === 'function') {
+          users = await this.getUsers();
+        }
+        if ((!users || users.length === 0) && typeof this.getAllUsers === 'function') {
+          users = await this.getAllUsers();
+        }
+        if (Array.isArray(users) && users.length > 0) {
+          this.cachedUsers = users;
+        } else if (!this.cachedUsers) {
+          this.cachedUsers = users || [];
+        }
+      } catch (e) {
+        console.warn("Aviso en db.getCachedUsers:", e);
+        try {
+          this.cachedUsers = JSON.parse(localStorage.getItem('bulapay_users') || '[]');
+        } catch(err) {
+          this.cachedUsers = this.cachedUsers || [];
+        }
+      }
+    }
+    return this.cachedUsers || [];
+  },
+
   // USERS
   async getUsers() {
     const supabase = await initSupabase();
@@ -827,8 +856,24 @@ const db = {
   async getAgentLiquidatedCartonesToday(agentUsername, routeId = null) {
     if (!agentUsername && !routeId) return [];
     try {
+      const self = (this && typeof this.getCachedUsers === 'function') ? this : (window.BulaPayDB || db);
       const supabase = await initSupabase();
-      const allUsers = await this.getCachedUsers();
+      let allUsers = [];
+      if (self && typeof self.getCachedUsers === 'function') {
+        allUsers = await self.getCachedUsers();
+      } else if (typeof db !== 'undefined' && typeof db.getCachedUsers === 'function') {
+        allUsers = await db.getCachedUsers();
+      } else if (self && typeof self.getUsers === 'function') {
+        allUsers = await self.getUsers();
+      } else if (typeof db !== 'undefined' && typeof db.getUsers === 'function') {
+        allUsers = await db.getUsers();
+      } else {
+        try {
+          allUsers = JSON.parse(localStorage.getItem('bulapay_users') || '[]');
+        } catch(e) {
+          allUsers = [];
+        }
+      }
       const cleanUser = agentUsername ? String(agentUsername).trim().toLowerCase() : '';
       const agentUser = (allUsers || []).find(u => 
         String(u.username || '').toLowerCase() === cleanUser ||
@@ -890,7 +935,18 @@ const db = {
       }
 
       // 2. Mapear clientes para obtener nombre y datos de contacto
-      const allClients = await this.getClients();
+      let allClients = [];
+      if (self && typeof self.getClients === 'function') {
+        allClients = await self.getClients();
+      } else if (typeof db !== 'undefined' && typeof db.getClients === 'function') {
+        allClients = await db.getClients();
+      } else {
+        try {
+          allClients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
+        } catch(e) {
+          allClients = [];
+        }
+      }
       const clientMap = new Map();
       (allClients || []).forEach(cl => {
         const cCed = String(cl.cedula || '').trim();
@@ -3209,28 +3265,28 @@ const db = {
 
     const client = await this.getGlobalClientByCedula(cedStr);
 
-    // 2. Determinar saldo actual exacto antes del pago (priorizando saldo_pendiente/outstanding reales > 0)
+    // 2. Determinar saldo actual exacto antes del pago (priorizando outstanding real > 0)
     let currentBalance = 0;
     if (activeCarton) {
-      const sp = Number(activeCarton.saldo_pendiente);
       const out = Number(activeCarton.outstanding);
+      const sp = Number(activeCarton.saldo_pendiente);
       const td = Number(activeCarton.total_debt || activeCarton.monto_total || 0);
 
-      if (!isNaN(sp) && sp > 0) {
-        currentBalance = Math.round(sp);
-      } else if (!isNaN(out) && out > 0) {
+      if (!isNaN(out) && out > 0) {
         currentBalance = Math.round(out);
+      } else if (!isNaN(sp) && sp > 0) {
+        currentBalance = Math.round(sp);
       } else if (td > 0) {
         currentBalance = Math.round(td);
       } else {
-        currentBalance = Math.max(isNaN(sp) ? 0 : Math.round(sp), isNaN(out) ? 0 : Math.round(out));
+        currentBalance = Math.max(isNaN(out) ? 0 : Math.round(out), isNaN(sp) ? 0 : Math.round(sp));
       }
     } else if (client) {
-      const sp = Number(client.saldo_pendiente);
       const out = Number(client.outstanding);
+      const sp = Number(client.saldo_pendiente);
       const td = Number(client.totalDebt ?? client.monto_total ?? 0);
-      if (!isNaN(sp) && sp > 0) currentBalance = Math.round(sp);
-      else if (!isNaN(out) && out > 0) currentBalance = Math.round(out);
+      if (!isNaN(out) && out > 0) currentBalance = Math.round(out);
+      else if (!isNaN(sp) && sp > 0) currentBalance = Math.round(sp);
       else currentBalance = Math.round(td);
     }
 
@@ -3301,12 +3357,11 @@ const db = {
 
     const validClienteId = (cedStr && String(cedStr).trim() !== '' && String(cedStr).trim() !== 'undefined' && String(cedStr).trim() !== 'null') ? String(cedStr).trim() : null;
 
-    // 4. CONDICIÓN DE LIQUIDACIÓN: SI Y SOLO SI saldo_pendiente - monto_pago <= 0
+    // 4. CONDICIÓN DE LIQUIDACIÓN: SI Y SOLO SI saldo restante - monto_pago <= 0
     const isLiquidado = (newBalanceNum <= 0);
 
     const cartonUpdatePayload = {
-      outstanding: newBalanceNum,
-      saldo_pendiente: newBalanceNum
+      outstanding: newBalanceNum
     };
     if (isLiquidado) {
       cartonUpdatePayload.estado = 'liquidado';
@@ -3314,6 +3369,7 @@ const db = {
       cartonUpdatePayload.fecha_cierre = new Date().toISOString();
       cartonUpdatePayload.liquidation_reason = 'Pago Exitoso';
     }
+    delete cartonUpdatePayload.saldo_pendiente;
 
     // UPDATE A LA TABLA CARTONES: ESTRICTAMENTE usando el UUID del cartón (.eq('id', validCartonId))
     // CONTROL DE ERRORES ESTRICTO: Exigir modificación de exactamente 1 o más filas con .select()
@@ -3368,8 +3424,10 @@ const db = {
       };
       if (newClientOutstanding <= 0 && isLiquidado) {
         clientPayload.risk = 'Verde';
-        clientPayload.status = 'Liquidado_Pagado';
       }
+      delete clientPayload.saldo_pendiente;
+      delete clientPayload.status;
+      delete clientPayload.estado;
 
       try {
         const { error: errClient } = await supabase
@@ -3379,10 +3437,6 @@ const db = {
 
         if (errClient) {
           console.error("❌ Error 400/DB al actualizar cliente en 'clients':", errClient.message, errClient.details, errClient.hint, errClient.code);
-        } else {
-          try {
-            await supabase.from('clients').update({ saldo_pendiente: newClientOutstanding }).eq('cedula', validClienteId);
-          } catch (eSp) {}
         }
       } catch (eCl) {
         console.error("❌ Excepción al actualizar tabla clients:", eCl);
@@ -4737,11 +4791,11 @@ const db = {
         estado: cartonEstadoTarget, 
         status: cartonEstadoTarget,
         outstanding: moraOutstanding,
-        saldo_pendiente: moraOutstanding,
         updated_at: new Date().toISOString(),
         fecha_cierre: new Date().toISOString(),
         liquidation_reason: isMora ? 'Liquidado por Mora' : (isRenovacion ? 'Renovación' : 'Pago Exitoso')
       };
+      delete cartonUpdatePayload.saldo_pendiente;
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
       if (cartonId && isValidUuid(cartonId)) {
@@ -4765,7 +4819,6 @@ const db = {
             cliente_id: cedStr,
             cedula: cedStr,
             monto: moraOutstanding,
-            saldo_pendiente: moraOutstanding,
             outstanding: moraOutstanding,
             total_debt: totalDebt || 0,
             carton_id: cartonId || null,

@@ -548,7 +548,6 @@ const agentModule = {
               cedula: cedulaStr,
               nombre: name,
               monto: saldoPendienteReal,
-              saldo_pendiente: saldoPendienteReal,
               outstanding: saldoPendienteReal,
               total_debt: totalDebt,
               carton_id: targetCartonId || null,
@@ -1847,8 +1846,8 @@ const agentModule = {
       }
 
       const currentDebt = Math.round(Number(
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const amountPaid = Math.round(Number(amount || 0));
@@ -1912,7 +1911,6 @@ const agentModule = {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
-          saldo_pendiente: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
           risk: 'Verde'
@@ -1963,8 +1961,8 @@ const agentModule = {
       this.btnProcessMassPayment.innerText = 'Procesando...';
       
       const currentDebt = Math.round(Number(
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
@@ -2054,7 +2052,6 @@ const agentModule = {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
-          saldo_pendiente: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
           risk: 'Verde'
@@ -2651,8 +2648,8 @@ const agentModule = {
       const todayStr = this.getLocalDateString();
       const firstPending = dailyStatusList.find(c => !c.hasPaid);
       const currentOutstanding = Math.round(Number(
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
 
@@ -2739,7 +2736,6 @@ const agentModule = {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
-          saldo_pendiente: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
           risk: 'Verde'
@@ -2855,8 +2851,8 @@ const agentModule = {
       }
 
       const currentDebt = Math.round(Number(
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const amountToPayNum = Math.round(Number(amountToPay || 0));
@@ -2913,7 +2909,6 @@ const agentModule = {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
-          saldo_pendiente: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
           risk: 'Verde'
@@ -3102,8 +3097,8 @@ const agentModule = {
       }
 
       const currentDebt = Math.round(Number(
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
+        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const amountNum = Math.round(Number(amount || 0));
@@ -3166,7 +3161,6 @@ const agentModule = {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
-          saldo_pendiente: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
           risk: 'Verde'
