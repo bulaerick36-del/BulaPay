@@ -660,20 +660,40 @@ const supervisorModule = {
 
       clients.forEach(client => {
         const clientCedStr = String(client.cedula || '').trim();
-        const clientCartonIdStr = String(client.carton_id || client.cartonId || client.id || '').trim();
+        const rawCartonId = String(client.carton_id || client.cartonId || client.credit_id || '').trim();
+        const clientCartonIdStr = rawCartonId || (client.id && String(client.id).trim() !== clientCedStr ? String(client.id).trim() : '');
 
-        // 1. Filtrar los pagos que correspondan al cliente en el día de hoy
+        // 1. Filtrar los pagos que correspondan estrictamente al cartón/crédito activo del cliente en el día de hoy
         const clientTodayPayments = (allPayments || []).filter(p => {
-          const pCedula = String(p.clientCedula || p.client_cedula || '').trim();
-          const pCartonId = String(p.carton_id || p.cartonId || '').trim();
+          if (p.liquidado === true || p.liquidado === 'true') return false;
 
-          const isClientMatch = clientCedStr && pCedula && (clientCedStr === pCedula);
-          const isCartonMatch = clientCartonIdStr && pCartonId && (clientCartonIdStr === pCartonId);
-          if (!isClientMatch && !isCartonMatch) return false;
+          const pId = String(p.id || '').trim();
+          const pStatus = String(p.status || '').trim().toUpperCase();
+          const pType = String(p.payment_type || p.tipo_pago || '').trim().toUpperCase();
+          if (
+            pId.startsWith('pay_liq_') ||
+            pId.startsWith('pay_renov_') ||
+            Number(p.installmentNumber) === 999 ||
+            pType === 'RENOVACION' ||
+            pStatus.includes('LIQUIDADO') ||
+            pStatus.includes('CANCELADO') ||
+            pStatus.includes('RECHAZADO')
+          ) {
+            return false;
+          }
+
+          const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+          const pCartonId = String(p.carton_id || p.cartonId || p.credit_id || '').trim();
+
+          // Obligar coincidencia estricta por carton_id o credit_id cuando el cartón activo tiene ID
+          if (clientCartonIdStr) {
+            if (!pCartonId || pCartonId.toLowerCase() !== clientCartonIdStr.toLowerCase()) return false;
+          } else {
+            if (!clientCedStr || !pCedula || clientCedStr !== pCedula) return false;
+          }
 
           // Excluir registros con monto 0 o con estado 'No Pago'
           const amount = Number(p.amount || 0);
-          const pStatus = String(p.status || '').toUpperCase();
           if (amount <= 0 || pStatus === 'NO PAGO') return false;
 
           // Verificar si la fecha de pago o created_at o fecha_pago corresponde al día de hoy (local)
@@ -682,14 +702,17 @@ const supervisorModule = {
 
         let madePaymentToday = clientTodayPayments.length > 0;
 
-        // 2. Si no se encontró en la tabla de pagos, revisar en el arreglo cuotas de la entidad del cliente / cartón
-        if (!madePaymentToday && (client.cuotas || client.cuotas_json)) {
+        // 2. Si no se encontró en la tabla de pagos, revisar en el arreglo cuotas del cartón activo (solo si el saldo ya disminuyó)
+        const hasFullUntouchedDebt = Number(client.totalDebt) > 0 && Number(client.outstanding) >= Number(client.totalDebt);
+        if (!madePaymentToday && !hasFullUntouchedDebt && (client.cuotas || client.cuotas_json)) {
           try {
             const rawCuotas = client.cuotas || client.cuotas_json;
             const cuotasArr = typeof rawCuotas === 'string' ? JSON.parse(rawCuotas) : rawCuotas;
             if (Array.isArray(cuotasArr)) {
               madePaymentToday = cuotasArr.some(c => {
                 if (!c) return false;
+                const cCartonId = String(c.carton_id || c.cartonId || c.credit_id || '').trim();
+                if (clientCartonIdStr && cCartonId && cCartonId.toLowerCase() !== clientCartonIdStr.toLowerCase()) return false;
                 const isPaid = c.paid || c.pagado || String(c.status || '').toLowerCase() === 'pagado' || String(c.status || '').toLowerCase() === 'abonado';
                 if (!isPaid) return false;
                 const cDate = c.fecha_pago || c.created_at || c.date || c.paid_at;
@@ -738,7 +761,7 @@ const supervisorModule = {
           item.style.backgroundColor = bgLight;
         });
 
-        item.addEventListener('click', () => this.showAgentClientAuditLedger(client.cedula, client.agent_id || agent.username || username, client.carton_id || client.id));
+        item.addEventListener('click', () => this.showAgentClientAuditLedger(client.cedula, client.agent_id || agent.username || username, client.carton_id || client.credit_id || client.id));
         listContainer.appendChild(item);
       });
 
@@ -760,7 +783,7 @@ const supervisorModule = {
     if (!cedStr) return;
 
     const targetAgentId = agentId || this.currentAuditAgentId;
-    const targetCartonId = cartonId;
+    const targetCartonId = cartonId && String(cartonId).trim() !== cedStr ? String(cartonId).trim() : null;
 
     this.currentAuditCedula = cedStr;
     this.currentAuditCartonId = targetCartonId;
@@ -794,7 +817,28 @@ const supervisorModule = {
 
       let activeCarton = null;
       try {
-        if (targetCartonId) {
+        // Priorizar siempre el cartón activo más reciente (especialmente tras una renovación)
+        let qOrCarton = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
+        if (!isNaN(Number(cedStr))) {
+          const numVal = Number(cedStr);
+          qOrCarton += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
+        }
+        let activeCartonQuery = supabase
+          .from('cartones')
+          .select('*')
+          .or(qOrCarton)
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
+          .order('created_at', { ascending: false });
+
+        if (targetAgentId) {
+          activeCartonQuery = activeCartonQuery.eq('agent_id', targetAgentId);
+        }
+        const { data: activeData } = await activeCartonQuery.limit(1);
+        if (activeData && activeData.length > 0) {
+          activeCarton = activeData[0];
+        }
+
+        if (!activeCarton && targetCartonId) {
           const { data: cDataId } = await supabase
             .from('cartones')
             .select('*')
@@ -802,27 +846,6 @@ const supervisorModule = {
             .limit(1);
           if (cDataId && cDataId.length > 0) {
             activeCarton = cDataId[0];
-          }
-        }
-        if (!activeCarton) {
-          let qOrCarton = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
-          if (!isNaN(Number(cedStr))) {
-            const numVal = Number(cedStr);
-            qOrCarton += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
-          }
-          let cartonQuery = supabase
-            .from('cartones')
-            .select('*')
-            .or(qOrCarton)
-            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'liquidado', 'Liquidado_Pagado'])
-            .order('created_at', { ascending: false });
-
-          if (targetAgentId) {
-            cartonQuery = cartonQuery.eq('agent_id', targetAgentId);
-          }
-          const { data: cData } = await cartonQuery.limit(1);
-          if (cData && cData.length > 0) {
-            activeCarton = cData[0];
           }
         }
       } catch (eC) {
@@ -846,76 +869,16 @@ const supervisorModule = {
         if (activeCarton.created_at) client.created_at = activeCarton.created_at;
       }
 
-      // Parsear arreglo/JSON de cuotas fresco guardado en el cartón de la BD
-      let cartonCuotasArray = [];
-      if (activeCarton) {
-        const rawCuotas = activeCarton.cuotas || activeCarton.cuotas_json;
-        if (rawCuotas) {
-          try {
-            cartonCuotasArray = typeof rawCuotas === 'string' ? JSON.parse(rawCuotas) : rawCuotas;
-          } catch (eJson) {}
-        }
-      }
+      const activeCartonIdStr = String(
+        activeCarton?.id ||
+        client.carton_id ||
+        client.credit_id ||
+        targetCartonId ||
+        (client.id && String(client.id).trim() !== cedStr ? client.id : '') ||
+        ''
+      ).trim();
+      this.currentAuditCartonId = activeCartonIdStr || targetCartonId;
 
-      const jsonPaidCuotasMap = new Map();
-      if (Array.isArray(cartonCuotasArray)) {
-        cartonCuotasArray.forEach(cq => {
-          const num = Number(cq.numero || cq.cuota || cq.installmentNumber);
-          const st = String(cq.estado || cq.status || '').toLowerCase();
-          if (num > 0 && (st === 'pagado' || cq.pagado === true)) {
-            jsonPaidCuotasMap.set(num, cq);
-          }
-        });
-      }
-
-      // 2. FETCH FRESCO DE PAGOS DESDE SUPABASE SIN FILTROS RESTRICTIVOS DE ROUTE/SUPERVISOR
-      let freshPayments = [];
-      try {
-        let queryOrPayments = `clientCedula.eq.${cedStr},client_cedula.eq.${cedStr},cedula.eq.${cedStr}`;
-        if (!isNaN(Number(cedStr))) {
-          const numVal = Number(cedStr);
-          queryOrPayments += `,clientCedula.eq.${numVal},client_cedula.eq.${numVal},cedula.eq.${numVal}`;
-        }
-        let payQuery = supabase
-          .from('payments')
-          .select('*')
-          .or(queryOrPayments);
-
-        if (targetAgentId) {
-          payQuery = payQuery.eq('agent_id', targetAgentId);
-        }
-
-        const { data: pData } = await payQuery;
-
-        if (pData && pData.length > 0) {
-          freshPayments = pData;
-        }
-      } catch (eP) {
-        console.warn("Aviso al obtener pagos en vivo para auditoría:", eP);
-      }
-
-      if (freshPayments.length === 0) {
-        freshPayments = await window.BulaPayDB.getPaymentsByClient(cedStr);
-      }
-
-      // 3. ACTUALIZAR ENCABEZADO Y METADATOS DEL CLIENTE
-      const allUsers = await this.getCachedUsers();
-      const associatedAgent = allUsers.find(u => u.username === client.agent_id || u.username === activeCarton?.agent_id);
-      const agentNameLabel = associatedAgent ? associatedAgent.name : (client.agent_id || 'No asignado');
-
-      nameEl.textContent = client.name || client.nombre || `Cliente ${cedStr}`;
-      metaEl.textContent = `Cédula: ${client.cedula || cedStr} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
-
-      // 4. ESTRUCTURAR EL ESTADO DIARIO CON LA LÓGICA DE NEGOCIO GLOBAL DE BULAPAY
-      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, freshPayments);
-      const dailyStatusMap = new Map();
-      if (dailyStatusList && Array.isArray(dailyStatusList)) {
-        dailyStatusList.forEach(ds => {
-          dailyStatusMap.set(ds.dayNumber, ds);
-        });
-      }
-
-      gridEl.innerHTML = '';
       const totalSlots = Number(client.installmentsCount || client.installments_count || 30);
       const valorCuota = Number(client.installmentAmount || client.installment_amount || 0);
 
@@ -930,40 +893,127 @@ const supervisorModule = {
       const montoRecaudadoCalculado = Math.max(0, montoTotalBase - saldoPendiente);
       const paidCuotasByBalance = (valorCuota > 0) ? Math.floor(montoRecaudadoCalculado / valorCuota) : 0;
 
-      // Pre-mapear pagos válidos por número de cuota
-      const validPaymentsMap = new Map();
-      const cartonId = client.carton_id || client.id;
-      const cartonStartStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
-      const clientCreatedTime = cartonStartStr ? new Date(cartonStartStr).getTime() : 0;
-
-      freshPayments.forEach(p => {
-        let pTime = 0;
-        if (p.created_at) pTime = new Date(p.created_at).getTime();
-        else if (p.date) {
-          const dStr = String(p.date).trim();
-          pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
+      // Parsear arreglo/JSON de cuotas fresco guardado en el cartón activo (solo si hay saldo recaudado en el cartón actual)
+      let cartonCuotasArray = [];
+      if (activeCarton && montoRecaudadoCalculado > 0) {
+        const rawCuotas = activeCarton.cuotas || activeCarton.cuotas_json;
+        if (rawCuotas) {
+          try {
+            cartonCuotasArray = typeof rawCuotas === 'string' ? JSON.parse(rawCuotas) : rawCuotas;
+          } catch (eJson) {}
         }
+      }
 
-        let belongsToCurrentCarton = true;
-        if (p.liquidado === true || p.liquidado === 'true') {
-          belongsToCurrentCarton = false;
-        } else if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
-          belongsToCurrentCarton = false;
-        } else if (!p.carton_id && clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000)) {
-          belongsToCurrentCarton = false;
-        }
+      const jsonPaidCuotasMap = new Map();
+      if (Array.isArray(cartonCuotasArray)) {
+        cartonCuotasArray.forEach(cq => {
+          const cqCartonId = String(cq.carton_id || cq.cartonId || cq.credit_id || '').trim();
+          if (activeCartonIdStr && cqCartonId && cqCartonId.toLowerCase() !== activeCartonIdStr.toLowerCase()) return;
+          const num = Number(cq.numero || cq.cuota || cq.installmentNumber);
+          const st = String(cq.estado || cq.status || '').toLowerCase();
+          if (num > 0 && (st === 'pagado' || cq.pagado === true)) {
+            jsonPaidCuotasMap.set(num, cq);
+          }
+        });
+      }
 
-        const rawStatus = String(p.status || '').trim().toLowerCase();
-        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || rawStatus.includes('liquidado') || rawStatus.includes('cancelado') || rawStatus.includes('rechazado');
+      // 2. FETCH FRESCO DE PAGOS DESDE SUPABASE FILTRANDO ESTRICTAMENTE POR CARTON_ID / CREDIT_ID
+      let freshPayments = [];
+      try {
+        if (activeCartonIdStr) {
+          let payQuery = supabase
+            .from('payments')
+            .select('*')
+            .eq('carton_id', activeCartonIdStr);
 
-        if (belongsToCurrentCarton && !isLiquidationRecord) {
-          if (p.installmentNumber && !isNaN(Number(p.installmentNumber))) {
-            validPaymentsMap.set(Number(p.installmentNumber), p);
+          if (targetAgentId) {
+            payQuery = payQuery.eq('agent_id', targetAgentId);
+          }
+
+          const { data: pData } = await payQuery;
+          if (pData && pData.length > 0) {
+            freshPayments = pData;
+          }
+        } else {
+          let queryOrPayments = `clientCedula.eq.${cedStr},client_cedula.eq.${cedStr},cedula.eq.${cedStr}`;
+          if (!isNaN(Number(cedStr))) {
+            const numVal = Number(cedStr);
+            queryOrPayments += `,clientCedula.eq.${numVal},client_cedula.eq.${numVal},cedula.eq.${numVal}`;
+          }
+          let payQuery = supabase
+            .from('payments')
+            .select('*')
+            .or(queryOrPayments);
+
+          if (targetAgentId) {
+            payQuery = payQuery.eq('agent_id', targetAgentId);
+          }
+
+          const { data: pData } = await payQuery;
+          if (pData && pData.length > 0) {
+            freshPayments = pData;
           }
         }
+      } catch (eP) {
+        console.warn("Aviso al obtener pagos en vivo para auditoría:", eP);
+      }
+
+      if (freshPayments.length === 0) {
+        freshPayments = await window.BulaPayDB.getPaymentsByClient(cedStr, activeCartonIdStr || null);
+      }
+
+      // Filtrar pagos estrictamente por carton_id o credit_id y excluir liquidaciones/renovaciones del cartón anterior
+      const validPaymentsMap = new Map();
+      const strictlyFilteredPayments = (freshPayments || []).filter(p => {
+        if (p.liquidado === true || p.liquidado === 'true') return false;
+
+        const pId = String(p.id || '').trim();
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const isLiquidationOrRenewal =
+          pId.startsWith('pay_liq_') ||
+          pId.startsWith('pay_renov_') ||
+          Number(p.installmentNumber) === 999 ||
+          pType === 'renovacion' ||
+          rawStatus.includes('liquidado') ||
+          rawStatus.includes('cancelado') ||
+          rawStatus.includes('rechazado');
+
+        if (isLiquidationOrRenewal) return false;
+
+        const pCartonId = String(p.carton_id || p.cartonId || p.credit_id || '').trim();
+        if (activeCartonIdStr) {
+          if (!pCartonId || pCartonId.toLowerCase() !== activeCartonIdStr.toLowerCase()) {
+            return false;
+          }
+        }
+
+        if (p.installmentNumber && !isNaN(Number(p.installmentNumber))) {
+          validPaymentsMap.set(Number(p.installmentNumber), p);
+        }
+        return true;
       });
 
-      // 5. RENDEREAR CUADRÍCULA CON EVALUACIÓN PRECISA (Pagado 🟢, Abonado 🟡, Atrasado 🔴, Pendiente ⚪/🔵)
+      // 3. ACTUALIZAR ENCABEZADO Y METADATOS DEL CLIENTE
+      const allUsers = await this.getCachedUsers();
+      const associatedAgent = allUsers.find(u => u.username === client.agent_id || u.username === activeCarton?.agent_id);
+      const agentNameLabel = associatedAgent ? associatedAgent.name : (client.agent_id || 'No asignado');
+
+      nameEl.textContent = client.name || client.nombre || `Cliente ${cedStr}`;
+      metaEl.textContent = `Cédula: ${client.cedula || cedStr} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
+
+      // 4. ESTRUCTURAR EL ESTADO DIARIO CON PAGOS ESTRICTAMENTE FILTRADOS POR CARTON_ID / CREDIT_ID
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, strictlyFilteredPayments);
+      const dailyStatusMap = new Map();
+      if (dailyStatusList && Array.isArray(dailyStatusList)) {
+        dailyStatusList.forEach(ds => {
+          dailyStatusMap.set(ds.dayNumber, ds);
+        });
+      }
+
+      gridEl.innerHTML = '';
+
+      // 5. RENDEREAR CUADRÍCULA CON EVALUACIÓN PRECISA (Pagado 🟢, Abonado 🟡, Atrasado 🔴, Pendiente ⚪)
       for (let i = 1; i <= totalSlots; i++) {
         const payment = validPaymentsMap.get(i);
         const dayStatus = dailyStatusMap.get(i);
@@ -971,7 +1021,6 @@ const supervisorModule = {
 
         const hasPaid = (i <= paidCuotasByBalance) || jsonCuotaPaid || (dayStatus ? dayStatus.hasPaid : false) || (payment && Number(payment.amount) > 0 && payment.status !== 'No Pago');
         const isOverdue = (i <= paidCuotasByBalance) ? false : (jsonCuotaPaid ? false : (dayStatus ? dayStatus.isOverdue : false));
-        const isToday = dayStatus ? dayStatus.isToday : false;
 
         const slotCard = document.createElement('div');
         slotCard.className = 'ledger-slot-card';
@@ -1040,15 +1089,13 @@ const supervisorModule = {
             <div class="slot-stamp" style="font-size: 0.75rem; position: absolute; bottom: 2px; right: 4px;">🔴</div>
           `;
         } else {
-          // PENDIENTE (Cuota de Hoy sin cobrar o Cuota futura)
-          const stateLabel = isToday ? 'Hoy' : 'Pendiente';
-          const labelColor = isToday ? '#3b82f6' : 'var(--text-muted)';
-          slotCard.style.borderColor = isToday ? 'rgba(59, 130, 246, 0.3)' : 'var(--border-color)';
-          slotCard.style.backgroundColor = isToday ? 'rgba(59, 130, 246, 0.04)' : 'rgba(255, 255, 255, 0.02)';
+          // PENDIENTE (Sin cobro registrado en el carton_id / credit_id activo)
+          slotCard.style.borderColor = 'var(--border-color)';
+          slotCard.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
           slotCard.innerHTML = `
-            <span class="slot-num" style="font-size: 0.55rem; font-weight: 700; color: ${labelColor};">CUOTA ${i}</span>
+            <span class="slot-num" style="font-size: 0.55rem; font-weight: 700; color: var(--text-muted);">CUOTA ${i}</span>
             <span class="slot-amount" style="color: var(--text-secondary); font-size: 0.7rem;">$${Number(client.installmentAmount).toLocaleString('es-CO')}</span>
-            <span class="slot-empty-text" style="font-size: 0.55rem; color: ${labelColor}; display:block;">${stateLabel}</span>
+            <span class="slot-empty-text" style="font-size: 0.55rem; color: var(--text-muted); display:block;">Pendiente</span>
           `;
         }
 
@@ -1688,7 +1735,37 @@ const supervisorModule = {
     nameEl.textContent = client.name;
     metaEl.textContent = `Cédula: ${client.cedula} | Agente: ${agentNameLabel} | Saldo Pendiente: $${Number(client.outstanding).toLocaleString('es-CO')} / $${Number(client.totalDebt).toLocaleString('es-CO')}`;
 
-    const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
+    const activeCartonIdStr = String(
+      client.carton_id ||
+      client.cartonId ||
+      client.credit_id ||
+      (client.id && String(client.id).trim() !== String(client.cedula || cedula).trim() ? client.id : '') ||
+      ''
+    ).trim();
+
+    const rawPayments = await window.BulaPayDB.getPaymentsByClient(cedula, activeCartonIdStr || null);
+    const payments = (rawPayments || []).filter(p => {
+      if (p.liquidado === true || p.liquidado === 'true') return false;
+      const pId = String(p.id || '').trim();
+      const rawStatus = String(p.status || '').trim().toLowerCase();
+      const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+      if (
+        pId.startsWith('pay_liq_') ||
+        pId.startsWith('pay_renov_') ||
+        Number(p.installmentNumber) === 999 ||
+        pType === 'renovacion' ||
+        rawStatus.includes('liquidado') ||
+        rawStatus.includes('cancelado') ||
+        rawStatus.includes('rechazado')
+      ) {
+        return false;
+      }
+      const pCartonId = String(p.carton_id || p.cartonId || p.credit_id || '').trim();
+      if (activeCartonIdStr) {
+        return pCartonId && pCartonId.toLowerCase() === activeCartonIdStr.toLowerCase();
+      }
+      return true;
+    });
 
     gridEl.innerHTML = '';
     const totalSlots = Number(client.installmentsCount || client.installments_count || 30);

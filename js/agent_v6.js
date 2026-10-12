@@ -1734,19 +1734,58 @@ const agentModule = {
     const cedula = client?.cedula;
     if (!cedula) return;
     
-    // Obtener los pagos reales desde Supabase
-    const payments = await window.BulaPayDB.getPaymentsByClient(cedula);
-    
+    const activeCartonIdStr = String(
+      client?.carton_id ||
+      client?.cartonId ||
+      client?.credit_id ||
+      (client?.id && String(client.id).trim() !== String(cedula).trim() ? client.id : '') ||
+      ''
+    ).trim();
+
+    // Obtener los pagos reales desde Supabase filtrados por carton_id / credit_id
+    const rawPayments = await window.BulaPayDB.getPaymentsByClient(client, activeCartonIdStr || null);
+    const payments = (rawPayments || []).filter(p => {
+      if (p.liquidado === true || p.liquidado === 'true') return false;
+      const pId = String(p.id || '').trim();
+      const rawStatus = String(p.status || '').trim().toLowerCase();
+      const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+      if (
+        pId.startsWith('pay_liq_') ||
+        pId.startsWith('pay_renov_') ||
+        Number(p.installmentNumber) === 999 ||
+        pType === 'renovacion' ||
+        rawStatus.includes('liquidado') ||
+        rawStatus.includes('cancelado') ||
+        rawStatus.includes('rechazado')
+      ) {
+        return false;
+      }
+      const pCartonId = String(p.carton_id || p.cartonId || p.credit_id || '').trim();
+      if (activeCartonIdStr) {
+        return pCartonId && pCartonId.toLowerCase() === activeCartonIdStr.toLowerCase();
+      }
+      return true;
+    });
+
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
     const startDate = cartonDateStr ? new Date(cartonDateStr) : new Date();
     const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-    
-    const paymentDates = new Set();
+
+    const paidInstallments = new Set();
     payments.forEach(p => {
-      if (p.amount > 0 && p.status !== 'No Pago') {
-        paymentDates.add(p.date);
+      if (Number(p.amount) > 0 && p.status !== 'No Pago' && p.installmentNumber) {
+        paidInstallments.add(Number(p.installmentNumber));
       }
     });
+
+    const baseMonto = (client.totalDebt && Number(client.totalDebt) > 0)
+      ? Number(client.totalDebt)
+      : (client.monto_prestado && Number(client.monto_prestado) > 0
+          ? Number(client.monto_prestado)
+          : (totalInstallments * installmentAmount));
+    const saldoPendiente = Math.max(0, Number(client.outstanding ?? 0));
+    const montoRecaudadoCalculado = Math.max(0, baseMonto - saldoPendiente);
+    const paidCuotasByBalance = (installmentAmount > 0) ? Math.floor(montoRecaudadoCalculado / installmentAmount) : 0;
 
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -1767,7 +1806,7 @@ const agentModule = {
       
       const dayStr = currentDayDate.toISOString().split('T')[0];
       const isPast = currentDayDate < todayZero;
-      const hasPaid = paymentDates.has(dayStr);
+      const hasPaid = (cuotaIdx <= paidCuotasByBalance) || paidInstallments.has(cuotaIdx);
       
       const cell = document.createElement('div');
       cell.classList.add('payment-card-cell');

@@ -3550,7 +3550,7 @@ const db = {
     const supId = this.getSupervisorId();
 
     const cedStr = String(typeof cedula === 'object' && cedula !== null ? (cedula.cedula || cedula.clientCedula || '') : (cedula || ''));
-    let rawCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || (this.isValidUuid(cedula.id) ? cedula.id : null)) : null);
+    let rawCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || cedula.credit_id || (this.isValidUuid(cedula.id) ? cedula.id : null)) : null);
     let targetCartonId = (rawCartonId && this.isValidUuid(rawCartonId)) ? String(rawCartonId).trim() : null;
 
     const targetAgentId = (typeof cedula === 'object' && cedula !== null) ? (cedula.agent_id || cedula.agentId) : null;
@@ -3564,7 +3564,7 @@ const db = {
           .from('cartones')
           .select('id')
           .eq('cliente_id', cedStr)
-          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO'])
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
           .order('created_at', { ascending: false });
 
         if (currentAgentId && currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
@@ -3605,8 +3605,31 @@ const db = {
       data = fallbackData;
     }
 
-    // Filtro adicional en memoria por seguridad
-    const filteredData = (data || []).filter(p => p.liquidado !== true && p.liquidado !== 'true');
+    // Filtro estricto en memoria por carton_id / credit_id y exclusión de pagos de liquidación/renovación
+    const filteredData = (data || []).filter(p => {
+      if (p.liquidado === true || p.liquidado === 'true') return false;
+      const pId = String(p.id || '').trim();
+      const rawStatus = String(p.status || '').trim().toLowerCase();
+      const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+      if (
+        pId.startsWith('pay_liq_') ||
+        pId.startsWith('pay_renov_') ||
+        Number(p.installmentNumber) === 999 ||
+        pType === 'renovacion' ||
+        rawStatus.includes('liquidado') ||
+        rawStatus.includes('cancelado') ||
+        rawStatus.includes('rechazado')
+      ) {
+        return false;
+      }
+      if (targetCartonId) {
+        const pCartonId = String(p.carton_id || p.cartonId || p.credit_id || '').trim();
+        if (!pCartonId || pCartonId.toLowerCase() !== String(targetCartonId).trim().toLowerCase()) {
+          return false;
+        }
+      }
+      return true;
+    });
     return filteredData;
   },
 
@@ -3981,7 +4004,9 @@ const db = {
     const pendingRecordsMap = new Map();
 
     if (payments) {
-      const cartonId = client.carton_id || client.id || client.numero_carton;
+      const clientCedStr = String(client.cedula || client.clientCedula || '').trim();
+      const rawCartonId = String(client.carton_id || client.cartonId || client.credit_id || '').trim();
+      const cartonId = rawCartonId || (client.id && String(client.id).trim() !== clientCedStr ? String(client.id).trim() : '');
       const clientCreatedTime = cartonDateStr ? new Date(cartonDateStr).getTime() : 0;
       payments.forEach(p => {
         let pTime = 0;
@@ -3992,21 +4017,29 @@ const db = {
           pTime = new Date(dStr.includes('T') ? dStr : dStr + 'T00:00:00').getTime();
         }
 
-        // Si el pago pertenece a un cartón anterior (diferente carton_id o marcado como liquidado: true), se excluye obligatoriamente
+        const pCartonId = String(p.carton_id || p.cartonId || p.credit_id || '').trim();
+
+        // Filtrar estrictamente por carton_id o credit_id cuando existe ID del cartón activo
         let belongsToCurrentCarton = true;
         if (p.liquidado === true || p.liquidado === 'true') {
           belongsToCurrentCarton = false;
-        } else if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
-          belongsToCurrentCarton = false;
-        } else if (!p.carton_id && clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000)) {
+        } else if (cartonId) {
+          belongsToCurrentCarton = Boolean(pCartonId && pCartonId.toLowerCase() === cartonId.toLowerCase());
+        } else if (clientCreatedTime > 0 && pTime > 0 && (clientCreatedTime - pTime > 2000)) {
           belongsToCurrentCarton = false;
         }
 
         const rawStatus = String(p.status || '').trim().toLowerCase();
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
 
-        const isLiquidationRecord = (p.id && String(p.id).startsWith('pay_liq_')) || 
-          rawStatus.includes('liquidado') || 
-          rawStatus.includes('cancelado') || 
+        const isLiquidationRecord =
+          pId.startsWith('pay_liq_') ||
+          pId.startsWith('pay_renov_') ||
+          Number(p.installmentNumber) === 999 ||
+          pType === 'renovacion' ||
+          rawStatus.includes('liquidado') ||
+          rawStatus.includes('cancelado') ||
           rawStatus.includes('rechazado');
 
         const isPaidStatus = !isLiquidationRecord && (
@@ -4024,7 +4057,7 @@ const db = {
             }
           }
         }
-        if (rawStatus === 'pendiente' && belongsToCurrentCarton) {
+        if (rawStatus === 'pendiente' && belongsToCurrentCarton && !isLiquidationRecord) {
           pendingRecordsMap.set(Number(p.installmentNumber), p.date);
         }
       });
