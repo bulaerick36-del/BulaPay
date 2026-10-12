@@ -3989,11 +3989,67 @@ const db = {
     }
   },
 
+  parseLocalCartonDate(dateVal) {
+    if (!dateVal) return new Date();
+    if (dateVal instanceof Date) {
+      return isNaN(dateVal.getTime())
+        ? new Date()
+        : new Date(dateVal.getFullYear(), dateVal.getMonth(), dateVal.getDate());
+    }
+    const str = String(dateVal).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [y, m, d] = str.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    }
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+    }
+    return new Date();
+  },
+
+  isCartonCreatedOnDate(clientOrCarton, targetDateVal = new Date()) {
+    if (!clientOrCarton) return false;
+    const rawCreation = clientOrCarton.fecha_apertura || clientOrCarton.fecha_inicio || clientOrCarton.created_at;
+    if (!rawCreation) return false;
+    const creationDay = this.parseLocalCartonDate(rawCreation);
+    const targetDay = this.parseLocalCartonDate(targetDateVal);
+    return creationDay.getTime() >= targetDay.getTime();
+  },
+
+  getExpectedInstallmentsCount(client, targetDateVal = new Date()) {
+    if (!client) return 0;
+    const rawCreation = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    if (!rawCreation) return 0;
+    const startDate = this.parseLocalCartonDate(rawCreation);
+    const targetZero = this.parseLocalCartonDate(targetDateVal);
+
+    // Regla Gota a Gota: El día de creación (Día 0) las cuotas esperadas son 0.
+    // El conteo de días exigibles empieza a partir de fecha_creacion + 1 día.
+    if (targetZero.getTime() <= startDate.getTime()) {
+      return 0;
+    }
+
+    const totalInstallments = Number(client?.installmentsCount || client?.installments_count || 30);
+    let expectedCount = 0;
+    let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    cursor.setDate(cursor.getDate() + 1);
+
+    while (cursor <= targetZero && expectedCount < totalInstallments) {
+      if (cursor.getDay() !== 0) {
+        expectedCount++;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return expectedCount;
+  },
+
   getDailyPaymentStatus(client, payments) {
     if (!client) return [];
     
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
-    const startDate = cartonDateStr ? new Date(cartonDateStr) : new Date();
+    const startDate = cartonDateStr ? this.parseLocalCartonDate(cartonDateStr) : this.parseLocalCartonDate(new Date());
     const todayZero = new Date();
     todayZero.setHours(0,0,0,0);
     
@@ -4066,8 +4122,10 @@ const db = {
     const dailyStatus = [];
     const totalInstallments = Number(client?.installmentsCount || client?.installments_count || 30); // Mostrar todo el cartón
     
+    // Regla de negocio "Gota a Gota":
+    // El primer cobro (Cuota 1) se realiza a partir de fecha_creacion + 1 día (Día 0 tiene 0 cuotas esperadas).
     let validDaysCounter = 0;
-    let calendarDaysOffset = 0;
+    let calendarDaysOffset = 1;
     
     while (validDaysCounter < totalInstallments) {
       const currentDayDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
@@ -4089,12 +4147,16 @@ const db = {
       let finalDateStr = mathDateStr;
       let finalDateObj = currentDayDate;
 
-      // Usar la fecha explícita si existe en la base de datos ('Pendiente')
+      // Usar la fecha explícita si existe en la base de datos ('Pendiente'), siempre que sea >= fecha_creacion + 1 día
       if (pendingRecordsMap.has(dayNum)) {
-        finalDateStr = pendingRecordsMap.get(dayNum);
-        const parts = finalDateStr.split('-');
+        const candidateDateStr = pendingRecordsMap.get(dayNum);
+        const parts = String(candidateDateStr || '').split('-');
         if (parts.length === 3) {
-          finalDateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+          const candidateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+          if (candidateObj > startDate) {
+            finalDateStr = candidateDateStr;
+            finalDateObj = candidateObj;
+          }
         }
       }
 

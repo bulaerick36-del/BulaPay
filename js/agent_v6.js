@@ -1768,8 +1768,7 @@ const agentModule = {
     });
 
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
-    const startDate = cartonDateStr ? new Date(cartonDateStr) : new Date();
-    const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const startZero = cartonDateStr ? this.parseLocalDate(cartonDateStr) : this.parseLocalDate(new Date());
 
     const paidInstallments = new Set();
     payments.forEach(p => {
@@ -1790,7 +1789,8 @@ const agentModule = {
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-    let dayCount = 0;
+    // Regla Gota a Gota: El conteo de días exigibles empieza a partir de fecha_creacion + 1 día (Día 0 tiene 0 cuotas esperadas)
+    let dayCount = 1;
     let cuotaIdx = 1;
 
     // Generar celdas hasta completar el cartón
@@ -1804,7 +1804,7 @@ const agentModule = {
         continue;
       }
       
-      const dayStr = currentDayDate.toISOString().split('T')[0];
+      const dayStr = `${currentDayDate.getFullYear()}-${String(currentDayDate.getMonth() + 1).padStart(2, '0')}-${String(currentDayDate.getDate()).padStart(2, '0')}`;
       const isPast = currentDayDate < todayZero;
       const hasPaid = (cuotaIdx <= paidCuotasByBalance) || paidInstallments.has(cuotaIdx);
       
@@ -2322,7 +2322,8 @@ const agentModule = {
 
   calculateCartonDueDate(startDateObj, totalInstallments) {
     let validDaysCounter = 0;
-    let calendarDaysOffset = 0;
+    // Regla Gota a Gota: El conteo de días exigibles empieza a partir de fecha_creacion + 1 día
+    let calendarDaysOffset = 1;
     let lastDate = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
     
     while (validDaysCounter < totalInstallments) {
@@ -2392,7 +2393,8 @@ const agentModule = {
       const today = new Date();
       const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       let tempDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      while (tempDate < todayZero) {
+      tempDate.setDate(tempDate.getDate() + 1); // Empezar desde fecha_creacion + 1 día
+      while (tempDate <= todayZero) {
         if (tempDate.getDay() !== 0) daysElapsed++;
         tempDate.setDate(tempDate.getDate() + 1);
       }
@@ -3013,13 +3015,17 @@ const agentModule = {
                                   rawStatusDetail === 'LIQUIDADO_MORA' ||
                                   (String(client.risk || '').trim().toUpperCase() === 'ROJO' && rawStatusDetail !== 'ACTIVO');
 
+    const isDayZeroCarton = window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function'
+      ? window.BulaPayDB.isCartonCreatedOnDate(client)
+      : false;
+
     if (isDbBlacklistedDetail) {
       client.risk = 'Rojo';
     } else {
       try {
         const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
         dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-        const overdueCount = dailyStatusList.filter(s => s.isOverdue).length;
+        const overdueCount = isDayZeroCarton ? 0 : dailyStatusList.filter(s => s.isOverdue).length;
         
         // Umbral justo de mora: hasta 6 días con retrasos es Amarillo; a partir de 7 días es Rojo (mora severa)
         if (overdueCount >= 7) {
@@ -3031,6 +3037,7 @@ const agentModule = {
         }
       } catch (e) {
         console.error("Error al calcular riesgo dinámico en renderClientInfo:", e);
+        if (isDayZeroCarton) client.risk = 'Verde';
       }
     }
 
@@ -3053,6 +3060,7 @@ const agentModule = {
     // Estado de Cartera texto explicativo
     let statusText = 'Al Día';
     if (Number(client.outstanding) === 0) statusText = 'Crédito Cancelado';
+    else if (isDayZeroCarton && !isDbBlacklistedDetail) statusText = 'Al Día';
     else if (client.risk === 'Amarillo') statusText = 'Atrasado';
     else if (client.risk === 'Rojo') statusText = 'Mora Severa';
 
@@ -4387,10 +4395,28 @@ const agentModule = {
         return true;
       });
 
-      const totalClientsCount = activeClients.length;
+      // Regla Gota a Gota: Clientes cuyo cartón fue creado hoy (Día 0) tienen 0 cuotas esperadas hoy
+      const isClientDayZero = (c) => {
+        if (window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function') {
+          return window.BulaPayDB.isCartonCreatedOnDate(c);
+        }
+        const rawDate = c.fecha_apertura || c.fecha_inicio || c.created_at;
+        if (!rawDate) return false;
+        const d = this.parseLocalDate(rawDate);
+        const now = new Date();
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      };
+
+      const expectedActiveClients = activeClients.filter(c => {
+        const ced = String(c.cedula || c.cliente_id || c.client_id || '').trim();
+        if (todayPaymentsMap.has(ced)) return true;
+        return !isClientDayZero(c);
+      });
+
+      const totalClientsCount = expectedActiveClients.length;
       let paidClientsCount = 0;
 
-      activeClients.forEach(c => {
+      expectedActiveClients.forEach(c => {
         const ced = String(c.cedula || c.cliente_id || c.client_id || '').trim();
         if (todayPaymentsMap.has(ced)) {
           paidClientsCount++;
@@ -4581,9 +4607,13 @@ const agentModule = {
           // Estado real de cobro: Solo es 'Pagó' si existe recibo registrado hoy o si el préstamo está cancelado
           const hasPaid = isCancelled || hasPaidRecordToday;
 
-          const clientCreatedAt = c.created_at ? new Date(c.created_at) : new Date(0);
+          const cartonCreationStr = c.fecha_apertura || c.fecha_inicio || c.created_at;
+          const clientCreatedAt = cartonCreationStr ? new Date(cartonCreationStr) : new Date(0);
           const msIn24Hours = 24 * 60 * 60 * 1000;
-          const isNewClient = (Date.now() - clientCreatedAt.getTime()) < msIn24Hours;
+          const isCreatedOnTodayDate = window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function'
+            ? window.BulaPayDB.isCartonCreatedOnDate(c)
+            : false;
+          const isNewClient = isCreatedOnTodayDate || ((Date.now() - clientCreatedAt.getTime()) < msIn24Hours);
           const isNewUnpaid = !hasPaid && isNewClient;
 
           let borderStyle, bgStyle, textColor, badgeBg, dashedBorder;
@@ -4613,6 +4643,7 @@ const agentModule = {
           let badgeText = clientCedula;
           if (isCancelled) badgeText = 'Cancelado';
           else if (hasPaid) badgeText = 'Pagó';
+          else if (isNewUnpaid) badgeText = 'Al Día';
           
           const clientName = c.name || 'Desconocido';
           const clientPhone = c.phone || 'Sin teléfono';

@@ -722,11 +722,38 @@ const supervisorModule = {
           } catch(eJson) {}
         }
 
-        const statusIcon = madePaymentToday ? '✅' : '❌';
-        const statusColor = madePaymentToday ? 'var(--color-verde)' : 'var(--color-rojo)';
-        const statusLabel = madePaymentToday ? 'Recaudado Hoy' : 'Sin Cobro Hoy';
-        const bgLight = madePaymentToday ? 'rgba(16, 185, 129, 0.04)' : 'rgba(239, 68, 68, 0.04)';
-        const borderLight = madePaymentToday ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+        // Regla Gota a Gota: En el Día 0 (creación/renovación hoy), las cuotas esperadas son 0 y se oculta la alerta roja "SIN COBRO HOY"
+        const isDayZeroCarton =
+          isDateToday(client.fecha_apertura) ||
+          isDateToday(client.fecha_inicio) ||
+          isDateToday(client.created_at) ||
+          (window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function' && window.BulaPayDB.isCartonCreatedOnDate(client));
+
+        let statusIcon = '❌';
+        let statusColor = 'var(--color-rojo)';
+        let statusLabel = 'Sin Cobro Hoy';
+        let bgLight = 'rgba(239, 68, 68, 0.04)';
+        let borderLight = 'rgba(239, 68, 68, 0.2)';
+        let badgeBg = 'rgba(239, 68, 68, 0.12)';
+        let hoverBg = 'rgba(239, 68, 68, 0.08)';
+
+        if (madePaymentToday) {
+          statusIcon = '✅';
+          statusColor = 'var(--color-verde)';
+          statusLabel = 'Recaudado Hoy';
+          bgLight = 'rgba(16, 185, 129, 0.04)';
+          borderLight = 'rgba(16, 185, 129, 0.2)';
+          badgeBg = 'rgba(16, 185, 129, 0.12)';
+          hoverBg = 'rgba(16, 185, 129, 0.08)';
+        } else if (isDayZeroCarton) {
+          statusIcon = '🟢';
+          statusColor = 'var(--text-secondary)';
+          statusLabel = 'Al Día';
+          bgLight = 'rgba(148, 163, 184, 0.05)';
+          borderLight = 'var(--border-color)';
+          badgeBg = 'rgba(148, 163, 184, 0.15)';
+          hoverBg = 'rgba(148, 163, 184, 0.1)';
+        }
 
         // Buscar nombre del agente por agent_id
         const associatedAgent = allUsers.find(u => u.username === client.agent_id);
@@ -746,15 +773,15 @@ const supervisorModule = {
         item.innerHTML = `
           <div>
             <span style="font-size: 1.1rem; margin-right: 0.5rem; vertical-align: middle;">${statusIcon}</span>
-            <strong style="color: ${statusColor}; font-size: 0.9rem; font-weight: 700; transition: color 0.3s ease; vertical-align: middle;">${client.name}</strong>
+            <strong style="color: ${madePaymentToday ? statusColor : (isDayZeroCarton ? 'var(--text-primary)' : statusColor)}; font-size: 0.9rem; font-weight: 700; transition: color 0.3s ease; vertical-align: middle;">${client.name}</strong>
             <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.15rem; padding-left: 1.7rem;">Deuda: $${Number(client.outstanding).toLocaleString('es-CO')} | Agente: ${agentNameLabel}</div>
           </div>
-          <span style="font-size: 0.65rem; background-color: ${madePaymentToday ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'}; color: ${statusColor}; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${statusLabel}</span>
+          <span style="font-size: 0.65rem; background-color: ${badgeBg}; color: ${statusColor}; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">${statusLabel}</span>
         `;
 
         item.addEventListener('mouseenter', () => {
           item.style.borderColor = statusColor;
-          item.style.backgroundColor = madePaymentToday ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+          item.style.backgroundColor = hoverBg;
         });
         item.addEventListener('mouseleave', () => {
           item.style.borderColor = borderLight;
@@ -1557,9 +1584,6 @@ const supervisorModule = {
         continue;
       }
 
-      const expectedAmount = Number(client.installmentAmount);
-      capitalEsperado += expectedAmount;
-
       // Pagos realizados dentro del rango de 6 AM a 6 AM
       const paymentsOnDate = clientPayments.filter(p => {
         const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
@@ -1567,6 +1591,17 @@ const supervisorModule = {
       });
       const amountPaidOnDate = paymentsOnDate.reduce((sum, p) => sum + Number(p.amount), 0);
       totalRecaudado += amountPaidOnDate;
+
+      // Regla Gota a Gota: En el día de creación del cartón (Día 0), las cuotas esperadas son 0
+      const isDayZeroOnSelectedDate = window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function'
+        ? window.BulaPayDB.isCartonCreatedOnDate(client, selectedDate)
+        : false;
+      if (isDayZeroOnSelectedDate) {
+        continue;
+      }
+
+      const expectedAmount = Number(client.installmentAmount);
+      capitalEsperado += expectedAmount;
 
       // Si no pagó ese día o registró "No Pago"
       const hasNoPagoStatus = paymentsOnDate.some(p => p.status === 'No Pago');
@@ -2198,7 +2233,12 @@ const supervisorModule = {
     const expectedClients = clients.filter(c => {
       if (!c.routeId || !routeIds.has(c.routeId)) return false;
       const hasPaymentToday = paymentsToday.some(p => p.clientCedula === c.cedula);
-      return Number(c.outstanding) > 0 || hasPaymentToday;
+      if (hasPaymentToday) return true;
+      // Regla Gota a Gota: En el día de creación del cartón (Día 0), las cuotas esperadas son 0
+      if (window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function' && window.BulaPayDB.isCartonCreatedOnDate(c, now)) {
+        return false;
+      }
+      return Number(c.outstanding) > 0;
     });
     const totalExpectedToday = expectedClients.reduce((sum, c) => sum + Number(c.installmentAmount), 0);
 
@@ -2323,7 +2363,12 @@ const supervisorModule = {
 
       const expectedClients = routeClients.filter(c => {
         const hasPaymentToday = routePaymentsToday.some(p => p.clientCedula === c.cedula);
-        return Number(c.outstanding) > 0 || hasPaymentToday;
+        if (hasPaymentToday) return true;
+        // Regla Gota a Gota: En el día de creación del cartón (Día 0), las cuotas esperadas son 0
+        if (window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function' && window.BulaPayDB.isCartonCreatedOnDate(c, now)) {
+          return false;
+        }
+        return Number(c.outstanding) > 0;
       });
       const totalExpectedToday = expectedClients.reduce((sum, c) => sum + Number(c.installmentAmount), 0);
 
