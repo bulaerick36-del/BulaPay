@@ -757,12 +757,12 @@ const db = {
     if (!agentId && !routeId) return 0;
     try {
       const supabase = await initSupabase();
-      const now = new Date();
-      const targetDate = dateStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const targetDate = dateStr || this.getColombiaLocalDateStr(new Date());
       const cleanAgentId = agentId ? String(agentId).trim() : null;
       const cleanRouteId = routeId ? String(routeId).trim() : null;
 
-      // Intento 1: Llamada RPC SECURITY DEFINER en Supabase (evita 401 / RLS)
+      let rpcTotal = 0;
+      // Intento 1: Llamada RPC SECURITY DEFINER en Supabase
       try {
         const { data: rpcVal, error: rpcErr } = await supabase.rpc('get_agent_recaudo_hoy', {
           p_agent_id: cleanAgentId,
@@ -771,22 +771,21 @@ const db = {
         });
 
         if (!rpcErr && rpcVal !== null && rpcVal !== undefined) {
-          console.log(`✅ [Supabase RPC get_agent_recaudo_hoy] Recaudo obtenido via SECURITY DEFINER: $${rpcVal}`);
-          return Math.round(Number(rpcVal));
+          rpcTotal = Math.round(Number(rpcVal) || 0);
+          console.log(`✅ [Supabase RPC get_agent_recaudo_hoy] Recaudo obtenido via SECURITY DEFINER: $${rpcTotal}`);
         }
       } catch (eRpc) {
         console.warn("⚠️ Aviso al llamar RPC get_agent_recaudo_hoy:", eRpc);
       }
 
-      // Intento 2: Consulta directa a la tabla payments
+      // Intento 2: Consulta directa a la tabla payments incluyendo explícitamente Renovacion, 999 y liquidado === true
       const { data, error } = await supabase
         .from('payments')
         .select('*');
 
       if (error) {
         console.error("❌ Error 401 / Permisos RLS en Supabase al consultar tabla 'payments':", error);
-        // Manejo estricto de errores: NO sumar a lo ciego sobre arrays cacheados
-        return 0;
+        return rpcTotal;
       }
 
       const paymentList = data || [];
@@ -798,55 +797,142 @@ const db = {
         userObj = await this.getUserByUsername(cleanAgentId);
       }
       const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
+      const effectiveRouteIdLower = lowerRouteId || (userObj && (userObj.routeId || userObj.route_id) ? String(userObj.routeId || userObj.route_id).trim().toLowerCase() : null);
+
+      // Obtener cédulas de clientes del agente/ruta para vincular pagos de renovación que solo tengan clientCedula
+      const agentClientCedulas = new Set();
+      try {
+        const allClients = await this.getClients();
+        (allClients || []).forEach(c => {
+          if (!c) return;
+          const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+          const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
+          if (
+            (lowerAgentId && cAgent === lowerAgentId) ||
+            (effectiveRouteIdLower && cRoute === effectiveRouteIdLower)
+          ) {
+            const ced = String(c.cedula || c.cliente_id || '').trim();
+            if (ced) agentClientCedulas.add(ced);
+          }
+        });
+      } catch (eCl) {}
+
+      const isDateMatchingTarget = (rawVal) => {
+        if (!rawVal) return false;
+        const s = String(rawVal).trim();
+        if (s.startsWith(targetDate)) return true;
+        if (typeof this.getColombiaLocalDateStr === 'function') {
+          const colDate = this.getColombiaLocalDateStr(s);
+          if (colDate === targetDate) return true;
+        }
+        try {
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            const localD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (localD === targetDate) return true;
+          }
+        } catch (e) {}
+        return false;
+      };
 
       const seenIds = new Set();
+      const clientsWithRenewalPayToday = new Set();
       let totalMontoReal = 0;
 
       paymentList.forEach(p => {
         if (!p) return;
 
-        // Validar fecha estricta: debe ser del día objetivo
-        const pDateStr = String(p.date || p.created_at || p.fecha_pago || p.fecha || '').trim();
-        let isToday = false;
-        if (pDateStr.startsWith(targetDate)) {
-          isToday = true;
-        } else if (pDateStr) {
-          try {
-            const d = new Date(pDateStr);
-            if (!isNaN(d.getTime())) {
-              const localD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-              if (localD === targetDate) isToday = true;
-            }
-          } catch (e) {}
-        }
+        const rawId = String(p.id || '').trim();
+        if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
+
+        // Validar fecha en hora local de Colombia (verificando tanto created_at como date y fecha_pago)
+        const isToday =
+          isDateMatchingTarget(p.created_at) ||
+          isDateMatchingTarget(p.date) ||
+          isDateMatchingTarget(p.fecha_pago) ||
+          isDateMatchingTarget(p.fecha);
         if (!isToday) return;
 
-        // Validar estado y monto
+        // Validar monto e incluir explícitamente payment_type === 'Renovacion', installmentNumber === 999 o liquidado === true
         const amount = Number(p.amount || 0);
-        const status = String(p.status || '').toUpperCase();
-        if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE') return;
+        if (amount <= 0) return;
+
+        const status = String(p.status || '').trim().toUpperCase();
+        const paymentType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const isRenovacionOrLiquidado =
+          paymentType === 'renovacion' ||
+          Number(p.installmentNumber) === 999 ||
+          p.liquidado === true ||
+          p.liquidado === 'true' ||
+          rawId.startsWith('pay_renov_');
+
+        if (status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return;
+        if (!isRenovacionOrLiquidado && (status.includes('CANCEL') || status.includes('RECHAZ'))) return;
 
         // Validar pertenencia al agente o ruta
         const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
         const pAgentName = String(p.agentName || '').trim().toLowerCase();
         const pRouteId = String(p.routeId || p.route_id || '').trim().toLowerCase();
+        const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
 
         let matches = false;
         if (lowerAgentId && (pAgentId === lowerAgentId || pAgentName === lowerAgentId)) matches = true;
-        if (agentNameLower && pAgentName === agentNameLower) matches = true;
-        if (lowerRouteId && pRouteId === lowerRouteId) matches = true;
+        if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) matches = true;
+        if (effectiveRouteIdLower && pRouteId === effectiveRouteIdLower) matches = true;
+        if (!matches && pCedula && agentClientCedulas.has(pCedula)) matches = true;
 
         if (!matches) return;
 
         // Deduplicación estricta por ID único de pago
-        const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.installmentNumber || ''}_${amount}_${targetDate}`;
+        const pId = rawId || `${pCedula}_${p.installmentNumber || ''}_${amount}_${targetDate}`;
         if (seenIds.has(pId)) return;
         seenIds.add(pId);
+
+        if (paymentType === 'renovacion' || Number(p.installmentNumber) === 999 || rawId.startsWith('pay_renov_')) {
+          if (pCedula) clientsWithRenewalPayToday.add(pCedula);
+        }
 
         totalMontoReal += Math.round(amount);
       });
 
-      return totalMontoReal;
+      // Respaldo adicional: si un cartón fue renovado hoy y su monto refinanciado (saldo_anterior / rollover_amount)
+      // no quedó insertado en 'payments' como pay_renov_ / 999, sumarlo para reflejar el 100% del cartón viejo
+      try {
+        const { data: cartonesHoy } = await supabase.from('cartones').select('*');
+        if (Array.isArray(cartonesHoy)) {
+          cartonesHoy.forEach(c => {
+            if (!c) return;
+            const cCedula = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+            if (!cCedula || clientsWithRenewalPayToday.has(cCedula)) return;
+
+            const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
+            const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+            if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
+            if (rollover <= 0) return;
+
+            const isCreatedToday =
+              isDateMatchingTarget(c.created_at) ||
+              isDateMatchingTarget(c.fecha_apertura) ||
+              isDateMatchingTarget(c.fecha_inicio);
+            if (!isCreatedToday) return;
+
+            const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+            const cRoute = String(c.route_id || c.routeId || '').trim().toLowerCase();
+            let matchesCarton = false;
+            if (lowerAgentId && cAgent === lowerAgentId) matchesCarton = true;
+            if (agentNameLower && cAgent === agentNameLower) matchesCarton = true;
+            if (effectiveRouteIdLower && cRoute === effectiveRouteIdLower) matchesCarton = true;
+            if (!matchesCarton && agentClientCedulas.has(cCedula)) matchesCarton = true;
+
+            if (matchesCarton) {
+              clientsWithRenewalPayToday.add(cCedula);
+              totalMontoReal += rollover;
+            }
+          });
+        }
+      } catch (eCartRenov) {}
+
+      return Math.max(rpcTotal, totalMontoReal);
     } catch (e) {
       console.error("❌ Excepción inesperada en getAgentRecaudoHoyDirect:", e);
       return 0;
@@ -2852,41 +2938,70 @@ const db = {
         });
       }
 
+      const insertRenovPaymentRecord = async () => {
+        if (rolloverVal <= 0) return;
+        const todayStr = this.getColombiaLocalDateStr(new Date());
+        const renovPayRecord = {
+          id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          clientCedula: String(clientId).trim(),
+          carton_id: payload.old_carton_id || null,
+          installmentNumber: 999,
+          amount: rolloverVal,
+          date: todayStr,
+          status: 'Pagado',
+          payment_type: 'Renovacion',
+          liquidado: true,
+          agentName: currentUser ? (currentUser.name || currentUser.username) : (agentId || 'Sistema'),
+          agent_id: agentId,
+          routeId: routeId,
+          route_id: routeId,
+          signature: `BulaPay-SIG-${clientId}-RENOV`,
+          supervisor_id: supervisorId,
+          created_at: nowIso,
+          updated_at: nowIso
+        };
+        try {
+          const { error: pErr } = await supabase.from('payments').insert([renovPayRecord]);
+          if (pErr) {
+            console.warn("Reintentando pago de renovación sin route_id/updated_at:", pErr.message);
+            delete renovPayRecord.route_id;
+            delete renovPayRecord.updated_at;
+            const { error: pErr2 } = await supabase.from('payments').insert([renovPayRecord]);
+            if (pErr2) {
+              delete renovPayRecord.liquidado;
+              delete renovPayRecord.routeId;
+              const { error: pErr3 } = await supabase.from('payments').insert([renovPayRecord]);
+              if (pErr3) {
+                delete renovPayRecord.payment_type;
+                delete renovPayRecord.carton_id;
+                await supabase.from('payments').insert([renovPayRecord]);
+              }
+            }
+          }
+        } catch (ePay) {
+          console.warn("Aviso al insertar pago de renovación en payments:", ePay?.message);
+        }
+      };
+
+      if (rpcSucceeded && rolloverVal > 0) {
+        try {
+          const todayStr = this.getColombiaLocalDateStr(new Date());
+          if (rpcRes && rpcRes.payment_id) {
+            await supabase
+              .from('payments')
+              .update({ date: todayStr, payment_type: 'Renovacion', installmentNumber: 999, liquidado: true })
+              .eq('id', rpcRes.payment_id);
+          } else {
+            await insertRenovPaymentRecord();
+          }
+        } catch (eSyncRenov) {}
+      }
+
       if (!rpcSucceeded) {
         console.log('⚡ Ejecutando bloque atómico de 3 pasos en cliente (Fallback)...');
         // PASO 1: INSERT a la tabla payments liquidando el saldo restante del cartón viejo
         if (rolloverVal > 0) {
-          const todayStr = nowIso.split('T')[0];
-          const renovPayRecord = {
-            id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-            clientCedula: String(clientId).trim(),
-            carton_id: payload.old_carton_id || null,
-            installmentNumber: 999,
-            amount: rolloverVal,
-            date: todayStr,
-            status: 'Pagado',
-            payment_type: 'Renovacion',
-            agentName: currentUser ? (currentUser.name || currentUser.username) : (agentId || 'Sistema'),
-            agent_id: agentId,
-            routeId: routeId,
-            route_id: routeId,
-            signature: `BulaPay-SIG-${clientId}-RENOV`,
-            supervisor_id: supervisorId,
-            created_at: nowIso,
-            updated_at: nowIso
-          };
-          try {
-            const { error: pErr } = await supabase.from('payments').insert([renovPayRecord]);
-            if (pErr) {
-              console.warn("Reintentando pago de renovación sin columnas opcionales:", pErr.message);
-              delete renovPayRecord.route_id;
-              delete renovPayRecord.payment_type;
-              delete renovPayRecord.updated_at;
-              await supabase.from('payments').insert([renovPayRecord]);
-            }
-          } catch (ePay) {
-            console.warn("Aviso al insertar pago de renovación en payments:", ePay?.message);
-          }
+          await insertRenovPaymentRecord();
         }
 
         // PASO 2: UPDATE al cartón viejo cambiando su estado a RENOVADO y deuda 0
@@ -4764,7 +4879,7 @@ const db = {
           const currentUser = this.getCurrentUser();
           const supId = this.getSupervisorId();
           const now = new Date();
-          const todayStr = now.toISOString().split('T')[0];
+          const todayStr = this.getColombiaLocalDateStr(now);
           const renovPayment = {
             id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             clientCedula: String(cedula),
@@ -4776,11 +4891,18 @@ const db = {
             agent_id: currentUser ? (currentUser.id || currentUser.username) : null,
             status: 'Pagado',
             payment_type: 'Renovacion',
+            liquidado: true,
             signature: `BulaPay-SIG-${cedula}-RENOV`,
             supervisor_id: supId,
             created_at: now.toISOString()
           };
-          await supabase.from('payments').insert([renovPayment]);
+          const { error: renErr } = await supabase.from('payments').insert([renovPayment]);
+          if (renErr) {
+            delete renovPayment.liquidado;
+            delete renovPayment.payment_type;
+            delete renovPayment.carton_id;
+            await supabase.from('payments').insert([renovPayment]);
+          }
         } catch (errPay) {
           console.warn("Aviso al registrar pago de renovación en liquidateCredit:", errPay);
         }
@@ -6962,7 +7084,7 @@ const db = {
 
   async getSupervisorCajaGlobalData(supervisorId, filterRouteId = null) {
     const supabase = await initSupabase();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = this.getColombiaLocalDateStr(new Date());
     const supId = supervisorId || (this.getCurrentUser() ? this.getCurrentUser().username : 'admin');
 
     try {
@@ -7078,10 +7200,18 @@ const db = {
         routesList = routesList.filter(r => r.id === filterRouteId);
       }
 
-      const hoyPayments = payments.filter(p => 
-        (p.supervisor_id === supId || (p.agent_id && agentUsernames.includes(p.agent_id))) &&
-        (p.date === todayStr || p.created_at?.startsWith(todayStr))
-      );
+      const hoyPayments = payments.filter(p => {
+        if (!p) return false;
+        const pId = String(p.id || '').trim();
+        if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
+        const pStatus = String(p.status || '').trim().toUpperCase();
+        if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'LIQUIDADO_MORA') return false;
+        if (Number(p.amount || 0) <= 0) return false;
+        const belongsToSup = p.supervisor_id === supId || (p.agent_id && agentUsernames.includes(p.agent_id));
+        if (!belongsToSup) return false;
+        const colDate = this.getColombiaLocalDateStr(p.created_at || p.date);
+        return p.date === todayStr || colDate === todayStr || p.created_at?.startsWith(todayStr);
+      });
       const recaudoHoy = hoyPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const carteraEnCalle = supervisorClients.reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
 

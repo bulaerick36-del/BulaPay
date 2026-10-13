@@ -475,10 +475,66 @@ const supervisorModule = {
 
   async getAgentRecaudoHoyReal(agentUsername, routeId = null) {
     try {
+      let directTotal = 0;
       if (window.BulaPayDB && typeof window.BulaPayDB.getAgentRecaudoHoyDirect === 'function') {
-        return await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername, null, routeId);
+        directTotal = Number(await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername, null, routeId)) || 0;
       }
-      return 0;
+
+      // Suma verificadora sobre el historial del día incluyendo explícitamente payment_type === 'Renovacion', installmentNumber === 999 o liquidado === true
+      let fallbackTotal = 0;
+      if (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function') {
+        const todayStr = this.getLocalDateString();
+        const allPayments = await window.BulaPayDB.getPayments();
+        const allUsers = await this.getCachedUsers();
+        const agentObj = (allUsers || []).find(u => u && String(u.username || '').toLowerCase() === String(agentUsername || '').toLowerCase());
+        const agentNameLower = agentObj ? String(agentObj.name || '').trim().toLowerCase() : '';
+        const agentUserLower = String(agentUsername || '').trim().toLowerCase();
+        const targetRouteLower = String(routeId || agentObj?.routeId || agentObj?.route_id || '').trim().toLowerCase();
+
+        const seenIds = new Set();
+        (allPayments || []).forEach(p => {
+          if (!p) return;
+          const rawId = String(p.id || '').trim();
+          if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
+
+          const pLocalDate = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : String(p.date || '').trim();
+          const isToday = String(p.date || '').startsWith(todayStr) || pLocalDate === todayStr;
+          if (!isToday) return;
+
+          const amount = Number(p.amount || 0);
+          if (amount <= 0) return;
+
+          const pStatus = String(p.status || '').trim().toUpperCase();
+          const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+          const isRenovOrLiquidado =
+            pType === 'renovacion' ||
+            Number(p.installmentNumber) === 999 ||
+            p.liquidado === true ||
+            p.liquidado === 'true' ||
+            rawId.startsWith('pay_renov_');
+
+          if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'LIQUIDADO_MORA') return;
+          if (!isRenovOrLiquidado && (pStatus.includes('CANCEL') || pStatus.includes('RECHAZ'))) return;
+
+          const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
+          const pAgentName = String(p.agentName || '').trim().toLowerCase();
+          const pRoute = String(p.routeId || p.route_id || '').trim().toLowerCase();
+
+          let belongs = false;
+          if (agentUserLower && (pAgentId === agentUserLower || pAgentName === agentUserLower)) belongs = true;
+          if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) belongs = true;
+          if (targetRouteLower && pRoute === targetRouteLower) belongs = true;
+          if (!belongs) return;
+
+          const dedupKey = rawId || `${p.clientCedula || p.client_cedula}_${p.installmentNumber || ''}_${amount}_${todayStr}`;
+          if (seenIds.has(dedupKey)) return;
+          seenIds.add(dedupKey);
+
+          fallbackTotal += Math.round(amount);
+        });
+      }
+
+      return Math.max(Math.round(directTotal), Math.round(fallbackTotal));
     } catch (e) {
       console.error("Error al calcular recaudo real del agente:", e);
       return 0;
@@ -1569,28 +1625,44 @@ const supervisorModule = {
     endRange.setDate(endRange.getDate() + 1);
 
     for (const client of routeClients) {
-      // Calcular abonos hechos antes de la fecha seleccionada
-      const clientPayments = payments.filter(p => p.clientCedula === client.cedula);
-      
+      // Calcular abonos del cliente
+      const clientPayments = payments.filter(p => (p.clientCedula || p.client_cedula || p.cedula) === client.cedula);
+
+      // Pagos realizados dentro del rango de 6 AM a 6 AM o en la fecha local seleccionada (incluyendo Renovacion, installmentNumber === 999, liquidado === true)
+      const paymentsOnDate = clientPayments.filter(p => {
+        const pId = String(p.id || '');
+        if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
+        const pStatus = String(p.status || '').trim();
+        if (pStatus === 'Pendiente' || pStatus === 'Liquidado_Mora') return false;
+
+        const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
+        const inWindow = pDate >= startRange && pDate < endRange;
+        const pLocalDate = p.created_at
+          ? this.getLocalDateString(new Date(p.created_at))
+          : String(p.date || '').split('T')[0];
+        return inWindow || pLocalDate === selectedDate || String(p.date || '').split('T')[0] === selectedDate;
+      });
+
+      const validPaymentsOnDate = paymentsOnDate.filter(p => {
+        const pType = String(p.payment_type || p.type || '').trim();
+        const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || String(p.id || '').startsWith('pay_renov_');
+        if (isRenovOrLiq) return Number(p.amount || 0) > 0;
+        return p.status !== 'No Pago' && Number(p.amount || 0) > 0;
+      });
+      const amountPaidOnDate = validPaymentsOnDate.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      totalRecaudado += amountPaidOnDate;
+
       // Pagos creados antes del inicio de la ventana
       const paymentsBefore = clientPayments.filter(p => {
         const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
         return pDate < startRange;
       });
-      const totalPaidBefore = paymentsBefore.reduce((sum, p) => sum + Number(p.amount), 0);
+      const totalPaidBefore = paymentsBefore.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
       // Si ya estaba saldado antes de la fecha seleccionada, no se esperaba cuota
       if (totalPaidBefore >= Number(client.totalDebt)) {
         continue;
       }
-
-      // Pagos realizados dentro del rango de 6 AM a 6 AM
-      const paymentsOnDate = clientPayments.filter(p => {
-        const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
-        return pDate >= startRange && pDate < endRange;
-      });
-      const amountPaidOnDate = paymentsOnDate.reduce((sum, p) => sum + Number(p.amount), 0);
-      totalRecaudado += amountPaidOnDate;
 
       // Regla Gota a Gota: En el día de creación del cartón (Día 0), las cuotas esperadas son 0
       const isDayZeroOnSelectedDate = window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function'
@@ -1632,7 +1704,7 @@ const supervisorModule = {
     if (!routeSelect || !dateInput || !clientsList) return;
 
     const selectedRouteId = routeSelect.value;
-    const selectedDate = dateInput.value || new Date().toISOString().split('T')[0];
+    const selectedDate = dateInput.value || this.getLocalDateString();
 
     if (ledgerContainer) ledgerContainer.style.display = 'none';
     const paymentsContainer = document.getElementById('modal-audit-payments-container');
@@ -2210,19 +2282,28 @@ const supervisorModule = {
     const end6AM = new Date(start6AM);
     end6AM.setDate(end6AM.getDate() + 1);
 
+    const todayLocalStr = this.getLocalDateString(now);
     const seenMainPaymentIds = new Set();
     const paymentsToday = (payments || []).filter(p => {
       if (!p) return false;
-      const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
+      const pId = String(p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`);
       if (seenMainPaymentIds.has(pId)) return false;
+      if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
 
       const amount = Number(p.amount || 0);
       const status = String(p.status || '').toUpperCase();
-      if (amount <= 0 || status === 'NO PAGO') return false;
+      if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
+
+      const pType = String(p.payment_type || p.type || '').trim();
+      const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
 
       const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
       const isWindow = pDate >= start6AM && pDate < end6AM;
-      if (isWindow) {
+      const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
+      const pDateOnly = String(p.date || '').split('T')[0];
+      const isTodayLocal = pCreatedLocal === todayLocalStr || pDateOnly === todayLocalStr;
+
+      if (isWindow || (isRenovOrLiq && isTodayLocal)) {
         seenMainPaymentIds.add(pId);
         return true;
       }
@@ -2315,6 +2396,7 @@ const supervisorModule = {
 
     // Rango de corte a las 6:00 AM para Recaudado Hoy
     const now = new Date();
+    const todayLocalStr = this.getLocalDateString(now);
     const start6AM = new Date(now);
     start6AM.setHours(6, 0, 0, 0);
     if (now < start6AM) {
@@ -2326,16 +2408,24 @@ const supervisorModule = {
     const seenTablePaymentIds = new Set();
     const paymentsToday = (payments || []).filter(p => {
       if (!p) return false;
-      const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
+      const pId = String(p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`);
       if (seenTablePaymentIds.has(pId)) return false;
+      if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
 
       const amount = Number(p.amount || 0);
       const status = String(p.status || '').toUpperCase();
-      if (amount <= 0 || status === 'NO PAGO') return false;
+      if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
+
+      const pType = String(p.payment_type || p.type || '').trim();
+      const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
 
       const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
       const isWindow = pDate >= start6AM && pDate < end6AM;
-      if (isWindow) {
+      const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
+      const pDateOnly = String(p.date || '').split('T')[0];
+      const isTodayLocal = pCreatedLocal === todayLocalStr || pDateOnly === todayLocalStr;
+
+      if (isWindow || (isRenovOrLiq && isTodayLocal)) {
         seenTablePaymentIds.add(pId);
         return true;
       }
@@ -2353,7 +2443,9 @@ const supervisorModule = {
       const routePaymentsToday = paymentsToday.filter(p => {
         const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
         if (seenRoutePaymentIds.has(pId)) return false;
-        if (clientCedulas.has(p.clientCedula)) {
+        const pCedula = p.clientCedula || p.client_cedula || p.cedula;
+        const pRouteId = p.routeId || p.route_id;
+        if (clientCedulas.has(pCedula) || (pRouteId && rIds.includes(pRouteId))) {
           seenRoutePaymentIds.add(pId);
           return true;
         }
@@ -3931,18 +4023,27 @@ const supervisorModule = {
           .map(c => String(c.cedula))
       );
 
-      // Filtrar cobros globales de hoy (excluyendo lista negra y mora)
+      // Filtrar cobros globales de hoy (incluyendo Renovacion, installmentNumber === 999 y liquidado === true; excluyendo lista negra y mora)
       const todayPayments = allPayments.filter(p => {
+        const pId = String(p.id || '');
+        if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
+
         const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
         const pStatusUpper = String(p.status || '').toUpperCase();
         const isMoraPayment = pStatusUpper.includes('MORA') || pStatusUpper.includes('NEGRA') || (p.id && String(p.id).startsWith('pay_liq_') && blacklistedCedulas.has(pCedula));
 
-        return p.date === todayStr && 
-               Number(p.amount) > 0 && 
-               p.status !== 'No Pago' &&
-               p.status !== 'Pendiente' &&
-               !isMoraPayment &&
-               !blacklistedCedulas.has(pCedula);
+        const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
+        const pDateOnly = String(p.date || '').split('T')[0];
+        const isToday = pDateOnly === todayStr || pCreatedLocal === todayStr;
+
+        const pType = String(p.payment_type || p.type || '').trim();
+        const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
+
+        if (!isToday || Number(p.amount) <= 0 || isMoraPayment || blacklistedCedulas.has(pCedula)) return false;
+        if (isRenovOrLiq) return true;
+
+        return p.status !== 'No Pago' &&
+               p.status !== 'Pendiente';
       });
       const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
@@ -4103,21 +4204,38 @@ const supervisorModule = {
           .map(c => String(c.cedula))
       );
 
-      // Filtrar cobros del agente específico para hoy (excluyendo lista negra y mora)
+      // Filtrar cobros del agente específico para hoy (incluyendo Renovacion, installmentNumber === 999 y liquidado === true; excluyendo lista negra y mora)
+      const normUser = String(agentUsername || '').toLowerCase().trim();
+      const normName = String(agentName || '').toLowerCase().trim();
       const todayPayments = allPayments.filter(p => {
+        const pId = String(p.id || '');
+        if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
+
         const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
         const pStatusUpper = String(p.status || '').toUpperCase();
         const isMoraPayment = pStatusUpper.includes('MORA') || pStatusUpper.includes('NEGRA') || (p.id && String(p.id).startsWith('pay_liq_') && blacklistedCedulas.has(pCedula));
 
-        return p.date === todayStr && 
-               Number(p.amount) > 0 && 
-               p.status !== 'No Pago' &&
-               p.status !== 'Pendiente' &&
-               !isMoraPayment &&
-               !blacklistedCedulas.has(pCedula) &&
-               p.agentName && p.agentName.toLowerCase().trim() === agentName.toLowerCase().trim();
+        const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
+        const pDateOnly = String(p.date || '').split('T')[0];
+        const isToday = pDateOnly === todayStr || pCreatedLocal === todayStr;
+
+        const pAgentId = String(p.agent_id || p.agentId || '').toLowerCase().trim();
+        const pAgentName = String(p.agentName || '').toLowerCase().trim();
+        const matchesAgent = (normUser && (pAgentId === normUser || pAgentName === normUser)) ||
+                             (normName && (pAgentName === normName || pAgentId === normName));
+
+        const pType = String(p.payment_type || p.type || '').trim();
+        const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
+
+        if (!isToday || !matchesAgent || Number(p.amount) <= 0 || isMoraPayment || blacklistedCedulas.has(pCedula)) return false;
+        if (isRenovOrLiq) return true;
+
+        return p.status !== 'No Pago' &&
+               p.status !== 'Pendiente';
       });
-      const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const localCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const realCollected = await this.getAgentRecaudoHoyReal(agentUsername);
+      const totalCollected = Math.max(localCollected, Number(realCollected || 0));
 
       // Obtener clientes de hoy asociados al ID del agente activo
       const todayClients = allClients.filter(c => {

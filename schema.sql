@@ -133,7 +133,7 @@ DECLARE
     v_date text;
     v_total numeric;
 BEGIN
-    v_date := COALESCE(p_date, to_char(CURRENT_DATE, 'YYYY-MM-DD'));
+    v_date := COALESCE(p_date, to_char(NOW() AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD'));
     
     SELECT COALESCE(SUM(amount), 0)
     INTO v_total
@@ -142,13 +142,22 @@ BEGIN
         FROM payments
         WHERE (
             (p_agent_id IS NOT NULL AND (LOWER(agent_id) = LOWER(p_agent_id) OR LOWER("agentName") = LOWER(p_agent_id)))
-            OR (p_route_id IS NOT NULL AND "routeId" = p_route_id)
+            OR (p_route_id IS NOT NULL AND ("routeId" = p_route_id OR route_id = p_route_id))
         )
         AND (
             date::text LIKE (v_date || '%')
             OR created_at::text LIKE (v_date || '%')
+            OR to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = v_date
         )
-        AND UPPER(status) NOT IN ('NO PAGO', 'PENDIENTE')
+        AND COALESCE(id, '') NOT LIKE 'pay_init_%'
+        AND COALESCE(id, '') NOT LIKE 'pend_%'
+        AND (
+            LOWER(COALESCE(payment_type, '')) = 'renovacion'
+            OR "installmentNumber" = 999
+            OR COALESCE(liquidado, false) = true
+            OR UPPER(COALESCE(status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA', 'CANCELADO', 'RECHAZADO')
+        )
+        AND UPPER(COALESCE(status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA')
         AND amount > 0
     ) sub;
 
@@ -789,7 +798,7 @@ DECLARE
     v_now timestamptz := NOW();
     v_route_final text := NULL;
 BEGIN
-    v_today_str := to_char(CURRENT_DATE, 'YYYY-MM-DD');
+    v_today_str := to_char(v_now AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD');
 
     -- Paso 0: Identificar el cartón viejo a liquidar
     IF p_old_carton_id IS NOT NULL AND p_old_carton_id != '' THEN
@@ -822,7 +831,7 @@ BEGIN
     -- Saldo a liquidar
     v_saldo_liquidar := COALESCE(p_saldo_restante, 0);
     IF v_saldo_liquidar <= 0 AND v_old_carton.id IS NOT NULL THEN
-        v_saldo_liquidar := COALESCE(v_old_carton.outstanding, v_old_carton.saldo_pendiente, 0);
+        v_saldo_liquidar := COALESCE(v_old_carton.outstanding, 0);
     END IF;
 
     -- Determinar ruta
@@ -853,6 +862,7 @@ BEGIN
                 date,
                 status,
                 payment_type,
+                liquidado,
                 "agentName",
                 agent_id,
                 "routeId",
@@ -869,6 +879,7 @@ BEGIN
                 v_today_str,
                 'Pagado', -- Cruza directo con get_agent_recaudo_hoy
                 'Renovacion',
+                true,
                 v_agent_name,
                 p_agent_id,
                 v_route_final,
@@ -915,7 +926,6 @@ BEGIN
             estado = 'RENOVADO',
             status = 'RENOVADO',
             outstanding = 0,
-            saldo_pendiente = 0,
             fecha_cierre = v_now,
             updated_at = v_now,
             liquidation_reason = 'Renovación'
@@ -928,7 +938,6 @@ BEGIN
         estado = 'RENOVADO',
         status = 'RENOVADO',
         outstanding = 0,
-        saldo_pendiente = 0,
         fecha_cierre = v_now,
         updated_at = v_now,
         liquidation_reason = 'Renovación'
