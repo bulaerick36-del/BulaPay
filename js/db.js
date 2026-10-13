@@ -890,6 +890,19 @@ const db = {
 
         if (paymentType === 'renovacion' || Number(p.installmentNumber) === 999 || rawId.startsWith('pay_renov_')) {
           if (pCedula) clientsWithRenewalPayToday.add(pCedula);
+          if (rawId && (String(p.date || '').trim() !== targetDate || p.liquidado !== true || !p.payment_type)) {
+            supabase
+              .from('payments')
+              .update({
+                date: targetDate,
+                liquidado: true,
+                payment_type: p.payment_type || 'Renovacion',
+                installmentNumber: Number(p.installmentNumber) || 999
+              })
+              .eq('id', rawId)
+              .then(() => {})
+              .catch(() => {});
+          }
         }
 
         totalMontoReal += Math.round(amount);
@@ -2892,8 +2905,11 @@ const db = {
 
       console.log('📦 Payload enviado al RPC renovar_carton (14 parámetros):', rpcPayload);
       let rpcSucceeded = false;
+      let rpcRes = null;
       try {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('renovar_carton', rpcPayload);
+        const rpcCall = await supabase.rpc('renovar_carton', rpcPayload);
+        rpcRes = rpcCall.data;
+        const rpcErr = rpcCall.error;
 
         if (rpcErr) {
           console.error('❌ ERROR CRUDO DE SUPABASE RPC (renovar_carton):', {
@@ -2986,15 +3002,53 @@ const db = {
       if (rpcSucceeded && rolloverVal > 0) {
         try {
           const todayStr = this.getColombiaLocalDateStr(new Date());
+          const cedStr = String(clientId).trim();
           if (rpcRes && rpcRes.payment_id) {
             await supabase
               .from('payments')
-              .update({ date: todayStr, payment_type: 'Renovacion', installmentNumber: 999, liquidado: true })
+              .update({
+                date: todayStr,
+                payment_type: 'Renovacion',
+                installmentNumber: 999,
+                liquidado: true,
+                carton_id: payload.old_carton_id || null,
+                agent_id: agentId,
+                routeId: routeId
+              })
               .eq('id', rpcRes.payment_id);
           } else {
-            await insertRenovPaymentRecord();
+            const { data: recentRenovPays } = await supabase
+              .from('payments')
+              .select('id, date, created_at, installmentNumber, payment_type')
+              .eq('clientCedula', cedStr)
+              .eq('installmentNumber', 999);
+            const matchingTodayRenov = (recentRenovPays || []).filter(r => {
+              const rId = String(r.id || '');
+              const colCreated = r.created_at ? this.getColombiaLocalDateStr(r.created_at) : '';
+              return rId.startsWith('pay_renov_') && (colCreated === todayStr || String(r.date || '').startsWith(todayStr));
+            });
+            if (matchingTodayRenov.length > 0) {
+              for (const r of matchingTodayRenov) {
+                await supabase
+                  .from('payments')
+                  .update({
+                    date: todayStr,
+                    payment_type: 'Renovacion',
+                    installmentNumber: 999,
+                    liquidado: true,
+                    carton_id: payload.old_carton_id || null,
+                    agent_id: agentId,
+                    routeId: routeId
+                  })
+                  .eq('id', r.id);
+              }
+            } else {
+              await insertRenovPaymentRecord();
+            }
           }
-        } catch (eSyncRenov) {}
+        } catch (eSyncRenov) {
+          console.warn("Aviso al sincronizar fecha/flags del pago de renovación:", eSyncRenov);
+        }
       }
 
       if (!rpcSucceeded) {
