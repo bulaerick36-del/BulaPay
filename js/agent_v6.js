@@ -1425,7 +1425,6 @@ const agentModule = {
           container.innerHTML = badClients.map(c => {
             const moraDebt = Number(
               c.outstanding ?? 
-              c.saldo_pendiente ?? 
               c.saldo_restante ?? 
               c.totalDebt ?? 
               c.total_debt ?? 
@@ -1886,7 +1885,6 @@ const agentModule = {
 
       const currentDebt = Math.round(Number(
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const amountPaid = Math.round(Number(amount || 0));
@@ -2001,7 +1999,6 @@ const agentModule = {
       
       const currentDebt = Math.round(Number(
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
@@ -2195,7 +2192,6 @@ const agentModule = {
 
       const moraDebt = Math.round(Number(
         client.outstanding ?? 
-        client.saldo_pendiente ?? 
         client.saldo_restante ?? 
         client.totalDebt ?? 
         client.total_debt ?? 
@@ -2472,16 +2468,17 @@ const agentModule = {
       const activeRouteId = currentUser?.routeId || currentUser?.route_id;
 
       // 1. Verificar si el cliente existe en el sistema BulaPay (clients o cartones)
+      const cedulaClean = String(cedula).trim();
       const { data: dbClientGlobal } = await supabase
         .from('clients')
         .select('*')
-        .eq('cedula', cedula)
+        .eq('cedula', cedulaClean)
         .maybeSingle();
 
       const { data: dbCartonesGlobal } = await supabase
         .from('cartones')
         .select('*')
-        .or(`cliente_id.eq.${cedula},cedula.eq.${cedula}`);
+        .eq('cliente_id', cedulaClean);
 
       const clientExistsInSystem = !!dbClientGlobal || (dbCartonesGlobal && dbCartonesGlobal.length > 0);
 
@@ -2500,42 +2497,44 @@ const agentModule = {
         return st === 'activo' || st === 'activo_por_renovacion';
       });
 
-      const globalActiveCarton = allActiveGlobalCartones.length > 0 ? allActiveGlobalCartones[0] : null;
-
       let effectiveRouteId = currentUser?.routeId || currentUser?.route_id;
       if (!effectiveRouteId && currentUser && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
         effectiveRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
       }
       const effectiveAgentId = currentUser?.username || currentUser?.id;
 
-      if (globalActiveCarton) {
-        const cartonRouteId = globalActiveCarton.route_id || globalActiveCarton.routeId;
-        const cartonAgentId = globalActiveCarton.agent_id || globalActiveCarton.agentId;
+      const isCartonMine = (cartonObj) => {
+        if (!cartonObj) return false;
+        const cartonRouteId = String(cartonObj.route_id || cartonObj.routeId || '').trim().toLowerCase();
+        const cartonAgentId = String(cartonObj.agent_id || cartonObj.agentId || '').trim().toLowerCase();
+        const effRoute = String(effectiveRouteId || '').trim().toLowerCase();
+        const effAgent = String(effectiveAgentId || '').trim().toLowerCase();
+        const effUser = String(currentUser?.username || '').trim().toLowerCase();
+        return (effRoute && cartonRouteId && cartonRouteId === effRoute) ||
+               (effAgent && cartonAgentId && (cartonAgentId === effAgent || cartonAgentId === effUser));
+      };
 
-        const isMine = (
-          (effectiveRouteId && cartonRouteId && String(cartonRouteId) === String(effectiveRouteId)) ||
-          (effectiveAgentId && cartonAgentId && (String(cartonAgentId) === String(effectiveAgentId) || String(cartonAgentId) === String(currentUser?.username)))
-        );
-
-        if (!isMine) {
-          const crossRouteMsg = 'Este cliente tiene un crédito activo en otra ruta';
-          if (this.searchError) {
-            this.searchError.style.display = 'block';
-            this.searchError.textContent = crossRouteMsg;
-          }
-          alert(`⚠️ ${crossRouteMsg}`);
-          if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
-          if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
-          this.currentClient = null;
-          return;
-        }
-      }
+      const myActiveCarton = allActiveGlobalCartones.find(isCartonMine) || null;
+      const globalActiveCarton = myActiveCarton || (allActiveGlobalCartones.length > 0 ? allActiveGlobalCartones[0] : null);
 
       // También verificar en la lista precargada de créditos activos del agente
       const activeCredits = await window.BulaPayDB.loadActiveCredits();
-      const activeCreditLocal = activeCredits.find(c => String(c.cedula).trim() === String(cedula).trim());
+      const activeCreditLocal = activeCredits.find(c => String(c.cedula).trim() === cedulaClean);
 
-      const activeCarton = globalActiveCarton || activeCreditLocal;
+      if (globalActiveCarton && !myActiveCarton && !activeCreditLocal) {
+        const crossRouteMsg = 'Este cliente tiene un crédito activo en otra ruta';
+        if (this.searchError) {
+          this.searchError.style.display = 'block';
+          this.searchError.textContent = crossRouteMsg;
+        }
+        alert(`⚠️ ${crossRouteMsg}`);
+        if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
+        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
+        this.currentClient = null;
+        return;
+      }
+
+      const activeCarton = myActiveCarton || activeCreditLocal || globalActiveCarton;
 
       if (!activeCarton) {
         // Si el cliente existe pero no tiene créditos activos en esta ruta:
@@ -2555,9 +2554,9 @@ const agentModule = {
       const client = {
         ...(dbClientGlobal || {}),
         ...activeCarton,
-        carton_id: activeCarton.id,
-        cedula: cedula,
-        name: dbClientGlobal?.name || dbClientGlobal?.nombre || activeCarton.nombre_cliente || `Cliente ${cedula}`,
+        carton_id: activeCarton.id || activeCarton.carton_id,
+        cedula: cedulaClean,
+        name: dbClientGlobal?.name || dbClientGlobal?.nombre || activeCarton.name || activeCarton.nombre_cliente || `Cliente ${cedulaClean}`,
         amount: Number(activeCarton.monto_prestado || activeCarton.amount || 0),
         totalDebt: Number(activeCarton.total_debt || activeCarton.totalDebt || 0),
         outstanding: Number(activeCarton.outstanding !== undefined ? activeCarton.outstanding : (activeCarton.total_debt || 0)),
@@ -2574,7 +2573,7 @@ const agentModule = {
         this.btnCobroLiquidarMora.dataset.numeroCarton = client.numero_carton || '';
         this.btnCobroLiquidarMora.dataset.cedula = client.cedula || '';
         this.btnCobroLiquidarMora.dataset.name = client.name || '';
-        const saldoPendienteActual = Number(client.outstanding ?? client.saldo_pendiente ?? client.saldo_restante ?? 0);
+        const saldoPendienteActual = Number(client.outstanding ?? client.saldo_restante ?? 0);
         this.btnCobroLiquidarMora.dataset.outstanding = saldoPendienteActual;
         this.btnCobroLiquidarMora.dataset.totalConIntereses = saldoPendienteActual;
       }
@@ -2690,7 +2689,6 @@ const agentModule = {
       const firstPending = dailyStatusList.find(c => !c.hasPaid);
       const currentOutstanding = Math.round(Number(
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
 
@@ -2893,7 +2891,6 @@ const agentModule = {
 
       const currentDebt = Math.round(Number(
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const amountToPayNum = Math.round(Number(amountToPay || 0));
@@ -3145,7 +3142,6 @@ const agentModule = {
 
       const currentDebt = Math.round(Number(
         ((this.currentClient.outstanding !== undefined && this.currentClient.outstanding !== null && Number(this.currentClient.outstanding) > 0) ? Number(this.currentClient.outstanding) :
-        (this.currentClient.saldo_pendiente !== undefined && this.currentClient.saldo_pendiente !== null && Number(this.currentClient.saldo_pendiente) > 0) ? Number(this.currentClient.saldo_pendiente) :
         (Number(this.currentClient.totalDebt || this.currentClient.monto_total || 0)))
       ));
       const amountNum = Math.round(Number(amount || 0));
@@ -4389,10 +4385,17 @@ const agentModule = {
 
       const activeClients = allClients.filter(c => {
         if (!this.isClientActiveAndValid(c)) return false;
-        if (currentAgentId && c.agent_id) {
-          return String(c.agent_id).trim() === String(currentAgentId).trim() || String(c.agent_id).trim() === String(currentUser.id).trim() || String(c.agent_id).trim() === String(currentUser.username).trim();
-        }
-        return true;
+        const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
+        const uRoute = String(userRouteId || '').trim().toLowerCase();
+        const cAgent = String(c.agent_id || '').trim().toLowerCase();
+        const uAgent = String(currentAgentId || '').trim().toLowerCase();
+        const uId = String(currentUser?.id || '').trim().toLowerCase();
+        const uName = String(currentUser?.username || '').trim().toLowerCase();
+
+        if (uRoute && cRoute && cRoute === uRoute) return true;
+        if (cAgent && (cAgent === uAgent || (uId && cAgent === uId) || (uName && cAgent === uName))) return true;
+        if (!cAgent && !cRoute) return true;
+        return false;
       });
 
       // Regla Gota a Gota: Clientes cuyo cartón fue creado hoy (Día 0) tienen 0 cuotas esperadas hoy
@@ -4413,13 +4416,21 @@ const agentModule = {
         return !isClientDayZero(c);
       });
 
-      const totalClientsCount = expectedActiveClients.length;
+      const totalClientsCount = activeClients.length;
       let paidClientsCount = 0;
+      let paidExpectedCount = 0;
+
+      activeClients.forEach(c => {
+        const ced = String(c.cedula || c.cliente_id || c.client_id || '').trim();
+        if (todayPaymentsMap.has(ced)) {
+          paidClientsCount++;
+        }
+      });
 
       expectedActiveClients.forEach(c => {
         const ced = String(c.cedula || c.cliente_id || c.client_id || '').trim();
         if (todayPaymentsMap.has(ced)) {
-          paidClientsCount++;
+          paidExpectedCount++;
         }
       });
 
@@ -4435,7 +4446,7 @@ const agentModule = {
         btn.style.color = 'var(--text-secondary)';
         btn.style.borderColor = 'var(--border-color)';
         if (dotEl) dotEl.style.backgroundColor = 'var(--text-muted)';
-      } else if (paidClientsCount === totalClientsCount) {
+      } else if (expectedActiveClients.length === 0 || paidExpectedCount === expectedActiveClients.length || paidClientsCount === totalClientsCount) {
         btn.style.backgroundColor = 'var(--color-verde-bg)';
         btn.style.color = 'var(--color-verde)';
         btn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
@@ -4586,10 +4597,17 @@ const agentModule = {
       // Excluir estrictamente clientes con cartón liquidado, cancelado o en Lista Negra / Mora (v106)
       const clients = allClients.filter(c => {
         if (!this.isClientActiveAndValid(c)) return false;
-        if (currentAgentId && c.agent_id) {
-          return String(c.agent_id).trim() === String(currentAgentId).trim() || String(c.agent_id).trim() === String(currentUser.id).trim() || String(c.agent_id).trim() === String(currentUser.username).trim();
-        }
-        return true;
+        const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
+        const uRoute = String(userRouteId || '').trim().toLowerCase();
+        const cAgent = String(c.agent_id || '').trim().toLowerCase();
+        const uAgent = String(currentAgentId || '').trim().toLowerCase();
+        const uId = String(currentUser?.id || '').trim().toLowerCase();
+        const uName = String(currentUser?.username || '').trim().toLowerCase();
+
+        if (uRoute && cRoute && cRoute === uRoute) return true;
+        if (cAgent && (cAgent === uAgent || (uId && cAgent === uId) || (uName && cAgent === uName))) return true;
+        if (!cAgent && !cRoute) return true;
+        return false;
       });
 
       if (clients.length === 0) {

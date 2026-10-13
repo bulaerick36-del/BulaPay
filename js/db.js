@@ -536,13 +536,13 @@ const db = {
             const { data: dataAgent } = await supabase
               .from('agentes_ruta')
               .select('*')
-              .or(`username.ilike."${cleanInput}",cedula.eq."${cleanInput}",phone.eq."${cleanInput}"`);
+              .or(`username.ilike."${cleanInput}",phone.eq."${cleanInput}"`);
 
             if (dataAgent && dataAgent.length > 0) {
               const ag = dataAgent[0];
               foundUser = {
                 id: ag.id || ag.username,
-                username: ag.username || ag.cedula || cleanInput,
+                username: ag.username || cleanInput,
                 password: ag.password || ag.clave || ag.pin || '123456',
                 name: ag.name || ag.nombre || ag.username,
                 role: 'Agente de Ruta',
@@ -609,13 +609,12 @@ const db = {
       await supabase
         .from('users')
         .update({ 
-          last_sign_in_at: nowIso, 
-          updated_at: nowIso 
+          last_location_time: nowIso 
         })
         .eq('username', String(username).toLowerCase());
       console.log(`⏱️ [BulaPay DB] Último acceso registrado para '${username}': ${nowIso}`);
     } catch (e) {
-      console.warn("Error actualizando fecha de último acceso en Supabase:", e);
+      console.warn("Aviso actualizando fecha de último acceso en Supabase:", e);
     }
   },
 
@@ -1104,7 +1103,7 @@ const db = {
                        rawReason.includes('castigo') ||
                        rawReason.includes('incobrable') ||
                        rawReason.includes('negra') ||
-                       (Number(c.outstanding || c.saldo_pendiente || 0) > 0 && !rawEstado.includes('renov'));
+                       (Number(c.outstanding || 0) > 0 && !rawEstado.includes('renov'));
 
         // 2. AZUL: Renovación (Retanqueo)
         const isRenovacion = !isMora && (
@@ -1153,7 +1152,7 @@ const db = {
           numeroCarton: c.numero_carton || c.numeroCarton || 'S/N',
           montoPrestado: Number(c.monto_prestado || c.amount || clientObj.amount || 0),
           totalDeuda: Number(c.total_debt || c.totalDebt || clientObj.totalDebt || 0),
-          saldoPendiente: Number(c.outstanding || c.saldo_pendiente || 0),
+          saldoPendiente: Number(c.outstanding || 0),
           category,
           categoryLabel,
           categoryColor,
@@ -1515,12 +1514,13 @@ const db = {
       const currentUser = this.getCurrentUser();
       if (!currentUser) return [];
       const supId = await this.getSupervisorIdForUser(currentUser);
+      const resolvedRouteId = currentUser.routeId || currentUser.route_id || (await this.getActiveRouteIdForUser(currentUser));
 
       // CONSULTA DIRECTA Y SIMPLE v113: Select * sin relaciones de llaves foráneas complejas (evita error PostgREST)
       const { data: cartonesData, error: cartonesErr } = await supabase
         .from('cartones')
         .select('*')
-        .in('estado', ['activo', 'activo_por_renovacion']);
+        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion']);
 
       if (cartonesErr) {
         console.error("Error al obtener cartones activos en Supabase:", cartonesErr);
@@ -1528,9 +1528,11 @@ const db = {
 
       // Pre-cargar mapa de la tabla clients para asociar nombres e información de contacto
       const clientsMap = new Map();
+      let allRawClients = [];
       try {
         const { data: rawClients } = await supabase.from('clients').select('*');
         if (rawClients) {
+          allRawClients = rawClients;
           rawClients.forEach(c => {
             if (c && c.cedula) clientsMap.set(String(c.cedula).trim(), c);
           });
@@ -1539,29 +1541,32 @@ const db = {
         console.warn("Aviso cargando tabla clients para fallback:", eCl);
       }
 
+      const activeCedulasInCartones = new Set(
+        (cartonesData || []).map(c => String(c.cliente_id || '').trim()).filter(Boolean)
+      );
+
       // Pre-cargar cédulas en Lista Negra para excluir automáticamente del listado de cobro activo (v124)
       const blacklistedCedulas = new Set();
       try {
-        const { data: allCls } = await supabase.from('clients').select('*');
-        if (allCls) {
-          allCls.forEach(c => {
+        if (allRawClients && allRawClients.length > 0) {
+          allRawClients.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
             const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('MORA') || st.includes('CASTIGADO'));
             if (isLoss) {
-              if (c.cedula) blacklistedCedulas.add(String(c.cedula).trim());
-              if (c.id) blacklistedCedulas.add(String(c.id).trim());
+              const ced = String(c.cedula || '').trim();
+              if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
             }
           });
         }
-        const { data: allCarts } = await supabase.from('cartones').select('*');
+        const { data: allCarts } = await supabase.from('cartones').select('cliente_id, estado, status');
         if (allCarts) {
           allCarts.forEach(c => {
             const st = String(c.status || c.estado || '').trim().toUpperCase();
             const rawEst = String(c.estado || '').trim().toLowerCase();
             const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
-            if (isLoss) {
-              if (c.cliente_id) blacklistedCedulas.add(String(c.cliente_id).trim());
-              if (c.client_id) blacklistedCedulas.add(String(c.client_id).trim());
+            if (isLoss && c.cliente_id) {
+              const ced = String(c.cliente_id).trim();
+              if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
             }
           });
         }
@@ -1571,9 +1576,36 @@ const db = {
 
       const activeCreditsList = [];
       const cartones = cartonesData || [];
+      const isMasterUser = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
+      const uNameLower = String(currentUser.username || '').trim().toLowerCase();
+      const uIdLower = String(currentUser.id || '').trim().toLowerCase();
+      const uRouteLower = String(resolvedRouteId || '').trim().toLowerCase();
+      const supIdLower = String(supId || '').trim().toLowerCase();
+
+      const matchesCurrentUserScope = (recSupervisorId, recAgentId, recRouteId) => {
+        if (isMasterUser) return true;
+        const cSup = String(recSupervisorId || '').trim().toLowerCase();
+        const cAgent = String(recAgentId || '').trim().toLowerCase();
+        const cRoute = String(recRouteId || '').trim().toLowerCase();
+
+        if (currentUser.role === 'Agente Independiente') {
+          return (cSup && cSup === uNameLower) ||
+                 (cAgent && cAgent === uNameLower) ||
+                 (!cSup && (!cAgent || cAgent === uNameLower));
+        } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+          return (uRouteLower && cRoute && cRoute === uRouteLower) ||
+                 (cAgent && (cAgent === uNameLower || (uIdLower && cAgent === uIdLower)));
+        } else if (supIdLower) {
+          return (cSup && cSup === supIdLower) ||
+                 (cAgent && cAgent === supIdLower);
+        }
+        return true;
+      };
+
+      const addedCedulasForScope = new Set();
 
       cartones.forEach(carton => {
-        const cedula = String(carton.cliente_id || carton.client_id || carton.cedula || '').trim();
+        const cedula = String(carton.cliente_id || '').trim();
         if (!cedula || blacklistedCedulas.has(cedula)) return;
 
         const joinedClient = (carton.clients && typeof carton.clients === 'object' && carton.clients.name)
@@ -1582,18 +1614,15 @@ const db = {
 
         const montoPrestado = Number(carton.monto_prestado || (joinedClient ? joinedClient.amount : 0) || 0);
         const totalDebt = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
-        const spVal = Number(carton.saldo_pendiente);
         const outVal = Number(carton.outstanding);
         const tdVal = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
         let outstanding = 0;
-        if (!isNaN(spVal) && spVal > 0) {
-          outstanding = Math.round(spVal);
-        } else if (!isNaN(outVal) && outVal > 0) {
+        if (!isNaN(outVal) && outVal > 0) {
           outstanding = Math.round(outVal);
         } else if (tdVal > 0) {
           outstanding = Math.round(tdVal);
         } else {
-          outstanding = Math.max(isNaN(spVal) ? 0 : Math.round(spVal), isNaN(outVal) ? 0 : Math.round(outVal));
+          outstanding = isNaN(outVal) ? 0 : Math.max(0, Math.round(outVal));
         }
         const installmentsCount = Number(carton.installments_count || 1);
         const installmentAmount = Number(carton.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
@@ -1604,24 +1633,9 @@ const db = {
         const cartonAgentId = carton.agent_id || joinedClient.agent_id || null;
         const cartonRouteId = carton.route_id || carton.routeId || joinedClient.routeId || null;
 
-        const isMasterUser = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
-        if (!isMasterUser) {
-          if (currentUser.role === 'Agente Independiente') {
-            const matchesUser = (cartonSupervisorId && cartonSupervisorId === currentUser.username) ||
-                                (cartonAgentId && cartonAgentId === currentUser.username) ||
-                                (!cartonSupervisorId && (!cartonAgentId || cartonAgentId === currentUser.username));
-            if (!matchesUser) return;
-          } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
-            const userRouteId = currentUser.routeId || currentUser.route_id;
-            const matchesRouteAgent = (userRouteId && cartonRouteId && String(cartonRouteId) === String(userRouteId)) ||
-                                      (cartonAgentId && (cartonAgentId === currentUser.username || cartonAgentId === currentUser.id));
-            if (!matchesRouteAgent) return;
-          } else if (supId) {
-            const matchesSupervisor = (cartonSupervisorId && cartonSupervisorId === supId) ||
-                                      (cartonAgentId && cartonAgentId === supId);
-            if (!matchesSupervisor) return;
-          }
-        }
+        if (!matchesCurrentUserScope(cartonSupervisorId, cartonAgentId, cartonRouteId)) return;
+
+        addedCedulasForScope.add(cedula);
 
         activeCreditsList.push({
           ...joinedClient,
@@ -1658,6 +1672,49 @@ const db = {
           created_at: carton.fecha_apertura || carton.fecha_inicio || carton.created_at || joinedClient.created_at
         });
       });
+
+      // Fallback para clientes con deuda activa en la tabla 'clients' cuyo cartón aún no esté activo en 'cartones'
+      if (allRawClients && allRawClients.length > 0) {
+        allRawClients.forEach(c => {
+          const cedula = String(c.cedula || '').trim();
+          if (!cedula || addedCedulasForScope.has(cedula) || blacklistedCedulas.has(cedula)) return;
+          if (this.isBlacklistedClient(c)) return;
+          const outVal = Number(c.outstanding || 0);
+          if (outVal <= 0) return;
+          if (!matchesCurrentUserScope(c.supervisor_id, c.agent_id, c.routeId || c.route_id)) return;
+
+          const montoPrestado = Number(c.amount || c.monto_prestado || 0);
+          const totalDebt = Number(c.totalDebt || c.total_debt || (montoPrestado ? Math.round(montoPrestado * 1.2) : outVal));
+          const installmentsCount = Number(c.installmentsCount || c.installments_count || 30);
+          const installmentAmount = Number(c.installmentAmount || c.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
+
+          addedCedulasForScope.add(cedula);
+          activeCreditsList.push({
+            ...c,
+            cedula: cedula,
+            cliente_id: cedula,
+            client_id: cedula,
+            name: c.name || `Cliente ${cedula}`,
+            monto_prestado: montoPrestado,
+            amount: montoPrestado,
+            total_debt: totalDebt,
+            totalDebt: totalDebt,
+            outstanding: Math.round(outVal),
+            installments_count: installmentsCount,
+            installmentsCount: installmentsCount,
+            installment_amount: installmentAmount,
+            installmentAmount: installmentAmount,
+            estado: 'activo',
+            status: 'Activo',
+            routeId: c.routeId || c.route_id || null,
+            agent_id: c.agent_id || null,
+            supervisor_id: c.supervisor_id || null,
+            carton_id: c.carton_id || c.id || null,
+            fecha_apertura: c.fecha_apertura || c.created_at,
+            created_at: c.created_at
+          });
+        });
+      }
 
       console.log('✅ [BulaPay DB] Cartones activos re-mapeados con clients (loadActiveCredits):', activeCreditsList);
       return activeCreditsList;
@@ -1783,13 +1840,6 @@ const db = {
         .update(clientUpdate)
         .eq('cedula', cedStr);
 
-      if (!isNaN(Number(cedStr))) {
-        await supabase
-          .from('clients')
-          .update(clientUpdate)
-          .eq('cedula', Number(cedStr));
-      }
-
       // 2. Restaurar cartones del cliente en la tabla 'cartones' (usando cliente_id)
       const { data: cartones } = await supabase
         .from('cartones')
@@ -1800,7 +1850,7 @@ const db = {
         for (const carton of cartones) {
           const rawEst = String(carton.estado || carton.status || '').toLowerCase();
           if (rawEst.includes('perdida') || rawEst.includes('mora') || rawEst.includes('castigado')) {
-            const newEstado = Number(carton.outstanding || carton.saldo_pendiente || 0) > 0 ? 'activo' : 'liquidado_pagado';
+            const newEstado = Number(carton.outstanding || 0) > 0 ? 'activo' : 'liquidado_pagado';
             await supabase
               .from('cartones')
               .update({ estado: newEstado, status: newEstado })
@@ -1809,24 +1859,7 @@ const db = {
         }
       }
 
-      // 3. Eliminar de la tabla 'lista_negra' si existe
-      try {
-        await supabase
-          .from('lista_negra')
-          .delete()
-          .or(`cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`);
-
-        if (!isNaN(Number(cedStr))) {
-          await supabase
-            .from('lista_negra')
-            .delete()
-            .or(`cliente_id.eq.${Number(cedStr)},client_id.eq.${Number(cedStr)},cedula.eq.${Number(cedStr)}`);
-        }
-      } catch (eLn) {
-        console.warn("Aviso al eliminar de tabla lista_negra:", eLn?.message);
-      }
-
-      // 4. Sincronizar caché local
+      // 3. Sincronizar caché local
       try {
         const localClients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
         localClients.forEach(c => {
@@ -1838,7 +1871,7 @@ const db = {
         localStorage.setItem('bulapay_clients', JSON.stringify(localClients));
       } catch (eCache) {}
 
-      // 5. Recargar clientes activos en memoria
+      // 4. Recargar clientes activos en memoria
       await this.loadActiveCredits();
 
       return { success: true };
@@ -1856,7 +1889,7 @@ const db = {
       const { data: cartonesData } = await supabase
         .from('cartones')
         .select('id, estado, status')
-        .or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`);
+        .eq('cliente_id', cedStr);
 
       if (cartonesData && cartonesData.length > 0) {
         const hasLoss = cartonesData.some(c => {
@@ -1865,14 +1898,6 @@ const db = {
         });
         if (hasLoss) return true;
       }
-
-      const { data: lnData } = await supabase
-        .from('lista_negra')
-        .select('id')
-        .or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`)
-        .maybeSingle();
-
-      if (lnData) return true;
 
       return false;
     } catch (e) {
@@ -1906,13 +1931,13 @@ const db = {
       const { data: userData } = await supabase
         .from('users')
         .select('*')
-        .or(`username.ilike."${cleanInput}",id.eq."${cleanInput}"`);
+        .ilike('username', cleanInput);
       if (userData && userData.length > 0) return userData[0];
 
       const { data: agentData } = await supabase
         .from('agentes_ruta')
         .select('*')
-        .or(`username.ilike."${cleanInput}",cedula.eq."${cleanInput}"`);
+        .ilike('username', cleanInput);
       if (agentData && agentData.length > 0) return agentData[0];
 
       return null;
@@ -1930,16 +1955,10 @@ const db = {
 
     // 1. Consulta limpia a la tabla 'cartones' ignorando cualquier filtro de route_id / supervisor_id / agent_id
     try {
-      let queryOr = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
-      if (!isNaN(Number(cedStr))) {
-        const numVal = Number(cedStr);
-        queryOr += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
-      }
-
       const { data: cData } = await supabase
         .from('cartones')
         .select('*')
-        .or(queryOr);
+        .eq('cliente_id', cedStr);
 
       if (cData && cData.length > 0) {
         userCartons = cData;
@@ -1948,7 +1967,7 @@ const db = {
       console.warn("Aviso en consulta por cédula en getActiveCartonesForHistory:", e);
     }
 
-    // 2. Fallback: Si la consulta .or() no trajo registros, realizar escaneo directo sobre la tabla 'cartones'
+    // 2. Fallback: Si la consulta no trajo registros, realizar escaneo directo sobre la tabla 'cartones'
     if (!userCartons || userCartons.length === 0) {
       try {
         const { data: allCartons } = await supabase
@@ -1957,7 +1976,7 @@ const db = {
 
         if (allCartons && allCartons.length > 0) {
           userCartons = allCartons.filter(c => {
-            const cId = String(c.cliente_id || c.client_id || c.cedula || c.clienteCedula || c.clientCedula || '').trim();
+            const cId = String(c.cliente_id || '').trim();
             return cId === cedStr || (!isNaN(Number(cedStr)) && Number(cId) === Number(cedStr));
           });
         }
@@ -1976,7 +1995,7 @@ const db = {
     if (activeCartons.length > 0) {
       for (const carton of activeCartons) {
         const agentId = carton.agent_id || carton.agentId || carton.agentName || null;
-        const routeId = carton.route_id || carton.routeId || carton.ruta_id || null;
+        const routeId = carton.route_id || carton.routeId || null;
 
         let agentName = 'Cobrador Desconocido';
         let routeName = 'Ruta Desconocida';
@@ -2032,16 +2051,10 @@ const db = {
 
     let userCartons = [];
     try {
-      let queryOr = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
-      if (!isNaN(Number(cedStr))) {
-        const numVal = Number(cedStr);
-        queryOr += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
-      }
-
       const { data: cData } = await supabase
         .from('cartones')
         .select('*')
-        .or(queryOr);
+        .eq('cliente_id', cedStr);
       if (cData && cData.length > 0) {
         userCartons = cData;
       }
@@ -2054,7 +2067,7 @@ const db = {
         const { data: allCartons } = await supabase.from('cartones').select('*');
         if (allCartons && allCartons.length > 0) {
           userCartons = allCartons.filter(c => {
-            const cId = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+            const cId = String(c.cliente_id || '').trim();
             return cId === cedStr || (!isNaN(Number(cedStr)) && Number(cId) === Number(cedStr));
           });
         }
@@ -2072,18 +2085,6 @@ const db = {
         hasLoss = true;
       }
     });
-
-    if (!hasLoss) {
-      try {
-        let queryOrLN = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
-        if (!isNaN(Number(cedStr))) {
-          const numVal = Number(cedStr);
-          queryOrLN += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
-        }
-        const { data: lnData } = await supabase.from('lista_negra').select('id').or(queryOrLN).maybeSingle();
-        if (lnData) hasLoss = true;
-      } catch (eln) {}
-    }
 
     if (hasLoss) {
       return {
@@ -2355,32 +2356,16 @@ const db = {
 
     let client = null;
     try {
-      let queryOr = `cedula.eq.${cedStr},cliente_id.eq.${cedStr},client_id.eq.${cedStr}`;
-      if (!isNaN(Number(cedStr))) {
-        const numVal = Number(cedStr);
-        queryOr += `,cedula.eq.${numVal},cliente_id.eq.${numVal},client_id.eq.${numVal}`;
-      }
-      const { data: clientData, error } = await supabase
+      const { data: clientData } = await supabase
         .from('clients')
         .select('*')
-        .or(queryOr);
+        .eq('cedula', cedStr);
 
       if (clientData && clientData.length > 0) {
         client = clientData[0];
       }
     } catch (e) {
       console.warn("Error al obtener cliente global por cédula:", e);
-    }
-
-    if (!client) {
-      try {
-        const { data: cSingle } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('cedula', cedStr)
-          .maybeSingle();
-        if (cSingle) client = cSingle;
-      } catch (eS) {}
     }
 
     if (!client) {
@@ -2402,12 +2387,15 @@ const db = {
 
     // Verificar cartón activo en la tabla 'cartones'
     try {
-      const { data: carton } = await supabase
+      const { data: cartonsData } = await supabase
         .from('cartones')
         .select('*')
-        .eq('cliente_id', String(cedula))
-        .in('estado', ['activo', 'activo_por_renovacion'])
-        .maybeSingle();
+        .eq('cliente_id', String(cedula).trim())
+        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const carton = (cartonsData && cartonsData.length > 0) ? cartonsData[0] : null;
 
       if (carton) {
         return {
@@ -2439,23 +2427,10 @@ const db = {
               .select('*')
               .eq('cliente_id', cedStr);
             
-            let lc = lostCartons ? lostCartons.find(c => {
+            const lc = lostCartons ? lostCartons.find(c => {
               const st = String(c.estado || c.status || '').toLowerCase();
               return st.includes('perdida') || st.includes('mora') || st.includes('castigado');
             }) : null;
-
-            if (!lc) {
-              const { data: lostCartons2 } = await supabase
-                .from('cartones')
-                .select('*')
-                .eq('client_id', cedStr);
-              if (lostCartons2) {
-                lc = lostCartons2.find(c => {
-                  const st = String(c.estado || c.status || '').toLowerCase();
-                  return st.includes('perdida') || st.includes('mora') || st.includes('castigado');
-                }) || lostCartons2[0];
-              }
-            }
 
             if (lc) {
               const cDebt = Number(
@@ -2676,7 +2651,6 @@ const db = {
       discount_amount: discountVal,
       net_cash: netCashVal,
       route_id: routeId,
-      ruta_id: routeId,
       agent_id: agentId,
       supervisor_id: supervisorId,
       created_at: nowIso
@@ -3059,7 +3033,7 @@ const db = {
         }
 
         // PASO 2: UPDATE al cartón viejo cambiando su estado a RENOVADO y deuda 0
-        // REGLA ESTRICTA: Filtrar ÚNICAMENTE por cliente_id (NO client_id ni cedula) y usar columnas nativas
+        // REGLA ESTRICTA: Filtrar por old_carton_id o por cliente_id + agent_id para no cerrar cartones de otros agentes
         try {
           const cedStr = String(clientId).trim();
           if (payload.old_carton_id) {
@@ -3068,22 +3042,30 @@ const db = {
               .update({ estado: 'RENOVADO', outstanding: 0 })
               .eq('id', payload.old_carton_id);
           }
-          const { error: errCed } = await supabase
+          let oldCartonQuery = supabase
             .from('cartones')
             .update({ estado: 'RENOVADO', outstanding: 0 })
             .eq('cliente_id', cedStr)
             .in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
+          if (agentId) {
+            oldCartonQuery = oldCartonQuery.eq('agent_id', agentId);
+          }
+          const { error: errCed } = await oldCartonQuery;
 
           if (errCed) {
             console.warn("Aviso al actualizar cartones viejos por cliente_id:", errCed.message);
           } else {
             // Actualización secundaria no bloqueante de columnas añadidas en migraciones si existen
             try {
-              await supabase
+              let secQuery = supabase
                 .from('cartones')
                 .update({ status: 'RENOVADO', liquidation_reason: 'Renovación' })
                 .eq('cliente_id', cedStr)
                 .eq('estado', 'RENOVADO');
+              if (agentId) {
+                secQuery = secQuery.eq('agent_id', agentId);
+              }
+              await secQuery;
             } catch (_) {}
           }
         } catch (eOld) {
@@ -3438,24 +3420,19 @@ const db = {
     let currentBalance = 0;
     if (activeCarton) {
       const out = Number(activeCarton.outstanding);
-      const sp = Number(activeCarton.saldo_pendiente);
       const td = Number(activeCarton.total_debt || activeCarton.monto_total || 0);
 
       if (!isNaN(out) && out > 0) {
         currentBalance = Math.round(out);
-      } else if (!isNaN(sp) && sp > 0) {
-        currentBalance = Math.round(sp);
       } else if (td > 0) {
         currentBalance = Math.round(td);
       } else {
-        currentBalance = Math.max(isNaN(out) ? 0 : Math.round(out), isNaN(sp) ? 0 : Math.round(sp));
+        currentBalance = isNaN(out) ? 0 : Math.max(0, Math.round(out));
       }
     } else if (client) {
       const out = Number(client.outstanding);
-      const sp = Number(client.saldo_pendiente);
       const td = Number(client.totalDebt ?? client.monto_total ?? 0);
       if (!isNaN(out) && out > 0) currentBalance = Math.round(out);
-      else if (!isNaN(sp) && sp > 0) currentBalance = Math.round(sp);
       else currentBalance = Math.round(td);
     }
 
@@ -3538,7 +3515,6 @@ const db = {
       cartonUpdatePayload.fecha_cierre = new Date().toISOString();
       cartonUpdatePayload.liquidation_reason = 'Pago Exitoso';
     }
-    delete cartonUpdatePayload.saldo_pendiente;
 
     // UPDATE A LA TABLA CARTONES: ESTRICTAMENTE usando el UUID del cartón (.eq('id', validCartonId))
     // CONTROL DE ERRORES ESTRICTO: Exigir modificación de exactamente 1 o más filas con .select()
@@ -3594,7 +3570,6 @@ const db = {
       if (newClientOutstanding <= 0 && isLiquidado) {
         clientPayload.risk = 'Verde';
       }
-      delete clientPayload.saldo_pendiente;
       delete clientPayload.status;
       delete clientPayload.estado;
 
@@ -5066,7 +5041,6 @@ const db = {
         fecha_cierre: new Date().toISOString(),
         liquidation_reason: isMora ? 'Liquidado por Mora' : (isRenovacion ? 'Renovación' : 'Pago Exitoso')
       };
-      delete cartonUpdatePayload.saldo_pendiente;
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
       if (cartonId && isValidUuid(cartonId)) {
@@ -5083,22 +5057,6 @@ const db = {
         });
         if (rpcErr) console.error("Error al liquidar mediante RPC en liquidateCredit:", rpcErr);
         else console.log(`✅ [v134 LIQUIDATE RPC] Cartón(es) de ${cedStr} liquidados por morosidad vía RPC en Supabase.`);
-
-        // Inserción en la tabla 'lista_negra' registrando el saldo pendiente real
-        try {
-          await supabase.from('lista_negra').insert([{
-            cliente_id: cedStr,
-            cedula: cedStr,
-            monto: moraOutstanding,
-            outstanding: moraOutstanding,
-            total_debt: totalDebt || 0,
-            carton_id: cartonId || null,
-            motivo: 'Liquidado por Mora',
-            created_at: new Date().toISOString()
-          }]);
-        } catch (eLn) {
-          console.warn("Aviso opcional en liquidateCredit al insertar en lista_negra:", eLn?.message);
-        }
       }
     } catch (eCarton) {
       console.warn("Excepción al actualizar tabla cartones:", eCarton.message);
@@ -5207,7 +5165,7 @@ const db = {
           const rawStatus = String(c.status || c.estado || '').toUpperCase();
           if (c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA')) {
             const ced = String(c.cedula).trim();
-            const realSaldoPendiente = Math.round(Number(c.outstanding ?? c.saldo_pendiente ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
+            const realSaldoPendiente = Math.round(Number(c.outstanding ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
             blacklistedMap.set(ced, {
               ...c,
               cedula: ced,
@@ -5223,7 +5181,7 @@ const db = {
         cartonesData.forEach(carton => {
           const rawEstado = String(carton.estado || carton.status || '').toLowerCase();
           if (rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora')) {
-            const ced = String(carton.cliente_id || carton.client_id || '').trim();
+            const ced = String(carton.cliente_id || '').trim();
             if (ced) {
               const clientFromDb = allClientsByCedula.get(ced) || {};
               const joinedClient = carton.clients || {};
@@ -5232,8 +5190,6 @@ const db = {
                 carton.outstanding ?? 
                 clientFromDb.outstanding ?? 
                 joinedClient.outstanding ?? 
-                carton.saldo_pendiente ?? 
-                clientFromDb.saldo_pendiente ?? 
                 carton.total_debt ?? 
                 carton.totalDebt ?? 
                 0

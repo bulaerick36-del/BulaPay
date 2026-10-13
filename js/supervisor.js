@@ -884,7 +884,7 @@ const supervisorModule = {
         let clientQuery = supabase
           .from('clients')
           .select('*')
-          .or(`cedula.eq.${cedStr},cliente_id.eq.${cedStr},client_id.eq.${cedStr}`);
+          .eq('cedula', cedStr);
         if (targetAgentId) {
           clientQuery = clientQuery.eq('agent_id', targetAgentId);
         }
@@ -901,15 +901,10 @@ const supervisorModule = {
       let activeCarton = null;
       try {
         // Priorizar siempre el cartón activo más reciente (especialmente tras una renovación)
-        let qOrCarton = `cliente_id.eq.${cedStr},client_id.eq.${cedStr},cedula.eq.${cedStr}`;
-        if (!isNaN(Number(cedStr))) {
-          const numVal = Number(cedStr);
-          qOrCarton += `,cliente_id.eq.${numVal},client_id.eq.${numVal},cedula.eq.${numVal}`;
-        }
         let activeCartonQuery = supabase
           .from('cartones')
           .select('*')
-          .or(qOrCarton)
+          .eq('cliente_id', cedStr)
           .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
           .order('created_at', { ascending: false });
 
@@ -944,8 +939,7 @@ const supervisorModule = {
         client.totalDebt = Number(activeCarton.total_debt || activeCarton.totalDebt || client.totalDebt || client.total_debt || 0);
         client.outstanding = Number(
           (activeCarton.outstanding !== undefined && activeCarton.outstanding !== null && !isNaN(Number(activeCarton.outstanding))) ? activeCarton.outstanding :
-          ((activeCarton.saldo_pendiente !== undefined && activeCarton.saldo_pendiente !== null && !isNaN(Number(activeCarton.saldo_pendiente))) ? activeCarton.saldo_pendiente :
-          (client.outstanding ?? 0))
+          (client.outstanding ?? 0)
         );
         if (activeCarton.fecha_apertura) client.fecha_apertura = activeCarton.fecha_apertura;
         if (activeCarton.fecha_inicio) client.fecha_inicio = activeCarton.fecha_inicio;
