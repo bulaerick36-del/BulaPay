@@ -483,10 +483,10 @@ const supervisorModule = {
         directTotal = Number(await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername, null, routeId)) || 0;
       }
 
-      // Suma verificadora sobre el historial del día con verificación estricta de cartón y agente
+      // Suma verificadora sobre el historial de la jornada operativa con verificación estricta de cartón y agente
       let fallbackTotal = 0;
       if (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function') {
-        const todayStr = this.getLocalDateString();
+        const shiftWindow = await window.BulaPayDB.getRouteOperationalShiftWindow(routeId, null, agentUsername);
         const allPayments = await window.BulaPayDB.getPayments();
         const allCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
           ? await window.BulaPayDB.getCartones()
@@ -502,6 +502,20 @@ const supervisorModule = {
         const agentUserLower = String(agentUsername || '').trim().toLowerCase();
         const targetRouteLower = String(routeId || agentObj?.routeId || agentObj?.route_id || '').trim().toLowerCase();
 
+        const isDateInShift = (rawVal) => {
+          if (!rawVal) return false;
+          let d = null;
+          if (rawVal instanceof Date) d = rawVal;
+          else {
+            const s = String(rawVal).trim();
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(`${s}T12:00:00-05:00`);
+            else d = new Date(s);
+          }
+          if (!d || isNaN(d.getTime())) return false;
+          const ms = d.getTime();
+          return ms >= shiftWindow.effectiveStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
+        };
+
         const seenIds = new Set();
         const handledRenewalCartonIds = new Set();
         (allPayments || []).forEach(p => {
@@ -509,9 +523,8 @@ const supervisorModule = {
           const rawId = String(p.id || '').trim();
           if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
 
-          const pLocalDate = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : String(p.date || '').trim();
-          const isToday = String(p.date || '').startsWith(todayStr) || pLocalDate === todayStr;
-          if (!isToday) return;
+          const inShift = isDateInShift(p.created_at) || isDateInShift(p.fecha_pago) || isDateInShift(p.fecha) || (isDateInShift(p.date) && (!p.created_at || isDateInShift(p.created_at)));
+          if (!inShift) return;
 
           const amount = Number(p.amount || 0);
           if (amount <= 0) return;
@@ -535,7 +548,6 @@ const supervisorModule = {
 
           let belongs = false;
           if (agentUserLower) {
-            // El pago DEBE pertenecer a un cartón amarrado específicamente al agente consultado
             if (pCartonId && cartonMap.has(pCartonId)) {
               const c = cartonMap.get(pCartonId);
               const cAgent = String(c.agent_id || '').trim().toLowerCase();
@@ -543,7 +555,6 @@ const supervisorModule = {
                 belongs = true;
               }
             } else {
-              // Si no tiene cartón amarrado en el mapa, validar por agent_id / agentName directo del pago
               if (pAgentId === agentUserLower || pAgentName === agentUserLower) belongs = true;
               if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) belongs = true;
             }
@@ -557,7 +568,7 @@ const supervisorModule = {
           }
           if (!belongs) return;
 
-          const dedupKey = rawId || `${p.clientCedula || p.client_cedula}_${p.installmentNumber || ''}_${amount}_${todayStr}`;
+          const dedupKey = rawId || `${p.clientCedula || p.client_cedula}_${p.installmentNumber || ''}_${amount}_${shiftWindow.shiftDateStr}`;
           if (seenIds.has(dedupKey)) return;
           seenIds.add(dedupKey);
 
@@ -585,8 +596,8 @@ const supervisorModule = {
           if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
           if (rollover <= 0) return;
 
-          const cLocalDate = c.created_at ? this.getLocalDateString(new Date(c.created_at)) : (c.fecha_apertura ? this.getLocalDateString(new Date(c.fecha_apertura)) : '');
-          if (cLocalDate !== todayStr) return;
+          const inShift = isDateInShift(c.created_at) || isDateInShift(c.fecha_apertura);
+          if (!inShift) return;
 
           if (cId) handledRenewalCartonIds.add(cId);
           fallbackTotal += rollover;
@@ -1352,6 +1363,7 @@ const supervisorModule = {
 
     modal.classList.add('active');
     await this.calculateCierreCaja();
+    await this.renderHistorialCierresSupervisor();
   },
 
   closeCierreCajaModal() {
@@ -1382,6 +1394,104 @@ const supervisorModule = {
     if (renovOutEl) renovOutEl.textContent = `-$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
     if (retenidosEl) retenidosEl.textContent = `+$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
     if (entregarEl) entregarEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
+
+    await this.renderHistorialCierresSupervisor();
+  },
+
+  async renderHistorialCierresSupervisor() {
+    const container = document.getElementById('cierre-historial-container');
+    if (!container) return;
+
+    const routeSelect = document.getElementById('modal-cierre-route-select');
+    const routeId = routeSelect ? routeSelect.value : null;
+
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.5rem;">Cargando historial...</div>';
+
+    const cierres = await window.BulaPayDB.getHistorialCierres(routeId);
+    if (!cierres || cierres.length === 0) {
+      container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.5rem;">No hay cierres previos registrados para esta ruta.</div>';
+      return;
+    }
+
+    container.innerHTML = cierres.map(c => {
+      const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : c.fecha_jornada;
+      const recaudo = Number(c.total_recaudado || 0);
+      const entrega = Number(c.efectivo_entregar || 0);
+      const tipo = c.tipo_cierre === 'automatico_reinicio' ? '⚡ Auto-reinicio' : '🔒 Cierre manual';
+      return `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 0.5rem 0.75rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+          <div>
+            <div style="font-weight: 700; color: #fff;">📅 Jornada ${c.fecha_jornada} <span style="font-size:0.7rem; color:#94a3b8;">(${tipo})</span></div>
+            <div style="font-size: 0.72rem; color: #94a3b8;">Cerrado: ${fCierre} | Agente: ${c.agent_name || c.agent_id || 'Ruta'}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="color: #10b981; font-weight: 800;">+$${recaudo.toLocaleString('es-CO')}</div>
+            <div style="color: #38bdf8; font-size: 0.72rem; font-weight: 600;">Entrega: $${entrega.toLocaleString('es-CO')}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  async confirmarCierreJornadaSupervisor() {
+    const routeSelect = document.getElementById('modal-cierre-route-select');
+    if (!routeSelect) return;
+    const routeId = routeSelect.value;
+
+    const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
+    const recaudo = Number(data.totalCobrado + (data.entradasRenovacion || 0));
+
+    let confirmRes = false;
+    if (typeof Swal !== 'undefined') {
+      const res = await Swal.fire({
+        title: '¿Confirmar Cierre de Jornada?',
+        html: `Se cerrará la jornada operativa actual de la ruta <strong>${data.routeName}</strong>.<br><br>
+               <strong>Recaudo a archivar:</strong> <span style="color:#10b981; font-weight:bold;">$${recaudo.toLocaleString('es-CO')}</span><br>
+               <strong>Total a entregar:</strong> <span style="color:#38bdf8; font-weight:bold;">$${data.totalEntregar.toLocaleString('es-CO')}</span><br><br>
+               <span style="color:#f59e0b; font-size:0.85rem;">⚠️ Al confirmar, el contador de 'Recaudado Hoy' de la ruta reiniciará inmediatamente a $0.</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, Realizar Cierre',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#64748b',
+        background: '#0f172a',
+        color: '#fff'
+      });
+      confirmRes = res.isConfirmed;
+    } else {
+      confirmRes = confirm(`¿Confirmar cierre de jornada para ${data.routeName}?\nRecaudo a archivar: $${recaudo.toLocaleString('es-CO')}\nEl contador reiniciará a $0.`);
+    }
+
+    if (!confirmRes) return;
+
+    try {
+      await window.BulaPayDB.realizarCierreJornada({
+        routeId: data.routeId,
+        tipoCierre: 'manual',
+        detalles: { cerrado_por: 'Supervisor', fecha_operativa: data.dateStr }
+      });
+
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: '¡Cierre Exitoso!',
+          text: `La jornada fue archivada en el historial y el recaudo de la ruta se reinició a $0.`,
+          icon: 'success',
+          confirmButtonColor: '#10b981',
+          background: '#0f172a',
+          color: '#fff'
+        });
+      } else {
+        alert('✅ Cierre de jornada realizado con éxito. Contador reiniciado a $0.');
+      }
+
+      await this.calculateCierreCaja();
+      await this.renderHistorialCierresSupervisor();
+      await this.loadAll();
+    } catch (e) {
+      console.error("Error al confirmar cierre de jornada:", e);
+      alert('❌ Error al realizar el cierre de jornada: ' + e.message);
+    }
   },
 
   // 4. POPULATE MODAL: LISTA NEGRA (MOROSOS)
@@ -2468,48 +2578,32 @@ const supervisorModule = {
       }
     });
 
-    // Rango de corte a las 6:00 AM para Recaudado Hoy
+    // Helper para verificar si un pago o cartón pertenece a la jornada operativa de la ruta
+    const isTimestampInShiftWindow = (rawVal, sWindow) => {
+      if (!rawVal) return false;
+      let d = null;
+      if (rawVal instanceof Date) d = rawVal;
+      else {
+        const s = String(rawVal).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(`${s}T12:00:00-05:00`);
+        else d = new Date(s);
+      }
+      if (!d || isNaN(d.getTime())) return false;
+      const ms = d.getTime();
+      return ms >= sWindow.effectiveStart.getTime() && ms < sWindow.shiftEnd.getTime();
+    };
+
     const now = new Date();
     const todayLocalStr = this.getLocalDateString(now);
-    const start6AM = new Date(now);
-    start6AM.setHours(6, 0, 0, 0);
-    if (now < start6AM) {
-      start6AM.setDate(start6AM.getDate() - 1);
-    }
-    const end6AM = new Date(start6AM);
-    end6AM.setDate(end6AM.getDate() + 1);
-
-    const seenTablePaymentIds = new Set();
-    const paymentsToday = (payments || []).filter(p => {
-      if (!p) return false;
-      const pId = String(p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`);
-      if (seenTablePaymentIds.has(pId)) return false;
-      if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
-
-      const amount = Number(p.amount || 0);
-      const status = String(p.status || '').toUpperCase();
-      if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
-
-      const pType = String(p.payment_type || p.type || '').trim();
-      const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
-
-      const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
-      const isWindow = pDate >= start6AM && pDate < end6AM;
-      const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
-      const pDateOnly = String(p.date || '').split('T')[0];
-      const isTodayLocal = pCreatedLocal === todayLocalStr || pDateOnly === todayLocalStr;
-
-      if (isWindow || (isRenovOrLiq && isTodayLocal)) {
-        seenTablePaymentIds.add(pId);
-        return true;
-      }
-      return false;
-    });
 
     for (const name in groupedRoutes) {
       const gRoute = groupedRoutes[name];
       const rIds = gRoute.routeIds;
       const rIdsLower = rIds.map(x => String(x).toLowerCase());
+
+      // Determinar la jornada operativa específica de esta ruta
+      const sampleRoute = (routes || []).find(r => r && rIds.includes(r.id)) || gRoute;
+      const shiftWindow = window.BulaPayDB.getRouteOperationalShiftWindowSync(sampleRoute);
 
       const routeAgentUsernames = new Set();
       (routes || []).forEach(r => {
@@ -2522,10 +2616,20 @@ const supervisorModule = {
       const routeClients = clients.filter(c => c.routeId && rIds.includes(c.routeId));
       
       const seenRoutePaymentIds = new Set();
-      const routePaymentsToday = paymentsToday.filter(p => {
+      const routePaymentsToday = (payments || []).filter(p => {
+        if (!p) return false;
         const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
         if (seenRoutePaymentIds.has(pId)) return false;
-        
+        if (String(pId).startsWith('pay_init_') || String(pId).startsWith('pend_')) return false;
+
+        const amount = Number(p.amount || 0);
+        const status = String(p.status || '').toUpperCase();
+        if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
+
+        const pType = String(p.payment_type || p.type || '').trim().toLowerCase();
+        const isRenovOrLiq = pType === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || String(pId).startsWith('pay_renov_');
+        if (!isRenovOrLiq && (status.includes('CANCEL') || status.includes('RECHAZ'))) return false;
+
         const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
         const pRouteId = (p.routeId || p.route_id) ? String(p.routeId || p.route_id).trim().toLowerCase() : null;
         const pAgentId = (p.agent_id || p.agentId) ? String(p.agent_id || p.agentId).trim().toLowerCase() : null;
@@ -2539,9 +2643,7 @@ const supervisorModule = {
           if (rIdsLower.includes(cRoute) || routeAgentUsernames.has(cAgent) || routeAgentNames.has(cAgent)) {
             belongsToThisRoute = true;
           }
-          // Si el cartón pertenece a otra ruta/agente, NUNCA coincide
         } else {
-          // Si no tiene cartón amarrado, validar directamente por ruta o agente del pago
           if (pRouteId && rIdsLower.includes(pRouteId)) {
             belongsToThisRoute = true;
           } else if (pAgentId && routeAgentUsernames.has(pAgentId)) {
@@ -2550,17 +2652,20 @@ const supervisorModule = {
             belongsToThisRoute = true;
           }
         }
+        if (!belongsToThisRoute) return false;
 
-        // NOTA CRÍTICA: NUNCA asociar por clientCedulas como condición.
-        // Los clientes compartidos entre rutas solo suman en la ruta del cartón que recibió el pago.
-        if (belongsToThisRoute) {
-          seenRoutePaymentIds.add(pId);
-          return true;
-        }
-        return false;
+        // Validar que el pago caiga dentro de la jornada operativa de esta ruta
+        const inWindow = isTimestampInShiftWindow(p.created_at, shiftWindow) ||
+                         isTimestampInShiftWindow(p.fecha_pago, shiftWindow) ||
+                         isTimestampInShiftWindow(p.fecha, shiftWindow) ||
+                         (isTimestampInShiftWindow(p.date, shiftWindow) && (!p.created_at || isTimestampInShiftWindow(p.created_at, shiftWindow)));
+        if (!inWindow) return false;
+
+        seenRoutePaymentIds.add(pId);
+        return true;
       });
 
-      // Contabilizar también renovaciones virtuales (rollover de cartones) que pertenezcan a esta ruta hoy
+      // Contabilizar también renovaciones virtuales (rollover de cartones) que pertenezcan a esta ruta en la jornada operativa
       let routeRenewalRollovers = 0;
       const routeHandledRenewalCartons = new Set();
       routePaymentsToday.forEach(p => {
@@ -2585,8 +2690,8 @@ const supervisorModule = {
         if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
         if (rollover <= 0) return;
 
-        const cLocalDate = c.created_at ? this.getLocalDateString(new Date(c.created_at)) : (c.fecha_apertura ? this.getLocalDateString(new Date(c.fecha_apertura)) : '');
-        if (cLocalDate !== todayLocalStr) return;
+        const inWindow = isTimestampInShiftWindow(c.created_at, shiftWindow) || isTimestampInShiftWindow(c.fecha_apertura, shiftWindow);
+        if (!inWindow) return;
 
         if (cId) routeHandledRenewalCartons.add(cId);
         routeRenewalRollovers += rollover;

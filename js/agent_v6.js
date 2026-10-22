@@ -829,6 +829,10 @@ const agentModule = {
         if (modal) modal.style.display = 'none';
       });
     }
+    const btnConfirmAgentCierre = document.getElementById('btn-confirm-agent-cierre');
+    if (btnConfirmAgentCierre) {
+      btnConfirmAgentCierre.addEventListener('click', () => this.confirmarCierreJornadaAgente());
+    }
 
     // Cartón de Pagos
     if (this.btnOpenPaymentCard) {
@@ -4734,6 +4738,7 @@ const agentModule = {
 
       const activeRouteId = currentUser.routeId || currentUser.route_id || (await window.BulaPayDB.getActiveRouteIdForUser(currentUser));
       const data = await window.BulaPayDB.getCierreCajaDataForRoute(activeRouteId, currentUser);
+      this.currentCashReportData = data;
 
       // Poblar el modal de Arqueo y Cierre de Caja Diario del Agente
       const dateEl = document.getElementById('cash-report-date');
@@ -4761,6 +4766,9 @@ const agentModule = {
       if (retainedEl) retainedEl.textContent = `+$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
       if (netEl) netEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
 
+      // Renderizar historial de cierres previos del agente
+      await this.renderAgentCierreHistorial(activeRouteId, currentUser.username);
+
       // Mostrar el modal de Cierre de Caja Diario
       const reportModal = document.getElementById('agent-cash-report-modal');
       if (reportModal) {
@@ -4769,6 +4777,119 @@ const agentModule = {
     } catch (e) {
       console.error("Error al generar Cierre de Caja Diario para Agente:", e);
       alert('❌ Error al calcular el Cierre de Caja Diario.');
+    }
+  },
+
+  async renderAgentCierreHistorial(routeId, agentUsername) {
+    const container = document.getElementById('agent-cierre-historial-container');
+    if (!container) return;
+
+    container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 0.5rem;">Cargando historial...</div>';
+    try {
+      const cierres = await window.BulaPayDB.getHistorialCierres(routeId, agentUsername);
+
+      if (!cierres || cierres.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 0.5rem; font-style: italic;">No hay cierres previos registrados para esta ruta.</div>';
+        return;
+      }
+
+      container.innerHTML = cierres.map(c => {
+        const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : c.fecha_jornada;
+        const recaudo = Number(c.total_recaudado || 0);
+        const entrega = Number(c.efectivo_entregar || 0);
+        const tipo = c.tipo_cierre === 'automatico_reinicio' ? '⚡ Auto-reinicio' : '🔒 Cierre manual';
+        return `
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 0.4rem 0.6rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <div>
+              <div style="font-weight: 700; color: #fff;">📅 ${c.fecha_jornada} <span style="font-size:0.68rem; color:#94a3b8;">(${tipo})</span></div>
+              <div style="font-size: 0.68rem; color: #94a3b8;">Cerrado: ${fCierre}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="color: #10b981; font-weight: 800;">+$${recaudo.toLocaleString('es-CO')}</div>
+              <div style="color: #38bdf8; font-size: 0.68rem; font-weight: 600;">Entrega: $${entrega.toLocaleString('es-CO')}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error("Error al cargar historial de cierres del agente:", err);
+      container.innerHTML = '<div style="color: var(--color-rojo); text-align: center; padding: 0.5rem;">Error al cargar historial</div>';
+    }
+  },
+
+  async confirmarCierreJornadaAgente() {
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser) return;
+
+    const activeRouteId = currentUser.routeId || currentUser.route_id || (await window.BulaPayDB.getActiveRouteIdForUser(currentUser));
+    const data = this.currentCashReportData || (await window.BulaPayDB.getCierreCajaDataForRoute(activeRouteId, currentUser));
+    const recaudo = Number(data.totalCobrado + (data.entradasRenovacion || 0));
+
+    let confirmRes = false;
+    if (typeof Swal !== 'undefined') {
+      const res = await Swal.fire({
+        title: '¿Confirmar Cierre de Caja?',
+        html: `Se registrará el cierre de tu jornada actual.<br><br>
+               <strong>Recaudo a archivar:</strong> <span style="color:#10b981; font-weight:bold;">$${recaudo.toLocaleString('es-CO')}</span><br>
+               <strong>Total en efectivo a entregar:</strong> <span style="color:#38bdf8; font-weight:bold;">$${data.totalEntregar.toLocaleString('es-CO')}</span><br><br>
+               <span style="color:#f59e0b; font-size:0.85rem;">⚠️ Al confirmar, el contador de 'Recaudado Hoy' reiniciará inmediatamente a $0 para tu nueva jornada.</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, Confirmar Cierre',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#64748b',
+        background: '#0f172a',
+        color: '#fff'
+      });
+      confirmRes = res.isConfirmed;
+    } else {
+      confirmRes = confirm(`¿Confirmar cierre de caja?\nRecaudo a archivar: $${recaudo.toLocaleString('es-CO')}\nEfectivo a entregar: $${data.totalEntregar.toLocaleString('es-CO')}\nTu contador de Recaudado Hoy reiniciará a $0.`);
+    }
+
+    if (!confirmRes) return;
+
+    try {
+      await window.BulaPayDB.realizarCierreJornada({
+        routeId: activeRouteId,
+        agentId: currentUser.username,
+        tipoCierre: 'manual',
+        detalles: {
+          cerrado_por: currentUser.name || currentUser.username,
+          fecha_operativa: data.dateStr,
+          efectivo_inicial: data.efectivoInicial,
+          total_cobrado: data.totalCobrado,
+          total_prestado: data.totalPrestado,
+          efectivo_entregar: data.totalEntregar
+        }
+      });
+
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: '¡Cierre de Caja Exitoso!',
+          text: 'Tu jornada fue archivada y el recaudo de hoy se ha reiniciado a $0.',
+          icon: 'success',
+          confirmButtonColor: '#10b981',
+          background: '#0f172a',
+          color: '#fff'
+        });
+      } else {
+        alert('✅ Cierre de caja realizado con éxito. Contador de hoy reiniciado a $0.');
+      }
+
+      const modal = document.getElementById('agent-cash-report-modal');
+      if (modal) modal.style.display = 'none';
+
+      // Actualizar contadores y dashboard financiero del agente
+      if (typeof this.renderFinancialDashboard === 'function') {
+        await this.renderFinancialDashboard();
+      }
+      if (typeof this.updateCashViews === 'function') {
+        await this.updateCashViews();
+      }
+    } catch (e) {
+      console.error("Error al registrar cierre de caja del agente:", e);
+      alert('❌ Error al registrar el cierre: ' + e.message);
     }
   },
 

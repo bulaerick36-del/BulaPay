@@ -81,6 +81,148 @@ const db = {
     return new Date().toISOString().split('T')[0];
   },
 
+  getColombiaNow() {
+    const now = new Date();
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+      });
+      const parts = formatter.formatToParts(now);
+      const p = {};
+      parts.forEach(pt => p[pt.type] = pt.value);
+      const hour = parseInt(p.hour, 10) % 24;
+      return {
+        year: parseInt(p.year, 10),
+        month: parseInt(p.month, 10),
+        day: parseInt(p.day, 10),
+        hour: hour,
+        minute: parseInt(p.minute, 10),
+        second: parseInt(p.second, 10),
+        dateStr: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`,
+        dateObj: now
+      };
+    } catch (e) {
+      const bogotaMs = now.getTime() - (5 * 60 * 60 * 1000);
+      const bd = new Date(bogotaMs);
+      return {
+        year: bd.getUTCFullYear(),
+        month: bd.getUTCMonth() + 1,
+        day: bd.getUTCDate(),
+        hour: bd.getUTCHours(),
+        minute: bd.getUTCMinutes(),
+        second: bd.getUTCSeconds(),
+        dateStr: bd.toISOString().split('T')[0],
+        dateObj: now
+      };
+    }
+  },
+
+  getRouteOperationalShiftWindowSync(routeObj, targetDate = null) {
+    const openingTime = (routeObj && routeObj.opening_time) ? String(routeObj.opening_time).trim() : '06:00';
+    const parts = openingTime.split(':');
+    const openH = parseInt(parts[0], 10) || 6;
+    const openM = parseInt(parts[1], 10) || 0;
+    const pad = (n) => String(n).padStart(2, '0');
+
+    const colNow = this.getColombiaNow();
+    let shiftDateStr;
+
+    if (targetDate && /^\d{4}-\d{2}-\d{2}$/.test(String(targetDate).trim())) {
+      shiftDateStr = String(targetDate).trim();
+    } else {
+      // Si la hora actual en Colombia es menor que la hora de inicio de jornada (ej: 02:00 AM antes de 06:00 AM),
+      // los cobros nocturnos pertenecen a la jornada laboral iniciada ayer a las 6:00 AM
+      const isBeforeOpening = (colNow.hour < openH) || (colNow.hour === openH && colNow.minute < openM);
+      if (isBeforeOpening) {
+        const yesterdayMs = colNow.dateObj.getTime() - (24 * 60 * 60 * 1000);
+        shiftDateStr = this.getColombiaLocalDateStr(new Date(yesterdayMs));
+      } else {
+        shiftDateStr = colNow.dateStr;
+      }
+    }
+
+    const startIso = `${shiftDateStr}T${pad(openH)}:${pad(openM)}:00-05:00`;
+    const shiftStart = new Date(startIso);
+    const shiftEnd = new Date(shiftStart.getTime() + (24 * 60 * 60 * 1000));
+
+    // Validar si existe fecha de último cierre registrada en la ruta
+    let effectiveStart = shiftStart;
+    let fechaUltimoCierre = null;
+    if (routeObj && routeObj.fecha_ultimo_cierre) {
+      const fCierre = new Date(routeObj.fecha_ultimo_cierre);
+      if (!isNaN(fCierre.getTime())) {
+        fechaUltimoCierre = fCierre;
+        // Si el cierre fue realizado dentro de esta jornada operativa, el contador reinicia desde ese momento
+        if (fCierre.getTime() >= shiftStart.getTime() && fCierre.getTime() <= Date.now()) {
+          effectiveStart = fCierre;
+        }
+      }
+    }
+
+    return {
+      routeId: routeObj?.id || null,
+      openingTime: `${pad(openH)}:${pad(openM)}`,
+      openHour: openH,
+      openMinute: openM,
+      shiftDateStr,
+      shiftStart,
+      shiftEnd,
+      effectiveStart,
+      fechaUltimoCierre,
+      isCurrentShift: (!targetDate || targetDate === shiftDateStr)
+    };
+  },
+
+  async getRouteOperationalShiftWindow(routeOrRouteId, targetDate = null, agentId = null) {
+    let route = null;
+    if (routeOrRouteId && typeof routeOrRouteId === 'object' && routeOrRouteId.id) {
+      route = routeOrRouteId;
+    } else if (typeof routeOrRouteId === 'string' && routeOrRouteId.trim()) {
+      route = await this.getRouteById(routeOrRouteId.trim());
+    }
+
+    if (!route && agentId) {
+      const routes = await this.getRoutes();
+      const cleanAgent = String(agentId).trim().toLowerCase();
+      route = (routes || []).find(r => 
+        (r.agentUsername && String(r.agentUsername).trim().toLowerCase() === cleanAgent) ||
+        (r.agentName && String(r.agentName).trim().toLowerCase() === cleanAgent) ||
+        (r.agent_id && String(r.agent_id).trim().toLowerCase() === cleanAgent)
+      );
+    }
+
+    // Verificar si en cierres_jornada hay un cierre más reciente para esta ruta/agente
+    const baseWindow = this.getRouteOperationalShiftWindowSync(route, targetDate);
+    try {
+      const supabase = await initSupabase();
+      let q = supabase.from('cierres_jornada').select('fecha_cierre').order('fecha_cierre', { ascending: false }).limit(1);
+      if (route?.id) {
+        q = q.eq('route_id', route.id);
+      } else if (agentId) {
+        q = q.eq('agent_id', agentId);
+      }
+      const { data: cData } = await q;
+      if (cData && cData[0] && cData[0].fecha_cierre) {
+        const cDate = new Date(cData[0].fecha_cierre);
+        if (!isNaN(cDate.getTime()) && cDate.getTime() >= baseWindow.shiftStart.getTime() && cDate.getTime() <= Date.now()) {
+          if (cDate.getTime() > baseWindow.effectiveStart.getTime()) {
+            baseWindow.effectiveStart = cDate;
+            baseWindow.fechaUltimoCierre = cDate;
+          }
+        }
+      }
+    } catch (e) {}
+
+    return baseWindow;
+  },
+
   async initSupabase() {
     return await initSupabase();
   },
@@ -807,7 +949,6 @@ const db = {
     if (!agentId && !routeId) return 0;
     try {
       const supabase = await initSupabase();
-      const targetDate = dateStr || this.getColombiaLocalDateStr(new Date());
       const cleanAgentId = agentId ? String(agentId).trim() : null;
       const cleanRouteId = routeId ? String(routeId).trim() : null;
       const lowerAgentId = cleanAgentId ? cleanAgentId.toLowerCase() : null;
@@ -820,18 +961,22 @@ const db = {
       const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
       const effectiveRouteIdLower = lowerRouteId || (userObj && (userObj.routeId || userObj.route_id) ? String(userObj.routeId || userObj.route_id).trim().toLowerCase() : null);
 
+      // Calcular ventana de Jornada Operativa según el horario configurado en la ruta (ej: 06:00 AM)
+      const shiftWindow = await this.getRouteOperationalShiftWindow(cleanRouteId || effectiveRouteIdLower, dateStr, cleanAgentId);
+      const targetDate = shiftWindow.shiftDateStr;
+
       let rpcTotal = 0;
       // Intento 1: Llamada RPC SECURITY DEFINER en Supabase
       try {
         const { data: rpcVal, error: rpcErr } = await supabase.rpc('get_agent_recaudo_hoy', {
           p_agent_id: cleanAgentId,
-          p_date: targetDate,
+          p_date: dateStr ? targetDate : null,
           p_route_id: cleanAgentId ? null : cleanRouteId
         });
 
         if (!rpcErr && rpcVal !== null && rpcVal !== undefined) {
           rpcTotal = Math.round(Number(rpcVal) || 0);
-          console.log(`✅ [Supabase RPC get_agent_recaudo_hoy] Recaudo obtenido via SECURITY DEFINER: $${rpcTotal}`);
+          console.log(`✅ [Supabase RPC get_agent_recaudo_hoy] Recaudo obtenido via SECURITY DEFINER (Jornada ${targetDate}): $${rpcTotal}`);
         }
       } catch (eRpc) {
         console.warn("⚠️ Aviso al llamar RPC get_agent_recaudo_hoy:", eRpc);
@@ -873,22 +1018,23 @@ const db = {
 
       const paymentList = data || [];
 
-      const isDateMatchingTarget = (rawVal) => {
+      // Función de validación de pago dentro de la ventana de la jornada operativa [effectiveStart, shiftEnd)
+      const isDateInOperationalShift = (rawVal) => {
         if (!rawVal) return false;
-        const s = String(rawVal).trim();
-        if (s.startsWith(targetDate)) return true;
-        if (typeof this.getColombiaLocalDateStr === 'function') {
-          const colDate = this.getColombiaLocalDateStr(s);
-          if (colDate === targetDate) return true;
-        }
-        try {
-          const d = new Date(s);
-          if (!isNaN(d.getTime())) {
-            const localD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            if (localD === targetDate) return true;
+        let d = null;
+        if (rawVal instanceof Date) {
+          d = rawVal;
+        } else {
+          const s = String(rawVal).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            d = new Date(`${s}T12:00:00-05:00`);
+          } else {
+            d = new Date(s);
           }
-        } catch (e) {}
-        return false;
+        }
+        if (!d || isNaN(d.getTime())) return false;
+        const ms = d.getTime();
+        return ms >= shiftWindow.effectiveStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
       };
 
       const seenIds = new Set();
@@ -902,12 +1048,12 @@ const db = {
         const rawId = String(p.id || '').trim();
         if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
 
-        // Validar fecha en hora local de Colombia (verificando tanto created_at como date y fecha_pago)
+        // Validar fecha dentro de la jornada operativa de la ruta (incluye cobros nocturnos en el turno correspondiente)
         const isToday =
-          isDateMatchingTarget(p.created_at) ||
-          isDateMatchingTarget(p.date) ||
-          isDateMatchingTarget(p.fecha_pago) ||
-          isDateMatchingTarget(p.fecha);
+          isDateInOperationalShift(p.created_at) ||
+          isDateInOperationalShift(p.fecha_pago) ||
+          isDateInOperationalShift(p.fecha) ||
+          (isDateInOperationalShift(p.date) && (!p.created_at || isDateInOperationalShift(p.created_at)));
         if (!isToday) return;
 
         // Validar monto e incluir explícitamente payment_type === 'Renovacion', installmentNumber === 999 o liquidado === true
@@ -959,7 +1105,6 @@ const db = {
         }
 
         // NOTA CRÍTICA: NUNCA asociar por clientCedula como condición de pertenencia.
-        // Un cliente asignado a múltiples agentes únicamente suma en el agente dueño del cartón correspondiente.
         if (!matches) return;
 
         // Deduplicación estricta por ID único de pago
@@ -988,8 +1133,7 @@ const db = {
         totalMontoReal += Math.round(amount);
       });
 
-      // Respaldo adicional: si un cartón fue renovado hoy por este agente y su monto refinanciado (saldo_anterior / rollover_amount)
-      // no quedó insertado en 'payments' como pay_renov_ / 999, sumarlo con filtro estricto por agente
+      // Respaldo adicional: renovaciones en cartones durante la jornada operativa
       allCartones.forEach(c => {
         if (!c) return;
         const cId = String(c.id || '').trim().toLowerCase();
@@ -1018,8 +1162,8 @@ const db = {
         if (rollover <= 0) return;
 
         const isCreatedToday =
-          isDateMatchingTarget(c.created_at) ||
-          isDateMatchingTarget(c.fecha_apertura);
+          isDateInOperationalShift(c.created_at) ||
+          isDateInOperationalShift(c.fecha_apertura);
         if (!isCreatedToday) return;
 
         if (cId) handledRenewalCartonIds.add(cId);
@@ -1027,12 +1171,8 @@ const db = {
         totalMontoReal += rollover;
       });
 
-      // Si payments fue consultado directamente y calculado con filtro estricto por cartón y agente,
-      // totalMontoReal es el valor certero sin fuga de datos.
-      if (Array.isArray(paymentList)) {
-        return totalMontoReal;
-      }
-      return rpcTotal;
+      if (rpcTotal > 0) return rpcTotal;
+      return totalMontoReal;
     } catch (e) {
       console.error("❌ Excepción inesperada en getAgentRecaudoHoyDirect:", e);
       return 0;
@@ -2257,7 +2397,6 @@ const db = {
 
   async getCierreCajaDataForRoute(routeId = null, agentUserObj = null) {
     const supabase = await initSupabase();
-    const todayStr = this.getColombiaLocalDateStr(new Date());
 
     let route = null;
     let targetRouteId = routeId;
@@ -2280,6 +2419,10 @@ const db = {
       route = routes.find(r => r.agent_id === uName || r.agentName === uFull || r.agentName === uName);
       if (route) targetRouteId = route.id;
     }
+
+    // Obtener ventana de la jornada operativa según horario de la ruta
+    const shiftWindow = await this.getRouteOperationalShiftWindow(route || targetRouteId, null, agentUserObj?.username);
+    const todayStr = shiftWindow.shiftDateStr;
 
     // 1. Capital Base (Inversión)
     let capitalBase = 0;
@@ -2327,11 +2470,30 @@ const db = {
     // FÓRMULA SOLICITADA: Efectivo en Bolsillo Inicial = (Capital Base - En Calle)
     const efectivoInicial = Math.max(0, capitalBase - enCalle);
 
+    // Función de fecha para evaluar si cae en la jornada operativa [effectiveStart, shiftEnd)
+    const isDateInShift = (rawVal, useEffective = true) => {
+      if (!rawVal) return false;
+      let d = null;
+      if (rawVal instanceof Date) d = rawVal;
+      else {
+        const s = String(rawVal).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          d = new Date(`${s}T12:00:00-05:00`);
+        } else {
+          d = new Date(s);
+        }
+      }
+      if (!d || isNaN(d.getTime())) return false;
+      const ms = d.getTime();
+      const startMs = useEffective ? shiftWindow.effectiveStart.getTime() : shiftWindow.shiftStart.getTime();
+      return ms >= startMs && ms < shiftWindow.shiftEnd.getTime();
+    };
+
     // 3. Total Cobrado Hoy (payments) & Pagos Masivos
     const allPayments = await this.getPayments();
     const todayPayments = (allPayments || []).filter(p => {
-      const pDate = this.getColombiaLocalDateStr(p.created_at || p.date);
-      if (pDate !== todayStr) return false;
+      const isDateValid = isDateInShift(p.created_at) || isDateInShift(p.fecha_pago) || isDateInShift(p.fecha) || (isDateInShift(p.date) && (!p.created_at || isDateInShift(p.created_at)));
+      if (!isDateValid) return false;
 
       const pStatus = String(p.status || '').toUpperCase();
       if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'CANCELADO' || pStatus === 'RECHAZADO') return false;
@@ -2369,10 +2531,10 @@ const db = {
       return p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('masivo');
     }).reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    // 4. Créditos creados hoy (clients/cartones creados hoy)
+    // 4. Créditos creados hoy (clients/cartones creados en esta jornada operativa)
     const todayClients = (allClients || []).filter(c => {
-      let cDate = this.getColombiaLocalDateStr(c.created_at || c.date || c.fecha_apertura);
-      if (cDate !== todayStr) return false;
+      const isDateValid = isDateInShift(c.created_at, false) || isDateInShift(c.fecha_apertura, false) || isDateInShift(c.date, false);
+      if (!isDateValid) return false;
 
       let belongs = false;
       if (targetRouteId === 'ALL') {
@@ -2423,7 +2585,13 @@ const db = {
       routeId: targetRouteId || null,
       routeName,
       agentName,
+      agentUsername: agentUserObj?.username || route?.agentUsername || '',
       dateStr: todayStr,
+      openingTime: shiftWindow.openingTime,
+      shiftStart: shiftWindow.shiftStart.toISOString(),
+      shiftEnd: shiftWindow.shiftEnd.toISOString(),
+      effectiveStart: shiftWindow.effectiveStart.toISOString(),
+      fechaUltimoCierre: shiftWindow.fechaUltimoCierre ? shiftWindow.fechaUltimoCierre.toISOString() : null,
       capitalBase: Math.round(capitalBase),
       enCalle: Math.round(enCalle),
       efectivoInicial: Math.round(efectivoInicial),
@@ -2435,6 +2603,148 @@ const db = {
       descuentosRetenidos: Math.round(descuentosRetenidos),
       totalEntregar: Math.round(totalEntregar)
     };
+  },
+
+  async realizarCierreJornada({ routeId = null, agentId = null, supervisorId = null, tipoCierre = 'manual', detalles = {} } = {}) {
+    const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser();
+    const effectiveSupId = supervisorId || (currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId());
+
+    // 1. Obtener la data contable fresca de la jornada operativa actual
+    const data = await this.getCierreCajaDataForRoute(routeId, agentId ? { username: agentId } : currentUser);
+    const now = new Date();
+    const cierreId = `cierre_${data.routeId || 'gral'}_${data.dateStr}_${now.getTime()}`;
+
+    const payload = {
+      id: cierreId,
+      route_id: data.routeId,
+      agent_id: agentId || data.agentUsername || currentUser?.username || '',
+      agent_name: data.agentName || currentUser?.name || 'Agente de Ruta',
+      supervisor_id: effectiveSupId,
+      fecha_jornada: data.dateStr,
+      hora_apertura: data.openingTime || '06:00',
+      inicio_jornada: data.shiftStart,
+      fin_jornada: data.shiftEnd,
+      fecha_cierre: now.toISOString(),
+      total_recaudado: data.totalCobrado + (data.entradasRenovacion || 0),
+      total_prestado: data.totalPrestado + (data.desembolsosRenovacion || 0),
+      efectivo_inicial: data.efectivoInicial,
+      efectivo_entregar: data.totalEntregar,
+      detalles: {
+        ...data,
+        ...detalles
+      },
+      tipo_cierre: tipoCierre,
+      created_at: now.toISOString()
+    };
+
+    // Intento 1: Llamar RPC cerrar_jornada_ruta en Supabase
+    let rpcSuccess = false;
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('cerrar_jornada_ruta', {
+        p_route_id: data.routeId,
+        p_agent_id: payload.agent_id,
+        p_supervisor_id: payload.supervisor_id,
+        p_tipo_cierre: tipoCierre,
+        p_detalles: payload.detalles
+      });
+      if (!rpcErr && rpcRes && rpcRes.success) {
+        rpcSuccess = true;
+        console.log(`✅ [RPC cerrar_jornada_ruta] Cierre registrado con éxito. ID: ${rpcRes.cierre_id}`);
+      }
+    } catch (e) {
+      console.warn("Aviso llamando RPC cerrar_jornada_ruta:", e);
+    }
+
+    // Intento 2: Inserción directa en tabla cierres_jornada y actualización en routes
+    if (!rpcSuccess) {
+      try {
+        await supabase.from('cierres_jornada').upsert(payload);
+      } catch (eIns) {
+        console.warn("Aviso insertando en cierres_jornada:", eIns);
+      }
+
+      if (data.routeId) {
+        try {
+          await supabase.from('routes').update({
+            fecha_ultimo_cierre: now.toISOString(),
+            ultimo_recaudo_cierre: payload.total_recaudado,
+            collected: 0
+          }).eq('id', data.routeId);
+        } catch (eUp) {
+          console.warn("Aviso actualizando fecha_ultimo_cierre en routes:", eUp);
+        }
+      }
+    }
+
+    // Respaldo en localStorage
+    try {
+      const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
+      localHist.unshift(payload);
+      localStorage.setItem('bulapay_cierres_jornada', JSON.stringify(localHist.slice(0, 100)));
+    } catch (eLoc) {}
+
+    return payload;
+  },
+
+  async getHistorialCierres(routeId = null, agentId = null) {
+    try {
+      const supabase = await initSupabase();
+      let query = supabase.from('cierres_jornada').select('*').order('fecha_cierre', { ascending: false }).limit(50);
+      if (routeId && routeId !== 'ALL') {
+        query = query.eq('route_id', routeId);
+      }
+      if (agentId) {
+        query = query.eq('agent_id', agentId);
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    } catch (e) {
+      console.warn("Aviso consultando cierres_jornada:", e);
+    }
+
+    // Fallback a localStorage
+    try {
+      const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
+      return localHist.filter(c => {
+        if (routeId && routeId !== 'ALL' && c.route_id !== routeId) return false;
+        if (agentId && c.agent_id !== agentId) return false;
+        return true;
+      });
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async verificarYAutoCerrarJornadaPrevia(routeId = null, agentId = null) {
+    try {
+      // 1. Obtener la ventana de la jornada actual
+      const currentShift = await this.getRouteOperationalShiftWindow(routeId, null, agentId);
+      // Fecha de la jornada anterior (shiftStart - 24 horas)
+      const prevShiftDateMs = currentShift.shiftStart.getTime() - (24 * 60 * 60 * 1000);
+      const prevShiftDateStr = this.getColombiaLocalDateStr(new Date(prevShiftDateMs));
+
+      // Verificar si ya existe cierre registrado para la jornada previa
+      const cierres = await this.getHistorialCierres(currentShift.routeId, agentId);
+      const yaCerrado = (cierres || []).some(c => c.fecha_jornada === prevShiftDateStr);
+      if (yaCerrado) return;
+
+      // Si no fue cerrada, verificar si hubo recaudo acumulado en esa jornada previa
+      const recaudoPrevio = await this.getAgentRecaudoHoyDirect(agentId, prevShiftDateStr, currentShift.routeId);
+      if (recaudoPrevio > 0) {
+        console.log(`ℹ️ [Auto-Cierre] Archivando jornada laboral anterior (${prevShiftDateStr}) con recaudo: $${recaudoPrevio}`);
+        await this.realizarCierreJornada({
+          routeId: currentShift.routeId,
+          agentId,
+          tipoCierre: 'automatico_reinicio',
+          detalles: { motivo: 'Inicio de nuevo horario laboral - Reinicio automático a $0', recaudo_archivado: recaudoPrevio }
+        });
+      }
+    } catch (e) {
+      console.warn("Aviso en verificarYAutoCerrarJornadaPrevia:", e);
+    }
   },
 
   async getGlobalClientByCedula(cedula) {
@@ -5668,10 +5978,15 @@ const db = {
       const clients = await this.getClients();
       const movements = await this.getCashMovements();
       
-      const todayStr = this.getColombiaLocalDateStr(new Date());
-      
       const currentUser = this.getCurrentUser();
       if (!currentUser) return { baseCapital: 0, totalCollected: 0, totalLent: 0, totalDiscounts: 0, totalIn: 0, totalOut: 0, onHand: 0, massPaymentsTotal: 0 };
+
+      const activeRouteId = currentUser.routeId || (await this.getActiveRouteIdForUser(currentUser));
+      const shiftWindow = await this.getRouteOperationalShiftWindow(activeRouteId, null, currentUser.username);
+      const todayStr = shiftWindow.shiftDateStr;
+
+      // Auto-archivo en background si la jornada anterior quedó sin cierre y ya inició el nuevo día
+      this.verificarYAutoCerrarJornadaPrevia(activeRouteId, currentUser.username).catch(() => {});
       
       // Capital Base (Patrimonio)
       const baseCapital = Math.round(await this.getRealBaseCapital(currentUser.routeId));
@@ -5680,7 +5995,23 @@ const db = {
       const agentNameLower = (currentUser.name || '').trim().toLowerCase();
       const supId = await this.getSupervisorIdForUser(currentUser);
 
-      const getCleanDateStr = (raw) => this.getColombiaLocalDateStr(raw);
+      const isDateInShift = (rawVal, useEffective = true) => {
+        if (!rawVal) return false;
+        let d = null;
+        if (rawVal instanceof Date) d = rawVal;
+        else {
+          const s = String(rawVal).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            d = new Date(`${s}T12:00:00-05:00`);
+          } else {
+            d = new Date(s);
+          }
+        }
+        if (!d || isNaN(d.getTime())) return false;
+        const ms = d.getTime();
+        const startMs = useEffective ? shiftWindow.effectiveStart.getTime() : shiftWindow.shiftStart.getTime();
+        return ms >= startMs && ms < shiftWindow.shiftEnd.getTime();
+      };
 
       // Mapa/Set de cédulas de clientes en Lista Negra / Mora (risk === 'Rojo')
       const blacklistedCedulas = new Set(
@@ -5695,12 +6026,10 @@ const db = {
           .map(c => String(c.cedula))
       );
 
-      // Cobrado hoy (EXCLUYENDO transacciones de clientes en Lista Negra o liquidaciones por mora)
+      // Cobrado en la jornada operativa (EXCLUYENDO transacciones de clientes en Lista Negra o liquidaciones por mora)
       const todaysPayments = payments.filter(p => {
-         const pRawDate = p.created_at || p.date;
-         if (!pRawDate) return false;
-         const pDate = getCleanDateStr(pRawDate);
-         const isToday = pDate === todayStr;
+         const isDateValid = isDateInShift(p.created_at) || isDateInShift(p.fecha_pago) || isDateInShift(p.fecha) || (isDateInShift(p.date) && (!p.created_at || isDateInShift(p.created_at)));
+         if (!isDateValid) return false;
          
          const pAgentNameLower = (p.agentName || '').trim().toLowerCase();
          const isMine = (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor')
@@ -5717,26 +6046,23 @@ const db = {
          const isBlacklistedClient = blacklistedCedulas.has(pCedula);
 
          const pStatusUpper = String(p.status || '').toUpperCase();
-         const isRenovationPayment = pStatusUpper.includes('RENOVAC') || pStatusUpper.includes('LIQUIDADO_POR_RENOVACION') || p.liquidado === true;
          const isMoraPayment = pStatusUpper.includes('MORA') || 
                                pStatusUpper.includes('LIQUIDADO_MORA') || 
                                pStatusUpper.includes('NEGRA') ||
                                (p.id && String(p.id).startsWith('pay_liq_') && isBlacklistedClient);
 
-         if (isRehabPayment && isToday && isMine && isRealPayment) return true;
+         if (isRehabPayment && isMine && isRealPayment) return true;
 
-         return isToday && isMine && isRealPayment && (!isBlacklistedClient || isRehabPayment) && !isMoraPayment;
+         return isMine && isRealPayment && (!isBlacklistedClient || isRehabPayment) && !isMoraPayment;
       });
       
       const totalCollected = Math.round(todaysPayments.reduce((acc, p) => acc + Math.round(Number(p.amount) || 0), 0));
       const massPaymentsTotal = Math.round(todaysPayments.reduce((acc, p) => (p.is_mass_payment || String(p.status || '').includes('Masivo')) ? acc + Math.round(Number(p.amount) || 0) : acc, 0));
       
-      // Prestado hoy (Desembolso Neto Real entregado de caja)
+      // Prestado en la jornada operativa (Desembolso Neto Real entregado de caja)
       const todaysClients = clients.filter(c => {
-         const cRawDate = c.created_at || c.date || c.fecha_apertura;
-         if (!cRawDate) return false;
-         const cDate = getCleanDateStr(cRawDate);
-         const isToday = cDate === todayStr;
+         const isDateValid = isDateInShift(c.created_at, false) || isDateInShift(c.fecha_apertura, false) || isDateInShift(c.date, false);
+         if (!isDateValid) return false;
          
          const belongsToAgent = (currentUser.role === 'Usuario Supervisor' || currentUser.role === 'supervisor')
             ? (c.supervisor_id === currentUser.username || c.agent_id === currentUser.username)
@@ -5746,7 +6072,7 @@ const db = {
                 (currentUser.routeId && c.routeId === currentUser.routeId) ||
                 (supId && c.supervisor_id === supId)
               );
-         return isToday && belongsToAgent;
+         return belongsToAgent;
       });
 
       let secondaryCartonesToday = [];
@@ -5763,10 +6089,7 @@ const db = {
         const { data: cartonesData } = await q;
         if (cartonesData && cartonesData.length > 0) {
           secondaryCartonesToday = cartonesData.filter(c => {
-            const cRawDate = c.fecha_apertura || c.fecha_inicio || c.created_at;
-            if (!cRawDate) return false;
-            const cDate = getCleanDateStr(cRawDate);
-            return cDate === todayStr;
+            return isDateInShift(c.fecha_apertura, false) || isDateInShift(c.fecha_inicio, false) || isDateInShift(c.created_at, false);
           });
         }
       } catch (e) {
@@ -5800,10 +6123,9 @@ const db = {
         });
       }
 
-      // Movimientos de caja
+      // Movimientos de caja en la jornada operativa
       const todaysMovements = movements.filter(m => {
-        const mRawDate = m.created_at || m.date;
-        return mRawDate && getCleanDateStr(mRawDate) === todayStr;
+        return isDateInShift(m.created_at, false) || isDateInShift(m.date, false);
       });
       const totalIn = Math.round(todaysMovements.filter(m => {
         if (m.type !== 'entrada') return false;
@@ -7654,6 +7976,8 @@ const db = {
         routesList = routesList.filter(r => r.id === filterRouteId);
       }
 
+      // Ventana de la jornada operativa para caja global
+      const shiftWindow = await this.getRouteOperationalShiftWindow(filterRouteId || (routesList[0]?.id || null));
       const hoyPayments = payments.filter(p => {
         if (!p) return false;
         const pId = String(p.id || '').trim();
@@ -7663,8 +7987,23 @@ const db = {
         if (Number(p.amount || 0) <= 0) return false;
         const belongsToSup = p.supervisor_id === supId || (p.agent_id && agentUsernames.includes(p.agent_id));
         if (!belongsToSup) return false;
-        const colDate = this.getColombiaLocalDateStr(p.created_at || p.date);
-        return p.date === todayStr || colDate === todayStr || p.created_at?.startsWith(todayStr);
+        
+        let pDateObj = null;
+        if (p.created_at) {
+          const d = new Date(p.created_at);
+          if (!isNaN(d.getTime())) pDateObj = d;
+        }
+        if (!pDateObj) {
+          const rawD = p.date || p.fecha_pago || p.fecha;
+          if (rawD) {
+            const cleanD = String(rawD).split('T')[0];
+            const d = new Date(`${cleanD}T12:00:00-05:00`);
+            if (!isNaN(d.getTime())) pDateObj = d;
+          }
+        }
+        if (!pDateObj) return false;
+        const pTime = pDateObj.getTime();
+        return (pTime >= shiftWindow.effectiveStart.getTime() && pTime < shiftWindow.shiftEnd.getTime());
       });
       const recaudoHoy = hoyPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const carteraEnCalle = supervisorClients.reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);

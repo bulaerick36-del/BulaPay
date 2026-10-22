@@ -1595,10 +1595,23 @@
                 </div>
               </div>
               
-              <!-- Botón de Cerrar -->
-              <button type="button" id="btn-close-cash-report" class="btn btn-secondary" style="width: 100%; padding: 0.65rem; font-weight: bold; font-size: 0.85rem; background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: background-color 0.2s;">
-                Cerrar Cierre de Caja
-              </button>
+              <!-- Botones de Acción de Cierre para el Agente -->
+              <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+                <button type="button" id="btn-confirm-agent-cierre" class="btn btn-primary" style="width: 100%; padding: 0.75rem; font-weight: 800; font-size: 0.85rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                  <span>🔒</span> Confirmar Cierre de Caja (Reiniciar a $0)
+                </button>
+                <button type="button" id="btn-close-cash-report" class="btn btn-secondary" style="width: 100%; padding: 0.65rem; font-weight: bold; font-size: 0.85rem; background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: background-color 0.2s;">
+                  Solo Consultar (Volver)
+                </button>
+              </div>
+
+              <!-- Historial de Cierres Recientes del Agente -->
+              <div style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 0.4rem;">📜 Últimos Cierres Registrados:</span>
+                <div id="agent-cierre-historial-container" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.75rem;">
+                  <!-- Inyectado dinámicamente -->
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2446,6 +2459,24 @@
         <div style="border-top: 1px dashed var(--border-color); padding-top: 0.85rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.1rem; font-weight: 800;">
           <span style="color: #34d399;">🏛️ TOTAL A ENTREGAR:</span>
           <strong id="cierre-efectivo-entregar" style="color: #34d399; font-size: 1.35rem;">$0</strong>
+        </div>
+      </div>
+
+      <!-- Botón de Acción de Cierre Supervisor -->
+      <div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <button type="button" id="btn-confirm-cierre-supervisor" onclick="supervisorModule.confirmarCierreJornadaSupervisor()" class="btn btn-primary" style="flex: 1; padding: 0.75rem; font-weight: 800; font-size: 0.9rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+          <span>🔒</span> Realizar Cierre de Jornada (Reiniciar a $0)
+        </button>
+      </div>
+
+      <!-- Historial de Cierres de la Ruta -->
+      <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <h4 style="font-size: 0.9rem; color: var(--accent); margin: 0; text-transform: uppercase;">📜 Historial de Cierres</h4>
+          <span style="font-size: 0.75rem; color: var(--text-secondary);">Jornadas Archivadas</span>
+        </div>
+        <div id="cierre-historial-container" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+          <!-- Inyectado dinámicamente -->
         </div>
       </div>
     </div>
