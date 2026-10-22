@@ -7222,18 +7222,34 @@ const db = {
     // 1. Capturar la fecha actual en tiempo real al vuelo (sin usar localStorage)
     const ahora = new Date();
 
-    // 2. Determinar la fecha de vencimiento (fecha_corte/fecha_vencimiento o created_at + 30 días)
+    // 2. Determinar la fecha de vencimiento (fecha_corte/fecha_vencimiento, herencia de supervisor o created_at + 30 días)
     let fechaVencimiento;
-    if (user.fecha_corte || user.fecha_vencimiento) {
-      const rawDateStr = String(user.fecha_corte || user.fecha_vencimiento).trim();
-      if (rawDateStr.includes('T')) {
-        fechaVencimiento = new Date(rawDateStr);
+    let rawDateStr = user.fecha_corte || user.fecha_vencimiento;
+
+    // Si es Agente de Ruta y no tiene fecha explícita, consultar vigencia de su supervisor en memoria/caché
+    if (!rawDateStr && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
+      const supId = user.supervisor_id || user.supervisor;
+      if (supId) {
+        try {
+          const localUsers = typeof this.getUsersFromLocalStorage === 'function' ? this.getUsersFromLocalStorage() : [];
+          const sup = localUsers.find(u => String(u.username).toLowerCase() === String(supId).toLowerCase());
+          if (sup && (sup.fecha_corte || sup.fecha_vencimiento)) {
+            rawDateStr = sup.fecha_corte || sup.fecha_vencimiento;
+          }
+        } catch(e) {}
+      }
+    }
+
+    if (rawDateStr) {
+      const cleanDateStr = String(rawDateStr).trim();
+      if (cleanDateStr.includes('T')) {
+        fechaVencimiento = new Date(cleanDateStr);
       } else {
-        const parts = rawDateStr.split('-');
+        const parts = cleanDateStr.split('-');
         if (parts.length === 3) {
           fechaVencimiento = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
         } else {
-          fechaVencimiento = new Date(rawDateStr);
+          fechaVencimiento = new Date(cleanDateStr);
         }
       }
     } else {

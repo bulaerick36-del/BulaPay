@@ -3985,12 +3985,16 @@ const superadminModule = {
         // Re-renderizar modal de gestión
         await this.openGestionSuscripcionModal(usernameTarget);
 
-        // Re-renderizar lista de usuarios en el panel superadmin
-        if (typeof this.renderUserTable === 'function') {
-          const users = typeof window.BulaPayDB.getUsers === 'function' ? await window.BulaPayDB.getUsers() : [];
-          this.renderUserTable(users);
-        } else if (typeof this.openSuperadminModal === 'function') {
-          this.openSuperadminModal();
+        // Re-renderizar lista de usuarios en el panel superadmin en tiempo real
+        try {
+          if (typeof this.renderCurrentTab === 'function') {
+            await this.renderCurrentTab();
+          } else if (typeof this.renderUsersListTable === 'function') {
+            const allUsers = typeof window.BulaPayDB.getAllUsers === 'function' ? await window.BulaPayDB.getAllUsers() : [];
+            this.renderUsersListTable(allUsers);
+          }
+        } catch (eRend) {
+          console.warn("⚠️ Aviso al refrescar tabla superadmin tras renovación:", eRend);
         }
       } else {
         alert(`Error al renovar ciclo: ${res.error || 'Intente nuevamente'}`);
