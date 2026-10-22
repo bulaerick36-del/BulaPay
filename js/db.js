@@ -810,6 +810,15 @@ const db = {
       const targetDate = dateStr || this.getColombiaLocalDateStr(new Date());
       const cleanAgentId = agentId ? String(agentId).trim() : null;
       const cleanRouteId = routeId ? String(routeId).trim() : null;
+      const lowerAgentId = cleanAgentId ? cleanAgentId.toLowerCase() : null;
+      const lowerRouteId = cleanRouteId ? cleanRouteId.toLowerCase() : null;
+
+      let userObj = null;
+      if (cleanAgentId) {
+        userObj = await this.getUserByUsername(cleanAgentId);
+      }
+      const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
+      const effectiveRouteIdLower = lowerRouteId || (userObj && (userObj.routeId || userObj.route_id) ? String(userObj.routeId || userObj.route_id).trim().toLowerCase() : null);
 
       let rpcTotal = 0;
       // Intento 1: Llamada RPC SECURITY DEFINER en Supabase
@@ -817,7 +826,7 @@ const db = {
         const { data: rpcVal, error: rpcErr } = await supabase.rpc('get_agent_recaudo_hoy', {
           p_agent_id: cleanAgentId,
           p_date: targetDate,
-          p_route_id: cleanRouteId
+          p_route_id: cleanAgentId ? null : cleanRouteId
         });
 
         if (!rpcErr && rpcVal !== null && rpcVal !== undefined) {
@@ -826,6 +835,30 @@ const db = {
         }
       } catch (eRpc) {
         console.warn("⚠️ Aviso al llamar RPC get_agent_recaudo_hoy:", eRpc);
+      }
+
+      // Pre-cargar cartones para verificar asignación estricta por cartón y agente
+      const cartonMap = new Map();
+      let allCartones = [];
+      try {
+        const { data: cartData } = await supabase
+          .from('cartones')
+          .select('id, cliente_id, agent_id, route_id, saldo_anterior, rollover_amount, estado, created_at, fecha_apertura');
+        if (Array.isArray(cartData)) {
+          allCartones = cartData;
+          cartData.forEach(c => {
+            if (c && c.id) {
+              cartonMap.set(String(c.id).toLowerCase(), {
+                agent_id: c.agent_id ? String(c.agent_id).trim().toLowerCase() : '',
+                route_id: c.route_id ? String(c.route_id).trim().toLowerCase() : '',
+                cliente_id: c.cliente_id ? String(c.cliente_id).trim() : '',
+                raw: c
+              });
+            }
+          });
+        }
+      } catch (eCart) {
+        console.warn("⚠️ Aviso al pre-cargar cartones en getAgentRecaudoHoyDirect:", eCart);
       }
 
       // Intento 2: Consulta directa a la tabla payments incluyendo explícitamente Renovacion, 999 y liquidado === true
@@ -839,33 +872,6 @@ const db = {
       }
 
       const paymentList = data || [];
-      const lowerAgentId = cleanAgentId ? cleanAgentId.toLowerCase() : null;
-      const lowerRouteId = cleanRouteId ? cleanRouteId.toLowerCase() : null;
-
-      let userObj = null;
-      if (cleanAgentId) {
-        userObj = await this.getUserByUsername(cleanAgentId);
-      }
-      const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
-      const effectiveRouteIdLower = lowerRouteId || (userObj && (userObj.routeId || userObj.route_id) ? String(userObj.routeId || userObj.route_id).trim().toLowerCase() : null);
-
-      // Obtener cédulas de clientes del agente/ruta para vincular pagos de renovación que solo tengan clientCedula
-      const agentClientCedulas = new Set();
-      try {
-        const allClients = await this.getClients();
-        (allClients || []).forEach(c => {
-          if (!c) return;
-          const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
-          const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
-          if (
-            (lowerAgentId && cAgent === lowerAgentId) ||
-            (effectiveRouteIdLower && cRoute === effectiveRouteIdLower)
-          ) {
-            const ced = String(c.cedula || c.cliente_id || '').trim();
-            if (ced) agentClientCedulas.add(ced);
-          }
-        });
-      } catch (eCl) {}
 
       const isDateMatchingTarget = (rawVal) => {
         if (!rawVal) return false;
@@ -886,7 +892,8 @@ const db = {
       };
 
       const seenIds = new Set();
-      const clientsWithRenewalPayToday = new Set();
+      const handledRenewalCartonIds = new Set();
+      const handledRenewalAgentClients = new Set();
       let totalMontoReal = 0;
 
       paymentList.forEach(p => {
@@ -919,18 +926,40 @@ const db = {
         if (status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return;
         if (!isRenovacionOrLiquidado && (status.includes('CANCEL') || status.includes('RECHAZ'))) return;
 
-        // Validar pertenencia al agente o ruta
+        // Validar pertenencia estricta por cartón y agente
+        const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
         const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
         const pAgentName = String(p.agentName || '').trim().toLowerCase();
         const pRouteId = String(p.routeId || p.route_id || '').trim().toLowerCase();
         const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
 
         let matches = false;
-        if (lowerAgentId && (pAgentId === lowerAgentId || pAgentName === lowerAgentId)) matches = true;
-        if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) matches = true;
-        if (effectiveRouteIdLower && pRouteId === effectiveRouteIdLower) matches = true;
-        if (!matches && pCedula && agentClientCedulas.has(pCedula)) matches = true;
+        if (lowerAgentId) {
+          // FILTRO ESTRICTO Y OBLIGATORIO POR ID DEL AGENTE:
+          if (pCartonId && cartonMap.has(pCartonId)) {
+            const carton = cartonMap.get(pCartonId);
+            // El cartón DEBE pertenecer específicamente al agente consultado
+            if (carton.agent_id === lowerAgentId || (agentNameLower && carton.agent_id === agentNameLower)) {
+              matches = true;
+            }
+            // Si el cartón existe pero pertenece a otro agente, NUNCA coincide
+          } else {
+            // Si el pago no tiene carton_id en el mapa, validar por agent_id / agentName directo del pago
+            if (pAgentId === lowerAgentId || pAgentName === lowerAgentId) matches = true;
+            if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) matches = true;
+          }
+        } else if (effectiveRouteIdLower) {
+          // Consulta por ruta sin agente específico
+          if (pCartonId && cartonMap.has(pCartonId)) {
+            const carton = cartonMap.get(pCartonId);
+            if (carton.route_id === effectiveRouteIdLower) matches = true;
+          } else {
+            if (pRouteId === effectiveRouteIdLower) matches = true;
+          }
+        }
 
+        // NOTA CRÍTICA: NUNCA asociar por clientCedula como condición de pertenencia.
+        // Un cliente asignado a múltiples agentes únicamente suma en el agente dueño del cartón correspondiente.
         if (!matches) return;
 
         // Deduplicación estricta por ID único de pago
@@ -938,8 +967,9 @@ const db = {
         if (seenIds.has(pId)) return;
         seenIds.add(pId);
 
-        if (paymentType === 'renovacion' || Number(p.installmentNumber) === 999 || rawId.startsWith('pay_renov_')) {
-          if (pCedula) clientsWithRenewalPayToday.add(pCedula);
+        if (isRenovacionOrLiquidado) {
+          if (pCartonId) handledRenewalCartonIds.add(pCartonId);
+          if (pCedula && lowerAgentId) handledRenewalAgentClients.add(`${lowerAgentId}_${pCedula}`);
           if (rawId && (String(p.date || '').trim() !== targetDate || p.liquidado !== true || !p.payment_type)) {
             supabase
               .from('payments')
@@ -958,44 +988,51 @@ const db = {
         totalMontoReal += Math.round(amount);
       });
 
-      // Respaldo adicional: si un cartón fue renovado hoy y su monto refinanciado (saldo_anterior / rollover_amount)
-      // no quedó insertado en 'payments' como pay_renov_ / 999, sumarlo para reflejar el 100% del cartón viejo
-      try {
-        const { data: cartonesHoy } = await supabase.from('cartones').select('*');
-        if (Array.isArray(cartonesHoy)) {
-          cartonesHoy.forEach(c => {
-            if (!c) return;
-            const cCedula = String(c.cliente_id || c.client_id || c.cedula || '').trim();
-            if (!cCedula || clientsWithRenewalPayToday.has(cCedula)) return;
+      // Respaldo adicional: si un cartón fue renovado hoy por este agente y su monto refinanciado (saldo_anterior / rollover_amount)
+      // no quedó insertado en 'payments' como pay_renov_ / 999, sumarlo con filtro estricto por agente
+      allCartones.forEach(c => {
+        if (!c) return;
+        const cId = String(c.id || '').trim().toLowerCase();
+        const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+        const cRoute = String(c.route_id || c.routeId || '').trim().toLowerCase();
+        const cCedula = String(c.cliente_id || c.client_id || c.cedula || '').trim();
 
-            const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
-            const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
-            if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
-            if (rollover <= 0) return;
-
-            const isCreatedToday =
-              isDateMatchingTarget(c.created_at) ||
-              isDateMatchingTarget(c.fecha_apertura) ||
-              isDateMatchingTarget(c.fecha_inicio);
-            if (!isCreatedToday) return;
-
-            const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
-            const cRoute = String(c.route_id || c.routeId || '').trim().toLowerCase();
-            let matchesCarton = false;
-            if (lowerAgentId && cAgent === lowerAgentId) matchesCarton = true;
-            if (agentNameLower && cAgent === agentNameLower) matchesCarton = true;
-            if (effectiveRouteIdLower && cRoute === effectiveRouteIdLower) matchesCarton = true;
-            if (!matchesCarton && agentClientCedulas.has(cCedula)) matchesCarton = true;
-
-            if (matchesCarton) {
-              clientsWithRenewalPayToday.add(cCedula);
-              totalMontoReal += rollover;
-            }
-          });
+        let matchesCarton = false;
+        if (lowerAgentId) {
+          if (cAgent === lowerAgentId || (agentNameLower && cAgent === agentNameLower)) {
+            matchesCarton = true;
+          }
+        } else if (effectiveRouteIdLower) {
+          if (cRoute === effectiveRouteIdLower) {
+            matchesCarton = true;
+          }
         }
-      } catch (eCartRenov) {}
+        if (!matchesCarton) return;
 
-      return Math.max(rpcTotal, totalMontoReal);
+        if (cId && handledRenewalCartonIds.has(cId)) return;
+        if (cCedula && lowerAgentId && handledRenewalAgentClients.has(`${lowerAgentId}_${cCedula}`)) return;
+
+        const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
+        const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+        if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
+        if (rollover <= 0) return;
+
+        const isCreatedToday =
+          isDateMatchingTarget(c.created_at) ||
+          isDateMatchingTarget(c.fecha_apertura);
+        if (!isCreatedToday) return;
+
+        if (cId) handledRenewalCartonIds.add(cId);
+        if (cCedula && lowerAgentId) handledRenewalAgentClients.add(`${lowerAgentId}_${cCedula}`);
+        totalMontoReal += rollover;
+      });
+
+      // Si payments fue consultado directamente y calculado con filtro estricto por cartón y agente,
+      // totalMontoReal es el valor certero sin fuga de datos.
+      if (Array.isArray(paymentList)) {
+        return totalMontoReal;
+      }
+      return rpcTotal;
     } catch (e) {
       console.error("❌ Excepción inesperada en getAgentRecaudoHoyDirect:", e);
       return 0;

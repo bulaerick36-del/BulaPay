@@ -41,33 +41,52 @@ AS $$
 DECLARE
     v_date text;
     v_total numeric;
+    v_clean_agent text;
+    v_clean_route text;
 BEGIN
     v_date := COALESCE(p_date, to_char(NOW() AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD'));
+    v_clean_agent := NULLIF(TRIM(p_agent_id), '');
+    v_clean_route := NULLIF(TRIM(p_route_id), '');
     
     SELECT COALESCE(SUM(amount), 0)
     INTO v_total
     FROM (
-        SELECT DISTINCT ON (COALESCE(id, "clientCedula" || '_' || "installmentNumber"::text || '_' || amount::text || '_' || v_date)) amount
-        FROM payments
+        SELECT DISTINCT ON (COALESCE(p.id, p."clientCedula" || '_' || COALESCE(p."installmentNumber"::text, '') || '_' || p.amount::text || '_' || v_date)) p.amount
+        FROM payments p
+        LEFT JOIN cartones c ON c.id::text = p.carton_id::text
         WHERE (
-            (p_agent_id IS NOT NULL AND (LOWER(agent_id) = LOWER(p_agent_id) OR LOWER("agentName") = LOWER(p_agent_id)))
-            OR (p_route_id IS NOT NULL AND ("routeId" = p_route_id OR route_id = p_route_id))
+            -- Si se consulta por agente, filtro estricto y obligatorio por el cartón amarrado específicamente a ese agente
+            (v_clean_agent IS NOT NULL AND (
+                (p.carton_id IS NOT NULL AND c.id IS NOT NULL AND LOWER(COALESCE(c.agent_id, '')) = LOWER(v_clean_agent))
+                OR
+                ((p.carton_id IS NULL OR c.id IS NULL) AND (
+                    LOWER(COALESCE(p.agent_id, '')) = LOWER(v_clean_agent) 
+                    OR LOWER(COALESCE(p."agentName", '')) = LOWER(v_clean_agent)
+                ))
+            ))
+            OR
+            -- Si solo se consulta por ruta sin agente
+            (v_clean_agent IS NULL AND v_clean_route IS NOT NULL AND (
+                (p.carton_id IS NOT NULL AND c.id IS NOT NULL AND (c.route_id = v_clean_route))
+                OR
+                (p."routeId" = v_clean_route OR p.route_id = v_clean_route)
+            ))
         )
         AND (
-            date::text LIKE (v_date || '%')
-            OR created_at::text LIKE (v_date || '%')
-            OR to_char(created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = v_date
+            p.date::text LIKE (v_date || '%')
+            OR p.created_at::text LIKE (v_date || '%')
+            OR to_char(p.created_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = v_date
         )
-        AND COALESCE(id, '') NOT LIKE 'pay_init_%'
-        AND COALESCE(id, '') NOT LIKE 'pend_%'
+        AND COALESCE(p.id, '') NOT LIKE 'pay_init_%'
+        AND COALESCE(p.id, '') NOT LIKE 'pend_%'
         AND (
-            LOWER(COALESCE(payment_type, '')) = 'renovacion'
-            OR "installmentNumber" = 999
-            OR COALESCE(liquidado, false) = true
-            OR UPPER(COALESCE(status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA', 'CANCELADO', 'RECHAZADO')
+            LOWER(COALESCE(p.payment_type, '')) = 'renovacion'
+            OR p."installmentNumber" = 999
+            OR COALESCE(p.liquidado, false) = true
+            OR UPPER(COALESCE(p.status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA', 'CANCELADO', 'RECHAZADO')
         )
-        AND UPPER(COALESCE(status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA')
-        AND amount > 0
+        AND UPPER(COALESCE(p.status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA')
+        AND p.amount > 0
     ) sub;
 
     RETURN v_total;

@@ -483,11 +483,19 @@ const supervisorModule = {
         directTotal = Number(await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername, null, routeId)) || 0;
       }
 
-      // Suma verificadora sobre el historial del día incluyendo explícitamente payment_type === 'Renovacion', installmentNumber === 999 o liquidado === true
+      // Suma verificadora sobre el historial del día con verificación estricta de cartón y agente
       let fallbackTotal = 0;
       if (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function') {
         const todayStr = this.getLocalDateString();
         const allPayments = await window.BulaPayDB.getPayments();
+        const allCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
+          ? await window.BulaPayDB.getCartones()
+          : [];
+        const cartonMap = new Map();
+        (allCartones || []).forEach(c => {
+          if (c && c.id) cartonMap.set(String(c.id).toLowerCase(), c);
+        });
+
         const allUsers = await this.getCachedUsers();
         const agentObj = (allUsers || []).find(u => u && String(u.username || '').toLowerCase() === String(agentUsername || '').toLowerCase());
         const agentNameLower = agentObj ? String(agentObj.name || '').trim().toLowerCase() : '';
@@ -495,6 +503,7 @@ const supervisorModule = {
         const targetRouteLower = String(routeId || agentObj?.routeId || agentObj?.route_id || '').trim().toLowerCase();
 
         const seenIds = new Set();
+        const handledRenewalCartonIds = new Set();
         (allPayments || []).forEach(p => {
           if (!p) return;
           const rawId = String(p.id || '').trim();
@@ -519,25 +528,73 @@ const supervisorModule = {
           if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'LIQUIDADO_MORA') return;
           if (!isRenovOrLiquidado && (pStatus.includes('CANCEL') || pStatus.includes('RECHAZ'))) return;
 
+          const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
           const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
           const pAgentName = String(p.agentName || '').trim().toLowerCase();
           const pRoute = String(p.routeId || p.route_id || '').trim().toLowerCase();
 
           let belongs = false;
-          if (agentUserLower && (pAgentId === agentUserLower || pAgentName === agentUserLower)) belongs = true;
-          if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) belongs = true;
-          if (targetRouteLower && pRoute === targetRouteLower) belongs = true;
+          if (agentUserLower) {
+            // El pago DEBE pertenecer a un cartón amarrado específicamente al agente consultado
+            if (pCartonId && cartonMap.has(pCartonId)) {
+              const c = cartonMap.get(pCartonId);
+              const cAgent = String(c.agent_id || '').trim().toLowerCase();
+              if (cAgent === agentUserLower || (agentNameLower && cAgent === agentNameLower)) {
+                belongs = true;
+              }
+            } else {
+              // Si no tiene cartón amarrado en el mapa, validar por agent_id / agentName directo del pago
+              if (pAgentId === agentUserLower || pAgentName === agentUserLower) belongs = true;
+              if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) belongs = true;
+            }
+          } else if (targetRouteLower) {
+            if (pCartonId && cartonMap.has(pCartonId)) {
+              const c = cartonMap.get(pCartonId);
+              if (String(c.route_id || '').trim().toLowerCase() === targetRouteLower) belongs = true;
+            } else if (pRoute === targetRouteLower) {
+              belongs = true;
+            }
+          }
           if (!belongs) return;
 
           const dedupKey = rawId || `${p.clientCedula || p.client_cedula}_${p.installmentNumber || ''}_${amount}_${todayStr}`;
           if (seenIds.has(dedupKey)) return;
           seenIds.add(dedupKey);
 
+          if (isRenovOrLiquidado && pCartonId) {
+            handledRenewalCartonIds.add(pCartonId);
+          }
+
           fallbackTotal += Math.round(amount);
+        });
+
+        // Respaldo de renovaciones virtuales en cartones del agente
+        (allCartones || []).forEach(c => {
+          if (!c) return;
+          const cId = String(c.id || '').trim().toLowerCase();
+          const cAgent = String(c.agent_id || '').trim().toLowerCase();
+          if (agentUserLower) {
+            if (cAgent !== agentUserLower && (!agentNameLower || cAgent !== agentNameLower)) return;
+          } else if (targetRouteLower) {
+            if (String(c.route_id || '').trim().toLowerCase() !== targetRouteLower) return;
+          }
+          if (cId && handledRenewalCartonIds.has(cId)) return;
+
+          const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
+          const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+          if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
+          if (rollover <= 0) return;
+
+          const cLocalDate = c.created_at ? this.getLocalDateString(new Date(c.created_at)) : (c.fecha_apertura ? this.getLocalDateString(new Date(c.fecha_apertura)) : '');
+          if (cLocalDate !== todayStr) return;
+
+          if (cId) handledRenewalCartonIds.add(cId);
+          fallbackTotal += rollover;
         });
       }
 
-      return Math.max(Math.round(directTotal), Math.round(fallbackTotal));
+      if (directTotal > 0) return directTotal;
+      return fallbackTotal;
     } catch (e) {
       console.error("Error al calcular recaudo real del agente:", e);
       return 0;
@@ -1622,8 +1679,21 @@ const supervisorModule = {
     endRange.setDate(endRange.getDate() + 1);
 
     for (const client of routeClients) {
-      // Calcular abonos del cliente
-      const clientPayments = payments.filter(p => (p.clientCedula || p.client_cedula || p.cedula) === client.cedula);
+      // Calcular abonos del cliente condicionados estrictamente al cartón o ruta de este cliente
+      const clientCartonId = String(client.carton_id || client.id || '').trim().toLowerCase();
+      const clientPayments = payments.filter(p => {
+        const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+        if (pCed !== String(client.cedula).trim()) return false;
+        const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : '';
+        if (pCartonId && clientCartonId) {
+          return pCartonId === clientCartonId;
+        }
+        const pRoute = String(p.routeId || p.route_id || '').trim().toLowerCase();
+        if (pRoute) {
+          return routeIds.map(x => String(x).toLowerCase()).includes(pRoute);
+        }
+        return true;
+      });
 
       // Pagos realizados dentro del rango de 6 AM a 6 AM o en la fecha local seleccionada (incluyendo Renovacion, installmentNumber === 999, liquidado === true)
       const paymentsOnDate = clientPayments.filter(p => {
@@ -2357,6 +2427,13 @@ const supervisorModule = {
 
     const payments = await window.BulaPayDB.getPayments();
     const clients = await window.BulaPayDB.getClients();
+    const allCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
+      ? await window.BulaPayDB.getCartones()
+      : [];
+    const cartonMap = new Map();
+    (allCartones || []).forEach(c => {
+      if (c && c.id) cartonMap.set(String(c.id).toLowerCase(), c);
+    });
 
     // Group routes by name
     const groupedRoutes = {};
@@ -2432,23 +2509,90 @@ const supervisorModule = {
     for (const name in groupedRoutes) {
       const gRoute = groupedRoutes[name];
       const rIds = gRoute.routeIds;
+      const rIdsLower = rIds.map(x => String(x).toLowerCase());
+
+      const routeAgentUsernames = new Set();
+      (routes || []).forEach(r => {
+        if (r && rIds.includes(r.id) && r.agentUsername) {
+          routeAgentUsernames.add(String(r.agentUsername).trim().toLowerCase());
+        }
+      });
+      const routeAgentNames = new Set(Array.from(gRoute.agentNames).map(n => String(n).trim().toLowerCase()));
 
       const routeClients = clients.filter(c => c.routeId && rIds.includes(c.routeId));
-      const clientCedulas = new Set(routeClients.map(c => c.cedula));
       
       const seenRoutePaymentIds = new Set();
       const routePaymentsToday = paymentsToday.filter(p => {
         const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
         if (seenRoutePaymentIds.has(pId)) return false;
-        const pCedula = p.clientCedula || p.client_cedula || p.cedula;
-        const pRouteId = p.routeId || p.route_id;
-        if (clientCedulas.has(pCedula) || (pRouteId && rIds.includes(pRouteId))) {
+        
+        const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
+        const pRouteId = (p.routeId || p.route_id) ? String(p.routeId || p.route_id).trim().toLowerCase() : null;
+        const pAgentId = (p.agent_id || p.agentId) ? String(p.agent_id || p.agentId).trim().toLowerCase() : null;
+        const pAgentName = p.agentName ? String(p.agentName).trim().toLowerCase() : null;
+
+        let belongsToThisRoute = false;
+        if (pCartonId && cartonMap.has(pCartonId)) {
+          const c = cartonMap.get(pCartonId);
+          const cRoute = String(c.route_id || '').trim().toLowerCase();
+          const cAgent = String(c.agent_id || '').trim().toLowerCase();
+          if (rIdsLower.includes(cRoute) || routeAgentUsernames.has(cAgent) || routeAgentNames.has(cAgent)) {
+            belongsToThisRoute = true;
+          }
+          // Si el cartón pertenece a otra ruta/agente, NUNCA coincide
+        } else {
+          // Si no tiene cartón amarrado, validar directamente por ruta o agente del pago
+          if (pRouteId && rIdsLower.includes(pRouteId)) {
+            belongsToThisRoute = true;
+          } else if (pAgentId && routeAgentUsernames.has(pAgentId)) {
+            belongsToThisRoute = true;
+          } else if (pAgentName && routeAgentNames.has(pAgentName)) {
+            belongsToThisRoute = true;
+          }
+        }
+
+        // NOTA CRÍTICA: NUNCA asociar por clientCedulas como condición.
+        // Los clientes compartidos entre rutas solo suman en la ruta del cartón que recibió el pago.
+        if (belongsToThisRoute) {
           seenRoutePaymentIds.add(pId);
           return true;
         }
         return false;
       });
-      const totalCollectedToday = routePaymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+
+      // Contabilizar también renovaciones virtuales (rollover de cartones) que pertenezcan a esta ruta hoy
+      let routeRenewalRollovers = 0;
+      const routeHandledRenewalCartons = new Set();
+      routePaymentsToday.forEach(p => {
+        const pType = String(p.payment_type || p.type || '').trim().toLowerCase();
+        const isRenov = pType === 'renovacion' || Number(p.installmentNumber) === 999 || String(p.id || '').startsWith('pay_renov_');
+        if (isRenov && p.carton_id) {
+          routeHandledRenewalCartons.add(String(p.carton_id).trim().toLowerCase());
+        }
+      });
+
+      (allCartones || []).forEach(c => {
+        if (!c) return;
+        const cId = String(c.id || '').trim().toLowerCase();
+        const cRoute = String(c.route_id || '').trim().toLowerCase();
+        const cAgent = String(c.agent_id || '').trim().toLowerCase();
+        const matchesRoute = rIdsLower.includes(cRoute) || routeAgentUsernames.has(cAgent) || routeAgentNames.has(cAgent);
+        if (!matchesRoute) return;
+        if (cId && routeHandledRenewalCartons.has(cId)) return;
+
+        const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
+        const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
+        if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
+        if (rollover <= 0) return;
+
+        const cLocalDate = c.created_at ? this.getLocalDateString(new Date(c.created_at)) : (c.fecha_apertura ? this.getLocalDateString(new Date(c.fecha_apertura)) : '');
+        if (cLocalDate !== todayLocalStr) return;
+
+        if (cId) routeHandledRenewalCartons.add(cId);
+        routeRenewalRollovers += rollover;
+      });
+
+      const totalCollectedToday = routePaymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0) + routeRenewalRollovers;
 
       const expectedClients = routeClients.filter(c => {
         const hasPaymentToday = routePaymentsToday.some(p => p.clientCedula === c.cedula);
@@ -4204,6 +4348,15 @@ const supervisorModule = {
           .map(c => String(c.cedula))
       );
 
+      // Pre-cargar cartones para verificar asignación estricta por cartón y agente
+      const allCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
+        ? await window.BulaPayDB.getCartones()
+        : [];
+      const cartonMap = new Map();
+      (allCartones || []).forEach(c => {
+        if (c && c.id) cartonMap.set(String(c.id).toLowerCase(), c);
+      });
+
       // Filtrar cobros del agente específico para hoy (incluyendo Renovacion, installmentNumber === 999 y liquidado === true; excluyendo lista negra y mora)
       const normUser = String(agentUsername || '').toLowerCase().trim();
       const normName = String(agentName || '').toLowerCase().trim();
@@ -4219,10 +4372,21 @@ const supervisorModule = {
         const pDateOnly = String(p.date || '').split('T')[0];
         const isToday = pDateOnly === todayStr || pCreatedLocal === todayStr;
 
+        const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
         const pAgentId = String(p.agent_id || p.agentId || '').toLowerCase().trim();
         const pAgentName = String(p.agentName || '').toLowerCase().trim();
-        const matchesAgent = (normUser && (pAgentId === normUser || pAgentName === normUser)) ||
-                             (normName && (pAgentName === normName || pAgentId === normName));
+
+        let matchesAgent = false;
+        if (pCartonId && cartonMap.has(pCartonId)) {
+          const c = cartonMap.get(pCartonId);
+          const cAgent = String(c.agent_id || '').trim().toLowerCase();
+          if (cAgent === normUser || (normName && cAgent === normName)) {
+            matchesAgent = true;
+          }
+        } else {
+          if (normUser && (pAgentId === normUser || pAgentName === normUser)) matchesAgent = true;
+          if (normName && (pAgentName === normName || pAgentId === normName)) matchesAgent = true;
+        }
 
         const pType = String(p.payment_type || p.type || '').trim();
         const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
@@ -4235,7 +4399,7 @@ const supervisorModule = {
       });
       const localCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
       const realCollected = await this.getAgentRecaudoHoyReal(agentUsername);
-      const totalCollected = Math.max(localCollected, Number(realCollected || 0));
+      const totalCollected = Number(realCollected || 0) || localCollected;
 
       // Obtener clientes de hoy asociados al ID del agente activo
       const todayClients = allClients.filter(c => {
