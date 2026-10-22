@@ -343,3 +343,87 @@ $$;
 
 GRANT EXECUTE ON FUNCTION renovar_carton(text, text, numeric, numeric, numeric, integer, numeric, numeric, numeric, text, text, text, bigint, text) TO anon, authenticated, service_role;
 
+
+
+-- ==============================================================================
+-- SINCRONIZACIÓN DE SUSCRIPCIONES SUPERVISOR -> AGENTE DE RUTA (POSTGRESQL)
+-- ==============================================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "fecha_vencimiento" TIMESTAMPTZ;
+
+-- A. Función y Trigger de Actualización en Cadena (Cascade Update)
+CREATE OR REPLACE FUNCTION cascade_supervisor_vigencia()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (NEW.role IN ('Usuario Supervisor', 'Supervisor', 'Administrador', 'Administrador de Rutas')) 
+       AND (NEW.fecha_vencimiento IS DISTINCT FROM OLD.fecha_vencimiento OR NEW.fecha_corte IS DISTINCT FROM OLD.fecha_corte) THEN
+        
+        UPDATE users
+        SET 
+            fecha_vencimiento = NEW.fecha_vencimiento,
+            fecha_corte = NEW.fecha_corte,
+            bloqueado_por_mora = COALESCE(NEW.bloqueado_por_mora, false),
+            estado_suscripcion = COALESCE(NEW.estado_suscripcion, 'activa'),
+            ciclo_actual = COALESCE(NEW.ciclo_actual, ciclo_actual),
+            fecha_inicio_ciclo = COALESCE(NEW.fecha_inicio_ciclo, fecha_inicio_ciclo),
+            updated_at = NOW()
+        WHERE 
+            role IN ('Agente de Ruta', 'agent')
+            AND (supervisor_id = NEW.username OR supervisor = NEW.username);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_cascade_supervisor_vigencia ON users;
+CREATE TRIGGER trg_cascade_supervisor_vigencia
+AFTER UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION cascade_supervisor_vigencia();
+
+-- B. Función y Trigger para Heredar por Defecto Vigencia al Crear Agente de Ruta
+CREATE OR REPLACE FUNCTION inherit_supervisor_vigencia_on_insert()
+RETURNS TRIGGER AS $$
+DECLARE
+    sup_vencimiento TIMESTAMPTZ;
+    sup_corte DATE;
+    sup_estado TEXT;
+    sup_ciclo INT;
+    sup_inicio TIMESTAMPTZ;
+    sup_username TEXT;
+BEGIN
+    IF (NEW.role IN ('Agente de Ruta', 'agent')) AND (NEW.supervisor_id IS NOT NULL OR NEW.supervisor IS NOT NULL) THEN
+        sup_username := COALESCE(NEW.supervisor_id, NEW.supervisor);
+        
+        SELECT fecha_vencimiento, fecha_corte, estado_suscripcion, ciclo_actual, fecha_inicio_ciclo
+        INTO sup_vencimiento, sup_corte, sup_estado, sup_ciclo, sup_inicio
+        FROM users
+        WHERE username = sup_username
+        LIMIT 1;
+
+        IF sup_vencimiento IS NOT NULL OR sup_corte IS NOT NULL THEN
+            IF NEW.fecha_vencimiento IS NULL THEN
+                NEW.fecha_vencimiento := sup_vencimiento;
+            END IF;
+            IF NEW.fecha_corte IS NULL THEN
+                NEW.fecha_corte := sup_corte;
+            END IF;
+            IF NEW.estado_suscripcion IS NULL OR NEW.estado_suscripcion = 'activa_prueba' THEN
+                NEW.estado_suscripcion := COALESCE(sup_estado, 'activa');
+            END IF;
+            IF NEW.ciclo_actual IS NULL THEN
+                NEW.ciclo_actual := COALESCE(sup_ciclo, 1);
+            END IF;
+            IF NEW.fecha_inicio_ciclo IS NULL THEN
+                NEW.fecha_inicio_ciclo := sup_inicio;
+            END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_inherit_supervisor_vigencia ON users;
+CREATE TRIGGER trg_inherit_supervisor_vigencia
+BEFORE INSERT ON users
+FOR EACH ROW
+EXECUTE FUNCTION inherit_supervisor_vigencia_on_insert();

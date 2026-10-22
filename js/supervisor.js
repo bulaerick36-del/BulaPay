@@ -182,9 +182,12 @@ const supervisorModule = {
               name: agent.name,
               role: 'Agente de Ruta',
               supervisor: supervisorUser.username,
+              supervisor_id: supervisorUser.username,
               routeId: routeId,
               documentType: 'CC',
-              documentNumber: agent.cedula
+              documentNumber: agent.cedula,
+              fecha_vencimiento: supervisorUser.fecha_vencimiento || (supervisorUser.fecha_corte ? (String(supervisorUser.fecha_corte).includes('T') ? supervisorUser.fecha_corte : `${supervisorUser.fecha_corte}T23:59:59.999Z`) : null),
+              fecha_corte: supervisorUser.fecha_corte || (supervisorUser.fecha_vencimiento ? String(supervisorUser.fecha_vencimiento).split('T')[0] : null)
             };
             await window.BulaPayDB.saveUser(newAgent);
           }
@@ -3040,9 +3043,12 @@ const supervisorModule = {
         name: name,
         role: 'Agente de Ruta',
         supervisor: supervisorUser.username,
+        supervisor_id: supervisorUser.username,
         routeId: routeId,
         documentType: 'CC',
-        documentNumber: cedula
+        documentNumber: cedula,
+        fecha_vencimiento: supervisorUser.fecha_vencimiento || (supervisorUser.fecha_corte ? (String(supervisorUser.fecha_corte).includes('T') ? supervisorUser.fecha_corte : `${supervisorUser.fecha_corte}T23:59:59.999Z`) : null),
+        fecha_corte: supervisorUser.fecha_corte || (supervisorUser.fecha_vencimiento ? String(supervisorUser.fecha_vencimiento).split('T')[0] : null)
       };
 
       await window.BulaPayDB.saveUser(newAgent);

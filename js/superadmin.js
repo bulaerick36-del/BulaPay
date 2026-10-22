@@ -908,13 +908,18 @@ const superadminModule = {
         const corteVal = document.getElementById('edit-sa-corte').value;
 
         try {
-          await window.BulaPayDB.updateUserProfile(targetUsername, {
+          const updatePayload = {
             name: nameVal,
             role: roleVal,
             phone: phoneVal,
             company: nameVal,
             fecha_corte: corteVal
-          });
+          };
+          if (corteVal) {
+            updatePayload.fecha_vencimiento = corteVal.includes('T') ? corteVal : `${corteVal}T23:59:59.999Z`;
+          }
+
+          await window.BulaPayDB.updateUserProfile(targetUsername, updatePayload);
 
           // Si se editó a 'erick26' o al usuario actual en sesión, actualizar de inmediato permisos y rol
           if (targetUsername === 'erick26' || targetUsername === '1121338578') {
@@ -937,7 +942,8 @@ const superadminModule = {
     document.getElementById('edit-sa-name').value = user.name || user.nombre_firmante || '';
     document.getElementById('edit-sa-role').value = user.role || 'Usuario Supervisor';
     document.getElementById('edit-sa-phone').value = user.phone || '';
-    document.getElementById('edit-sa-corte').value = user.fecha_corte || user.fecha_vencimiento || '';
+    const initialCorteVal = user.fecha_corte || (user.fecha_vencimiento ? String(user.fecha_vencimiento).split('T')[0] : '');
+    document.getElementById('edit-sa-corte').value = initialCorteVal;
 
     modal.style.display = 'flex';
   },
@@ -3953,6 +3959,9 @@ const superadminModule = {
 
       const res = await window.BulaPayDB.renovarCicloManual(usernameTarget);
       if (res && res.success) {
+        const cascadeMsg = res.updatedAgentsCount > 0 
+          ? `<div style="margin-top: 0.65rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); padding: 0.55rem; border-radius: 6px; color: #38bdf8; font-weight: 700; font-size: 0.82rem;">👥 Se sincronizó la vigencia de ${res.updatedAgentsCount} agente(s) de ruta asociado(s).</div>`
+          : '';
         if (typeof Swal !== 'undefined') {
           await Swal.fire({
             icon: 'success',
@@ -3963,13 +3972,14 @@ const superadminModule = {
                 <div style="background: rgba(16, 185, 129, 0.15); padding: 0.75rem; border-radius: 8px; color: #34d399; font-weight: 700;">
                   Nueva Fecha de Corte: ${res.nuevaFechaCorteStr} (+30 Días)
                 </div>
+                ${cascadeMsg}
               </div>
             `,
             background: '#0f172a',
             color: '#ffffff'
           });
         } else {
-          alert(`¡Ciclo Renovado! Se dio inicio al Ciclo ${res.nuevoCiclo}. Nueva fecha de corte: ${res.nuevaFechaCorteStr}`);
+          alert(`¡Ciclo Renovado! Se dio inicio al Ciclo ${res.nuevoCiclo}. Nueva fecha de corte: ${res.nuevaFechaCorteStr}` + (res.updatedAgentsCount > 0 ? `\n(Se sincronizaron ${res.updatedAgentsCount} agentes de ruta asociados)` : ''));
         }
 
         // Re-renderizar modal de gestión
