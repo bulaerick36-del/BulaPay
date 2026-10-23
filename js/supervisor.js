@@ -1319,9 +1319,25 @@ const supervisorModule = {
     const allClients = await window.BulaPayDB.getClients();
     const allPayments = await window.BulaPayDB.getPayments();
     const routeIds = filteredRoutes.map(r => r.id);
+    const routeAgentUsernames = new Set(
+      filteredRoutes.map(r => String(r.agentUsername || r.agent_id || '').trim().toLowerCase()).filter(Boolean)
+    );
+    const routeAgentNames = new Set();
+    filteredRoutes.forEach(r => {
+      if (r.agentName) {
+        String(r.agentName).split(',').forEach(n => {
+          if (n.trim()) routeAgentNames.add(n.trim().toLowerCase());
+        });
+      }
+    });
 
     // Clientes de las rutas seleccionadas
-    const selectedClients = allClients.filter(c => c.routeId && routeIds.includes(c.routeId));
+    const selectedClients = allClients.filter(c => {
+      if (!c) return false;
+      const cRoute = c.routeId || c.route_id;
+      const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+      return (cRoute && routeIds.includes(cRoute)) || (cAgent && (routeAgentUsernames.has(cAgent) || routeAgentNames.has(cAgent)));
+    });
 
     // 1. Capital Base (Inversión Inicial)
     const capitalBase = filteredRoutes.reduce((sum, r) => sum + (Number(r.capital) || 0), 0);
@@ -1332,7 +1348,19 @@ const supervisorModule = {
       .reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
 
     // 3. En Bolsillo (Efectivo) = Capital Base + Total Recaudado - Total Préstamos Realizados
-    const paymentsRoute = allPayments.filter(p => p.routeId && routeIds.includes(p.routeId));
+    const paymentsRoute = allPayments.filter(p => {
+      if (!p) return false;
+      const pId = String(p.id || '');
+      if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
+      const pStatus = String(p.status || '').toUpperCase();
+      if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'LIQUIDADO_MORA') return false;
+      const pRoute = p.routeId || p.route_id;
+      const pAgent = String(p.agent_id || p.agentId || '').trim().toLowerCase();
+      const pAgentName = String(p.agentName || '').trim().toLowerCase();
+      return (pRoute && routeIds.includes(pRoute)) ||
+             (pAgent && (routeAgentUsernames.has(pAgent) || routeAgentNames.has(pAgent))) ||
+             (pAgentName && (routeAgentNames.has(pAgentName) || routeAgentUsernames.has(pAgentName)));
+    });
     const totalRecaudos = paymentsRoute.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const totalPrestados = selectedClients.reduce((sum, c) => sum + (Number(c.amount || c.monto_prestado) || 0), 0);
     const enBolsillo = Math.max(0, capitalBase + totalRecaudos - totalPrestados);
@@ -1365,13 +1393,14 @@ const supervisorModule = {
     if (!modal || !routeSelect) return;
 
     const routes = await window.BulaPayDB.getRoutes();
-    routeSelect.innerHTML = '';
+    routeSelect.innerHTML = '<option value="ALL">Consolidado General (Todas las rutas)</option>';
     routes.forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.id;
       opt.textContent = `Ruta: ${r.name} (${r.agentName || 'Sin agente'})`;
       routeSelect.appendChild(opt);
     });
+    routeSelect.value = 'ALL';
 
     modal.classList.add('active');
     await this.calculateCierreCaja();
@@ -1395,7 +1424,7 @@ const supervisorModule = {
     const entregarEl = document.getElementById('cierre-efectivo-entregar');
 
     if (!routeSelect) return;
-    const routeId = routeSelect.value;
+    const routeId = routeSelect.value || 'ALL';
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
 
     if (inicialEl) inicialEl.textContent = `$${data.efectivoInicial.toLocaleString('es-CO')}`;
@@ -1460,7 +1489,7 @@ const supervisorModule = {
         html: `Se cerrará la jornada operativa actual de la ruta <strong>${data.routeName}</strong>.<br><br>
                <strong>Recaudo a archivar:</strong> <span style="color:#10b981; font-weight:bold;">$${recaudo.toLocaleString('es-CO')}</span><br>
                <strong>Total a entregar:</strong> <span style="color:#38bdf8; font-weight:bold;">$${data.totalEntregar.toLocaleString('es-CO')}</span><br><br>
-               <span style="color:#f59e0b; font-size:0.85rem;">⚠️ Al confirmar, el contador de 'Recaudado Hoy' de la ruta reiniciará inmediatamente a $0.</span>`,
+               <span style="color:#f59e0b; font-size:0.85rem;">⚠️ Al confirmar, el contador de 'Recaudado Hoy' del agente reiniciará inmediatamente a $0.</span>`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Sí, Realizar Cierre',
@@ -1487,7 +1516,7 @@ const supervisorModule = {
       if (typeof Swal !== 'undefined') {
         Swal.fire({
           title: '¡Cierre Exitoso!',
-          text: `La jornada fue archivada en el historial y el recaudo de la ruta se reinició a $0.`,
+          text: `La jornada fue archivada en el historial y el recaudo individual del agente se reinició a $0.`,
           icon: 'success',
           confirmButtonColor: '#10b981',
           background: '#0f172a',
@@ -1499,7 +1528,7 @@ const supervisorModule = {
 
       await this.calculateCierreCaja();
       await this.renderHistorialCierresSupervisor();
-      await this.loadAll();
+      await this.renderDashboard();
     } catch (e) {
       console.error("Error al confirmar cierre de jornada:", e);
       alert('❌ Error al realizar el cierre de jornada: ' + e.message);
@@ -2468,18 +2497,47 @@ const supervisorModule = {
 
     const routes = await window.BulaPayDB.getRoutes();
     const allUsers = await window.BulaPayDB.getUsers();
-    const agents = allUsers.filter(u => u.role === 'Agente de Ruta');
+    const agents = (allUsers || []).filter(u => u && (u.role === 'Agente de Ruta' || u.role === 'agent'));
 
-    // Calcular KPIs
-    const totalAgentsCount = agents.length;
-    const totalCapital = routes.reduce((acc, curr) => acc + Number(curr.capital), 0);
-    
-    // Calcular Progreso de Cobros con la nueva fórmula dinámica y en tiempo real (Ciclo 6:00 AM a 5:59 AM)
+    const routeAgentKeys = new Set();
+    (routes || []).forEach(r => {
+      if (!r) return;
+      if (r.agentUsername) routeAgentKeys.add(String(r.agentUsername).trim().toLowerCase());
+      else if (r.agentName) {
+        String(r.agentName).split(',').forEach(n => {
+          if (n.trim()) routeAgentKeys.add(n.trim().toLowerCase());
+        });
+      }
+    });
+
+    // Calcular KPIs consolidados permanentes de todas las rutas activas
+    const totalAgentsCount = Math.max(agents.length, routeAgentKeys.size);
+    const totalCapital = (routes || []).reduce((acc, curr) => acc + Number(curr.capital || curr.capital_asignado || 0), 0);
+
+    if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
+    if (this.kpiTotalCapital) this.kpiTotalCapital.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
+
     const payments = await window.BulaPayDB.getPayments();
     const clients = await window.BulaPayDB.getClients();
-    const routeIds = new Set(routes.map(r => r.id));
+    const routeIds = new Set((routes || []).map(r => r.id));
+    const routeIdsLower = new Set((routes || []).map(r => String(r.id || '').trim().toLowerCase()).filter(Boolean));
+    const activeAgentUsernames = new Set();
+    const activeAgentNames = new Set();
+    (routes || []).forEach(r => {
+      if (!r) return;
+      if (r.agentUsername) activeAgentUsernames.add(String(r.agentUsername).trim().toLowerCase());
+      if (r.agent_id) activeAgentUsernames.add(String(r.agent_id).trim().toLowerCase());
+      if (r.agentName) {
+        String(r.agentName).split(',').forEach(n => {
+          if (n.trim()) activeAgentNames.add(n.trim().toLowerCase());
+        });
+      }
+    });
+    agents.forEach(a => {
+      if (a.username) activeAgentUsernames.add(String(a.username).trim().toLowerCase());
+      if (a.name) activeAgentNames.add(String(a.name).trim().toLowerCase());
+    });
 
-    // Determinar la ventana estricta de 24 horas para "Hoy" (6:00 AM hoy a 5:59:59 AM mañana en hora Colombia)
     const now = new Date();
     const shiftWindowGlobal = window.BulaPayDB.getRouteOperationalShiftWindowSync();
     const start6AM = shiftWindowGlobal.shiftStart;
@@ -2487,16 +2545,39 @@ const supervisorModule = {
     const todayOpStr = shiftWindowGlobal.shiftDateStr;
 
     const seenMainPaymentIds = new Set();
-    const paymentsToday = (payments || []).filter(p => {
-      if (!p) return false;
+    const seenConsolidatedPaymentIds = new Set();
+    const paymentsToday = [];
+    const consolidatedRoutePayments = [];
+
+    (payments || []).forEach(p => {
+      if (!p) return;
       const pId = String(p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`);
-      if (seenMainPaymentIds.has(pId)) return false;
-      if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
+      if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return;
 
       const amount = Number(p.amount || 0);
       const status = String(p.status || '').toUpperCase();
-      if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
-      if (status === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
+      if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return;
+      if (status === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return;
+      const pType = String(p.payment_type || p.type || '').trim().toLowerCase();
+      const isRenovOrLiq = pType === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
+      if (!isRenovOrLiq && (status.includes('CANCEL') || status.includes('RECHAZ'))) return;
+
+      const pRoute = String(p.routeId || p.route_id || '').trim().toLowerCase();
+      const pAgent = String(p.agent_id || p.agentId || '').trim().toLowerCase();
+      const pAgentName = String(p.agentName || '').trim().toLowerCase();
+
+      const belongsToActiveRoutes =
+        routeIdsLower.size === 0 ||
+        (pRoute && routeIdsLower.has(pRoute)) ||
+        (pAgent && (activeAgentUsernames.has(pAgent) || activeAgentNames.has(pAgent))) ||
+        (pAgentName && (activeAgentNames.has(pAgentName) || activeAgentUsernames.has(pAgentName)));
+
+      if (!belongsToActiveRoutes) return;
+
+      if (!seenConsolidatedPaymentIds.has(pId)) {
+        seenConsolidatedPaymentIds.add(pId);
+        consolidatedRoutePayments.push(p);
+      }
 
       let isWindow = false;
       if (p.created_at) {
@@ -2507,19 +2588,24 @@ const supervisorModule = {
         isWindow = pDateOnly === todayOpStr;
       }
 
-      if (isWindow) {
+      if (isWindow && !seenMainPaymentIds.has(pId)) {
         seenMainPaymentIds.add(pId);
-        return true;
+        paymentsToday.push(p);
       }
-      return false;
     });
-    const totalCollectedToday = paymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    const expectedClients = clients.filter(c => {
-      if (!c.routeId || !routeIds.has(c.routeId)) return false;
+    const totalCollectedToday = paymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    const consolidatedPaymentsSum = consolidatedRoutePayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    const routesCollectedFieldSum = (routes || []).reduce((sum, r) => sum + Math.round(Number(r.collected || 0)), 0);
+    const consolidatedTotalCollected = Math.max(consolidatedPaymentsSum, routesCollectedFieldSum, totalCollectedToday);
+
+    const expectedClients = (clients || []).filter(c => {
+      if (!c) return false;
+      const cRoute = c.routeId || c.route_id;
+      const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+      if ((!cRoute || !routeIds.has(cRoute)) && (!cAgent || !activeAgentUsernames.has(cAgent))) return false;
       const hasPaymentToday = paymentsToday.some(p => p.clientCedula === c.cedula);
       if (hasPaymentToday) return true;
-      // Regla Gota a Gota: En el día de creación del cartón (Día 0), las cuotas esperadas son 0
       if (window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function' && window.BulaPayDB.isCartonCreatedOnDate(c, now)) {
         return false;
       }
@@ -2528,18 +2614,20 @@ const supervisorModule = {
     const totalExpectedToday = expectedClients.reduce((sum, c) => sum + Number(c.installmentAmount), 0);
 
     let progressPercent = 0;
-    if (totalExpectedToday > 0) {
+    if (totalExpectedToday > 0 && totalCollectedToday > 0) {
       progressPercent = Math.round((totalCollectedToday / totalExpectedToday) * 100);
+    } else if (totalCapital > 0) {
+      progressPercent = Math.round((consolidatedTotalCollected / totalCapital) * 100);
     }
 
-    // Inyectar KPIs
+    // Inyectar KPIs globales consolidados permanentemente
     if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
     if (this.kpiTotalCapital) this.kpiTotalCapital.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
-    if (this.kpiTotalCollected) this.kpiTotalCollected.textContent = `$${totalCollectedToday.toLocaleString('es-CO')}`;
+    if (this.kpiTotalCollected) this.kpiTotalCollected.textContent = `$${consolidatedTotalCollected.toLocaleString('es-CO')}`;
     
     const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
     if (kpiBlacklistEl) {
-      const blacklistedCount = clients.filter(c => window.BulaPayDB.isBlacklistedClient(c)).length;
+      const blacklistedCount = (clients || []).filter(c => window.BulaPayDB.isBlacklistedClient(c)).length;
       kpiBlacklistEl.textContent = blacklistedCount;
     }
     
@@ -2549,7 +2637,7 @@ const supervisorModule = {
       mainProgressBar.style.width = `${Math.min(progressPercent, 100)}%`;
     }
 
-    // Renderizar la tabla de progreso en vivo
+    // Renderizar la tabla de progreso en vivo con el flujo consolidado de todas las rutas activas
     await this.renderRoutesTable(routes);
   },
 
@@ -2583,6 +2671,7 @@ const supervisorModule = {
           routeIds: [],
           agentNames: new Set(),
           capital: 0,
+          collected: 0,
           status: route.status,
           openingTime: route.opening_time || '06:00',
           closingTime: route.closing_time || '18:00',
@@ -2597,7 +2686,8 @@ const supervisorModule = {
           if (trimmed) groupedRoutes[name].agentNames.add(trimmed);
         });
       }
-      groupedRoutes[name].capital += Number(route.capital);
+      groupedRoutes[name].capital += Number(route.capital || 0);
+      groupedRoutes[name].collected += Number(route.collected || 0);
       if (route.status === 'En Ruta') {
         groupedRoutes[name].status = 'En Ruta';
       } else if (route.status === 'Incidencia' && groupedRoutes[name].status !== 'En Ruta') {
@@ -2621,7 +2711,6 @@ const supervisorModule = {
     };
 
     const now = new Date();
-    const todayLocalStr = this.getLocalDateString(now);
 
     for (const name in groupedRoutes) {
       const gRoute = groupedRoutes[name];
@@ -2640,23 +2729,31 @@ const supervisorModule = {
       });
       const routeAgentNames = new Set(Array.from(gRoute.agentNames).map(n => String(n).trim().toLowerCase()));
 
-      const routeClients = clients.filter(c => c.routeId && rIds.includes(c.routeId));
+      const routeClients = clients.filter(c => {
+        if (!c) return false;
+        const cRoute = c.routeId || c.route_id;
+        const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+        return (cRoute && rIds.includes(cRoute)) || (cAgent && (routeAgentUsernames.has(cAgent) || routeAgentNames.has(cAgent)));
+      });
       
-      const seenRoutePaymentIds = new Set();
-      const routePaymentsToday = (payments || []).filter(p => {
-        if (!p) return false;
+      const seenRouteTodayIds = new Set();
+      const seenRouteConsolidatedIds = new Set();
+      const routePaymentsToday = [];
+      const routePaymentsConsolidated = [];
+
+      (payments || []).forEach(p => {
+        if (!p) return;
         const pId = p.id || `${p.clientCedula || p.client_cedula}_${p.amount}_${p.date || p.created_at}`;
-        if (seenRoutePaymentIds.has(pId)) return false;
-        if (String(pId).startsWith('pay_init_') || String(pId).startsWith('pend_')) return false;
+        if (String(pId).startsWith('pay_init_') || String(pId).startsWith('pend_')) return;
 
         const amount = Number(p.amount || 0);
         const status = String(p.status || '').toUpperCase();
-        if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
-        if (status === 'LIQUIDADO_POR_RENOVACION' && !String(pId).startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
+        if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return;
+        if (status === 'LIQUIDADO_POR_RENOVACION' && !String(pId).startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return;
 
         const pType = String(p.payment_type || p.type || '').trim().toLowerCase();
         const isRenovOrLiq = pType === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || String(pId).startsWith('pay_renov_');
-        if (!isRenovOrLiq && (status.includes('CANCEL') || status.includes('RECHAZ'))) return false;
+        if (!isRenovOrLiq && (status.includes('CANCEL') || status.includes('RECHAZ'))) return;
 
         const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
         const pRouteId = (p.routeId || p.route_id) ? String(p.routeId || p.route_id).trim().toLowerCase() : null;
@@ -2680,20 +2777,25 @@ const supervisorModule = {
             belongsToThisRoute = true;
           }
         }
-        if (!belongsToThisRoute) return false;
+        if (!belongsToThisRoute) return;
 
-        // Validar que el pago caiga dentro de la jornada operativa [6:00 AM, 5:59 AM)
+        if (!seenRouteConsolidatedIds.has(pId)) {
+          seenRouteConsolidatedIds.add(pId);
+          routePaymentsConsolidated.push(p);
+        }
+
+        // Validar si el pago cae dentro de la jornada operativa [6:00 AM, 5:59 AM)
         const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
         const inWindow = hasExactTimestamp
           ? (isTimestampInShiftWindow(p.created_at, shiftWindow) || isTimestampInShiftWindow(p.fecha_pago, shiftWindow) || isTimestampInShiftWindow(p.fecha, shiftWindow))
           : isTimestampInShiftWindow(p.date, shiftWindow);
-        if (!inWindow) return false;
-
-        seenRoutePaymentIds.add(pId);
-        return true;
+        if (inWindow && !seenRouteTodayIds.has(pId)) {
+          seenRouteTodayIds.add(pId);
+          routePaymentsToday.push(p);
+        }
       });
 
-      // Contabilizar también renovaciones virtuales (rollover de cartones) que pertenezcan a esta ruta en la jornada operativa
+      // Contabilizar renovaciones virtuales (rollover de cartones) que pertenezcan a esta ruta en la jornada operativa
       let routeRenewalRollovers = 0;
       const routeHandledRenewalCartons = new Set();
       routePaymentsToday.forEach(p => {
@@ -2726,6 +2828,9 @@ const supervisorModule = {
       });
 
       const totalCollectedToday = routePaymentsToday.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0) + routeRenewalRollovers;
+      const routeConsolidatedSum = routePaymentsConsolidated.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+      // El panel global del Supervisor muestra permanentemente el flujo consolidado de cada ruta activa (Jesús, Cesar y Carlo Mario)
+      const totalRouteDisplayCollected = Math.max(routeConsolidatedSum, Math.round(Number(gRoute.collected || 0)), totalCollectedToday);
 
       const expectedClients = routeClients.filter(c => {
         const hasPaymentToday = routePaymentsToday.some(p => p.clientCedula === c.cedula);
@@ -2739,8 +2844,10 @@ const supervisorModule = {
       const totalExpectedToday = expectedClients.reduce((sum, c) => sum + Number(c.installmentAmount), 0);
 
       let progress = 0;
-      if (totalExpectedToday > 0) {
+      if (totalExpectedToday > 0 && totalCollectedToday > 0) {
         progress = Math.round((totalCollectedToday / totalExpectedToday) * 100);
+      } else if (gRoute.capital > 0) {
+        progress = Math.round((totalRouteDisplayCollected / gRoute.capital) * 100);
       }
 
       let statusClass = 'en-ruta';
@@ -2769,7 +2876,7 @@ const supervisorModule = {
         <td style="font-weight: 600; color: white;">${gRoute.name}</td>
         <td>👤 ${agentsList}</td>
         <td>$${Number(gRoute.capital).toLocaleString('es-CO')}</td>
-        <td style="color: var(--accent); font-weight: 600;">$${totalCollectedToday.toLocaleString('es-CO')}</td>
+        <td style="color: var(--accent); font-weight: 600;">$${totalRouteDisplayCollected.toLocaleString('es-CO')}</td>
         <td>
           <span class="status-badge ${statusClass}">${displayStatus}</span>
         </td>

@@ -124,6 +124,27 @@ const db = {
     }
   },
 
+  getColombiaOperationalDateStr(rawInput = new Date()) {
+    if (!rawInput) rawInput = new Date();
+    if (typeof rawInput === 'string') {
+      const s = rawInput.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return s;
+      }
+    }
+    try {
+      const d = rawInput instanceof Date ? rawInput : new Date(rawInput);
+      if (!isNaN(d.getTime())) {
+        // El ciclo operativo diario va de 06:00 AM a 05:59:59.999 AM del día siguiente en hora de Colombia.
+        // Al restar 6 horas al timestamp antes de extraer la fecha en America/Bogota, cualquier hora entre
+        // 00:00 y 05:59:59 AM pertenece a la fecha operativa del día anterior, y desde las 06:00 AM inicia el nuevo día.
+        const shifted = new Date(d.getTime() - (6 * 60 * 60 * 1000));
+        return this.getColombiaLocalDateStr(shifted);
+      }
+    } catch (e) {}
+    return this.getColombiaLocalDateStr(rawInput);
+  },
+
   getRouteOperationalShiftWindowSync(routeObj, targetDate = null) {
     // Regla estricta de las 6:00 AM:
     // El día operativo comienza estrictamente a las 06:00 AM del día actual y termina a las 05:59:59.999 AM del día siguiente.
@@ -145,13 +166,16 @@ const db = {
     const startIso = `${shiftDateStr}T06:00:00-05:00`;
     const shiftStart = new Date(startIso);
     const shiftEnd = new Date(shiftStart.getTime() + (24 * 60 * 60 * 1000));
-    const effectiveStart = shiftStart;
+    let effectiveStart = shiftStart;
 
     let fechaUltimoCierre = null;
     if (routeObj && routeObj.fecha_ultimo_cierre) {
       const fCierre = new Date(routeObj.fecha_ultimo_cierre);
       if (!isNaN(fCierre.getTime())) {
         fechaUltimoCierre = fCierre;
+        if (fCierre.getTime() >= shiftStart.getTime() && fCierre.getTime() <= Date.now()) {
+          effectiveStart = fCierre;
+        }
       }
     }
 
@@ -173,7 +197,7 @@ const db = {
     let route = null;
     if (routeOrRouteId && typeof routeOrRouteId === 'object' && routeOrRouteId.id) {
       route = routeOrRouteId;
-    } else if (typeof routeOrRouteId === 'string' && routeOrRouteId.trim()) {
+    } else if (typeof routeOrRouteId === 'string' && routeOrRouteId.trim() && routeOrRouteId.trim() !== 'ALL') {
       route = await this.getRouteById(routeOrRouteId.trim());
     }
 
@@ -2593,28 +2617,28 @@ const db = {
     const supabase = await initSupabase();
 
     let route = null;
-    let targetRouteId = routeId;
+    let targetRouteId = routeId || (!agentUserObj ? 'ALL' : null);
 
-    if (targetRouteId) {
+    if (targetRouteId && targetRouteId !== 'ALL') {
       route = await this.getRouteById(targetRouteId);
     }
 
     if (!route && agentUserObj) {
       targetRouteId = agentUserObj.routeId || agentUserObj.route_id || (await this.getActiveRouteIdForUser(agentUserObj));
-      if (targetRouteId) {
+      if (targetRouteId && targetRouteId !== 'ALL') {
         route = await this.getRouteById(targetRouteId);
       }
     }
 
+    const allRoutes = await this.getRoutes();
     if (!route && agentUserObj) {
-      const routes = await this.getRoutes();
       const uName = agentUserObj.username || agentUserObj.id;
       const uFull = agentUserObj.name;
-      route = routes.find(r => r.agent_id === uName || r.agentName === uFull || r.agentName === uName);
+      route = (allRoutes || []).find(r => r.agentUsername === uName || r.agent_id === uName || r.agentName === uFull || r.agentName === uName);
       if (route) targetRouteId = route.id;
     }
 
-    // Obtener ventana de la jornada operativa según horario de la ruta
+    // Obtener ventana de la jornada operativa según horario de la ruta (6:00 AM a 5:59 AM)
     const shiftWindow = await this.getRouteOperationalShiftWindow(route || targetRouteId, null, agentUserObj?.username);
     const todayStr = shiftWindow.shiftDateStr;
 
@@ -2623,25 +2647,55 @@ const db = {
     if (route) {
       capitalBase = Number(route.capital || route.monto_inicial || 0);
     } else if (targetRouteId === 'ALL') {
-      const allRoutes = await this.getRoutes();
       capitalBase = (allRoutes || []).reduce((sum, r) => sum + Number(r.capital || r.monto_inicial || 0), 0);
     }
 
-    const agentName = route?.agentName || agentUserObj?.name || agentUserObj?.username || 'Agente de Ruta';
-    const routeName = route?.name || (targetRouteId === 'ALL' ? 'Consolidado General' : 'Ruta sin asignar');
+    const activeRouteIds = new Set(
+      targetRouteId === 'ALL'
+        ? (allRoutes || []).map(r => String(r.id || '').trim().toLowerCase()).filter(Boolean)
+        : (targetRouteId ? [String(targetRouteId).trim().toLowerCase()] : [])
+    );
+    const activeAgentUsernames = new Set();
+    const activeAgentNames = new Set();
+    if (targetRouteId === 'ALL') {
+      (allRoutes || []).forEach(r => {
+        if (r?.agentUsername) activeAgentUsernames.add(String(r.agentUsername).trim().toLowerCase());
+        if (r?.agent_id) activeAgentUsernames.add(String(r.agent_id).trim().toLowerCase());
+        if (r?.agentName) {
+          String(r.agentName).split(',').forEach(n => {
+            if (n.trim()) activeAgentNames.add(n.trim().toLowerCase());
+          });
+        }
+      });
+    } else if (route) {
+      if (route.agentUsername) activeAgentUsernames.add(String(route.agentUsername).trim().toLowerCase());
+      if (route.agent_id) activeAgentUsernames.add(String(route.agent_id).trim().toLowerCase());
+      if (route.agentName) {
+        String(route.agentName).split(',').forEach(n => {
+          if (n.trim()) activeAgentNames.add(n.trim().toLowerCase());
+        });
+      }
+    }
+    if (agentUserObj) {
+      if (agentUserObj.username) activeAgentUsernames.add(String(agentUserObj.username).trim().toLowerCase());
+      if (agentUserObj.name) activeAgentNames.add(String(agentUserObj.name).trim().toLowerCase());
+    }
+
+    const agentName = route?.agentName || agentUserObj?.name || agentUserObj?.username || (targetRouteId === 'ALL' ? (allRoutes || []).map(r => r.agentName).filter(Boolean).join(', ') : 'Agente de Ruta');
+    const routeName = route?.name || (targetRouteId === 'ALL' ? 'Consolidado General (Todas las rutas)' : 'Ruta sin asignar');
 
     // 2. En Calle (Cartera activa en poder de los clientes)
     const allClients = await this.getClients();
     const routeClients = (allClients || []).filter(c => {
-      let belongs = false;
+      if (!c) return false;
+      const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
+      const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
       if (targetRouteId === 'ALL') {
-        belongs = true;
-      } else if (targetRouteId && (c.routeId === targetRouteId || c.route_id === targetRouteId)) {
-        belongs = true;
-      } else if (agentUserObj && (c.agent_id === agentUserObj.username || c.agentId === agentUserObj.username || c.agent_id === agentUserObj.id)) {
-        belongs = true;
+        return activeRouteIds.size === 0 || activeRouteIds.has(cRoute) || activeAgentUsernames.has(cAgent);
       }
-      return belongs;
+      if (cRoute && activeRouteIds.has(cRoute)) return true;
+      if (cAgent && (activeAgentUsernames.has(cAgent) || activeAgentNames.has(cAgent))) return true;
+      return false;
     });
 
     let enCalle = routeClients
@@ -2683,65 +2737,67 @@ const db = {
       return ms >= startMs && ms < shiftWindow.shiftEnd.getTime();
     };
 
-    // 3. Total Cobrado Hoy (payments) & Pagos Masivos (Ciclo 6:00 AM a 5:59 AM)
     const allPayments = await this.getPayments();
-    const todayPayments = (allPayments || []).filter(p => {
-      const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
-      const isDateValid = hasExactTimestamp
-        ? (isDateInShift(p.created_at, false) || isDateInShift(p.fecha_pago, false) || isDateInShift(p.fecha, false))
-        : isDateInShift(p.date, false);
-      if (!isDateValid) return false;
-
+    const doesPaymentBelong = (p) => {
+      if (!p) return false;
+      const pId = String(p.id || '').trim();
+      if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
       const pStatus = String(p.status || '').toUpperCase();
-      if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'CANCELADO' || pStatus === 'RECHAZADO') return false;
+      if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'CANCELADO' || pStatus === 'RECHAZADO' || pStatus === 'LIQUIDADO_MORA') return false;
+      if (pStatus === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
       if (Number(p.amount || 0) <= 0) return false;
 
-      let belongs = false;
+      const pRoute = String(p.routeId || p.route_id || '').trim().toLowerCase();
+      const pAgent = String(p.agent_id || p.agentId || '').trim().toLowerCase();
+      const pAgentName = String(p.agentName || '').trim().toLowerCase();
+
       if (targetRouteId === 'ALL') {
-        belongs = true;
-      } else if (targetRouteId && (p.routeId === targetRouteId || p.route_id === targetRouteId)) {
-        belongs = true;
-      } else if (agentUserObj && (p.agent_id === agentUserObj.username || p.agentId === agentUserObj.username || p.agent_id === agentUserObj.id)) {
-        belongs = true;
-      } else if (agentName && p.agentName && String(p.agentName).toLowerCase().trim() === String(agentName).toLowerCase().trim()) {
-        belongs = true;
+        return activeRouteIds.size === 0 || activeRouteIds.has(pRoute) || activeAgentUsernames.has(pAgent) || activeAgentNames.has(pAgentName);
       }
-      return belongs;
+      if (pRoute && activeRouteIds.has(pRoute)) return true;
+      if (pAgent && (activeAgentUsernames.has(pAgent) || activeAgentNames.has(pAgent))) return true;
+      if (pAgentName && (activeAgentNames.has(pAgentName) || activeAgentUsernames.has(pAgentName))) return true;
+      return false;
+    };
+
+    const allBelongingPayments = (allPayments || []).filter(doesPaymentBelong);
+    const shiftPayments = allBelongingPayments.filter(p => {
+      const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
+      return hasExactTimestamp
+        ? (isDateInShift(p.created_at, !!agentUserObj) || isDateInShift(p.fecha_pago, !!agentUserObj) || isDateInShift(p.fecha, !!agentUserObj))
+        : isDateInShift(p.date, !!agentUserObj);
     });
 
-    const renewalPayments = todayPayments.filter(p => {
+    // Regla crítica:
+    // - Si es consulta individual del Agente (agentUserObj presente), el contador se resetea estrictamente a $0 en su nueva jornada diaria.
+    // - Si es el panel global del Supervisor (!agentUserObj), muestra permanentemente la información consolidada de las rutas activas aunque el recaudo diario individual esté en $0.
+    const isSupervisorGlobalView = !agentUserObj;
+    const effectivePayments = (isSupervisorGlobalView && shiftPayments.length === 0)
+      ? allBelongingPayments
+      : shiftPayments;
+
+    const renewalPayments = effectivePayments.filter(p => {
       const pType = String(p.payment_type || '').toLowerCase();
       const pId = String(p.id || '').toLowerCase();
-      return pType.includes('renov') || pId.startsWith('pay_renov_');
+      return pType.includes('renov') || pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999;
     });
-    const normalPayments = todayPayments.filter(p => {
+    const normalPayments = effectivePayments.filter(p => {
       const pType = String(p.payment_type || '').toLowerCase();
       const pId = String(p.id || '').toLowerCase();
-      return !pType.includes('renov') && !pId.startsWith('pay_renov_');
+      return !pType.includes('renov') && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999;
     });
 
     const totalCobrado = normalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
     const renewalPaymentsTotal = renewalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    const pagosMasivos = todayPayments.filter(p => {
+    const pagosMasivos = effectivePayments.filter(p => {
       const pStatus = String(p.status || '').toLowerCase();
       return p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('masivo');
     }).reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    // 4. Créditos creados hoy (clients/cartones creados en esta jornada operativa)
-    const todayClients = (allClients || []).filter(c => {
-      const isDateValid = isDateInShift(c.created_at, false) || isDateInShift(c.fecha_apertura, false) || isDateInShift(c.date, false);
-      if (!isDateValid) return false;
-
-      let belongs = false;
-      if (targetRouteId === 'ALL') {
-        belongs = true;
-      } else if (targetRouteId && (c.routeId === targetRouteId || c.route_id === targetRouteId)) {
-        belongs = true;
-      } else if (agentUserObj && (c.agent_id === agentUserObj.username || c.agentId === agentUserObj.username || c.agent_id === agentUserObj.id)) {
-        belongs = true;
-      }
-      return belongs;
+    // 4. Créditos creados en la jornada operativa
+    const todayClients = routeClients.filter(c => {
+      return isDateInShift(c.created_at, false) || isDateInShift(c.fecha_apertura, false) || isDateInShift(c.date, false);
     });
 
     let totalPrestado = 0;
