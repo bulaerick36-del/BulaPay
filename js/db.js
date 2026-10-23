@@ -125,10 +125,12 @@ const db = {
   },
 
   getRouteOperationalShiftWindowSync(routeObj, targetDate = null) {
-    const openingTime = (routeObj && routeObj.opening_time) ? String(routeObj.opening_time).trim() : '06:00';
-    const parts = openingTime.split(':');
-    const openH = parseInt(parts[0], 10) || 6;
-    const openM = parseInt(parts[1], 10) || 0;
+    // Regla estricta de las 6:00 AM:
+    // El día operativo comienza estrictamente a las 06:00 AM del día actual y termina a las 05:59:59.999 AM del día siguiente.
+    // Cualquier cobro o renovación realizado en la noche (ej. 7:00 PM u 8:00 PM) pertenece y se suma al día en curso.
+    // El reseteo a $0 ocurre únicamente al cruzar las 6:00 AM de la nueva mañana.
+    const openH = 6;
+    const openM = 0;
     const pad = (n) => String(n).padStart(2, '0');
 
     const colNow = this.getColombiaNow();
@@ -137,32 +139,19 @@ const db = {
     if (targetDate && /^\d{4}-\d{2}-\d{2}$/.test(String(targetDate).trim())) {
       shiftDateStr = String(targetDate).trim();
     } else {
-      // Si la hora actual en Colombia es menor que la hora de inicio de jornada (ej: 02:00 AM antes de 06:00 AM),
-      // los cobros nocturnos pertenecen a la jornada laboral iniciada ayer a las 6:00 AM
-      const isBeforeOpening = (colNow.hour < openH) || (colNow.hour === openH && colNow.minute < openM);
-      if (isBeforeOpening) {
-        const yesterdayMs = colNow.dateObj.getTime() - (24 * 60 * 60 * 1000);
-        shiftDateStr = this.getColombiaLocalDateStr(new Date(yesterdayMs));
-      } else {
-        shiftDateStr = colNow.dateStr;
-      }
+      shiftDateStr = this.getColombiaOperationalDateStr(colNow.dateObj);
     }
 
-    const startIso = `${shiftDateStr}T${pad(openH)}:${pad(openM)}:00-05:00`;
+    const startIso = `${shiftDateStr}T06:00:00-05:00`;
     const shiftStart = new Date(startIso);
     const shiftEnd = new Date(shiftStart.getTime() + (24 * 60 * 60 * 1000));
+    const effectiveStart = shiftStart;
 
-    // Validar si existe fecha de último cierre registrada en la ruta
-    let effectiveStart = shiftStart;
     let fechaUltimoCierre = null;
     if (routeObj && routeObj.fecha_ultimo_cierre) {
       const fCierre = new Date(routeObj.fecha_ultimo_cierre);
       if (!isNaN(fCierre.getTime())) {
         fechaUltimoCierre = fCierre;
-        // Si el cierre fue realizado dentro de esta jornada operativa, el contador reinicia desde ese momento
-        if (fCierre.getTime() >= shiftStart.getTime() && fCierre.getTime() <= Date.now()) {
-          effectiveStart = fCierre;
-        }
       }
     }
 
@@ -198,29 +187,7 @@ const db = {
       );
     }
 
-    // Verificar si en cierres_jornada hay un cierre más reciente para esta ruta/agente
-    const baseWindow = this.getRouteOperationalShiftWindowSync(route, targetDate);
-    try {
-      const supabase = await initSupabase();
-      let q = supabase.from('cierres_jornada').select('fecha_cierre').order('fecha_cierre', { ascending: false }).limit(1);
-      if (route?.id) {
-        q = q.eq('route_id', route.id);
-      } else if (agentId) {
-        q = q.eq('agent_id', agentId);
-      }
-      const { data: cData } = await q;
-      if (cData && cData[0] && cData[0].fecha_cierre) {
-        const cDate = new Date(cData[0].fecha_cierre);
-        if (!isNaN(cDate.getTime()) && cDate.getTime() >= baseWindow.shiftStart.getTime() && cDate.getTime() <= Date.now()) {
-          if (cDate.getTime() > baseWindow.effectiveStart.getTime()) {
-            baseWindow.effectiveStart = cDate;
-            baseWindow.fechaUltimoCierre = cDate;
-          }
-        }
-      }
-    } catch (e) {}
-
-    return baseWindow;
+    return this.getRouteOperationalShiftWindowSync(route, targetDate);
   },
 
   async initSupabase() {
@@ -961,16 +928,16 @@ const db = {
       const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
       const effectiveRouteIdLower = lowerRouteId || (userObj && (userObj.routeId || userObj.route_id) ? String(userObj.routeId || userObj.route_id).trim().toLowerCase() : null);
 
-      // Calcular ventana de Jornada Operativa según el horario configurado en la ruta (ej: 06:00 AM)
+      // Calcular ventana de Jornada Operativa según la Regla de las 6:00 AM (06:00 AM a 05:59:59 AM del día siguiente)
       const shiftWindow = await this.getRouteOperationalShiftWindow(cleanRouteId || effectiveRouteIdLower, dateStr, cleanAgentId);
       const targetDate = shiftWindow.shiftDateStr;
 
       let rpcTotal = 0;
-      // Intento 1: Llamada RPC SECURITY DEFINER en Supabase
+      // Intento 1: Llamada RPC SECURITY DEFINER en Supabase pasando explícitamente la fecha operativa (6:00 AM)
       try {
         const { data: rpcVal, error: rpcErr } = await supabase.rpc('get_agent_recaudo_hoy', {
           p_agent_id: cleanAgentId,
-          p_date: dateStr ? targetDate : null,
+          p_date: targetDate,
           p_route_id: cleanAgentId ? null : cleanRouteId
         });
 
@@ -1018,7 +985,7 @@ const db = {
 
       const paymentList = data || [];
 
-      // Función de validación de pago dentro de la ventana de la jornada operativa [effectiveStart, shiftEnd)
+      // Función de validación de pago dentro de la ventana de la jornada operativa [06:00:00 AM, 05:59:59.999 AM día siguiente)
       const isDateInOperationalShift = (rawVal) => {
         if (!rawVal) return false;
         let d = null;
@@ -1034,7 +1001,7 @@ const db = {
         }
         if (!d || isNaN(d.getTime())) return false;
         const ms = d.getTime();
-        return ms >= shiftWindow.effectiveStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
+        return ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
       };
 
       const seenIds = new Set();
@@ -1048,12 +1015,12 @@ const db = {
         const rawId = String(p.id || '').trim();
         if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
 
-        // Validar fecha dentro de la jornada operativa de la ruta (incluye cobros nocturnos en el turno correspondiente)
-        const isToday =
-          isDateInOperationalShift(p.created_at) ||
-          isDateInOperationalShift(p.fecha_pago) ||
-          isDateInOperationalShift(p.fecha) ||
-          (isDateInOperationalShift(p.date) && (!p.created_at || isDateInOperationalShift(p.created_at)));
+        // Validar fecha dentro de la jornada operativa [6:00 AM hoy, 5:59 AM mañana)
+        // Si tiene timestamp exacto (created_at / fecha_pago / fecha), manda estrictamente la ventana [6:00 AM, 5:59 AM)
+        const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
+        const isToday = hasExactTimestamp
+          ? (isDateInOperationalShift(p.created_at) || isDateInOperationalShift(p.fecha_pago) || isDateInOperationalShift(p.fecha))
+          : isDateInOperationalShift(p.date);
         if (!isToday) return;
 
         // Validar monto e incluir explícitamente payment_type === 'Renovacion', installmentNumber === 999 o liquidado === true
@@ -1148,7 +1115,7 @@ const db = {
         totalMontoReal += Math.round(amount);
       });
 
-      // Respaldo adicional: renovaciones en cartones durante la jornada operativa
+      // Respaldo adicional: renovaciones en cartones durante la jornada operativa [6:00 AM, 5:59 AM)
       allCartones.forEach(c => {
         if (!c) return;
         const cId = String(c.id || '').trim().toLowerCase();
@@ -1176,9 +1143,9 @@ const db = {
         if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
         if (rollover <= 0) return;
 
-        const isCreatedToday =
-          isDateInOperationalShift(c.created_at) ||
-          isDateInOperationalShift(c.fecha_apertura);
+        const isCreatedToday = c.created_at
+          ? isDateInOperationalShift(c.created_at)
+          : isDateInOperationalShift(c.fecha_apertura);
         if (!isCreatedToday) return;
 
         if (cId) handledRenewalCartonIds.add(cId);
@@ -1186,8 +1153,8 @@ const db = {
         totalMontoReal += rollover;
       });
 
-      if (rpcTotal > 0) return rpcTotal;
-      return totalMontoReal;
+      if (totalMontoReal > 0) return totalMontoReal;
+      return rpcTotal;
     } catch (e) {
       console.error("❌ Excepción inesperada en getAgentRecaudoHoyDirect:", e);
       return 0;
@@ -2716,10 +2683,13 @@ const db = {
       return ms >= startMs && ms < shiftWindow.shiftEnd.getTime();
     };
 
-    // 3. Total Cobrado Hoy (payments) & Pagos Masivos
+    // 3. Total Cobrado Hoy (payments) & Pagos Masivos (Ciclo 6:00 AM a 5:59 AM)
     const allPayments = await this.getPayments();
     const todayPayments = (allPayments || []).filter(p => {
-      const isDateValid = isDateInShift(p.created_at) || isDateInShift(p.fecha_pago) || isDateInShift(p.fecha) || (isDateInShift(p.date) && (!p.created_at || isDateInShift(p.created_at)));
+      const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
+      const isDateValid = hasExactTimestamp
+        ? (isDateInShift(p.created_at, false) || isDateInShift(p.fecha_pago, false) || isDateInShift(p.fecha, false))
+        : isDateInShift(p.date, false);
       if (!isDateValid) return false;
 
       const pStatus = String(p.status || '').toUpperCase();
@@ -2947,27 +2917,53 @@ const db = {
 
   async verificarYAutoCerrarJornadaPrevia(routeId = null, agentId = null) {
     try {
-      // 1. Obtener la ventana de la jornada actual
+      // 1. Obtener la ventana de la jornada actual (iniciada a las 6:00 AM)
       const currentShift = await this.getRouteOperationalShiftWindow(routeId, null, agentId);
       // Fecha de la jornada anterior (shiftStart - 24 horas)
-      const prevShiftDateMs = currentShift.shiftStart.getTime() - (24 * 60 * 60 * 1000);
-      const prevShiftDateStr = this.getColombiaLocalDateStr(new Date(prevShiftDateMs));
+      const prevShiftStartMs = currentShift.shiftStart.getTime() - (24 * 60 * 60 * 1000);
+      const prevShiftDateStr = this.getColombiaLocalDateStr(new Date(prevShiftStartMs));
 
       // Verificar si ya existe cierre registrado para la jornada previa
       const cierres = await this.getHistorialCierres(currentShift.routeId, agentId);
       const yaCerrado = (cierres || []).some(c => c.fecha_jornada === prevShiftDateStr);
       if (yaCerrado) return;
 
-      // Si no fue cerrada, verificar si hubo recaudo acumulado en esa jornada previa
+      // Si no fue cerrada, archivar únicamente la jornada previa sin afectar ni resetear la jornada activa actual
       const recaudoPrevio = await this.getAgentRecaudoHoyDirect(agentId, prevShiftDateStr, currentShift.routeId);
       if (recaudoPrevio > 0) {
-        console.log(`ℹ️ [Auto-Cierre] Archivando jornada laboral anterior (${prevShiftDateStr}) con recaudo: $${recaudoPrevio}`);
-        await this.realizarCierreJornada({
-          routeId: currentShift.routeId,
-          agentId,
-          tipoCierre: 'automatico_reinicio',
-          detalles: { motivo: 'Inicio de nuevo horario laboral - Reinicio automático a $0', recaudo_archivado: recaudoPrevio }
-        });
+        console.log(`ℹ️ [Auto-Cierre 6:00 AM] Archivando jornada laboral anterior (${prevShiftDateStr}) con recaudo: $${recaudoPrevio}`);
+        const supabase = await initSupabase();
+        const currentUser = this.getCurrentUser();
+        const effectiveSupId = currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId();
+        const archivePayload = {
+          id: `cierre_${currentShift.routeId || 'gral'}_${prevShiftDateStr}_auto6am`,
+          route_id: currentShift.routeId,
+          agent_id: agentId || currentUser?.username || '',
+          agent_name: currentUser?.name || agentId || 'Agente de Ruta',
+          supervisor_id: effectiveSupId,
+          fecha_jornada: prevShiftDateStr,
+          hora_apertura: '06:00',
+          inicio_jornada: new Date(prevShiftStartMs).toISOString(),
+          fin_jornada: currentShift.shiftStart.toISOString(),
+          fecha_cierre: currentShift.shiftStart.toISOString(),
+          total_recaudado: recaudoPrevio,
+          total_prestado: 0,
+          efectivo_inicial: 0,
+          efectivo_entregar: recaudoPrevio,
+          detalles: { motivo: 'Reinicio diario estricto a las 6:00 AM', recaudo_archivado: recaudoPrevio },
+          tipo_cierre: 'automatico_reinicio',
+          created_at: currentShift.shiftStart.toISOString()
+        };
+        try {
+          await supabase.from('cierres_jornada').upsert(archivePayload);
+        } catch (_) {}
+        try {
+          const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
+          if (!localHist.some(x => x.fecha_jornada === prevShiftDateStr && x.route_id === currentShift.routeId)) {
+            localHist.unshift(archivePayload);
+            localStorage.setItem('bulapay_cierres_jornada', JSON.stringify(localHist.slice(0, 100)));
+          }
+        } catch (_) {}
       }
     } catch (e) {
       console.warn("Aviso en verificarYAutoCerrarJornadaPrevia:", e);
@@ -3555,7 +3551,7 @@ const db = {
 
       const insertRenovPaymentRecord = async () => {
         if (rolloverVal <= 0) return;
-        const todayStr = this.getColombiaLocalDateStr(new Date());
+        const todayStr = this.getColombiaOperationalDateStr(new Date());
         const renovPayRecord = {
           id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
           clientCedula: String(clientId).trim(),
@@ -3609,7 +3605,7 @@ const db = {
 
       if (rpcSucceeded && rolloverVal > 0) {
         try {
-          const todayStr = this.getColombiaLocalDateStr(new Date());
+          const todayStr = this.getColombiaOperationalDateStr(new Date());
           const cedStr = String(clientId).trim();
           if (rpcRes && rpcRes.payment_id) {
             await supabase
@@ -4511,7 +4507,7 @@ const db = {
     
     const supId = this.getSupervisorId();
     const now = new Date();
-    const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const localDateStr = this.getColombiaOperationalDateStr(now);
     const agentId = payment.agent_id || (currentUser ? (currentUser.id || currentUser.username) : null);
     const agentName = payment.agentName || (currentUser ? (currentUser.name || currentUser.username) : 'Sistema');
     
@@ -5596,7 +5592,7 @@ const db = {
           const currentUser = this.getCurrentUser();
           const supId = this.getSupervisorId();
           const now = new Date();
-          const todayStr = this.getColombiaLocalDateStr(now);
+          const todayStr = this.getColombiaOperationalDateStr(now);
           const renovPayment = {
             id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             clientCedula: String(cedula),
@@ -5658,7 +5654,7 @@ const db = {
         // Generar registros de pagos para las cuotas faltantes ÚNICAMENTE si es liquidación exitosa por pago real (v122)
         const currentUser = this.getCurrentUser();
         const supId = this.getSupervisorId();
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = this.getColombiaOperationalDateStr(new Date());
         const newPayments = [];
 
         let remainingDebt = Math.max(0, totalDebt - currentPaidTotal);
@@ -6268,9 +6264,12 @@ const db = {
           .map(c => String(c.cedula))
       );
 
-      // Cobrado en la jornada operativa (EXCLUYENDO transacciones de clientes en Lista Negra o liquidaciones por mora)
+      // Cobrado en la jornada operativa (Ciclo 6:00 AM a 5:59 AM, EXCLUYENDO transacciones de clientes en Lista Negra o liquidaciones por mora)
       const todaysPayments = payments.filter(p => {
-         const isDateValid = isDateInShift(p.created_at) || isDateInShift(p.fecha_pago) || isDateInShift(p.fecha) || (isDateInShift(p.date) && (!p.created_at || isDateInShift(p.created_at)));
+         const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
+         const isDateValid = hasExactTimestamp
+           ? (isDateInShift(p.created_at, false) || isDateInShift(p.fecha_pago, false) || isDateInShift(p.fecha, false))
+           : isDateInShift(p.date, false);
          if (!isDateValid) return false;
          
          const pAgentNameLower = (p.agentName || '').trim().toLowerCase();

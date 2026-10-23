@@ -487,7 +487,7 @@ const supervisorModule = {
         directTotal = Number(await window.BulaPayDB.getAgentRecaudoHoyDirect(agentUsername, null, routeId)) || 0;
       }
 
-      // Suma verificadora sobre el historial de la jornada operativa con verificación estricta de cartón y agente
+      // Suma verificadora sobre el historial de la jornada operativa [6:00 AM, 5:59 AM) con verificación estricta de cartón y agente
       let fallbackTotal = 0;
       if (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function') {
         const shiftWindow = await window.BulaPayDB.getRouteOperationalShiftWindow(routeId, null, agentUsername);
@@ -517,7 +517,7 @@ const supervisorModule = {
           }
           if (!d || isNaN(d.getTime())) return false;
           const ms = d.getTime();
-          return ms >= shiftWindow.effectiveStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
+          return ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
         };
 
         const seenIds = new Set();
@@ -527,7 +527,10 @@ const supervisorModule = {
           const rawId = String(p.id || '').trim();
           if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
 
-          const inShift = isDateInShift(p.created_at) || isDateInShift(p.fecha_pago) || isDateInShift(p.fecha) || (isDateInShift(p.date) && (!p.created_at || isDateInShift(p.created_at)));
+          const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
+          const inShift = hasExactTimestamp
+            ? (isDateInShift(p.created_at) || isDateInShift(p.fecha_pago) || isDateInShift(p.fecha))
+            : isDateInShift(p.date);
           if (!inShift) return;
 
           const amount = Number(p.amount || 0);
@@ -607,7 +610,7 @@ const supervisorModule = {
           if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
           if (rollover <= 0) return;
 
-          const inShift = isDateInShift(c.created_at) || isDateInShift(c.fecha_apertura);
+          const inShift = c.created_at ? isDateInShift(c.created_at) : isDateInShift(c.fecha_apertura);
           if (!inShift) return;
 
           if (cId) handledRenewalCartonIds.add(cId);
@@ -615,8 +618,7 @@ const supervisorModule = {
         });
       }
 
-      if (directTotal > 0) return directTotal;
-      return fallbackTotal;
+      return Math.max(directTotal, fallbackTotal);
     } catch (e) {
       console.error("Error al calcular recaudo real del agente:", e);
       return 0;
@@ -769,22 +771,21 @@ const supervisorModule = {
 
       // Obtener todos los pagos frescos
       const allPayments = await window.BulaPayDB.getPayments();
+      const shiftWindow = window.BulaPayDB.getRouteOperationalShiftWindowSync(route);
 
-      // Función helper para determinar si una fecha corresponde al día de hoy en la zona horaria local
+      // Función helper para determinar si una fecha corresponde al día operativo actual (6:00 AM a 5:59 AM)
       const isDateToday = (dateVal) => {
         if (!dateVal) return false;
-        const now = new Date();
-        const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const todayOpStr = shiftWindow.shiftDateStr;
         if (typeof dateVal === 'string') {
           const trimmed = dateVal.trim();
-          if (trimmed.startsWith(todayLocalStr) || (trimmed.length === 10 && trimmed === todayLocalStr)) return true;
+          if (trimmed.length === 10 && trimmed === todayOpStr) return true;
         }
         try {
           const d = new Date(dateVal);
           if (isNaN(d.getTime())) return false;
-          return d.getFullYear() === now.getFullYear() &&
-                 d.getMonth() === now.getMonth() &&
-                 d.getDate() === now.getDate();
+          const ms = d.getTime();
+          return ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
         } catch (e) {
           return false;
         }
@@ -2345,14 +2346,21 @@ const supervisorModule = {
 
     feedContent.innerHTML = '';
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const shiftWindowFeed = window.BulaPayDB.getRouteOperationalShiftWindowSync();
     const payments = await window.BulaPayDB.getPayments();
     const clients = await window.BulaPayDB.getClients();
     const routes = await window.BulaPayDB.getRoutes();
 
-    // Filtra los pagos de hoy
+    // Filtra los pagos del ciclo operativo actual (6:00 AM a 5:59 AM)
     const paymentsToday = payments
-      .filter(p => p.date === todayStr)
+      .filter(p => {
+        if (!p) return false;
+        if (p.created_at) {
+          const ms = new Date(p.created_at).getTime();
+          return ms >= shiftWindowFeed.shiftStart.getTime() && ms < shiftWindowFeed.shiftEnd.getTime();
+        }
+        return String(p.date || '').split('T')[0] === shiftWindowFeed.shiftDateStr;
+      })
       .sort((a, b) => {
         const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
         const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -2466,22 +2474,18 @@ const supervisorModule = {
     const totalAgentsCount = agents.length;
     const totalCapital = routes.reduce((acc, curr) => acc + Number(curr.capital), 0);
     
-    // Calcular Progreso de Cobros con la nueva fórmula dinámica y en tiempo real (con corte a las 6:00 AM)
+    // Calcular Progreso de Cobros con la nueva fórmula dinámica y en tiempo real (Ciclo 6:00 AM a 5:59 AM)
     const payments = await window.BulaPayDB.getPayments();
     const clients = await window.BulaPayDB.getClients();
     const routeIds = new Set(routes.map(r => r.id));
 
-    // Determinar la ventana de 24 horas para "Hoy" (con corte a las 6:00 AM)
+    // Determinar la ventana estricta de 24 horas para "Hoy" (6:00 AM hoy a 5:59:59 AM mañana en hora Colombia)
     const now = new Date();
-    const start6AM = new Date(now);
-    start6AM.setHours(6, 0, 0, 0);
-    if (now < start6AM) {
-      start6AM.setDate(start6AM.getDate() - 1);
-    }
-    const end6AM = new Date(start6AM);
-    end6AM.setDate(end6AM.getDate() + 1);
+    const shiftWindowGlobal = window.BulaPayDB.getRouteOperationalShiftWindowSync();
+    const start6AM = shiftWindowGlobal.shiftStart;
+    const end6AM = shiftWindowGlobal.shiftEnd;
+    const todayOpStr = shiftWindowGlobal.shiftDateStr;
 
-    const todayLocalStr = this.getLocalDateString(now);
     const seenMainPaymentIds = new Set();
     const paymentsToday = (payments || []).filter(p => {
       if (!p) return false;
@@ -2492,17 +2496,18 @@ const supervisorModule = {
       const amount = Number(p.amount || 0);
       const status = String(p.status || '').toUpperCase();
       if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
+      if (status === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
 
-      const pType = String(p.payment_type || p.type || '').trim();
-      const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
+      let isWindow = false;
+      if (p.created_at) {
+        const pDate = new Date(p.created_at);
+        isWindow = !isNaN(pDate.getTime()) && pDate >= start6AM && pDate < end6AM;
+      } else {
+        const pDateOnly = String(p.date || '').split('T')[0];
+        isWindow = pDateOnly === todayOpStr;
+      }
 
-      const pDate = p.created_at ? new Date(p.created_at) : new Date(p.date + 'T12:00:00');
-      const isWindow = pDate >= start6AM && pDate < end6AM;
-      const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
-      const pDateOnly = String(p.date || '').split('T')[0];
-      const isTodayLocal = pCreatedLocal === todayLocalStr || pDateOnly === todayLocalStr;
-
-      if (isWindow || (isRenovOrLiq && isTodayLocal)) {
+      if (isWindow) {
         seenMainPaymentIds.add(pId);
         return true;
       }
@@ -2600,7 +2605,7 @@ const supervisorModule = {
       }
     });
 
-    // Helper para verificar si un pago o cartón pertenece a la jornada operativa de la ruta
+    // Helper para verificar si un pago o cartón pertenece a la jornada operativa [6:00 AM, 5:59 AM)
     const isTimestampInShiftWindow = (rawVal, sWindow) => {
       if (!rawVal) return false;
       let d = null;
@@ -2612,7 +2617,7 @@ const supervisorModule = {
       }
       if (!d || isNaN(d.getTime())) return false;
       const ms = d.getTime();
-      return ms >= sWindow.effectiveStart.getTime() && ms < sWindow.shiftEnd.getTime();
+      return ms >= sWindow.shiftStart.getTime() && ms < sWindow.shiftEnd.getTime();
     };
 
     const now = new Date();
@@ -2623,7 +2628,7 @@ const supervisorModule = {
       const rIds = gRoute.routeIds;
       const rIdsLower = rIds.map(x => String(x).toLowerCase());
 
-      // Determinar la jornada operativa específica de esta ruta
+      // Determinar la jornada operativa específica de esta ruta (6:00 AM a 5:59 AM)
       const sampleRoute = (routes || []).find(r => r && rIds.includes(r.id)) || gRoute;
       const shiftWindow = window.BulaPayDB.getRouteOperationalShiftWindowSync(sampleRoute);
 
@@ -2647,6 +2652,7 @@ const supervisorModule = {
         const amount = Number(p.amount || 0);
         const status = String(p.status || '').toUpperCase();
         if (amount <= 0 || status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return false;
+        if (status === 'LIQUIDADO_POR_RENOVACION' && !String(pId).startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
 
         const pType = String(p.payment_type || p.type || '').trim().toLowerCase();
         const isRenovOrLiq = pType === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || String(pId).startsWith('pay_renov_');
@@ -2676,11 +2682,11 @@ const supervisorModule = {
         }
         if (!belongsToThisRoute) return false;
 
-        // Validar que el pago caiga dentro de la jornada operativa de esta ruta
-        const inWindow = isTimestampInShiftWindow(p.created_at, shiftWindow) ||
-                         isTimestampInShiftWindow(p.fecha_pago, shiftWindow) ||
-                         isTimestampInShiftWindow(p.fecha, shiftWindow) ||
-                         (isTimestampInShiftWindow(p.date, shiftWindow) && (!p.created_at || isTimestampInShiftWindow(p.created_at, shiftWindow)));
+        // Validar que el pago caiga dentro de la jornada operativa [6:00 AM, 5:59 AM)
+        const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
+        const inWindow = hasExactTimestamp
+          ? (isTimestampInShiftWindow(p.created_at, shiftWindow) || isTimestampInShiftWindow(p.fecha_pago, shiftWindow) || isTimestampInShiftWindow(p.fecha, shiftWindow))
+          : isTimestampInShiftWindow(p.date, shiftWindow);
         if (!inWindow) return false;
 
         seenRoutePaymentIds.add(pId);
@@ -4267,6 +4273,9 @@ const supervisorModule = {
   },
 
   getLocalDateString(dateObj = new Date()) {
+    if (window.BulaPayDB && typeof window.BulaPayDB.getColombiaOperationalDateStr === 'function') {
+      return window.BulaPayDB.getColombiaOperationalDateStr(dateObj);
+    }
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
@@ -4281,7 +4290,8 @@ const supervisorModule = {
       overlay.style.display = 'flex';
     }
     try {
-      const todayStr = this.getLocalDateString();
+      const shiftWindow = window.BulaPayDB.getRouteOperationalShiftWindowSync();
+      const todayStr = shiftWindow.shiftDateStr;
       const allPayments = await window.BulaPayDB.getPayments();
       
       const allClients = await window.BulaPayDB.getClients();
@@ -4294,18 +4304,24 @@ const supervisorModule = {
           .map(c => String(c.cedula))
       );
 
-      // Filtrar cobros globales de hoy (incluyendo Renovacion, installmentNumber === 999 y liquidado === true; excluyendo lista negra y mora)
+      // Filtrar cobros globales del día operativo actual (6:00 AM a 5:59 AM)
       const todayPayments = allPayments.filter(p => {
         const pId = String(p.id || '');
         if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
 
         const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
         const pStatusUpper = String(p.status || '').toUpperCase();
+        if (pStatusUpper === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
         const isMoraPayment = pStatusUpper.includes('MORA') || pStatusUpper.includes('NEGRA') || (p.id && String(p.id).startsWith('pay_liq_') && blacklistedCedulas.has(pCedula));
 
-        const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
-        const pDateOnly = String(p.date || '').split('T')[0];
-        const isToday = pDateOnly === todayStr || pCreatedLocal === todayStr;
+        let isToday = false;
+        if (p.created_at) {
+          const ms = new Date(p.created_at).getTime();
+          isToday = ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
+        } else {
+          const pDateOnly = String(p.date || '').split('T')[0];
+          isToday = pDateOnly === todayStr;
+        }
 
         const pType = String(p.payment_type || p.type || '').trim();
         const isRenovOrLiq = pType === 'Renovacion' || pType.toLowerCase() === 'renovacion' || Number(p.installmentNumber) === 999 || p.liquidado === true || pId.startsWith('pay_renov_');
@@ -4318,11 +4334,11 @@ const supervisorModule = {
       });
       const totalCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
-      // Obtener clientes creados hoy globalmente
+      // Obtener clientes creados en el día operativo actual (6:00 AM a 5:59 AM)
       const todayClients = allClients.filter(c => {
         if (!c.created_at) return false;
-        const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
-        return clientLocalDate === todayStr;
+        const ms = new Date(c.created_at).getTime();
+        return ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
       });
 
       const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.amount || c.monto_prestado || (Number(c.totalDebt || 0) / 1.2))), 0);
@@ -4462,7 +4478,8 @@ const supervisorModule = {
     netEl.textContent = 'Cargando...';
 
     try {
-      const todayStr = this.getLocalDateString();
+      const shiftWindow = await window.BulaPayDB.getRouteOperationalShiftWindow(null, null, agentUsername);
+      const todayStr = shiftWindow.shiftDateStr;
       const allPayments = await window.BulaPayDB.getPayments();
       
       const allClients = await window.BulaPayDB.getClients();
@@ -4484,7 +4501,7 @@ const supervisorModule = {
         if (c && c.id) cartonMap.set(String(c.id).toLowerCase(), c);
       });
 
-      // Filtrar cobros del agente específico para hoy (incluyendo Renovacion, installmentNumber === 999 y liquidado === true; excluyendo lista negra y mora)
+      // Filtrar cobros del agente específico en el ciclo operativo actual (6:00 AM a 5:59 AM)
       const normUser = String(agentUsername || '').toLowerCase().trim();
       const normName = String(agentName || '').toLowerCase().trim();
       const todayPayments = allPayments.filter(p => {
@@ -4493,11 +4510,17 @@ const supervisorModule = {
 
         const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
         const pStatusUpper = String(p.status || '').toUpperCase();
+        if (pStatusUpper === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
         const isMoraPayment = pStatusUpper.includes('MORA') || pStatusUpper.includes('NEGRA') || (p.id && String(p.id).startsWith('pay_liq_') && blacklistedCedulas.has(pCedula));
 
-        const pCreatedLocal = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : '';
-        const pDateOnly = String(p.date || '').split('T')[0];
-        const isToday = pDateOnly === todayStr || pCreatedLocal === todayStr;
+        let isToday = false;
+        if (p.created_at) {
+          const ms = new Date(p.created_at).getTime();
+          isToday = ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
+        } else {
+          const pDateOnly = String(p.date || '').split('T')[0];
+          isToday = pDateOnly === todayStr;
+        }
 
         const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
         const pAgentId = String(p.agent_id || p.agentId || '').toLowerCase().trim();
@@ -4526,13 +4549,13 @@ const supervisorModule = {
       });
       const localCollected = todayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
       const realCollected = await this.getAgentRecaudoHoyReal(agentUsername);
-      const totalCollected = Number(realCollected || 0) || localCollected;
+      const totalCollected = Math.max(Number(realCollected || 0), localCollected);
 
-      // Obtener clientes de hoy asociados al ID del agente activo
+      // Obtener clientes creados en el ciclo operativo actual (6:00 AM a 5:59 AM) asociados al agente
       const todayClients = allClients.filter(c => {
         if (!c.created_at) return false;
-        const clientLocalDate = this.getLocalDateString(new Date(c.created_at));
-        return clientLocalDate === todayStr && c.agent_id === agentUsername;
+        const ms = new Date(c.created_at).getTime();
+        return ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime() && c.agent_id === agentUsername;
       });
 
       const totalLent = todayClients.reduce((sum, c) => sum + Math.round(Number(c.amount || c.monto_prestado || (Number(c.totalDebt || 0) / 1.2))), 0);

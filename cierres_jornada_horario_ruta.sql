@@ -38,7 +38,7 @@ DROP POLICY IF EXISTS "Permitir todo a anonimos en cierres_jornada" ON cierres_j
 DROP POLICY IF EXISTS "Permitir todo a usuarios en cierres_jornada" ON cierres_jornada;
 CREATE POLICY "Permitir todo a usuarios en cierres_jornada" ON cierres_jornada FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- 3. Función RPC get_agent_recaudo_hoy basada en la Jornada Operativa de la Ruta
+-- 3. Función RPC get_agent_recaudo_hoy basada en el Ciclo Diario de Recaudo (Regla de las 6:00 AM a 5:59 AM)
 CREATE OR REPLACE FUNCTION get_agent_recaudo_hoy(
     p_agent_id text DEFAULT NULL, 
     p_date text DEFAULT NULL, 
@@ -51,10 +51,7 @@ AS $$
 DECLARE
     v_clean_agent text;
     v_clean_route text;
-    v_opening_time text := '06:00';
     v_open_time_val time := '06:00:00'::time;
-    v_ultimo_cierre timestamptz;
-    v_ultimo_cierre_tabla timestamptz;
     v_now_bogota timestamp;
     v_today_date date;
     v_shift_today timestamp;
@@ -69,21 +66,10 @@ BEGIN
     v_clean_agent := NULLIF(TRIM(p_agent_id), '');
     v_clean_route := NULLIF(TRIM(p_route_id), '');
 
-    -- 1. Obtener la ruta vinculada y su horario configurado de apertura (opening_time)
-    IF v_clean_route IS NOT NULL THEN
-        SELECT 
-            COALESCE(NULLIF(TRIM(opening_time), ''), '06:00'),
-            fecha_ultimo_cierre
-        INTO v_opening_time, v_ultimo_cierre
-        FROM routes
-        WHERE id = v_clean_route
-        LIMIT 1;
-    ELSIF v_clean_agent IS NOT NULL THEN
-        SELECT 
-            r.id,
-            COALESCE(NULLIF(TRIM(r.opening_time), ''), '06:00'),
-            r.fecha_ultimo_cierre
-        INTO v_clean_route, v_opening_time, v_ultimo_cierre
+    -- 1. Obtener la ruta vinculada si se consulta por agente
+    IF v_clean_route IS NULL AND v_clean_agent IS NOT NULL THEN
+        SELECT r.id
+        INTO v_clean_route
         FROM routes r
         WHERE LOWER(r."agentUsername") = LOWER(v_clean_agent)
            OR LOWER(COALESCE(r."agentName", '')) = LOWER(v_clean_agent)
@@ -91,26 +77,22 @@ BEGIN
         LIMIT 1;
     END IF;
 
-    -- Validar formato de hora de apertura (HH:MM)
-    BEGIN
-        v_open_time_val := (v_opening_time || ':00')::time;
-    EXCEPTION WHEN OTHERS THEN
-        v_opening_time := '06:00';
-        v_open_time_val := '06:00:00'::time;
-    END;
-
-    -- 2. Calcular la ventana de Jornada Operativa en hora local de Colombia (America/Bogota, UTC-5)
+    -- 2. Regla estricta de las 6:00 AM:
+    -- El día operativo comienza estrictamente a las 06:00:00 AM del día actual y termina a las 05:59:59.999 AM del día siguiente (America/Bogota, UTC-5).
+    -- Cualquier cobro o renovación realizado en la noche (ej. 7:00 PM u 8:00 PM) pertenece y se suma al día en curso.
+    -- El reseteo a $0 ocurre únicamente al cruzar las 6:00 AM de la nueva mañana.
+    v_open_time_val := '06:00:00'::time;
     v_now_bogota := NOW() AT TIME ZONE 'America/Bogota';
     v_today_date := v_now_bogota::date;
     v_shift_today := v_today_date + v_open_time_val;
 
     IF p_date IS NOT NULL AND p_date ~ '^\d{4}-\d{2}-\d{2}$' THEN
-        -- Si se especifica una fecha explícita, la jornada inicia a la hora de apertura de esa fecha
+        -- Si se especifica una fecha operativa explícita, la jornada va desde las 6:00 AM de esa fecha hasta las 5:59:59 AM del día siguiente
         v_shift_start_local := p_date::date + v_open_time_val;
         v_shift_end_local := v_shift_start_local + INTERVAL '1 day';
     ELSE
-        -- Jornada activa actual: si la hora actual es menor que la hora de apertura (ej: 2:00 AM),
-        -- pertenece a la jornada operativa iniciada ayer a las 6:00 AM
+        -- Jornada activa actual: si la hora actual en Colombia es antes de las 6:00 AM (ej: 11:00 PM o 2:00 AM),
+        -- pertenece a la jornada operativa iniciada a las 6:00 AM del turno en curso
         IF v_now_bogota >= v_shift_today THEN
             v_shift_start_local := v_shift_today;
             v_shift_end_local := v_shift_today + INTERVAL '1 day';
@@ -122,35 +104,9 @@ BEGIN
 
     v_shift_start := v_shift_start_local AT TIME ZONE 'America/Bogota';
     v_shift_end := v_shift_end_local AT TIME ZONE 'America/Bogota';
+    v_effective_start := v_shift_start;
 
-    -- 3. Verificar si se realizó cierre de caja previo dentro de esta jornada operativa
-    -- Buscar el último cierre en la tabla cierres_jornada
-    BEGIN
-        SELECT MAX(fecha_cierre)
-        INTO v_ultimo_cierre_tabla
-        FROM cierres_jornada
-        WHERE (
-            (v_clean_route IS NOT NULL AND route_id = v_clean_route)
-            OR (v_clean_agent IS NOT NULL AND LOWER(agent_id) = LOWER(v_clean_agent))
-        )
-        AND fecha_cierre >= v_shift_start
-        AND fecha_cierre <= NOW();
-    EXCEPTION WHEN OTHERS THEN
-        v_ultimo_cierre_tabla := NULL;
-    END;
-
-    IF v_ultimo_cierre_tabla IS NOT NULL AND (v_ultimo_cierre IS NULL OR v_ultimo_cierre_tabla > v_ultimo_cierre) THEN
-        v_ultimo_cierre := v_ultimo_cierre_tabla;
-    END IF;
-
-    -- Si hubo un cierre previo dentro de esta jornada, el contador de Recaudado Hoy reinicia desde el momento del cierre
-    IF v_ultimo_cierre IS NOT NULL AND v_ultimo_cierre >= v_shift_start AND v_ultimo_cierre <= NOW() THEN
-        v_effective_start := v_ultimo_cierre;
-    ELSE
-        v_effective_start := v_shift_start;
-    END IF;
-
-    -- 4. Calcular el recaudo acumulado en la jornada operativa (o posterior al último cierre)
+    -- 3. Calcular el recaudo acumulado en la ventana [06:00:00 AM, 06:00:00 AM día siguiente)
     SELECT COALESCE(SUM(amount), 0)
     INTO v_total
     FROM (
@@ -178,7 +134,7 @@ BEGIN
         AND (
             (p.created_at IS NOT NULL AND p.created_at >= v_effective_start AND p.created_at < v_shift_end)
             OR
-            (p.created_at IS NULL AND p.date = v_shift_start_local::date AND v_effective_start <= v_shift_start)
+            (p.created_at IS NULL AND p.date = v_shift_start_local::date)
         )
         AND COALESCE(p.id, '') NOT LIKE 'pay_init_%'
         AND COALESCE(p.id, '') NOT LIKE 'pend_%'
@@ -359,7 +315,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION cerrar_jornada_ruta(text, text, text, text, jsonb) TO anon, authenticated;
 
--- 5. RPC para Auto-Cierre / Archivo de Jornada Previa al Iniciar Nuevo Horario Laboral
+-- 5. RPC para Auto-Cierre / Archivo de Jornada Previa al Cruzar las 6:00 AM de la Nueva Mañana
 CREATE OR REPLACE FUNCTION verificar_cierre_automatico_jornada(
     p_route_id text DEFAULT NULL
 )
@@ -369,52 +325,58 @@ SECURITY DEFINER
 AS $$
 DECLARE
     r RECORD;
-    v_opening_time text;
-    v_open_time_val time;
+    v_open_time_val time := '06:00:00'::time;
     v_now_bogota timestamp;
     v_shift_today timestamp;
     v_prev_shift_date text;
     v_prev_recaudo numeric;
     v_already_closed boolean;
     v_archived_count integer := 0;
+    v_cierre_id text;
 BEGIN
     v_now_bogota := NOW() AT TIME ZONE 'America/Bogota';
+    v_shift_today := v_now_bogota::date + v_open_time_val;
 
     FOR r IN 
-        SELECT id, "agentUsername", "agentName", supervisor_id, COALESCE(NULLIF(TRIM(opening_time), ''), '06:00') as op_time
+        SELECT id, "agentUsername", "agentName", supervisor_id
         FROM routes
         WHERE (p_route_id IS NULL OR id = p_route_id)
     LOOP
-        v_opening_time := r.op_time;
-        BEGIN
-            v_open_time_val := (v_opening_time || ':00')::time;
-        EXCEPTION WHEN OTHERS THEN
-            v_open_time_val := '06:00:00'::time;
-        END;
-
-        v_shift_today := v_now_bogota::date + v_open_time_val;
-
-        -- Solo se auto-archiva si ya comenzó el nuevo día laboral (hora actual >= hora apertura)
+        -- Solo se auto-archiva la jornada anterior cuando ya se cruzó las 6:00 AM de la nueva mañana
         IF v_now_bogota >= v_shift_today THEN
             v_prev_shift_date := to_char(v_now_bogota::date - INTERVAL '1 day', 'YYYY-MM-DD');
 
-            -- Verificar si ya existe cierre para esa fecha
+            -- Verificar si ya existe cierre para esa fecha previa
             SELECT EXISTS (
                 SELECT 1 FROM cierres_jornada 
                 WHERE route_id = r.id AND fecha_jornada = v_prev_shift_date
             ) INTO v_already_closed;
 
             IF NOT v_already_closed THEN
-                -- Obtener recaudo de esa jornada previa
+                -- Obtener recaudo de esa jornada previa (6:00 AM ayer a 5:59 AM hoy)
                 v_prev_recaudo := get_agent_recaudo_hoy(r."agentUsername", v_prev_shift_date, r.id);
                 IF v_prev_recaudo > 0 THEN
-                    PERFORM cerrar_jornada_ruta(
-                        r.id, 
-                        r."agentUsername", 
-                        r.supervisor_id, 
-                        'automatico_reinicio', 
-                        jsonb_build_object('motivo', 'Inicio de nuevo horario laboral - Reinicio a $0')
-                    );
+                    v_cierre_id := 'cierre_' || COALESCE(r.id, 'gral') || '_' || v_prev_shift_date || '_auto6am';
+                    INSERT INTO cierres_jornada (
+                        id, route_id, agent_id, agent_name, supervisor_id,
+                        fecha_jornada, hora_apertura, inicio_jornada, fin_jornada,
+                        fecha_cierre, total_recaudado, tipo_cierre, detalles, created_at
+                    ) VALUES (
+                        v_cierre_id,
+                        r.id,
+                        r."agentUsername",
+                        COALESCE(r."agentName", r."agentUsername"),
+                        r.supervisor_id,
+                        v_prev_shift_date,
+                        '06:00',
+                        (v_prev_shift_date::date + v_open_time_val) AT TIME ZONE 'America/Bogota',
+                        v_shift_today AT TIME ZONE 'America/Bogota',
+                        v_shift_today AT TIME ZONE 'America/Bogota',
+                        v_prev_recaudo,
+                        'automatico_reinicio',
+                        jsonb_build_object('motivo', 'Reinicio diario estricto a las 6:00 AM'),
+                        NOW()
+                    ) ON CONFLICT (id) DO NOTHING;
                     v_archived_count := v_archived_count + 1;
                 END IF;
             END IF;

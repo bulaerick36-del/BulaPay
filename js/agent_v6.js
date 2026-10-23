@@ -234,8 +234,8 @@ const agentModule = {
   },
 
   getLocalDateString(date = new Date()) {
-    if (window.BulaPayDB && typeof window.BulaPayDB.getColombiaLocalDateStr === 'function') {
-      return window.BulaPayDB.getColombiaLocalDateStr(date);
+    if (window.BulaPayDB && typeof window.BulaPayDB.getColombiaOperationalDateStr === 'function') {
+      return window.BulaPayDB.getColombiaOperationalDateStr(date);
     }
     return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Bogota' });
   },
@@ -247,7 +247,7 @@ const agentModule = {
     this._midnightInterval = setInterval(async () => {
       const currentDateStr = this.getLocalDateString();
       if (this._lastActiveDateStr && currentDateStr !== this._lastActiveDateStr) {
-        console.log(`[REINICIO DIARIO] Cambio de día detectado (${this._lastActiveDateStr} -> ${currentDateStr}). Reiniciando contadores diarios a $0.`);
+        console.log(`[REINICIO DIARIO 6:00 AM] Cambio de jornada operativa detectado (${this._lastActiveDateStr} -> ${currentDateStr}). Reiniciando contadores diarios a $0.`);
         this._lastActiveDateStr = currentDateStr;
         if (typeof this.updateCashViews === 'function') {
           await this.updateCashViews();
@@ -4185,6 +4185,9 @@ const agentModule = {
   },
 
   getLocalDateString(dateObj = new Date()) {
+    if (window.BulaPayDB && typeof window.BulaPayDB.getColombiaOperationalDateStr === 'function') {
+      return window.BulaPayDB.getColombiaOperationalDateStr(dateObj);
+    }
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
@@ -4361,8 +4364,9 @@ const agentModule = {
                               p.status === 'Liquidado_Pagado' || 
                               p.status === 'Liquidado_Mora' || 
                               String(p.status || '').includes('Liquidado');
-                              
-        if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
+
+        const pOpDate = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : String(p.date || '').split('T')[0];
+        if ((pOpDate === todayStr || (!p.created_at && p.date === todayStr)) && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
           if (client) {
             const cartonId = client.carton_id || client.id;
             if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
@@ -4572,8 +4576,9 @@ const agentModule = {
                               p.status === 'Liquidado_Pagado' || 
                               p.status === 'Liquidado_Mora' || 
                               String(p.status || '').includes('Liquidado');
-                              
-        if (p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
+
+        const pOpDate = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : String(p.date || '').split('T')[0];
+        if ((pOpDate === todayStr || (!p.created_at && p.date === todayStr)) && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
           if (client) {
             const cartonId = client.carton_id || client.id;
             if (p.carton_id && cartonId && String(p.carton_id).trim().toLowerCase() !== String(cartonId).trim().toLowerCase()) {
