@@ -254,6 +254,10 @@ const supervisorModule = {
       }
       if (this.selectedAuditAgentUsername) {
         await this.showModalAgentDetail(this.selectedAuditAgentUsername);
+        const liqOverlay = document.getElementById('modal-liquidated-cards');
+        if (liqOverlay && liqOverlay.classList.contains('active')) {
+          await this.openLiquidatedCardsModal(this.selectedAuditAgentUsername);
+        }
       }
     };
     window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
@@ -531,12 +535,19 @@ const supervisorModule = {
 
           const pStatus = String(p.status || '').trim().toUpperCase();
           const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+          const isMassPay = p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('MASIVO');
+          const instNum = Number(p.installmentNumber || 0);
+          if (pStatus === 'LIQUIDADO_POR_RENOVACION' && !rawId.startsWith('pay_renov_') && instNum !== 999) return;
+
+          const isStrictRenov =
+            rawId.startsWith('pay_renov_') ||
+            instNum === 999 ||
+            (pType === 'renovacion' && !isMassPay && !rawId.startsWith('pay_liq_'));
+
           const isRenovOrLiquidado =
-            pType === 'renovacion' ||
-            Number(p.installmentNumber) === 999 ||
+            isStrictRenov ||
             p.liquidado === true ||
-            p.liquidado === 'true' ||
-            rawId.startsWith('pay_renov_');
+            p.liquidado === 'true';
 
           if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'LIQUIDADO_MORA') return;
           if (!isRenovOrLiquidado && (pStatus.includes('CANCEL') || pStatus.includes('RECHAZ'))) return;
@@ -572,7 +583,7 @@ const supervisorModule = {
           if (seenIds.has(dedupKey)) return;
           seenIds.add(dedupKey);
 
-          if (isRenovOrLiquidado && pCartonId) {
+          if (isStrictRenov && pCartonId) {
             handledRenewalCartonIds.add(pCartonId);
           }
 
@@ -1605,11 +1616,22 @@ const supervisorModule = {
       const agent = (allUsers || []).find(u => u.username === username || u.id === username);
       const agentName = agent ? agent.name : (username || 'Agente');
 
-      if (subtitle) {
-        subtitle.textContent = `Cartones liquidados hoy por ${agentName} (${this.getLocalDateString()})`;
+      const effectiveRouteId = routeId || agent?.routeId || agent?.route_id || null;
+      let shiftDateLabel = this.getLocalDateString();
+      if (window.BulaPayDB && typeof window.BulaPayDB.getRouteOperationalShiftWindow === 'function') {
+        try {
+          const shiftWindow = await window.BulaPayDB.getRouteOperationalShiftWindow(effectiveRouteId, null, username);
+          if (shiftWindow && shiftWindow.shiftDateStr) {
+            shiftDateLabel = shiftWindow.shiftDateStr;
+          }
+        } catch (_) {}
       }
 
-      const cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, routeId || agent?.routeId);
+      if (subtitle) {
+        subtitle.textContent = `Cartones liquidados hoy por ${agentName} (${shiftDateLabel})`;
+      }
+
+      const cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, effectiveRouteId);
 
       const totalCount = cards.length;
       const blueCount = cards.filter(c => c.category === 'blue').length;

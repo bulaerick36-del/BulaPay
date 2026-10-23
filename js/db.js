@@ -1062,12 +1062,27 @@ const db = {
 
         const status = String(p.status || '').trim().toUpperCase();
         const paymentType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const isMassPay = p.is_mass_payment === true || p.is_mass_payment === 'true' || status.includes('MASIVO');
+        const instNum = Number(p.installmentNumber || 0);
+        const isArchivedPending = status === 'LIQUIDADO_POR_RENOVACION' && !rawId.startsWith('pay_renov_') && instNum !== 999;
+        if (isArchivedPending) return;
+
+        // Auto-saneamiento si un pago masivo/normal de cuota regular tenía payment_type = 'Renovacion' por error previo
+        if (paymentType === 'renovacion' && (isMassPay || (instNum > 0 && instNum < 999 && !rawId.startsWith('pay_renov_')))) {
+          if (rawId) {
+            supabase.from('payments').update({ payment_type: null }).eq('id', rawId).then(() => {}).catch(() => {});
+          }
+        }
+
+        const isStrictRenovacion =
+          rawId.startsWith('pay_renov_') ||
+          instNum === 999 ||
+          (paymentType === 'renovacion' && !isMassPay && !rawId.startsWith('pay_liq_'));
+
         const isRenovacionOrLiquidado =
-          paymentType === 'renovacion' ||
-          Number(p.installmentNumber) === 999 ||
+          isStrictRenovacion ||
           p.liquidado === true ||
-          p.liquidado === 'true' ||
-          rawId.startsWith('pay_renov_');
+          p.liquidado === 'true';
 
         if (status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return;
         if (!isRenovacionOrLiquidado && (status.includes('CANCEL') || status.includes('RECHAZ'))) return;
@@ -1112,17 +1127,17 @@ const db = {
         if (seenIds.has(pId)) return;
         seenIds.add(pId);
 
-        if (isRenovacionOrLiquidado) {
+        if (isStrictRenovacion) {
           if (pCartonId) handledRenewalCartonIds.add(pCartonId);
           if (pCedula && lowerAgentId) handledRenewalAgentClients.add(`${lowerAgentId}_${pCedula}`);
-          if (rawId && (String(p.date || '').trim() !== targetDate || p.liquidado !== true || !p.payment_type)) {
+          if (rawId && (rawId.startsWith('pay_renov_') || instNum === 999) && (String(p.date || '').trim() !== targetDate || p.liquidado !== true || !p.payment_type)) {
             supabase
               .from('payments')
               .update({
                 date: targetDate,
                 liquidado: true,
-                payment_type: p.payment_type || 'Renovacion',
-                installmentNumber: Number(p.installmentNumber) || 999
+                payment_type: 'Renovacion',
+                installmentNumber: 999
               })
               .eq('id', rawId)
               .then(() => {})
@@ -1206,32 +1221,50 @@ const db = {
         String(u.id || '').toLowerCase() === cleanUser
       );
 
-      const targetRouteId = routeId || agentUser?.routeId || null;
+      const targetRouteId = routeId || agentUser?.routeId || agentUser?.route_id || null;
       const targetAgentId = agentUser?.id || agentUsername;
       const targetAgentUsername = agentUser?.username || agentUsername;
+      const targetAgentUserLower = String(targetAgentUsername || '').trim().toLowerCase();
+      const targetAgentIdLower = String(targetAgentId || '').trim().toLowerCase();
+      const targetAgentNameLower = agentUser?.name ? String(agentUser.name).trim().toLowerCase() : '';
+      const targetRouteIdStr = targetRouteId ? String(targetRouteId).trim() : '';
 
-      const now = new Date();
-      const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      // Obtener ventana estricta de la jornada operativa actual de la ruta/agente (respeta horario y cierres de jornada)
+      const shiftWindow = await this.getRouteOperationalShiftWindow(targetRouteIdStr || null, null, targetAgentUsername);
+      const hasMidShiftClosure = Boolean(
+        shiftWindow.fechaUltimoCierre &&
+        shiftWindow.effectiveStart.getTime() > shiftWindow.shiftStart.getTime()
+      );
 
-      // Helper para verificar si la fecha coincide con HOY
-      const isToday = (dVal) => {
-        if (!dVal) return false;
-        const str = String(dVal).trim();
-        if (str.startsWith(todayLocalStr)) return true;
-        const d = new Date(dVal);
+      // Verificador estricto de timestamp dentro de la jornada operativa actual [effectiveStart, shiftEnd)
+      const isDateInOperationalShift = (rawVal) => {
+        if (!rawVal) return false;
+        if (rawVal instanceof Date) {
+          if (isNaN(rawVal.getTime())) return false;
+          const ms = rawVal.getTime();
+          return ms >= shiftWindow.effectiveStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
+        }
+        const s = String(rawVal).trim();
+        if (!s) return false;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          // Si hubo un cierre de jornada manual hoy, una fecha sin hora (YYYY-MM-DD) no puede garantizar ser posterior al cierre
+          if (hasMidShiftClosure) return false;
+          return s === shiftWindow.shiftDateStr;
+        }
+        const d = new Date(s);
         if (isNaN(d.getTime())) return false;
-        const localStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        return localStr === todayLocalStr;
+        const ms = d.getTime();
+        return ms >= shiftWindow.effectiveStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
       };
 
       // 1. Consultar cartones en Supabase
       let cartones = [];
       try {
         let q = supabase.from('cartones').select('*');
-        if (targetRouteId && targetAgentUsername) {
-          q = q.or(`route_id.eq.${targetRouteId},agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId}`);
-        } else if (targetRouteId) {
-          q = q.eq('route_id', targetRouteId);
+        if (targetRouteIdStr && targetAgentUsername) {
+          q = q.or(`route_id.eq.${targetRouteIdStr},agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId}`);
+        } else if (targetRouteIdStr) {
+          q = q.eq('route_id', targetRouteIdStr);
         } else if (targetAgentUsername) {
           q = q.or(`agent_id.eq.${targetAgentUsername},agent_id.eq.${targetAgentId}`);
         }
@@ -1252,7 +1285,6 @@ const db = {
         } catch(e) {}
       }
 
-      // Si no trajo de Supabase o hubo error de red, consultar memoria/caché local
       if (!cartones || cartones.length === 0) {
         try {
           const localCartones = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
@@ -1260,7 +1292,108 @@ const db = {
         } catch(e) {}
       }
 
-      // 2. Mapear clientes para obtener nombre y datos de contacto
+      // Función estricta de pertenencia del cartón al agente consultado (evita mezcla en rutas compartidas)
+      const cartonBelongsToAgent = (c) => {
+        if (!c) return false;
+        const cRoute = String(c.route_id || c.ruta_id || c.routeId || '').trim();
+        const cAgent = String(c.agent_id || c.agent_username || c.agentId || '').trim().toLowerCase();
+
+        if (targetAgentUserLower) {
+          if (cAgent) {
+            return cAgent === targetAgentUserLower ||
+                   (targetAgentIdLower && cAgent === targetAgentIdLower) ||
+                   (targetAgentNameLower && cAgent === targetAgentNameLower);
+          }
+          if (targetRouteIdStr && cRoute) {
+            return cRoute === targetRouteIdStr;
+          }
+          return false;
+        }
+        if (targetRouteIdStr) {
+          return cRoute === targetRouteIdStr;
+        }
+        return true;
+      };
+
+      // 2. Consultar pagos para verificar cierres/renovaciones reales ocurridas en esta misma jornada operativa
+      let allPayments = [];
+      try {
+        if (typeof this.getPayments === 'function') {
+          allPayments = await this.getPayments();
+        } else {
+          const { data: pData } = await supabase.from('payments').select('*');
+          if (pData) allPayments = pData;
+        }
+      } catch (ePay) {
+        allPayments = [];
+      }
+
+      // Pre-identificar eventos reales de la jornada operativa actual:
+      // A) Nuevos cartones abiertos por renovación HOY (en esta jornada operativa) por cada cliente
+      const newRenewalCartonsTodayByCedula = new Map();
+      (cartones || []).forEach(c => {
+        if (!c || !cartonBelongsToAgent(c)) return;
+        const rawEst = String(c.estado || c.status || '').trim().toLowerCase();
+        const rollover = Math.round(Number(c.saldo_anterior || c.rollover_amount || 0));
+        const isNewRenovCarton = (rawEst === 'activo_por_renovacion' || rollover > 0);
+        if (!isNewRenovCarton) return;
+
+        // Un cartón nuevo de renovación debe haberse CREADO/ABIERTO estrictamente en la jornada operativa actual
+        const openedInShift = isDateInOperationalShift(c.created_at) || isDateInOperationalShift(c.fecha_apertura) || isDateInOperationalShift(c.fecha_inicio);
+        if (!openedInShift) return;
+
+        const ced = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+        if (!ced) return;
+        if (!newRenewalCartonsTodayByCedula.has(ced)) {
+          newRenewalCartonsTodayByCedula.set(ced, []);
+        }
+        newRenewalCartonsTodayByCedula.get(ced).push(c);
+      });
+
+      // B) Pagos reales registrados en la jornada operativa actual (separando renovaciones reales vs pagos normales/masivos)
+      const renewalPayCartonIdsToday = new Set();
+      const renewalPayCedulasToday = new Set();
+      const realPayoffCartonIdsToday = new Set();
+      const realPayoffCedulasToday = new Set();
+
+      (allPayments || []).forEach(p => {
+        if (!p) return;
+        const rawId = String(p.id || '').trim();
+        if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
+
+        const amount = Number(p.amount || 0);
+        if (amount <= 0) return;
+
+        const pStatus = String(p.status || '').trim().toUpperCase();
+        if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'LIQUIDADO_MORA' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return;
+
+        // Exigir que el pago haya sido creado/registrado en la jornada operativa actual
+        const paidInShift = p.created_at
+          ? isDateInOperationalShift(p.created_at)
+          : (isDateInOperationalShift(p.fecha_pago) || isDateInOperationalShift(p.fecha) || isDateInOperationalShift(p.date));
+        if (!paidInShift) return;
+
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const isMassPay = p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('MASIVO');
+        const instNum = Number(p.installmentNumber || 0);
+        const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
+        const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+
+        const isGenuineRenovPayment =
+          !isMassPay &&
+          !rawId.startsWith('pay_liq_') &&
+          (rawId.startsWith('pay_renov_') || instNum === 999 || (pType === 'renovacion' && (instNum === 999 || instNum === 0)));
+
+        if (isGenuineRenovPayment) {
+          if (pCartonId) renewalPayCartonIdsToday.add(pCartonId);
+          if (pCedula) renewalPayCedulasToday.add(pCedula);
+        } else {
+          if (pCartonId) realPayoffCartonIdsToday.add(pCartonId);
+          if (pCedula) realPayoffCedulasToday.add(pCedula);
+        }
+      });
+
+      // 3. Mapear clientes para obtener nombre y datos de contacto
       let allClients = [];
       if (self && typeof self.getClients === 'function') {
         allClients = await self.getClients();
@@ -1279,69 +1412,113 @@ const db = {
         if (cCed) clientMap.set(cCed, cl);
       });
 
-      // 3. Filtrar estrictamente cartones que pertenecen al agente y fueron liquidados HOY
-      const liquidatedList = [];
+      // 4. Filtrar estrictamente cartones que pertenecen al agente y fueron CERRADOS o RENOVADOS en la jornada operativa actual
+      const candidateList = [];
       const seenCartonIds = new Set();
 
       (cartones || []).forEach(c => {
         if (!c) return;
-        const cId = String(c.id || `${c.cliente_id}_${c.numero_carton}_${c.updated_at}`);
-        if (seenCartonIds.has(cId)) return;
+        const cId = String(c.id || `${c.cliente_id}_${c.numero_carton}_${c.updated_at}`).trim();
+        const cIdLower = cId.toLowerCase();
+        if (seenCartonIds.has(cIdLower)) return;
 
-        // Verificar si pertenece al agente / ruta
-        const cRoute = String(c.route_id || c.ruta_id || '');
-        const cAgent = String(c.agent_id || c.agent_username || c.agentId || '').toLowerCase();
-        let belongsToAgent = false;
-        if (targetRouteId && cRoute && cRoute === String(targetRouteId)) {
-          belongsToAgent = true;
-        }
-        if (targetAgentUsername && (cAgent === String(targetAgentUsername).toLowerCase() || cAgent === String(targetAgentId).toLowerCase())) {
-          belongsToAgent = true;
-        }
-        if (!belongsToAgent && !targetRouteId && !targetAgentUsername) {
-          belongsToAgent = true;
-        }
-        if (!belongsToAgent) return;
+        if (!cartonBelongsToAgent(c)) return;
 
-        // Verificar si está liquidado / cerrado
         const rawEstado = String(c.estado || c.status || '').trim().toLowerCase();
         const rawReason = String(c.liquidation_reason || c.motivo || c.motivo_liquidacion || '').trim().toLowerCase();
-        const isLiquidatedStatus = rawEstado.startsWith('liquidado') || 
-                                   rawEstado.includes('liquid') || 
-                                   rawEstado.includes('castig') || 
-                                   rawEstado.includes('renov') || 
-                                   rawEstado === 'pagado' ||
-                                   Boolean(c.liquidation_reason);
 
-        if (!isLiquidatedStatus) return;
+        // REGLA CRÍTICA 1: Excluir rotundamente cualquier cartón ACTIVO ('activo' o 'activo_por_renovacion').
+        // Un cartón 'activo_por_renovacion' que hoy recibe un pago normal o pago masivo actualiza su updated_at,
+        // pero SIGUE ACTIVO y jamás debe aparecer como cartón liquidado ni como renovación hoy.
+        if (!rawEstado || rawEstado === 'activo' || rawEstado === 'activo_por_renovacion' || rawEstado.startsWith('activo')) {
+          return;
+        }
 
-        // Verificar fecha de cierre o liquidación coincidente con HOY: DATE(updated_at) = HOY o fecha_cierre = HOY
-        const updatedMatches = isToday(c.updated_at);
-        const cierreMatches = isToday(c.fecha_cierre || c.closed_at || c.fecha_liquidacion);
-        if (!updatedMatches && !cierreMatches) return;
-
-        // Clasificar motivo y color exacto
+        // Clasificar estado real de cierre
         // 1. ROJO: En Mora / Lista Negra
-        const isMora = rawEstado.includes('perdida') || 
-                       rawEstado.includes('mora') || 
-                       rawEstado.includes('castig') || 
+        const isMora = rawEstado === 'liquidado_perdida' ||
+                       rawEstado === 'liquidado_mora' ||
+                       rawEstado === 'castigado' ||
+                       rawEstado === 'lista negra' ||
+                       rawEstado.includes('perdida') ||
+                       rawEstado.includes('mora') ||
+                       rawEstado.includes('castig') ||
                        rawEstado.includes('negra') ||
                        rawReason.includes('mora') ||
                        rawReason.includes('perdida') ||
                        rawReason.includes('castigo') ||
                        rawReason.includes('incobrable') ||
-                       rawReason.includes('negra') ||
-                       (Number(c.outstanding || 0) > 0 && !rawEstado.includes('renov'));
+                       rawReason.includes('negra');
 
         // 2. AZUL: Renovación (Retanqueo)
+        // NOTA CRÍTICA: NUNCA usar saldo_anterior / rollover_amount para clasificar un cartón como cerrado por renovación,
+        // porque saldo_anterior pertenece al cartón nuevo cuando se abrió, no al motivo de cierre cuando termina de pagarse.
         const isRenovacion = !isMora && (
-          rawEstado.includes('renov') || 
-          rawReason.includes('renov') || 
-          rawReason.includes('retanqueo') || 
-          Number(c.saldo_anterior || c.rollover_amount || 0) > 0
+          rawEstado === 'renovado' ||
+          rawEstado === 'liquidado_renovacion' ||
+          rawEstado === 'liquidado_por_renovacion' ||
+          rawEstado.includes('renov') ||
+          rawReason.includes('renov') ||
+          rawReason.includes('retanqueo')
+        ) && !rawReason.includes('exitoso');
+
+        // 3. VERDE: Exitoso (Pago natural o masivo completo)
+        const isExitoso = !isMora && !isRenovacion && (
+          rawEstado === 'liquidado' ||
+          rawEstado === 'liquidado_exitoso' ||
+          rawEstado === 'liquidado_pagado' ||
+          rawEstado === 'liquidado_retraso' ||
+          rawEstado === 'pagado' ||
+          rawEstado === 'cerrado' ||
+          rawReason.includes('exitoso') ||
+          rawReason.includes('pago')
         );
 
-        // 3. VERDE: Exitoso (Pago natural completo)
+        if (!isMora && !isRenovacion && !isExitoso) return;
+
+        // REGLA CRÍTICA 2: Si no es liquidación por mora, el cartón DEBE tener saldo pendiente <= 0 para estar realmente cerrado
+        const currentOutstanding = Number(c.outstanding || 0);
+        if (!isMora && currentOutstanding > 0) return;
+
+        // REGLA CRÍTICA 3: Verificación estricta de fecha dentro de la jornada operativa actual
+        const rawCloseDate = c.fecha_cierre || c.closed_at || c.fecha_liquidacion || null;
+        if (rawCloseDate) {
+          // Si existe fecha_cierre explícita, manda sobre updated_at: si fecha_cierre es de un día/jornada anterior, descartar
+          if (!isDateInOperationalShift(rawCloseDate)) return;
+        } else {
+          // Si no tiene fecha_cierre explícita, updated_at debe pertenecer estrictamente a la jornada operativa actual
+          if (!isDateInOperationalShift(c.updated_at)) return;
+        }
+
+        const cedStr = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+
+        // REGLA CRÍTICA 4: Verificación anti-fantasmas para Renovaciones
+        // Para que un cartón figure como Renovación (🔵) en la jornada actual, debe haberse ejecutado una renovación REAL
+        // en esta misma jornada (nuevo cartón activo_por_renovacion creado hoy para el cliente o pago pay_renov_ hoy para este cartón).
+        // Si el cliente hoy solo tuvo pagos normales o pagos masivos sobre su cartón activo, se descarta cualquier registro antiguo.
+        if (isRenovacion) {
+          const hasDirectRenovPayToday = renewalPayCartonIdsToday.has(cIdLower);
+          const hasNewRenovCartonToday = cedStr && newRenewalCartonsTodayByCedula.has(cedStr);
+          const hasClientRenovPayToday = cedStr && renewalPayCedulasToday.has(cedStr);
+
+          if (!hasDirectRenovPayToday && !hasNewRenovCartonToday) {
+            return;
+          }
+
+          // Si el cliente tuvo un nuevo cartón de renovación creado hoy, el cartón cerrado debe ser anterior o igual al nuevo cartón
+          if (hasNewRenovCartonToday && !hasDirectRenovPayToday) {
+            const newCartons = newRenewalCartonsTodayByCedula.get(cedStr) || [];
+            const isSameAsNew = newCartons.some(nc => String(nc.id || '').trim().toLowerCase() === cIdLower);
+            if (isSameAsNew) return;
+          }
+        }
+
+        // REGLA CRÍTICA 5: Verificación anti-fantasmas para Liquidaciones Exitosas sin fecha_cierre
+        if (isExitoso && !rawCloseDate) {
+          const hasPayoffToday = realPayoffCartonIdsToday.has(cIdLower) || (cedStr && realPayoffCedulasToday.has(cedStr));
+          if (!hasPayoffToday) return;
+        }
+
         let category = 'green';
         let categoryLabel = 'Exitoso';
         let categoryColor = '#10b981';
@@ -1368,13 +1545,14 @@ const db = {
           explanation = 'El cliente canceló el saldo anterior usando un nuevo crédito (Retanqueo).';
         }
 
-        const cedStr = String(c.cliente_id || c.client_id || c.cedula || '').trim();
         const clientObj = clientMap.get(cedStr) || {};
         const clientName = clientObj.name || clientObj.nombre || c.client_name || c.cliente_nombre || (cedStr ? `Cliente C.C. ${cedStr}` : 'Cliente Sin Nombre');
 
-        seenCartonIds.add(cId);
-        liquidatedList.push({
+        seenCartonIds.add(cIdLower);
+        candidateList.push({
           ...c,
+          _cIdLower: cIdLower,
+          _hasDirectRenovPayToday: renewalPayCartonIdsToday.has(cIdLower),
           clientName,
           cedula: cedStr,
           numeroCarton: c.numero_carton || c.numeroCarton || 'S/N',
@@ -1388,8 +1566,57 @@ const db = {
           categoryBorder,
           categoryIcon,
           explanation,
-          fechaLiquidacion: c.updated_at || c.fecha_cierre || new Date().toISOString()
+          fechaLiquidacion: rawCloseDate || c.updated_at || new Date().toISOString()
         });
+      });
+
+      // 5. Deduplicación final anti-fantasmas por cliente en Renovaciones:
+      // Si un cliente tiene múltiples cartones históricos con estado 'RENOVADO' cuyo updated_at fue tocado en masa,
+      // solo permitir la cantidad real de renovaciones ejecutadas en esta jornada para ese cliente (priorizando coincidencia exacta por carton_id o el cartón más reciente).
+      const renewalsByCedula = new Map();
+      const nonRenewals = [];
+
+      candidateList.forEach(item => {
+        if (item.category === 'blue' && item.cedula) {
+          if (!renewalsByCedula.has(item.cedula)) {
+            renewalsByCedula.set(item.cedula, []);
+          }
+          renewalsByCedula.get(item.cedula).push(item);
+        } else {
+          nonRenewals.push(item);
+        }
+      });
+
+      const verifiedRenewals = [];
+      renewalsByCedula.forEach((items, ced) => {
+        const newCartonsTodayCount = (newRenewalCartonsTodayByCedula.get(ced) || []).length;
+        const directMatched = items.filter(it => it._hasDirectRenovPayToday);
+        if (directMatched.length > 0) {
+          verifiedRenewals.push(...directMatched);
+        } else {
+          // Ordenar del más reciente al más antiguo por fecha de creación/cierre y número de cartón
+          items.sort((a, b) => {
+            const tA = new Date(a.fecha_cierre || a.created_at || a.fecha_apertura || a.updated_at || 0).getTime();
+            const tB = new Date(b.fecha_cierre || b.created_at || b.fecha_apertura || b.updated_at || 0).getTime();
+            if (tB !== tA) return tB - tA;
+            return Number(b.numeroCarton || 0) - Number(a.numeroCarton || 0);
+          });
+          const maxAllowed = Math.max(1, newCartonsTodayCount);
+          verifiedRenewals.push(...items.slice(0, maxAllowed));
+        }
+      });
+
+      const liquidatedList = [...nonRenewals, ...verifiedRenewals].map(item => {
+        const cleanItem = { ...item };
+        delete cleanItem._cIdLower;
+        delete cleanItem._hasDirectRenovPayToday;
+        return cleanItem;
+      });
+
+      liquidatedList.sort((a, b) => {
+        const tA = new Date(a.fechaLiquidacion || 0).getTime();
+        const tB = new Date(b.fechaLiquidacion || 0).getTime();
+        return tB - tA;
       });
 
       return liquidatedList;
@@ -3371,6 +3598,15 @@ const db = {
         }
       };
 
+      if (rpcSucceeded && payload.old_carton_id) {
+        try {
+          await supabase
+            .from('cartones')
+            .update({ fecha_cierre: nowIso, liquidation_reason: 'Renovación', updated_at: nowIso })
+            .eq('id', String(payload.old_carton_id).trim());
+        } catch (_) {}
+      }
+
       if (rpcSucceeded && rolloverVal > 0) {
         try {
           const todayStr = this.getColombiaLocalDateStr(new Date());
@@ -3430,41 +3666,47 @@ const db = {
           await insertRenovPaymentRecord();
         }
 
-        // PASO 2: UPDATE al cartón viejo cambiando su estado a RENOVADO y deuda 0
-        // REGLA ESTRICTA: Filtrar por old_carton_id o por cliente_id + agent_id para no cerrar cartones de otros agentes
+        // PASO 2: UPDATE únicamente al cartón ACTIVO que se está renovando (NUNCA tocar cartones históricos ya cerrados/renovados)
         try {
           const cedStr = String(clientId).trim();
+          const targetOldIds = new Set();
           if (payload.old_carton_id) {
-            await supabase
+            targetOldIds.add(String(payload.old_carton_id).trim());
+          }
+          try {
+            let findActiveQuery = supabase
               .from('cartones')
-              .update({ estado: 'RENOVADO', outstanding: 0 })
-              .eq('id', payload.old_carton_id);
-          }
-          let oldCartonQuery = supabase
-            .from('cartones')
-            .update({ estado: 'RENOVADO', outstanding: 0 })
-            .eq('cliente_id', cedStr)
-            .in('estado', ['activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO']);
-          if (agentId) {
-            oldCartonQuery = oldCartonQuery.eq('agent_id', agentId);
-          }
-          const { error: errCed } = await oldCartonQuery;
+              .select('id')
+              .eq('cliente_id', cedStr)
+              .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion']);
+            if (agentId) {
+              findActiveQuery = findActiveQuery.eq('agent_id', agentId);
+            }
+            const { data: activeOldRows } = await findActiveQuery;
+            (activeOldRows || []).forEach(r => {
+              if (r && r.id) targetOldIds.add(String(r.id).trim());
+            });
+          } catch (_) {}
 
-          if (errCed) {
-            console.warn("Aviso al actualizar cartones viejos por cliente_id:", errCed.message);
-          } else {
-            // Actualización secundaria no bloqueante de columnas añadidas en migraciones si existen
-            try {
-              let secQuery = supabase
+          const idsArray = Array.from(targetOldIds);
+          if (idsArray.length > 0) {
+            const { error: errClose } = await supabase
+              .from('cartones')
+              .update({
+                estado: 'RENOVADO',
+                outstanding: 0,
+                fecha_cierre: nowIso,
+                updated_at: nowIso,
+                liquidation_reason: 'Renovación'
+              })
+              .in('id', idsArray);
+
+            if (errClose) {
+              await supabase
                 .from('cartones')
-                .update({ status: 'RENOVADO', liquidation_reason: 'Renovación' })
-                .eq('cliente_id', cedStr)
-                .eq('estado', 'RENOVADO');
-              if (agentId) {
-                secQuery = secQuery.eq('agent_id', agentId);
-              }
-              await secQuery;
-            } catch (_) {}
+                .update({ estado: 'RENOVADO', outstanding: 0 })
+                .in('id', idsArray);
+            }
           }
         } catch (eOld) {
           console.warn("Aviso al actualizar cartón viejo a RENOVADO:", eOld?.message);
