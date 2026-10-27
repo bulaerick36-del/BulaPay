@@ -271,47 +271,30 @@ BEGIN
         v_effective_start := v_shift_start;
     END IF;
 
-    -- 4. Calcular el recaudo acumulado en la jornada operativa (o posterior al último cierre)
-    SELECT COALESCE(SUM(amount), 0)
+    -- 4. Sumatoria directa y bruta de la tabla payments en la jornada operativa (o posterior al último cierre)
+    -- Sin depender del estado del cartón ni de llaves de cliente que colapsen múltiples retanqueos
+    SELECT COALESCE(SUM(p.amount), 0)
     INTO v_total
-    FROM (
-        SELECT DISTINCT ON (COALESCE(p.id, p."clientCedula" || '_' || COALESCE(p."installmentNumber"::text, '') || '_' || p.amount::text || '_' || to_char(v_shift_start_local, 'YYYY-MM-DD'))) p.amount
-        FROM payments p
-        LEFT JOIN cartones c ON c.id::text = p.carton_id::text
-        WHERE (
-            -- Si se consulta por agente, filtro estricto y obligatorio por el cartón amarrado específicamente a ese agente
-            (v_clean_agent IS NOT NULL AND (
-                (p.carton_id IS NOT NULL AND c.id IS NOT NULL AND LOWER(COALESCE(c.agent_id, '')) = LOWER(v_clean_agent))
-                OR
-                ((p.carton_id IS NULL OR c.id IS NULL) AND (
-                    LOWER(COALESCE(p.agent_id, '')) = LOWER(v_clean_agent) 
-                    OR LOWER(COALESCE(p."agentName", '')) = LOWER(v_clean_agent)
-                ))
-            ))
-            OR
-            -- Si solo se consulta por ruta sin agente
-            (v_clean_agent IS NULL AND v_clean_route IS NOT NULL AND (
-                (p.carton_id IS NOT NULL AND c.id IS NOT NULL AND (c.route_id = v_clean_route))
-                OR
-                (p."routeId" = v_clean_route OR p.route_id = v_clean_route)
-            ))
-        )
-        AND (
-            (p.created_at IS NOT NULL AND p.created_at >= v_effective_start AND p.created_at < v_shift_end)
-            OR
-            (p.created_at IS NULL AND p.date = v_shift_start_local::date AND v_effective_start <= v_shift_start)
-        )
-        AND COALESCE(p.id, '') NOT LIKE 'pay_init_%'
-        AND COALESCE(p.id, '') NOT LIKE 'pend_%'
-        AND (
-            LOWER(COALESCE(p.payment_type, '')) = 'renovacion'
-            OR p."installmentNumber" = 999
-            OR COALESCE(p.liquidado, false) = true
-            OR UPPER(COALESCE(p.status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA', 'CANCELADO', 'RECHAZADO')
-        )
-        AND UPPER(COALESCE(p.status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA')
-        AND p.amount > 0
-    ) sub;
+    FROM payments p
+    WHERE (
+        (v_clean_agent IS NOT NULL AND (
+            LOWER(COALESCE(p.agent_id, '')) = LOWER(v_clean_agent)
+            OR LOWER(COALESCE(p."agentName", '')) = LOWER(v_clean_agent)
+        ))
+        OR
+        (v_clean_route IS NOT NULL AND (
+            p."routeId" = v_clean_route OR p.route_id = v_clean_route
+        ))
+    )
+    AND (
+        (p.created_at IS NOT NULL AND p.created_at >= v_effective_start AND p.created_at < v_shift_end)
+        OR
+        (p.created_at IS NULL AND p.date = v_shift_start_local::date AND v_effective_start <= v_shift_start)
+    )
+    AND COALESCE(p.id, '') NOT LIKE 'pay_init_%'
+    AND COALESCE(p.id, '') NOT LIKE 'pend_%'
+    AND UPPER(COALESCE(p.status, '')) NOT IN ('NO PAGO', 'PENDIENTE', 'LIQUIDADO_MORA', 'CANCELADO', 'RECHAZADO')
+    AND p.amount > 0;
 
     RETURN v_total;
 END;

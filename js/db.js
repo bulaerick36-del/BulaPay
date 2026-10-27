@@ -1067,10 +1067,9 @@ const db = {
       const lowerAgentId = cleanAgentId ? cleanAgentId.toLowerCase() : null;
       const lowerRouteId = cleanRouteId ? cleanRouteId.toLowerCase() : null;
 
-      // Ejecutar lecturas en paralelo con caché en memoria para máxima velocidad (sin bloqueos ni RPCs con desfase UTC)
-      const [userObj, allCartones, paymentList] = await Promise.all([
+      // Ejecutar lecturas en paralelo
+      const [userObj, paymentList] = await Promise.all([
         cleanAgentId ? this.getUserByUsername(cleanAgentId) : Promise.resolve(null),
-        this.getCartones(),
         this.getPayments()
       ]);
 
@@ -1079,22 +1078,7 @@ const db = {
 
       // Calcular ventana de Jornada Operativa según la Regla Estricta de las 6:00 AM (06:00:00 AM a 05:59:59.999 AM del día siguiente)
       const shiftWindow = await this.getRouteOperationalShiftWindow(cleanRouteId || effectiveRouteIdLower, dateStr, cleanAgentId);
-      const targetDate = shiftWindow.shiftDateStr;
 
-      // Mapa en memoria de cartones para verificar asignación estricta por cartón y agente
-      const cartonMap = new Map();
-      (allCartones || []).forEach(c => {
-        if (c && c.id) {
-          cartonMap.set(String(c.id).toLowerCase(), {
-            agent_id: c.agent_id ? String(c.agent_id).trim().toLowerCase() : '',
-            route_id: c.route_id ? String(c.route_id).trim().toLowerCase() : '',
-            cliente_id: c.cliente_id ? String(c.cliente_id).trim() : '',
-            raw: c
-          });
-        }
-      });
-
-      const seenIds = new Set();
       let totalMontoReal = 0;
 
       (paymentList || []).forEach(p => {
@@ -1104,67 +1088,32 @@ const db = {
         if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
 
         // Validar estrictamente dentro de la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
-        // Cualquier transacción hecha antes de las 6:00 AM queda totalmente excluida del recaudo del día nuevo
         if (!this.isRecordInOperationalShift(p, shiftWindow, true)) return;
 
-        // Validar monto e incluir explícitamente payment_type === 'Renovacion', installmentNumber === 999 o liquidado === true
+        // Validar monto
         const amount = Number(p.amount || 0);
         if (amount <= 0) return;
 
         const status = String(p.status || '').trim().toUpperCase();
-        const paymentType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
-        const isMassPay = p.is_mass_payment === true || p.is_mass_payment === 'true' || status.includes('MASIVO');
-        const instNum = Number(p.installmentNumber || 0);
-        const isArchivedPending = status === 'LIQUIDADO_POR_RENOVACION' && !rawId.startsWith('pay_renov_') && instNum !== 999;
-        if (isArchivedPending) return;
+        if (status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA' || status.includes('CANCEL') || status.includes('RECHAZ')) return;
 
-        const isStrictRenovacion =
-          rawId.startsWith('pay_renov_') ||
-          instNum === 999 ||
-          (paymentType === 'renovacion' && !isMassPay && !rawId.startsWith('pay_liq_'));
-
-        const isRenovacionOrLiquidado =
-          isStrictRenovacion ||
-          p.liquidado === true ||
-          p.liquidado === 'true';
-
-        if (status === 'NO PAGO' || status === 'PENDIENTE' || status === 'LIQUIDADO_MORA') return;
-        if (!isRenovacionOrLiquidado && (status.includes('CANCEL') || status.includes('RECHAZ'))) return;
-
-        // Validar pertenencia estricta por cartón y agente
-        const pCartonId = p.carton_id ? String(p.carton_id).trim().toLowerCase() : null;
+        // Validar pertenencia directa por agente o ruta desde el registro de pago (sin depender de cartones)
         const pAgentId = String(p.agent_id || p.agentId || '').trim().toLowerCase();
         const pAgentName = String(p.agentName || '').trim().toLowerCase();
         const pRouteId = String(p.routeId || p.route_id || '').trim().toLowerCase();
-        const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
 
         let matches = false;
         if (lowerAgentId) {
-          // FILTRO ESTRICTO Y OBLIGATORIO POR ID DEL AGENTE:
-          if (pCartonId && cartonMap.has(pCartonId)) {
-            const carton = cartonMap.get(pCartonId);
-            if (carton.agent_id === lowerAgentId || (agentNameLower && carton.agent_id === agentNameLower)) {
-              matches = true;
-            }
-          } else {
-            if (pAgentId === lowerAgentId || pAgentName === lowerAgentId) matches = true;
-            if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) matches = true;
-          }
+          if (pAgentId === lowerAgentId || pAgentName === lowerAgentId) matches = true;
+          if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) matches = true;
+          if (effectiveRouteIdLower && pRouteId === effectiveRouteIdLower) matches = true;
         } else if (effectiveRouteIdLower) {
-          if (pCartonId && cartonMap.has(pCartonId)) {
-            const carton = cartonMap.get(pCartonId);
-            if (carton.route_id === effectiveRouteIdLower) matches = true;
-          } else {
-            if (pRouteId === effectiveRouteIdLower) matches = true;
-          }
+          if (pRouteId === effectiveRouteIdLower) matches = true;
         }
 
         if (!matches) return;
 
-        const pId = rawId || `${pCedula}_${p.installmentNumber || ''}_${pCartonId || ''}_${amount}_${targetDate}`;
-        if (seenIds.has(pId)) return;
-        seenIds.add(pId);
-
+        // Sumatoria bruta e independiente de cada transacción (sin colapsar clientes ni retanqueos)
         totalMontoReal += Math.round(amount);
       });
 
@@ -3585,34 +3534,8 @@ const db = {
               })
               .eq('id', rpcRes.payment_id);
           } else {
-            const { data: recentRenovPays } = await supabase
-              .from('payments')
-              .select('id, date, created_at, installmentNumber, payment_type')
-              .eq('clientCedula', cedStr)
-              .eq('installmentNumber', 999);
-            const matchingTodayRenov = (recentRenovPays || []).filter(r => {
-              const rId = String(r.id || '');
-              const colCreated = r.created_at ? this.getColombiaLocalDateStr(r.created_at) : '';
-              return rId.startsWith('pay_renov_') && (colCreated === todayStr || String(r.date || '').startsWith(todayStr));
-            });
-            if (matchingTodayRenov.length > 0) {
-              for (const r of matchingTodayRenov) {
-                await supabase
-                  .from('payments')
-                  .update({
-                    date: todayStr,
-                    payment_type: 'Renovacion',
-                    installmentNumber: 999,
-                    liquidado: true,
-                    carton_id: payload.old_carton_id || null,
-                    agent_id: agentId,
-                    routeId: routeId
-                  })
-                  .eq('id', r.id);
-              }
-            } else {
-              await insertRenovPaymentRecord();
-            }
+            // Cada renovación/retanqueo debe registrarse como una fila independiente en la bitácora de pagos
+            await insertRenovPaymentRecord();
           }
         } catch (eSyncRenov) {
           console.warn("Aviso al sincronizar fecha/flags del pago de renovación:", eSyncRenov);
