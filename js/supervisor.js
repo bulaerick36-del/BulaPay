@@ -1625,17 +1625,20 @@ const supervisorModule = {
             newCartonNumberBadge = ` ➔ <span style="color: #93c5fd; font-weight: 700;">Nuevo #${newCarton.numero_carton}</span>`;
           }
 
-          // 3. Desglose Financiero de la Renovación (Estructura exacta para supervisor)
-          // Cartón antes de la renovación: (Mostrar el valor del crédito anterior, ej: $200.000)
-          const cartonAntes = Number(c.montoPrestado || c.monto_prestado || c.amount || 0);
-
-          // Valor del nuevo préstamo / Deuda total: (Mostrar el monto del crédito nuevo, ej: $240.000)
-          let nuevoPrestamoDeudaTotal = newCarton
-            ? Number(newCarton.total_debt || newCarton.totalDebt || newCarton.monto_prestado || 0)
-            : Number(c.totalDeuda || 0);
-          if (nuevoPrestamoDeudaTotal <= 0 && newCarton) {
-            nuevoPrestamoDeudaTotal = Number(newCarton.monto_prestado || 0);
-          }
+          // 3. Desglose Financiero de la Renovación (Estructura limpia para supervisor)
+          // Cartón antes de la renovación: refleja el saldo/amortización real previo a la renovación (ej: $160.000)
+          let normalPaymentsTotal = 0;
+          (allPayments || []).forEach(p => {
+            if (!p) return;
+            const pCartonId = String(p.carton_id || '').trim().toLowerCase();
+            if (pCartonId !== cIdLower) return;
+            const pId = String(p.id || '').trim();
+            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+            const pStatus = String(p.status || '').trim().toUpperCase();
+            if (pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999 || pType === 'renovacion') return;
+            if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return;
+            normalPaymentsTotal += Number(p.amount || 0);
+          });
 
           // Pago en renovación (Abono aplicado): (Mostrar el valor descontado del saldo viejo, ej: $80.000)
           const pagoRenovacion = Number(
@@ -1646,6 +1649,15 @@ const supervisorModule = {
             c.rollover_amount ||
             0
           );
+
+          let cartonAntes = 0;
+          if (normalPaymentsTotal > 0) {
+            cartonAntes = normalPaymentsTotal;
+          } else if (Number(c.totalDeuda || 0) > pagoRenovacion && pagoRenovacion > 0) {
+            cartonAntes = Number(c.totalDeuda) - pagoRenovacion;
+          } else {
+            cartonAntes = Number(c.totalDeuda || c.montoPrestado || 0);
+          }
 
           // Saldo al cierre: ($0)
           const saldoCierre = Number(c.saldoPendiente || c.outstanding || 0);
@@ -1661,24 +1673,20 @@ const supervisorModule = {
           } else if (c.net_cash != null && Number(c.net_cash) > 0) {
             totalEntregado = Number(c.net_cash);
           } else {
-            totalEntregado = Math.max(0, cartonAntes - pagoRenovacion);
+            totalEntregado = Math.max(0, Number(c.montoPrestado || 0) - pagoRenovacion);
           }
 
           // Nuevo cartón generado: (El saldo final del nuevo crédito, ej: $240.000)
           let nuevoCartonGenerado = newCarton
-            ? Number(newCarton.outstanding || newCarton.total_debt || newCarton.totalDebt || 0)
-            : nuevoPrestamoDeudaTotal;
-          if (nuevoCartonGenerado <= 0) nuevoCartonGenerado = nuevoPrestamoDeudaTotal;
+            ? Number(newCarton.outstanding || newCarton.total_debt || newCarton.totalDebt || newCarton.monto_prestado || 0)
+            : Number(c.totalDeuda || 0);
+          if (nuevoCartonGenerado <= 0) nuevoCartonGenerado = Number(c.totalDeuda || 0);
 
           financialDetailsHtml = `
             <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.75rem 0.9rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
               <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
                 <span style="color: #000000; font-weight: 700;">Cartón antes de la renovación:</span>
                 <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${cartonAntes.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
-                <span style="color: #000000; font-weight: 700;">Valor del nuevo préstamo / Deuda total:</span>
-                <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${nuevoPrestamoDeudaTotal.toLocaleString('es-CO')}</strong>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
                 <span style="color: #000000; font-weight: 700;">Pago en renovación (Abono aplicado):</span>
