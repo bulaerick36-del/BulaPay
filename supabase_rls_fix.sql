@@ -239,10 +239,7 @@ BEGIN
         AND COALESCE(c.rollover_amount, c.saldo_anterior, 0) > 0
         AND NOT EXISTS (
             SELECT 1 FROM payments p 
-            WHERE (
-                p.carton_id = c.id::text 
-                OR p."clientCedula" = c.cliente_id
-            )
+            WHERE p.carton_id = c.id::text 
             AND (
                 LOWER(COALESCE(p.payment_type, '')) = 'renovacion' 
                 OR p."installmentNumber" = 999 
@@ -596,67 +593,14 @@ BEGIN
 
     -- ========================================================
     -- CÁLCULO ESTRICTO DE RECAUDO REAL:
-    -- Evitar acumular sumas fantasmas o duplicar el monto prestado/saldo anterior en el total del día
+    -- Cada liquidación por renovación es una transacción independiente
     -- ========================================================
-    IF v_is_old_carton_same_shift THEN
-        -- Retanqueo/Renovación sucesiva sobre un cartón originado en la misma jornada:
-        -- El capital prestado de este cartón ya fue entregado hoy. Para no duplicar dicho capital
-        -- en el "Recaudado Hoy", el recaudo registrado toma ÚNICAMENTE el valor real de los intereses
-        -- o la ganancia/saldo neto cancelado en esta transacción.
-        v_monto_prestado_anterior := COALESCE(v_old_carton.monto_prestado, 0);
-        v_intereses_actuales := GREATEST(0, COALESCE(v_old_carton.total_debt, 0) - v_monto_prestado_anterior);
-        
-        IF v_saldo_liquidar > v_monto_prestado_anterior THEN
-            v_recaudo_real := v_saldo_liquidar - v_monto_prestado_anterior;
-        ELSE
-            v_recaudo_real := LEAST(v_saldo_liquidar, v_intereses_actuales);
-        END IF;
-    ELSE
-        -- Cartón originado en jornadas anteriores: todo el saldo restante a liquidar es recaudo legítimo
-        v_recaudo_real := v_saldo_liquidar;
-    END IF;
+    v_recaudo_real := v_saldo_liquidar;
 
     -- ========================================================
-    -- PASO 1: Registro en payments (con deduplicación estricta)
+    -- PASO 1: Registro en payments (cada renovación es una transacción independiente)
     -- ========================================================
-    -- Verificar si ya existe un registro de liquidación por renovación para este cartón en la jornada actual
-    IF v_target_old_id IS NOT NULL THEN
-        BEGIN
-            SELECT id INTO v_existing_payment_id
-            FROM payments
-            WHERE carton_id = v_target_old_id
-              AND (
-                  LOWER(COALESCE(payment_type, '')) = 'renovacion' 
-                  OR "installmentNumber" = 999 
-                  OR id LIKE 'pay_renov_%'
-              )
-              AND (
-                  (created_at IS NOT NULL AND created_at >= v_shift_start AND created_at < v_shift_end)
-                  OR (created_at IS NULL AND date = v_today_str)
-              )
-            ORDER BY created_at DESC
-            LIMIT 1;
-        EXCEPTION WHEN OTHERS THEN
-            v_existing_payment_id := NULL;
-        END;
-    END IF;
-
-    IF v_existing_payment_id IS NOT NULL THEN
-        -- Si ya existe un pago de renovación en la misma jornada para este cartón, se actualiza
-        -- evitando filas duplicadas que sumen doble en el recaudo diario
-        UPDATE payments
-        SET amount = v_recaudo_real,
-            date = v_today_str,
-            status = 'Pagado',
-            payment_type = 'Renovacion',
-            liquidado = true,
-            "agentName" = v_agent_name,
-            agent_id = p_agent_id,
-            "routeId" = v_route_final,
-            updated_at = v_now
-        WHERE id = v_existing_payment_id;
-        v_payment_id := v_existing_payment_id;
-    ELSIF v_recaudo_real > 0 THEN
+    IF v_recaudo_real > 0 THEN
         v_payment_id := 'pay_renov_' || floor(extract(epoch from v_now))::text || '_' || floor(random() * 1000)::text;
         
         BEGIN

@@ -1095,10 +1095,7 @@ const db = {
       });
 
       const seenIds = new Set();
-      const seenRenovCartonIds = new Map();
       const handledRenewalCartonIds = new Set();
-      const handledRenewalClients = new Set();
-      const handledRenewalAgentClients = new Set();
       let totalMontoReal = 0;
 
       (paymentList || []).forEach(p => {
@@ -1165,25 +1162,12 @@ const db = {
 
         if (!matches) return;
 
-        // Deduplicación estricta de renovaciones para un mismo cartón en la misma jornada operativa
-        if (isStrictRenovacion && pCartonId) {
-          if (seenRenovCartonIds.has(pCartonId)) {
-            const prevAmt = seenRenovCartonIds.get(pCartonId);
-            totalMontoReal = totalMontoReal - prevAmt + Math.round(amount);
-            seenRenovCartonIds.set(pCartonId, Math.round(amount));
-            return;
-          }
-          seenRenovCartonIds.set(pCartonId, Math.round(amount));
-        }
-
-        const pId = rawId || `${pCedula}_${p.installmentNumber || ''}_${amount}_${targetDate}`;
+        const pId = rawId || `${pCedula}_${p.installmentNumber || ''}_${pCartonId || ''}_${amount}_${targetDate}`;
         if (seenIds.has(pId)) return;
         seenIds.add(pId);
 
-        if (isStrictRenovacion) {
-          if (pCartonId) handledRenewalCartonIds.add(pCartonId);
-          if (pCedula) handledRenewalClients.add(pCedula);
-          if (pCedula && lowerAgentId) handledRenewalAgentClients.add(`${lowerAgentId}_${pCedula}`);
+        if (isStrictRenovacion && pCartonId) {
+          handledRenewalCartonIds.add(pCartonId);
         }
 
         totalMontoReal += Math.round(amount);
@@ -1195,7 +1179,6 @@ const db = {
         const cId = String(c.id || '').trim().toLowerCase();
         const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
         const cRoute = String(c.route_id || c.routeId || '').trim().toLowerCase();
-        const cCedula = String(c.cliente_id || c.client_id || c.cedula || '').trim();
 
         let matchesCarton = false;
         if (lowerAgentId) {
@@ -1209,9 +1192,8 @@ const db = {
         }
         if (!matchesCarton) return;
 
+        // Si este cartón específico ya tiene su pago de renovación contabilizado en payments, no duplicar
         if (cId && handledRenewalCartonIds.has(cId)) return;
-        if (cCedula && handledRenewalClients.has(cCedula)) return;
-        if (cCedula && lowerAgentId && handledRenewalAgentClients.has(`${lowerAgentId}_${cCedula}`)) return;
 
         const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
         const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
@@ -1221,7 +1203,6 @@ const db = {
         if (!this.isRecordInOperationalShift(c, shiftWindow, true)) return;
 
         if (cId) handledRenewalCartonIds.add(cId);
-        if (cCedula && lowerAgentId) handledRenewalAgentClients.add(`${lowerAgentId}_${cCedula}`);
         totalMontoReal += rollover;
       });
 
@@ -3572,53 +3553,9 @@ const db = {
         if (rolloverVal <= 0) return;
         const todayStr = this.getColombiaOperationalDateStr(new Date());
 
-        // Evaluar si el cartón anterior fue originado/renovado en esta misma jornada operativa
-        let realRecaudoVal = rolloverVal;
-        let oldCartonObj = null;
-        if (payload.old_carton_id) {
-          const cartones = await this.getCartones();
-          oldCartonObj = (cartones || []).find(c => c && String(c.id).toLowerCase() === String(payload.old_carton_id).toLowerCase());
-        }
-        const shiftWin = await this.getRouteOperationalShiftWindow(routeId, todayStr, agentId);
-        if (oldCartonObj && this.isRecordInOperationalShift(oldCartonObj, shiftWin, true)) {
-          const oldMonto = Number(oldCartonObj.monto_prestado || 0);
-          const oldDebt = Number(oldCartonObj.total_debt || 0);
-          const oldInterest = Math.max(0, oldDebt - oldMonto);
-          if (rolloverVal > oldMonto) {
-            realRecaudoVal = rolloverVal - oldMonto;
-          } else {
-            realRecaudoVal = Math.min(rolloverVal, oldInterest);
-          }
-        }
+        // Cada transacción de liquidación por renovación registra su abono/saldo liquidado como recaudo independiente
+        const realRecaudoVal = rolloverVal;
         if (realRecaudoVal <= 0) return;
-
-        // Verificar si ya existe un pago de liquidación por renovación hoy para este cartón
-        if (payload.old_carton_id) {
-          try {
-            const { data: existPays } = await supabase
-              .from('payments')
-              .select('id, created_at, date')
-              .eq('carton_id', String(payload.old_carton_id))
-              .in('installmentNumber', [999]);
-            const sameShiftPay = (existPays || []).find(p => this.isRecordInOperationalShift(p, shiftWin, true));
-            if (sameShiftPay && sameShiftPay.id) {
-              await supabase
-                .from('payments')
-                .update({
-                  amount: realRecaudoVal,
-                  date: todayStr,
-                  status: 'Pagado',
-                  payment_type: 'Renovacion',
-                  liquidado: true,
-                  agent_id: agentId,
-                  routeId: routeId,
-                  updated_at: nowIso
-                })
-                .eq('id', sameShiftPay.id);
-              return;
-            }
-          } catch (_) {}
-        }
 
         const renovPayRecord = {
           id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,

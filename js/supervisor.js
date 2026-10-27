@@ -1626,7 +1626,7 @@ const supervisorModule = {
           }
 
           // 3. Desglose Financiero de la Renovación (Estructura limpia para supervisor)
-          // Cartón antes de la renovación: refleja el saldo/amortización real previo a la renovación (ej: $160.000)
+          // Suma de pagos normales previos a la renovación
           let normalPaymentsTotal = 0;
           (allPayments || []).forEach(p => {
             if (!p) return;
@@ -1640,47 +1640,61 @@ const supervisorModule = {
             normalPaymentsTotal += Number(p.amount || 0);
           });
 
-          // Pago en renovación (Abono aplicado): (Mostrar el valor descontado del saldo viejo, ej: $80.000)
+          // Pago en renovación (Abono aplicado): (El valor real descontado del saldo viejo, ej: $88.000)
           const pagoRenovacion = Number(
+            renovPay?.amount ||
             newCarton?.saldo_anterior ||
             newCarton?.rollover_amount ||
-            renovPay?.amount ||
             c.saldo_anterior ||
             c.rollover_amount ||
             0
           );
 
+          // Cartón antes de la renovación: (Saldo pendiente anterior, ej: $160.000)
           let cartonAntes = 0;
-          if (normalPaymentsTotal > 0) {
-            cartonAntes = normalPaymentsTotal;
-          } else if (Number(c.totalDeuda || 0) > pagoRenovacion && pagoRenovacion > 0) {
-            cartonAntes = Number(c.totalDeuda) - pagoRenovacion;
+          if (newCarton?.old_outstanding != null && Number(newCarton.old_outstanding) > 0) {
+            cartonAntes = Number(newCarton.old_outstanding);
+          } else if (c.old_outstanding != null && Number(c.old_outstanding) > 0) {
+            cartonAntes = Number(c.old_outstanding);
           } else {
-            cartonAntes = Number(c.totalDeuda || c.montoPrestado || 0);
+            const totDeuda = Number(c.totalDeuda || c.total_debt || 0);
+            if (totDeuda > 0) {
+              const calcSaldo = Math.max(0, totDeuda - normalPaymentsTotal);
+              cartonAntes = calcSaldo > 0 ? calcSaldo : (pagoRenovacion > 0 ? pagoRenovacion : totDeuda);
+            } else {
+              cartonAntes = pagoRenovacion > 0 ? pagoRenovacion : Number(c.montoPrestado || c.amount || 0);
+            }
           }
 
           // Saldo al cierre: ($0)
           const saldoCierre = Number(c.saldoPendiente || c.outstanding || 0);
 
-          // Total entregado al cliente (con descuento y cuotas): (Efectivo neto real entregado, ej: $104.000)
+          // Total entregado al cliente: (El efectivo neto real que salió de la mano del cobrador, ej: $96.000)
           let totalEntregado = 0;
-          if (newCarton && newCarton.net_cash != null && Number(newCarton.net_cash) > 0) {
+          if (newCarton && newCarton.net_cash != null && !isNaN(Number(newCarton.net_cash)) && Number(newCarton.net_cash) >= 0) {
             totalEntregado = Number(newCarton.net_cash);
           } else if (newCarton) {
-            const nMonto = Number(newCarton.monto_prestado || 0);
-            const nDesc = Number(newCarton.discount_amount || 0);
+            const nMonto = Number(newCarton.monto_prestado || newCarton.amount || 0);
+            const nDesc = Number(newCarton.discount_amount || newCarton.descuento || 0);
             totalEntregado = Math.max(0, nMonto - nDesc - pagoRenovacion);
-          } else if (c.net_cash != null && Number(c.net_cash) > 0) {
+          } else if (c.net_cash != null && !isNaN(Number(c.net_cash)) && Number(c.net_cash) >= 0) {
             totalEntregado = Number(c.net_cash);
           } else {
-            totalEntregado = Math.max(0, Number(c.montoPrestado || 0) - pagoRenovacion);
+            totalEntregado = Math.max(0, Number(c.montoPrestado || c.amount || 0) - pagoRenovacion);
           }
 
-          // Nuevo cartón generado: (El saldo final del nuevo crédito, ej: $240.000)
-          let nuevoCartonGenerado = newCarton
-            ? Number(newCarton.outstanding || newCarton.total_debt || newCarton.totalDebt || newCarton.monto_prestado || 0)
-            : Number(c.totalDeuda || 0);
-          if (nuevoCartonGenerado <= 0) nuevoCartonGenerado = Number(c.totalDeuda || 0);
+          // Nuevo cartón generado: (El valor total del nuevo crédito, ej: $240.000)
+          let nuevoCartonGenerado = 0;
+          if (newCarton) {
+            nuevoCartonGenerado = Number(newCarton.total_debt || newCarton.totalDebt || 0);
+            if (nuevoCartonGenerado <= 0) nuevoCartonGenerado = Number(newCarton.outstanding || 0);
+            if (nuevoCartonGenerado <= 0 && newCarton.monto_prestado) {
+              nuevoCartonGenerado = Math.round(Number(newCarton.monto_prestado) * 1.2);
+            }
+          }
+          if (nuevoCartonGenerado <= 0) {
+            nuevoCartonGenerado = Number(c.totalDeuda || c.total_debt || 0);
+          }
 
           financialDetailsHtml = `
             <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.75rem 0.9rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
@@ -1697,7 +1711,7 @@ const supervisorModule = {
                 <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${saldoCierre.toLocaleString('es-CO')}</strong>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
-                <span style="color: #000000; font-weight: 700;">Total entregado al cliente (con descuento y cuotas):</span>
+                <span style="color: #000000; font-weight: 700;">Total entregado al cliente:</span>
                 <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${totalEntregado.toLocaleString('es-CO')}</strong>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; font-size: 0.78rem;">

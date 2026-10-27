@@ -164,10 +164,7 @@ BEGIN
         AND COALESCE(c.rollover_amount, c.saldo_anterior, 0) > 0
         AND NOT EXISTS (
             SELECT 1 FROM payments p 
-            WHERE (
-                p.carton_id = c.id::text 
-                OR p."clientCedula" = c.cliente_id
-            )
+            WHERE p.carton_id = c.id::text 
             AND (
                 LOWER(COALESCE(p.payment_type, '')) = 'renovacion' 
                 OR p."installmentNumber" = 999 
