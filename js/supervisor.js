@@ -1671,30 +1671,30 @@ const supervisorModule = {
           if (nuevoCartonGenerado <= 0) nuevoCartonGenerado = nuevoPrestamoDeudaTotal;
 
           financialDetailsHtml = `
-            <div style="background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 10px; padding: 0.65rem 0.85rem; display: flex; flex-direction: column; gap: 0.45rem;">
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
-                <span style="color: #94a3b8; font-weight: 500;">Cartón antes de la renovación:</span>
-                <strong style="color: #ffffff; font-size: 0.84rem;">$${cartonAntes.toLocaleString('es-CO')}</strong>
+            <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.75rem 0.9rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
+                <span style="color: #000000; font-weight: 700;">Cartón antes de la renovación:</span>
+                <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${cartonAntes.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
-                <span style="color: #94a3b8; font-weight: 500;">Valor del nuevo préstamo / Deuda total:</span>
-                <strong style="color: #60a5fa; font-size: 0.84rem;">$${nuevoPrestamoDeudaTotal.toLocaleString('es-CO')}</strong>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
+                <span style="color: #000000; font-weight: 700;">Valor del nuevo préstamo / Deuda total:</span>
+                <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${nuevoPrestamoDeudaTotal.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
-                <span style="color: #94a3b8; font-weight: 500;">Pago en renovación (Abono aplicado):</span>
-                <strong style="color: #fbbf24; font-size: 0.84rem;">$${pagoRenovacion.toLocaleString('es-CO')}</strong>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
+                <span style="color: #000000; font-weight: 700;">Pago en renovación (Abono aplicado):</span>
+                <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${pagoRenovacion.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
-                <span style="color: #94a3b8; font-weight: 500;">Saldo al cierre:</span>
-                <strong style="color: #34d399; font-size: 0.84rem;">$${saldoCierre.toLocaleString('es-CO')}</strong>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
+                <span style="color: #000000; font-weight: 700;">Saldo al cierre:</span>
+                <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${saldoCierre.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
-                <span style="color: #94a3b8; font-weight: 500;">Total entregado al cliente (con descuento y cuotas):</span>
-                <strong style="color: #38bdf8; font-size: 0.84rem;">$${totalEntregado.toLocaleString('es-CO')}</strong>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem;">
+                <span style="color: #000000; font-weight: 700;">Total entregado al cliente (con descuento y cuotas):</span>
+                <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${totalEntregado.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; font-size: 0.77rem;">
-                <span style="color: #94a3b8; font-weight: 500;">Nuevo cartón generado:</span>
-                <strong style="color: #a78bfa; font-size: 0.84rem;">$${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; font-size: 0.78rem;">
+                <span style="color: #000000; font-weight: 700;">Nuevo cartón generado:</span>
+                <strong style="color: #000000; font-weight: 800; font-size: 0.86rem;">$${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
               </div>
             </div>
           `;
