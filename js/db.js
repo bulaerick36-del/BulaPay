@@ -3715,7 +3715,7 @@ const db = {
       console.warn("Aviso al archivar cuotas pendientes del cartón anterior:", e.message);
     }
 
-    // 6. Actualizar únicamente la información de contacto/perfil del cliente en la tabla 'clients'
+    // 6. Actualizar la ficha del cliente en la tabla 'clients' con su saldo y deuda activa intacta
     // REGLA ESTRICTA: La tabla 'clients' NO contiene columna 'status' ni 'estado'. NUNCA incluirlos aquí.
     const clientUpdatePayload = {
       name: payload.name || '',
@@ -3724,6 +3724,10 @@ const db = {
       city: payload.city || '',
       zone: payload.zone || '',
       risk: payload.risk || 'Verde',
+      totalDebt: newTotalDebt,
+      outstanding: newTotalDebt,
+      installmentsCount: Number(payload.installmentsCount || 30),
+      installmentAmount: Math.round(Number(payload.installmentAmount || (newTotalDebt / (payload.installmentsCount || 30)))),
       routeId: routeId,
       agent_id: agentId,
       supervisor_id: supervisorId
@@ -3744,9 +3748,22 @@ const db = {
       .eq('cedula', String(clientId).trim());
 
     if (clientUpdateErr) {
-      console.error("❌ Error de Supabase al actualizar cliente en 'clients':", clientUpdateErr);
+      console.warn("Aviso al actualizar cliente con saldo en 'clients'. Reintentando solo perfil básico:", clientUpdateErr.message);
+      delete clientUpdatePayload.totalDebt;
+      delete clientUpdatePayload.outstanding;
+      delete clientUpdatePayload.installmentsCount;
+      delete clientUpdatePayload.installmentAmount;
+      const { error: retryClientErr } = await supabase
+        .from('clients')
+        .update(clientUpdatePayload)
+        .eq('cedula', String(clientId).trim());
+      if (retryClientErr) {
+        console.error("❌ Error de Supabase al actualizar cliente en 'clients':", retryClientErr);
+      } else {
+        console.log("✅ Ficha del cliente actualizada exitosamente en 'clients' para cédula:", clientId);
+      }
     } else {
-      console.log("✅ Ficha del cliente actualizada exitosamente en 'clients' para cédula:", clientId);
+      console.log("✅ Ficha del cliente actualizada exitosamente en 'clients' para cédula:", clientId, "con saldo intacto:", newTotalDebt);
     }
 
     // 7. Insertar cuotas iniciales del nuevo cartón
@@ -4226,8 +4243,8 @@ const db = {
     const supId = this.getSupervisorId();
 
     const cedStr = String(typeof cedula === 'object' && cedula !== null ? (cedula.cedula || cedula.clientCedula || '') : (cedula || ''));
-    let rawCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || cedula.credit_id || (this.isValidUuid(cedula.id) ? cedula.id : null)) : null);
-    let targetCartonId = (rawCartonId && this.isValidUuid(rawCartonId)) ? String(rawCartonId).trim() : null;
+    let rawCartonId = cartonId || (typeof cedula === 'object' && cedula !== null ? (cedula.carton_id || cedula.cartonId || cedula.credit_id || (cedula.id && String(cedula.id).trim() !== cedStr ? cedula.id : null)) : null);
+    let targetCartonId = (rawCartonId && String(rawCartonId).trim().length > 0) ? String(rawCartonId).trim() : null;
 
     const targetAgentId = (typeof cedula === 'object' && cedula !== null) ? (cedula.agent_id || cedula.agentId) : null;
     const currentUser = this.getCurrentUser();
@@ -4249,8 +4266,8 @@ const db = {
 
         const { data: cartonData } = await cartonQuery.limit(1);
 
-        if (cartonData && cartonData.length > 0 && cartonData[0].id && this.isValidUuid(cartonData[0].id)) {
-          targetCartonId = cartonData[0].id;
+        if (cartonData && cartonData.length > 0 && cartonData[0].id) {
+          targetCartonId = String(cartonData[0].id).trim();
         }
       } catch (e) {
         console.warn("Aviso al consultar el cartón activo del cliente desde 'cartones':", e.message);

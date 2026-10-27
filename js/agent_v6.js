@@ -1759,7 +1759,9 @@ const agentModule = {
         pType === 'renovacion' ||
         rawStatus.includes('liquidado') ||
         rawStatus.includes('cancelado') ||
-        rawStatus.includes('rechazado')
+        rawStatus.includes('rechazado') ||
+        rawStatus === 'pendiente' ||
+        rawStatus === 'no pago'
       ) {
         return false;
       }
@@ -1775,7 +1777,9 @@ const agentModule = {
 
     const paidInstallments = new Set();
     payments.forEach(p => {
-      if (Number(p.amount) > 0 && p.status !== 'No Pago' && p.installmentNumber) {
+      const rawStatus = String(p.status || '').trim().toLowerCase();
+      const isPaid = (rawStatus.includes('pagado') || rawStatus.includes('abonado') || rawStatus.includes('completo') || (Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente'));
+      if (isPaid && p.installmentNumber && Number(p.installmentNumber) !== 999) {
         paidInstallments.add(Number(p.installmentNumber));
       }
     });
@@ -1787,7 +1791,10 @@ const agentModule = {
           : (totalInstallments * installmentAmount));
     const saldoPendiente = Math.max(0, Number(client.outstanding ?? 0));
     const montoRecaudadoCalculado = Math.max(0, baseMonto - saldoPendiente);
-    const paidCuotasByBalance = (installmentAmount > 0) ? Math.floor(montoRecaudadoCalculado / installmentAmount) : 0;
+    // REGLA CRÍTICA: Solo inferir cuotas pagadas por saldo si efectivamente existen abonos confirmados en este cartón
+    const paidCuotasByBalance = (installmentAmount > 0 && paidInstallments.size > 0 && montoRecaudadoCalculado > 0) 
+      ? Math.floor(montoRecaudadoCalculado / installmentAmount) 
+      : 0;
 
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -1809,7 +1816,8 @@ const agentModule = {
       
       const dayStr = `${currentDayDate.getFullYear()}-${String(currentDayDate.getMonth() + 1).padStart(2, '0')}-${String(currentDayDate.getDate()).padStart(2, '0')}`;
       const isPast = currentDayDate < todayZero;
-      const hasPaid = (cuotaIdx <= paidCuotasByBalance) || paidInstallments.has(cuotaIdx);
+      // Regla estricta: No asumir pagos fantasma en cartón nuevo/renovado si no hay pagos reales registrados
+      const hasPaid = paidInstallments.has(cuotaIdx) || (paidInstallments.size > 0 && cuotaIdx <= paidCuotasByBalance);
       
       const cell = document.createElement('div');
       cell.classList.add('payment-card-cell');
@@ -2482,7 +2490,8 @@ const agentModule = {
       const { data: dbCartonesGlobal } = await supabase
         .from('cartones')
         .select('*')
-        .eq('cliente_id', cedulaClean);
+        .eq('cliente_id', cedulaClean)
+        .order('created_at', { ascending: false });
 
       const clientExistsInSystem = !!dbClientGlobal || (dbCartonesGlobal && dbCartonesGlobal.length > 0);
 
@@ -2615,7 +2624,13 @@ const agentModule = {
           const payments = await window.BulaPayDB.getPaymentsByClient(client, client.carton_id || client.id);
           const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
           const todayStr = this.getLocalDateString();
-          this.hasPaidRecordToday = payments ? payments.some(p => p.date === todayStr && Number(p.amount) > 0 && String(p.status || '').trim().toLowerCase() !== 'no pago') : false;
+          this.hasPaidRecordToday = payments ? payments.some(p => {
+            const pId = String(p.id || '').trim();
+            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+            const rawStatus = String(p.status || '').trim().toLowerCase();
+            if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999 || pType === 'renovacion' || rawStatus.includes('liquidado')) return false;
+            return p.date === todayStr && Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente';
+          }) : false;
           
           // Re-evaluar estado de los botones de pago, renovación y liquidación por mora
           this.updateCobroViewState(client, dailyStatusList);
@@ -2703,7 +2718,13 @@ const agentModule = {
         return;
       }
 
-      const hasPaidRecordToday = payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago');
+      const hasPaidRecordToday = payments.some(p => {
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999 || pType === 'renovacion' || rawStatus.includes('liquidado')) return false;
+        return p.date === todayStr && Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente';
+      });
 
       if (firstPending && firstPending.isFuture && hasPaidRecordToday) {
         alert('Operación denegada: Ya se adelantó una cuota individual hoy. Use Pago Masivo para adelantar más días, o espere a mañana.');
@@ -2839,19 +2860,25 @@ const agentModule = {
         this.btnProcessMassPayment.style.display = 'none';
       }
       
-      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient, this.currentClient?.carton_id || this.currentClient?.id);
       const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
       const selectedIds = this.selectedInstallments.map(i => i.number);
       window.BulaPayDB.renderOverdueDaysList(this.cobroOverdueDaysList, dailyStatusList, (st) => this.handleCartonPayment(st), selectedIds);
       return;
     }
     
-    const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+    const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient, this.currentClient?.carton_id || this.currentClient?.id);
     const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
     const firstPending = dailyStatusList.find(s => !s.hasPaid);
 
     const todayStr = this.getLocalDateString();
-    const hasPaidRecordToday = payments.some(p => p.date === todayStr && Number(p.amount) > 0 && p.status !== 'No Pago');
+    const hasPaidRecordToday = payments.some(p => {
+      const pId = String(p.id || '').trim();
+      const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+      const rawStatus = String(p.status || '').trim().toLowerCase();
+      if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999 || pType === 'renovacion' || rawStatus.includes('liquidado')) return false;
+      return p.date === todayStr && Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente';
+    });
 
     if (firstPending && firstPending.isFuture && hasPaidRecordToday) {
       alert('Operación denegada: Ya se adelantó una cuota individual hoy. Use Pago Masivo para adelantar más días, o espere a mañana.');
@@ -3024,7 +3051,7 @@ const agentModule = {
       client.risk = 'Rojo';
     } else {
       try {
-        const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
+        const payments = await window.BulaPayDB.getPaymentsByClient(client, client?.carton_id || client?.id);
         dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
         const overdueCount = isDayZeroCarton ? 0 : dailyStatusList.filter(s => s.isOverdue).length;
         
@@ -3060,7 +3087,14 @@ const agentModule = {
 
     // Estado de Cartera texto explicativo
     let statusText = 'Al Día';
+    let realPaidCount = 0;
+    if (dailyStatusList && dailyStatusList.length > 0) {
+      realPaidCount = dailyStatusList.filter(s => s.hasPaid).length;
+    }
+    const isNewCartonWithoutPayments = realPaidCount === 0 && Number(client.outstanding) > 0;
+
     if (Number(client.outstanding) === 0) statusText = 'Crédito Cancelado';
+    else if (isNewCartonWithoutPayments && (isDayZeroCarton || String(client.estado || client.status || '').toLowerCase().includes('renov'))) statusText = 'Nuevo Crédito (Sin Abonos)';
     else if (isDayZeroCarton && !isDbBlacklistedDetail) statusText = 'Al Día';
     else if (client.risk === 'Amarillo') statusText = 'Atrasado';
     else if (client.risk === 'Rojo') statusText = 'Mora Severa';
@@ -3135,11 +3169,18 @@ const agentModule = {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
-      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient, this.currentClient?.carton_id || this.currentClient?.id);
       
-      // Validar si ya pagó hoy
+      // Validar si ya pagó hoy en este cartón activo
       const todayStr = this.getLocalDateString();
-      if (payments.some(p => p.date === todayStr)) {
+      const hasRealPaymentToday = payments.some(p => {
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999 || pType === 'renovacion' || rawStatus.includes('liquidado')) return false;
+        return p.date === todayStr && Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente';
+      });
+      if (hasRealPaymentToday) {
         alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
         return;
       }
@@ -3248,11 +3289,18 @@ const agentModule = {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
-      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
+      const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient, this.currentClient?.carton_id || this.currentClient?.id);
       
-      // Validar si ya pagó hoy
+      // Validar si ya pagó hoy en este cartón activo
       const todayStr = this.getLocalDateString();
-      if (payments.some(p => p.date === todayStr)) {
+      const hasRealPaymentToday = payments.some(p => {
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999 || pType === 'renovacion' || rawStatus.includes('liquidado')) return false;
+        return p.date === todayStr && Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente';
+      });
+      if (hasRealPaymentToday) {
         alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
         return;
       }
@@ -3590,7 +3638,7 @@ const agentModule = {
         savedResult = await window.BulaPayDB.saveClient(payload);
       }
       console.log('Guardado exitoso:', savedResult);
-      this.currentClient = payload;
+      this.currentClient = { ...payload, ...(savedResult || {}) };
 
       // v160: Sin alteraciones automáticas en caja_movimientos durante renovación
 
@@ -3625,7 +3673,7 @@ const agentModule = {
         if (this.isRenewalMode) {
           try {
             const updatedPayload = await window.BulaPayDB.registerCreditToExistingClient(payload);
-            this.currentClient = updatedPayload;
+            this.currentClient = { ...payload, ...(updatedPayload || {}) };
             if (typeof this.updateRouteTracking === 'function') {
               this.updateRouteTracking();
             }
@@ -4360,10 +4408,14 @@ const agentModule = {
         const clientCedula = String(p.clientCedula || p.client_cedula || '');
         const client = clientMap.get(clientCedula);
         
-        const isLiquidation = (p.id && String(p.id).startsWith('pay_liq_')) || 
-                              p.status === 'Liquidado_Pagado' || 
-                              p.status === 'Liquidado_Mora' || 
-                              String(p.status || '').includes('Liquidado');
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        const isLiquidation = pId.startsWith('pay_liq_') || 
+                              pId.startsWith('pay_renov_') ||
+                              Number(p.installmentNumber) === 999 ||
+                              pType === 'renovacion' ||
+                              rawStatus.includes('liquidado');
 
         const pOpDate = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : String(p.date || '').split('T')[0];
         if ((pOpDate === todayStr || (!p.created_at && p.date === todayStr)) && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
@@ -4572,10 +4624,14 @@ const agentModule = {
         const clientCedula = String(p.clientCedula || p.client_cedula || '');
         const client = clientMap.get(clientCedula);
         
-        const isLiquidation = (p.id && String(p.id).startsWith('pay_liq_')) || 
-                              p.status === 'Liquidado_Pagado' || 
-                              p.status === 'Liquidado_Mora' || 
-                              String(p.status || '').includes('Liquidado');
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        const isLiquidation = pId.startsWith('pay_liq_') || 
+                              pId.startsWith('pay_renov_') ||
+                              Number(p.installmentNumber) === 999 ||
+                              pType === 'renovacion' ||
+                              rawStatus.includes('liquidado');
 
         const pOpDate = p.created_at ? this.getLocalDateString(new Date(p.created_at)) : String(p.date || '').split('T')[0];
         if ((pOpDate === todayStr || (!p.created_at && p.date === todayStr)) && Number(p.amount) > 0 && p.status !== 'No Pago' && p.status !== 'Pendiente' && !isLiquidation) {
@@ -4670,7 +4726,7 @@ const agentModule = {
           let badgeText = clientCedula;
           if (isCancelled) badgeText = 'Cancelado';
           else if (hasPaid) badgeText = 'Pagó';
-          else if (isNewUnpaid) badgeText = 'Al Día';
+          else if (isNewUnpaid) badgeText = 'Nuevo';
           
           const clientName = c.name || 'Desconocido';
           const clientPhone = c.phone || 'Sin teléfono';

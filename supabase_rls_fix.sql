@@ -706,6 +706,15 @@ BEGIN
         v_now
     );
 
+    -- Sincronizar de forma atómica la ficha del cliente en 'clients' con el nuevo crédito intacto
+    UPDATE clients
+    SET 
+        "totalDebt" = p_total_debt,
+        "outstanding" = p_total_debt,
+        "installmentsCount" = p_installments_count,
+        "installmentAmount" = p_installment_amount
+    WHERE "cedula" = p_cliente_id;
+
     RETURN jsonb_build_object(
         'success', true,
         'old_carton_id', v_target_old_id,
