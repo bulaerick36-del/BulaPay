@@ -61,7 +61,6 @@ DECLARE
     v_shift_end timestamptz;
     v_effective_start timestamptz;
     v_total numeric := 0;
-    v_carton_rollover numeric := 0;
 BEGIN
     v_clean_agent := NULLIF(TRIM(p_agent_id), '');
     v_clean_route := NULLIF(TRIM(p_route_id), '');
@@ -148,38 +147,7 @@ BEGIN
         AND p.amount > 0
     ) sub;
 
-    -- Respaldo: renovaciones directas en cartones si no existen en payments
-    BEGIN
-        SELECT COALESCE(SUM(COALESCE(c.rollover_amount, c.saldo_anterior, 0)), 0)
-        INTO v_carton_rollover
-        FROM cartones c
-        WHERE (
-            (v_clean_agent IS NOT NULL AND LOWER(COALESCE(c.agent_id, '')) = LOWER(v_clean_agent))
-            OR (v_clean_agent IS NULL AND v_clean_route IS NOT NULL AND c.route_id = v_clean_route)
-        )
-        AND (
-            (c.created_at IS NOT NULL AND c.created_at >= v_effective_start AND c.created_at < v_shift_end)
-            OR (c.created_at IS NULL AND c.fecha_apertura IS NOT NULL AND c.fecha_apertura >= v_effective_start AND c.fecha_apertura < v_shift_end)
-        )
-        AND COALESCE(c.rollover_amount, c.saldo_anterior, 0) > 0
-        AND NOT EXISTS (
-            SELECT 1 FROM payments p 
-            WHERE p.carton_id = c.id::text 
-            AND (
-                LOWER(COALESCE(p.payment_type, '')) = 'renovacion' 
-                OR p."installmentNumber" = 999 
-                OR p.id LIKE 'pay_renov_%'
-            )
-            AND (
-                (p.created_at IS NOT NULL AND p.created_at >= v_effective_start AND p.created_at < v_shift_end)
-                OR (p.created_at IS NULL AND p.date = v_shift_start_local::date)
-            )
-        );
-    EXCEPTION WHEN OTHERS THEN
-        v_carton_rollover := 0;
-    END;
-
-    RETURN v_total + v_carton_rollover;
+    RETURN v_total;
 END;
 $$;
 

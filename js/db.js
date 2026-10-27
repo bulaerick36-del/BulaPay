@@ -1095,7 +1095,6 @@ const db = {
       });
 
       const seenIds = new Set();
-      const handledRenewalCartonIds = new Set();
       let totalMontoReal = 0;
 
       (paymentList || []).forEach(p => {
@@ -1166,44 +1165,7 @@ const db = {
         if (seenIds.has(pId)) return;
         seenIds.add(pId);
 
-        if (isStrictRenovacion && pCartonId) {
-          handledRenewalCartonIds.add(pCartonId);
-        }
-
         totalMontoReal += Math.round(amount);
-      });
-
-      // Respaldo adicional: renovaciones en cartones creadas estrictamente durante la jornada operativa [06:00:00 AM, 05:59:59 AM)
-      (allCartones || []).forEach(c => {
-        if (!c) return;
-        const cId = String(c.id || '').trim().toLowerCase();
-        const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
-        const cRoute = String(c.route_id || c.routeId || '').trim().toLowerCase();
-
-        let matchesCarton = false;
-        if (lowerAgentId) {
-          if (cAgent === lowerAgentId || (agentNameLower && cAgent === agentNameLower)) {
-            matchesCarton = true;
-          }
-        } else if (effectiveRouteIdLower) {
-          if (cRoute === effectiveRouteIdLower) {
-            matchesCarton = true;
-          }
-        }
-        if (!matchesCarton) return;
-
-        // Si este cartón específico ya tiene su pago de renovación contabilizado en payments, no duplicar
-        if (cId && handledRenewalCartonIds.has(cId)) return;
-
-        const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
-        const rollover = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
-        if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
-        if (rollover <= 0) return;
-
-        if (!this.isRecordInOperationalShift(c, shiftWindow, true)) return;
-
-        if (cId) handledRenewalCartonIds.add(cId);
-        totalMontoReal += rollover;
       });
 
       return totalMontoReal;
@@ -2810,8 +2772,6 @@ const db = {
 
       if (isRenov) {
         desembolsosRenovacion += amt;
-        const rollVal = Math.round(Number(c.rollover_amount || c.saldo_anterior || 0));
-        entradasRenovacion += rollVal;
       } else {
         totalPrestado += amt;
       }
@@ -2825,9 +2785,8 @@ const db = {
       descuentosRetenidos += Math.round(ret);
     });
 
-    if (entradasRenovacion <= 0 && renewalPaymentsTotal > 0) {
-      entradasRenovacion = renewalPaymentsTotal;
-    }
+    // Entradas por renovación deben reflejar única y exclusivamente el valor real de las transacciones de renovación ejecutadas en payments
+    entradasRenovacion = renewalPaymentsTotal;
 
     // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda como dato patrimonial en la UI):
     // TOTAL A ENTREGAR = (Total Cobrado Hoy + Entradas por Renovación Hoy + Descuentos Retenidos) - (Total Prestado Hoy + Desembolsos por Renovación)
