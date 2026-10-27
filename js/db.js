@@ -12,6 +12,15 @@ let supabaseInstance = null;
 async function initSupabase() {
   if (supabaseInstance) return supabaseInstance;
 
+  if (window.supabase && typeof window.supabase.createClient === 'function') {
+    try {
+      supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      if (supabaseInstance) return supabaseInstance;
+    } catch (err) {
+      console.warn("Error al inicializar cliente directo de Supabase:", err);
+    }
+  }
+
   // 1. Inicialización con espera activa por el SDK CDN de Supabase en móvil/escritorio
   for (let attempt = 0; attempt < 15; attempt++) {
     if (window.supabase && typeof window.supabase.createClient === 'function') {
@@ -22,7 +31,7 @@ async function initSupabase() {
         console.warn("Error al inicializar cliente directo de Supabase:", err);
       }
     }
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 80));
   }
 
   // 2. Fallback opcional a /api/config sólo en entornos Node/Vercel
@@ -44,6 +53,46 @@ async function initSupabase() {
 }
 
 const db = {
+  _memCache: {},
+  _inflight: {},
+
+  _getCachedOrFetch(key, ttlMs, fetcherFn) {
+    const now = Date.now();
+    const entry = this._memCache[key];
+    if (entry && (now - entry.ts < ttlMs)) {
+      return Promise.resolve(entry.data);
+    }
+    if (this._inflight[key]) {
+      return this._inflight[key];
+    }
+    const p = Promise.resolve()
+      .then(() => fetcherFn())
+      .then(res => {
+        this._memCache[key] = { ts: Date.now(), data: res };
+        delete this._inflight[key];
+        return res;
+      })
+      .catch(err => {
+        delete this._inflight[key];
+        throw err;
+      });
+    this._inflight[key] = p;
+    return p;
+  },
+
+  invalidateCache(prefix = null) {
+    if (!prefix) {
+      this._memCache = {};
+      this._currentUserRouteCache = null;
+      this._currentUserRouteCacheTime = 0;
+      this.cachedUsers = null;
+      return;
+    }
+    Object.keys(this._memCache).forEach(k => {
+      if (k.startsWith(prefix)) delete this._memCache[k];
+    });
+  },
+
   getColombiaLocalDateStr(rawInput = new Date()) {
     if (!rawInput) rawInput = new Date();
 
@@ -135,9 +184,7 @@ const db = {
     try {
       const d = rawInput instanceof Date ? rawInput : new Date(rawInput);
       if (!isNaN(d.getTime())) {
-        // El ciclo operativo diario va de 06:00 AM a 05:59:59.999 AM del día siguiente en hora de Colombia.
-        // Al restar 6 horas al timestamp antes de extraer la fecha en America/Bogota, cualquier hora entre
-        // 00:00 y 05:59:59 AM pertenece a la fecha operativa del día anterior, y desde las 06:00 AM inicia el nuevo día.
+        // El ciclo operativo diario va estrictamente de 06:00:00 AM a 05:59:59.999 AM del día siguiente en hora de Colombia.
         const shifted = new Date(d.getTime() - (6 * 60 * 60 * 1000));
         return this.getColombiaLocalDateStr(shifted);
       }
@@ -147,9 +194,8 @@ const db = {
 
   getRouteOperationalShiftWindowSync(routeObj, targetDate = null) {
     // Regla estricta de las 6:00 AM:
-    // El día operativo comienza estrictamente a las 06:00 AM del día actual y termina a las 05:59:59.999 AM del día siguiente.
-    // Cualquier cobro o renovación realizado en la noche (ej. 7:00 PM u 8:00 PM) pertenece y se suma al día en curso.
-    // El reseteo a $0 ocurre únicamente al cruzar las 6:00 AM de la nueva mañana.
+    // El rango operativo es estrictamente desde las 06:00:00 AM del día actual hasta las 05:59:59.999 AM del día siguiente.
+    // Cualquier transacción hecha antes de las 06:00 AM (de la jornada anterior) queda totalmente excluida del día nuevo.
     const openH = 6;
     const openM = 0;
     const pad = (n) => String(n).padStart(2, '0');
@@ -193,12 +239,57 @@ const db = {
     };
   },
 
+  /**
+   * Evalúa estrictamente si un registro (pago, cartón, movimiento) ocurrió dentro de la ventana
+   * operativa [06:00:00 AM del día actual, 05:59:59.999 AM del día siguiente).
+   * Si el registro tiene un timestamp con hora (ej. created_at), manda EXCLUSIVAMENTE ese timestamp,
+   * jamás haciendo fallback a una fecha plana YYYY-MM-DD que arrastraría transacciones previas a las 6:00 AM.
+   */
+  isRecordInOperationalShift(rec, shiftWindow = null, useEffective = false) {
+    if (!rec) return false;
+    const sWin = shiftWindow || this.getRouteOperationalShiftWindowSync();
+    const startMs = useEffective ? sWin.effectiveStart.getTime() : sWin.shiftStart.getTime();
+    const endMs = sWin.shiftEnd.getTime();
+
+    // 1. Prioridad absoluta: cualquier campo con timestamp completo (con hora)
+    const exactFields = [rec.created_at, rec.fecha_pago, rec.fecha_apertura, rec.fecha_inicio, rec.fecha];
+    for (const raw of exactFields) {
+      if (!raw) continue;
+      if (raw instanceof Date && !isNaN(raw.getTime())) {
+        const ms = raw.getTime();
+        return ms >= startMs && ms < endMs;
+      }
+      const str = String(raw).trim();
+      if (str.includes('T') || str.includes(':')) {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+          const ms = d.getTime();
+          return ms >= startMs && ms < endMs;
+        }
+      }
+    }
+
+    // 2. Solo si el registro carece por completo de timestamp con hora, evaluar fecha YYYY-MM-DD
+    const dateOnlyRaw = rec.date || rec.fecha_pago || rec.fecha || rec.fecha_apertura || rec.fecha_inicio;
+    if (!dateOnlyRaw) return false;
+    if (useEffective && sWin.effectiveStart.getTime() > sWin.shiftStart.getTime()) {
+      return false;
+    }
+    const s = String(dateOnlyRaw).trim().split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      return s === sWin.shiftDateStr;
+    }
+    return false;
+  },
+
   async getRouteOperationalShiftWindow(routeOrRouteId, targetDate = null, agentId = null) {
     let route = null;
     if (routeOrRouteId && typeof routeOrRouteId === 'object' && routeOrRouteId.id) {
       route = routeOrRouteId;
     } else if (typeof routeOrRouteId === 'string' && routeOrRouteId.trim() && routeOrRouteId.trim() !== 'ALL') {
-      route = await this.getRouteById(routeOrRouteId.trim());
+      const routes = await this.getRoutes();
+      const targetId = routeOrRouteId.trim();
+      route = (routes || []).find(r => r && String(r.id) === targetId) || null;
     }
 
     if (!route && agentId) {
@@ -214,13 +305,25 @@ const db = {
     return this.getRouteOperationalShiftWindowSync(route, targetDate);
   },
 
+  async getCartones(forceRefresh = false) {
+    if (forceRefresh) this.invalidateCache('cartones');
+    return this._getCachedOrFetch('cartones_all', 4000, async () => {
+      const supabase = await initSupabase();
+      const { data, error } = await supabase.from('cartones').select('*');
+      if (error) {
+        console.warn("Aviso al obtener cartones:", error.message);
+        return [];
+      }
+      return data || [];
+    });
+  },
+
   async initSupabase() {
     return await initSupabase();
   },
 
   async init() {
     await initSupabase();
-    // v121: Se desactiva el mapeo automático en cada carga para prevenir el error 'permission denied for sequence cartones_numero_carton_seq'
   },
 
   async mapExistingClientsToCartones() {
@@ -397,43 +500,48 @@ const db = {
   },
 
   // USERS
-  async getUsers() {
-    const supabase = await initSupabase();
+  async getUsers(forceRefresh = false) {
     const currentUser = this.getCurrentUser();
     if (!currentUser) return [];
+    const cacheKey = `users_${currentUser.username || currentUser.id || 'anon'}`;
+    if (forceRefresh) this.invalidateCache('users_');
 
-    if (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin' || currentUser.role === 'Usuario Supervisor') {
-      const { data, error } = await supabase.from('users').select('*');
+    return this._getCachedOrFetch(cacheKey, 4000, async () => {
+      const supabase = await initSupabase();
+      if (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin' || currentUser.role === 'Usuario Supervisor') {
+        const { data, error } = await supabase.from('users').select('*');
+        if (error) {
+          console.error('Error de Supabase al cargar usuarios:', error);
+          return [];
+        }
+        return data || [];
+      }
+
+      if (currentUser.role === 'Agente Independiente') {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', currentUser.username);
+        if (error) return [currentUser];
+        return (data && data.length > 0) ? data : [currentUser];
+      }
+
+      const supId = this.getSupervisorId();
+      if (!supId) return [];
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .or(`supervisor_id.eq."${supId}",username.eq."${supId}"`);
       if (error) {
         console.error('Error de Supabase al cargar usuarios:', error);
         return [];
       }
       return data || [];
-    }
-
-    if (currentUser.role === 'Agente Independiente') {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', currentUser.username);
-      if (error) return [currentUser];
-      return (data && data.length > 0) ? data : [currentUser];
-    }
-
-    const supId = this.getSupervisorId();
-    if (!supId) return [];
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .or(`supervisor_id.eq."${supId}",username.eq."${supId}"`);
-    if (error) {
-      console.error('Error de Supabase al cargar usuarios:', error);
-      return [];
-    }
-    return data || [];
+    });
   },
 
   async saveUser(user) {
+    this.invalidateCache('users_');
     const supabase = await initSupabase();
     console.log('💾 [BulaPay DB saveUser] Recibido usuario para inserción con rol:', user.role);
     const supId = this.getSupervisorId();
@@ -689,6 +797,20 @@ const db = {
     try {
       const cleanInput = String(username).trim();
       const lowerInput = cleanInput.toLowerCase();
+
+      // Atajo rápido en memoria si la lista de usuarios ya está en caché
+      const curUser = this.getCurrentUser();
+      const cacheKey = curUser ? `users_${curUser.username || curUser.id || 'anon'}` : null;
+      if (cacheKey && this._memCache[cacheKey] && (Date.now() - this._memCache[cacheKey].ts < 5000)) {
+        const cachedMatch = (this._memCache[cacheKey].data || []).find(u =>
+          u && (
+            String(u.username || '').toLowerCase() === lowerInput ||
+            String(u.documentNumber || '').trim() === cleanInput
+          )
+        );
+        if (cachedMatch) return cachedMatch;
+      }
+
       const supabase = await initSupabase();
 
       let foundUser = null;
@@ -816,6 +938,7 @@ const db = {
   },
 
   async deleteUser(username) {
+    this.invalidateCache('users_');
     const supabase = await initSupabase();
     const { error } = await supabase
       .from('users')
@@ -939,113 +1062,54 @@ const db = {
   async getAgentRecaudoHoyDirect(agentId, dateStr = null, routeId = null) {
     if (!agentId && !routeId) return 0;
     try {
-      const supabase = await initSupabase();
       const cleanAgentId = agentId ? String(agentId).trim() : null;
       const cleanRouteId = routeId ? String(routeId).trim() : null;
       const lowerAgentId = cleanAgentId ? cleanAgentId.toLowerCase() : null;
       const lowerRouteId = cleanRouteId ? cleanRouteId.toLowerCase() : null;
 
-      let userObj = null;
-      if (cleanAgentId) {
-        userObj = await this.getUserByUsername(cleanAgentId);
-      }
+      // Ejecutar lecturas en paralelo con caché en memoria para máxima velocidad (sin bloqueos ni RPCs con desfase UTC)
+      const [userObj, allCartones, paymentList] = await Promise.all([
+        cleanAgentId ? this.getUserByUsername(cleanAgentId) : Promise.resolve(null),
+        this.getCartones(),
+        this.getPayments()
+      ]);
+
       const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
       const effectiveRouteIdLower = lowerRouteId || (userObj && (userObj.routeId || userObj.route_id) ? String(userObj.routeId || userObj.route_id).trim().toLowerCase() : null);
 
-      // Calcular ventana de Jornada Operativa según la Regla de las 6:00 AM (06:00 AM a 05:59:59 AM del día siguiente)
+      // Calcular ventana de Jornada Operativa según la Regla Estricta de las 6:00 AM (06:00:00 AM a 05:59:59.999 AM del día siguiente)
       const shiftWindow = await this.getRouteOperationalShiftWindow(cleanRouteId || effectiveRouteIdLower, dateStr, cleanAgentId);
       const targetDate = shiftWindow.shiftDateStr;
 
-      let rpcTotal = 0;
-      // Intento 1: Llamada RPC SECURITY DEFINER en Supabase pasando explícitamente la fecha operativa (6:00 AM)
-      try {
-        const { data: rpcVal, error: rpcErr } = await supabase.rpc('get_agent_recaudo_hoy', {
-          p_agent_id: cleanAgentId,
-          p_date: targetDate,
-          p_route_id: cleanAgentId ? null : cleanRouteId
-        });
-
-        if (!rpcErr && rpcVal !== null && rpcVal !== undefined) {
-          rpcTotal = Math.round(Number(rpcVal) || 0);
-          console.log(`✅ [Supabase RPC get_agent_recaudo_hoy] Recaudo obtenido via SECURITY DEFINER (Jornada ${targetDate}): $${rpcTotal}`);
-        }
-      } catch (eRpc) {
-        console.warn("⚠️ Aviso al llamar RPC get_agent_recaudo_hoy:", eRpc);
-      }
-
-      // Pre-cargar cartones para verificar asignación estricta por cartón y agente
+      // Mapa en memoria de cartones para verificar asignación estricta por cartón y agente
       const cartonMap = new Map();
-      let allCartones = [];
-      try {
-        const { data: cartData } = await supabase
-          .from('cartones')
-          .select('id, cliente_id, agent_id, route_id, saldo_anterior, rollover_amount, estado, created_at, fecha_apertura');
-        if (Array.isArray(cartData)) {
-          allCartones = cartData;
-          cartData.forEach(c => {
-            if (c && c.id) {
-              cartonMap.set(String(c.id).toLowerCase(), {
-                agent_id: c.agent_id ? String(c.agent_id).trim().toLowerCase() : '',
-                route_id: c.route_id ? String(c.route_id).trim().toLowerCase() : '',
-                cliente_id: c.cliente_id ? String(c.cliente_id).trim() : '',
-                raw: c
-              });
-            }
+      (allCartones || []).forEach(c => {
+        if (c && c.id) {
+          cartonMap.set(String(c.id).toLowerCase(), {
+            agent_id: c.agent_id ? String(c.agent_id).trim().toLowerCase() : '',
+            route_id: c.route_id ? String(c.route_id).trim().toLowerCase() : '',
+            cliente_id: c.cliente_id ? String(c.cliente_id).trim() : '',
+            raw: c
           });
         }
-      } catch (eCart) {
-        console.warn("⚠️ Aviso al pre-cargar cartones en getAgentRecaudoHoyDirect:", eCart);
-      }
-
-      // Intento 2: Consulta directa a la tabla payments incluyendo explícitamente Renovacion, 999 y liquidado === true
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*');
-
-      if (error) {
-        console.error("❌ Error 401 / Permisos RLS en Supabase al consultar tabla 'payments':", error);
-        return rpcTotal;
-      }
-
-      const paymentList = data || [];
-
-      // Función de validación de pago dentro de la ventana de la jornada operativa [06:00:00 AM, 05:59:59.999 AM día siguiente)
-      const isDateInOperationalShift = (rawVal) => {
-        if (!rawVal) return false;
-        let d = null;
-        if (rawVal instanceof Date) {
-          d = rawVal;
-        } else {
-          const s = String(rawVal).trim();
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-            d = new Date(`${s}T12:00:00-05:00`);
-          } else {
-            d = new Date(s);
-          }
-        }
-        if (!d || isNaN(d.getTime())) return false;
-        const ms = d.getTime();
-        return ms >= shiftWindow.shiftStart.getTime() && ms < shiftWindow.shiftEnd.getTime();
-      };
+      });
 
       const seenIds = new Set();
+      const seenRenovCartonIds = new Map();
       const handledRenewalCartonIds = new Set();
+      const handledRenewalClients = new Set();
       const handledRenewalAgentClients = new Set();
       let totalMontoReal = 0;
 
-      paymentList.forEach(p => {
+      (paymentList || []).forEach(p => {
         if (!p) return;
 
         const rawId = String(p.id || '').trim();
         if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
 
-        // Validar fecha dentro de la jornada operativa [6:00 AM hoy, 5:59 AM mañana)
-        // Si tiene timestamp exacto (created_at / fecha_pago / fecha), manda estrictamente la ventana [6:00 AM, 5:59 AM)
-        const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
-        const isToday = hasExactTimestamp
-          ? (isDateInOperationalShift(p.created_at) || isDateInOperationalShift(p.fecha_pago) || isDateInOperationalShift(p.fecha))
-          : isDateInOperationalShift(p.date);
-        if (!isToday) return;
+        // Validar estrictamente dentro de la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
+        // Cualquier transacción hecha antes de las 6:00 AM queda totalmente excluida del recaudo del día nuevo
+        if (!this.isRecordInOperationalShift(p, shiftWindow, true)) return;
 
         // Validar monto e incluir explícitamente payment_type === 'Renovacion', installmentNumber === 999 o liquidado === true
         const amount = Number(p.amount || 0);
@@ -1057,13 +1121,6 @@ const db = {
         const instNum = Number(p.installmentNumber || 0);
         const isArchivedPending = status === 'LIQUIDADO_POR_RENOVACION' && !rawId.startsWith('pay_renov_') && instNum !== 999;
         if (isArchivedPending) return;
-
-        // Auto-saneamiento si un pago masivo/normal de cuota regular tenía payment_type = 'Renovacion' por error previo
-        if (paymentType === 'renovacion' && (isMassPay || (instNum > 0 && instNum < 999 && !rawId.startsWith('pay_renov_')))) {
-          if (rawId) {
-            supabase.from('payments').update({ payment_type: null }).eq('id', rawId).then(() => {}).catch(() => {});
-          }
-        }
 
         const isStrictRenovacion =
           rawId.startsWith('pay_renov_') ||
@@ -1090,18 +1147,14 @@ const db = {
           // FILTRO ESTRICTO Y OBLIGATORIO POR ID DEL AGENTE:
           if (pCartonId && cartonMap.has(pCartonId)) {
             const carton = cartonMap.get(pCartonId);
-            // El cartón DEBE pertenecer específicamente al agente consultado
             if (carton.agent_id === lowerAgentId || (agentNameLower && carton.agent_id === agentNameLower)) {
               matches = true;
             }
-            // Si el cartón existe pero pertenece a otro agente, NUNCA coincide
           } else {
-            // Si el pago no tiene carton_id en el mapa, validar por agent_id / agentName directo del pago
             if (pAgentId === lowerAgentId || pAgentName === lowerAgentId) matches = true;
             if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) matches = true;
           }
         } else if (effectiveRouteIdLower) {
-          // Consulta por ruta sin agente específico
           if (pCartonId && cartonMap.has(pCartonId)) {
             const carton = cartonMap.get(pCartonId);
             if (carton.route_id === effectiveRouteIdLower) matches = true;
@@ -1110,37 +1163,34 @@ const db = {
           }
         }
 
-        // NOTA CRÍTICA: NUNCA asociar por clientCedula como condición de pertenencia.
         if (!matches) return;
 
-        // Deduplicación estricta por ID único de pago
+        // Deduplicación estricta de renovaciones para un mismo cartón en la misma jornada operativa
+        if (isStrictRenovacion && pCartonId) {
+          if (seenRenovCartonIds.has(pCartonId)) {
+            const prevAmt = seenRenovCartonIds.get(pCartonId);
+            totalMontoReal = totalMontoReal - prevAmt + Math.round(amount);
+            seenRenovCartonIds.set(pCartonId, Math.round(amount));
+            return;
+          }
+          seenRenovCartonIds.set(pCartonId, Math.round(amount));
+        }
+
         const pId = rawId || `${pCedula}_${p.installmentNumber || ''}_${amount}_${targetDate}`;
         if (seenIds.has(pId)) return;
         seenIds.add(pId);
 
         if (isStrictRenovacion) {
           if (pCartonId) handledRenewalCartonIds.add(pCartonId);
+          if (pCedula) handledRenewalClients.add(pCedula);
           if (pCedula && lowerAgentId) handledRenewalAgentClients.add(`${lowerAgentId}_${pCedula}`);
-          if (rawId && (rawId.startsWith('pay_renov_') || instNum === 999) && (String(p.date || '').trim() !== targetDate || p.liquidado !== true || !p.payment_type)) {
-            supabase
-              .from('payments')
-              .update({
-                date: targetDate,
-                liquidado: true,
-                payment_type: 'Renovacion',
-                installmentNumber: 999
-              })
-              .eq('id', rawId)
-              .then(() => {})
-              .catch(() => {});
-          }
         }
 
         totalMontoReal += Math.round(amount);
       });
 
-      // Respaldo adicional: renovaciones en cartones durante la jornada operativa [6:00 AM, 5:59 AM)
-      allCartones.forEach(c => {
+      // Respaldo adicional: renovaciones en cartones creadas estrictamente durante la jornada operativa [06:00:00 AM, 05:59:59 AM)
+      (allCartones || []).forEach(c => {
         if (!c) return;
         const cId = String(c.id || '').trim().toLowerCase();
         const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
@@ -1160,6 +1210,7 @@ const db = {
         if (!matchesCarton) return;
 
         if (cId && handledRenewalCartonIds.has(cId)) return;
+        if (cCedula && handledRenewalClients.has(cCedula)) return;
         if (cCedula && lowerAgentId && handledRenewalAgentClients.has(`${lowerAgentId}_${cCedula}`)) return;
 
         const cEstado = String(c.estado || c.status || '').trim().toLowerCase();
@@ -1167,18 +1218,14 @@ const db = {
         if (rollover <= 0 && cEstado !== 'activo_por_renovacion') return;
         if (rollover <= 0) return;
 
-        const isCreatedToday = c.created_at
-          ? isDateInOperationalShift(c.created_at)
-          : isDateInOperationalShift(c.fecha_apertura);
-        if (!isCreatedToday) return;
+        if (!this.isRecordInOperationalShift(c, shiftWindow, true)) return;
 
         if (cId) handledRenewalCartonIds.add(cId);
         if (cCedula && lowerAgentId) handledRenewalAgentClients.add(`${lowerAgentId}_${cCedula}`);
         totalMontoReal += rollover;
       });
 
-      if (totalMontoReal > 0) return totalMontoReal;
-      return rpcTotal;
+      return totalMontoReal;
     } catch (e) {
       console.error("❌ Excepción inesperada en getAgentRecaudoHoyDirect:", e);
       return 0;
@@ -1662,22 +1709,31 @@ const db = {
   },
 
   // ROUTES
-  async getRoutes() {
-    const supabase = await initSupabase();
+  async getRoutes(forceRefresh = false) {
     const supId = this.getSupervisorId();
     if (!supId) return [];
-    const { data, error } = await supabase
-      .from('routes')
-      .select('*')
-      .eq('supervisor_id', supId);
-    if (error) {
-      console.error("Error al obtener rutas en Supabase:", error);
-      return [];
-    }
-    return data || [];
+    const cacheKey = `routes_${supId}`;
+    if (forceRefresh) this.invalidateCache(cacheKey);
+    return await this._getCachedOrFetch(cacheKey, 4000, async () => {
+      const supabase = await initSupabase();
+      const { data, error } = await supabase
+        .from('routes')
+        .select('*')
+        .eq('supervisor_id', supId);
+      if (error) {
+        console.error("Error al obtener rutas en Supabase:", error);
+        return [];
+      }
+      return data || [];
+    });
   },
 
   async getRouteById(id) {
+    if (!id) return null;
+    const routes = await this.getRoutes();
+    const cached = (routes || []).find(r => String(r.id) === String(id));
+    if (cached) return cached;
+
     const supabase = await initSupabase();
     const supId = this.getSupervisorId();
     if (!supId) return null;
@@ -1726,6 +1782,7 @@ const db = {
       console.error("Error al crear ruta en Supabase:", error);
       throw error;
     }
+    this.invalidateCache('routes_');
 
     const savedRoute = (data && data[0]) ? data[0] : route;
 
@@ -1780,6 +1837,7 @@ const db = {
         .from('routes')
         .update({ capital: newCapital })
         .eq('id', routeId);
+      this.invalidateCache('routes_');
       if (error) {
         console.error(`Error al actualizar capital de ruta "${routeId}":`, error);
         throw error;
@@ -1796,6 +1854,7 @@ const db = {
         .from('routes')
         .update({ collected: newCollected })
         .eq('id', routeId);
+      this.invalidateCache('routes_');
       if (error) {
         console.error(`Error al actualizar recaudo de ruta "${routeId}":`, error);
         throw error;
@@ -1826,6 +1885,7 @@ const db = {
       .from('routes')
       .delete()
       .eq('id', routeId);
+    this.invalidateCache();
     if (error) {
       console.error(`Error al eliminar ruta "${routeId}" en Supabase:`, error);
       throw error;
@@ -1838,6 +1898,7 @@ const db = {
       .from('routes')
       .update({ agentUsername: agentUsernames, agentName: agentNames })
       .eq('id', routeId);
+    this.invalidateCache('routes_');
     if (error) {
       console.error(`Error al actualizar agentes de la ruta "${routeId}" en Supabase:`, error);
       throw error;
@@ -1864,16 +1925,17 @@ const db = {
           workingDays: workingDaysJSON 
         })
         .eq('supervisor_id', supId);
+      this.invalidateCache('routes_');
 
       if (error) {
         console.error("Error al actualizar horario de rutas con workingDays:", error);
-        // Si el error indica columna inexistente, reintentar sin ella
         if (error.code === 'PGRST204' || (error.message && (error.message.includes('column') || error.message.includes('does not exist')))) {
           console.warn("La columna 'workingDays' no existe en Supabase. Guardando solo horarios y usando localStorage como fallback.", error);
           const { error: retryError } = await supabase
             .from('routes')
             .update({ opening_time: openingTime, closing_time: closingTime })
             .eq('supervisor_id', supId);
+          this.invalidateCache('routes_');
           if (retryError) throw retryError;
         } else {
           throw error;
@@ -1881,12 +1943,12 @@ const db = {
       }
     } catch (e) {
       console.error("Error detallado al actualizar horario de rutas en Supabase:", e);
-      // Reintentar sin la columna workingDays en caso de cualquier error
       try {
         const { error: fallbackError } = await supabase
           .from('routes')
           .update({ opening_time: openingTime, closing_time: closingTime })
           .eq('supervisor_id', supId);
+        this.invalidateCache('routes_');
         if (fallbackError) throw fallbackError;
       } catch (err2) {
         console.error("Error en el fallback de actualización de horario:", err2);
@@ -1910,6 +1972,7 @@ const db = {
     // Invalida cache de la ruta actual
     this._currentUserRouteCache = null;
     this._currentUserRouteCacheTime = 0;
+    this.invalidateCache('routes_');
 
     // Actualizar en localStorage fallback
     try {
@@ -1953,221 +2016,205 @@ const db = {
     return data || [];
   },
 
-  // CLIENTS & CARTONES JOIN (v113 SIMPLIFICADO)
+  // CLIENTS & CARTONES JOIN (v113 SIMPLIFICADO Y OPTIMIZADO EN PARALELO)
   async loadActiveCredits(options = {}) {
-    try {
-      const supabase = await initSupabase();
-      const currentUser = this.getCurrentUser();
-      if (!currentUser) return [];
-      const supId = await this.getSupervisorIdForUser(currentUser);
-      const resolvedRouteId = currentUser.routeId || currentUser.route_id || (await this.getActiveRouteIdForUser(currentUser));
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) return [];
+    const cacheKey = `active_credits_${currentUser.username || currentUser.id || 'anon'}_${currentUser.role || ''}`;
+    if (options && options.forceRefresh) this.invalidateCache(cacheKey);
 
-      // CONSULTA DIRECTA Y SIMPLE v113: Select * sin relaciones de llaves foráneas complejas (evita error PostgREST)
-      const { data: cartonesData, error: cartonesErr } = await supabase
-        .from('cartones')
-        .select('*')
-        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion']);
-
-      if (cartonesErr) {
-        console.error("Error al obtener cartones activos en Supabase:", cartonesErr);
-      }
-
-      // Pre-cargar mapa de la tabla clients para asociar nombres e información de contacto
-      const clientsMap = new Map();
-      let allRawClients = [];
+    return await this._getCachedOrFetch(cacheKey, 4000, async () => {
       try {
-        const { data: rawClients } = await supabase.from('clients').select('*');
-        if (rawClients) {
-          allRawClients = rawClients;
-          rawClients.forEach(c => {
-            if (c && c.cedula) clientsMap.set(String(c.cedula).trim(), c);
-          });
-        }
-      } catch (eCl) {
-        console.warn("Aviso cargando tabla clients para fallback:", eCl);
-      }
+        const supabase = await initSupabase();
+        const [supId, resolvedRouteId, allCartones, rawClientsRes] = await Promise.all([
+          this.getSupervisorIdForUser(currentUser),
+          currentUser.routeId || currentUser.route_id ? Promise.resolve(currentUser.routeId || currentUser.route_id) : this.getActiveRouteIdForUser(currentUser),
+          this.getCartones(!!(options && options.forceRefresh)),
+          supabase.from('clients').select('*')
+        ]);
 
-      const activeCedulasInCartones = new Set(
-        (cartonesData || []).map(c => String(c.cliente_id || '').trim()).filter(Boolean)
-      );
+        const activeStates = new Set(['activo', 'activo_por_renovacion']);
+        const cartonesData = (allCartones || []).filter(c => c && activeStates.has(String(c.estado || '').trim().toLowerCase()));
 
-      // Pre-cargar cédulas en Lista Negra para excluir automáticamente del listado de cobro activo (v124)
-      const blacklistedCedulas = new Set();
-      try {
-        if (allRawClients && allRawClients.length > 0) {
-          allRawClients.forEach(c => {
-            const st = String(c.status || c.estado || '').trim().toUpperCase();
-            const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('MORA') || st.includes('CASTIGADO'));
-            if (isLoss) {
-              const ced = String(c.cedula || '').trim();
-              if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
-            }
-          });
-        }
-        const { data: allCarts } = await supabase.from('cartones').select('cliente_id, estado, status');
-        if (allCarts) {
-          allCarts.forEach(c => {
-            const st = String(c.status || c.estado || '').trim().toUpperCase();
-            const rawEst = String(c.estado || '').trim().toLowerCase();
-            const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
-            if (isLoss && c.cliente_id) {
-              const ced = String(c.cliente_id).trim();
-              if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
-            }
-          });
-        }
-      } catch (eB) {
-        console.warn("Aviso al obtener lista negra en loadActiveCredits:", eB);
-      }
-
-      const activeCreditsList = [];
-      const cartones = cartonesData || [];
-      const isMasterUser = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
-      const uNameLower = String(currentUser.username || '').trim().toLowerCase();
-      const uIdLower = String(currentUser.id || '').trim().toLowerCase();
-      const uRouteLower = String(resolvedRouteId || '').trim().toLowerCase();
-      const supIdLower = String(supId || '').trim().toLowerCase();
-
-      const matchesCurrentUserScope = (recSupervisorId, recAgentId, recRouteId) => {
-        if (isMasterUser) return true;
-        const cSup = String(recSupervisorId || '').trim().toLowerCase();
-        const cAgent = String(recAgentId || '').trim().toLowerCase();
-        const cRoute = String(recRouteId || '').trim().toLowerCase();
-
-        if (currentUser.role === 'Agente Independiente') {
-          return (cSup && cSup === uNameLower) ||
-                 (cAgent && cAgent === uNameLower) ||
-                 (!cSup && (!cAgent || cAgent === uNameLower));
-        } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
-          return (uRouteLower && cRoute && cRoute === uRouteLower) ||
-                 (cAgent && (cAgent === uNameLower || (uIdLower && cAgent === uIdLower)));
-        } else if (supIdLower) {
-          return (cSup && cSup === supIdLower) ||
-                 (cAgent && cAgent === supIdLower);
-        }
-        return true;
-      };
-
-      const addedCedulasForScope = new Set();
-
-      cartones.forEach(carton => {
-        const cedula = String(carton.cliente_id || '').trim();
-        if (!cedula || blacklistedCedulas.has(cedula)) return;
-
-        const joinedClient = (carton.clients && typeof carton.clients === 'object' && carton.clients.name)
-          ? carton.clients
-          : (clientsMap.get(cedula) || {});
-
-        const montoPrestado = Number(carton.monto_prestado || (joinedClient ? joinedClient.amount : 0) || 0);
-        const totalDebt = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
-        const outVal = Number(carton.outstanding);
-        const tdVal = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
-        let outstanding = 0;
-        if (!isNaN(outVal) && outVal > 0) {
-          outstanding = Math.round(outVal);
-        } else if (tdVal > 0) {
-          outstanding = Math.round(tdVal);
-        } else {
-          outstanding = isNaN(outVal) ? 0 : Math.max(0, Math.round(outVal));
-        }
-        const installmentsCount = Number(carton.installments_count || 1);
-        const installmentAmount = Number(carton.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
-        const discountAmount = Number(carton.discount_amount || 0);
-        const netCash = Number(carton.net_cash || (montoPrestado - discountAmount));
-
-        const cartonSupervisorId = carton.supervisor_id || joinedClient.supervisor_id || null;
-        const cartonAgentId = carton.agent_id || joinedClient.agent_id || null;
-        const cartonRouteId = carton.route_id || carton.routeId || joinedClient.routeId || null;
-
-        if (!matchesCurrentUserScope(cartonSupervisorId, cartonAgentId, cartonRouteId)) return;
-
-        addedCedulasForScope.add(cedula);
-
-        activeCreditsList.push({
-          ...joinedClient,
-          ...carton,
-          cedula: cedula,
-          cliente_id: cedula,
-          client_id: cedula,
-          name: joinedClient.name || carton.nombre_cliente || `Cliente ${cedula}`,
-          phone: joinedClient.phone || '',
-          email: joinedClient.email || '',
-          city: joinedClient.city || '',
-          zone: joinedClient.zone || '',
-          risk: joinedClient.risk || 'Verde',
-          monto_prestado: montoPrestado,
-          amount: montoPrestado,
-          total_debt: totalDebt,
-          totalDebt: totalDebt,
-          outstanding: outstanding,
-          installments_count: installmentsCount,
-          installmentsCount: installmentsCount,
-          installment_amount: installmentAmount,
-          installmentAmount: installmentAmount,
-          discount_amount: discountAmount,
-          discount_reason: carton.discount_reason || null,
-          net_cash: netCash,
-          estado: 'activo',
-          status: 'Activo',
-          routeId: carton.route_id || joinedClient.routeId || null,
-          agent_id: carton.agent_id || joinedClient.agent_id || null,
-          supervisor_id: carton.supervisor_id || joinedClient.supervisor_id || null,
-          carton_id: carton.id,
-          numero_carton: carton.numero_carton,
-          fecha_apertura: carton.fecha_apertura || carton.fecha_inicio || carton.created_at || joinedClient.created_at,
-          created_at: carton.fecha_apertura || carton.fecha_inicio || carton.created_at || joinedClient.created_at
-        });
-      });
-
-      // Fallback para clientes con deuda activa en la tabla 'clients' cuyo cartón aún no esté activo en 'cartones'
-      if (allRawClients && allRawClients.length > 0) {
+        // Pre-cargar mapa de la tabla clients para asociar nombres e información de contacto
+        const clientsMap = new Map();
+        const allRawClients = (rawClientsRes && rawClientsRes.data) ? rawClientsRes.data : [];
         allRawClients.forEach(c => {
-          const cedula = String(c.cedula || '').trim();
-          if (!cedula || addedCedulasForScope.has(cedula) || blacklistedCedulas.has(cedula)) return;
-          if (this.isBlacklistedClient(c)) return;
-          const outVal = Number(c.outstanding || 0);
-          if (outVal <= 0) return;
-          if (!matchesCurrentUserScope(c.supervisor_id, c.agent_id, c.routeId || c.route_id)) return;
+          if (c && c.cedula) clientsMap.set(String(c.cedula).trim(), c);
+        });
 
-          const montoPrestado = Number(c.amount || c.monto_prestado || 0);
-          const totalDebt = Number(c.totalDebt || c.total_debt || (montoPrestado ? Math.round(montoPrestado * 1.2) : outVal));
-          const installmentsCount = Number(c.installmentsCount || c.installments_count || 30);
-          const installmentAmount = Number(c.installmentAmount || c.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
+        const activeCedulasInCartones = new Set(
+          (cartonesData || []).map(c => String(c.cliente_id || '').trim()).filter(Boolean)
+        );
+
+        // Pre-cargar cédulas en Lista Negra reutilizando los arrays ya obtenidos en memoria (0 consultas adicionales)
+        const blacklistedCedulas = new Set();
+        allRawClients.forEach(c => {
+          const st = String(c.status || c.estado || '').trim().toUpperCase();
+          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('MORA') || st.includes('CASTIGADO'));
+          if (isLoss) {
+            const ced = String(c.cedula || '').trim();
+            if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
+          }
+        });
+        (allCartones || []).forEach(c => {
+          const st = String(c.status || c.estado || '').trim().toUpperCase();
+          const rawEst = String(c.estado || '').trim().toLowerCase();
+          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
+          if (isLoss && c.cliente_id) {
+            const ced = String(c.cliente_id).trim();
+            if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
+          }
+        });
+
+        const activeCreditsList = [];
+        const cartones = cartonesData || [];
+        const isMasterUser = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
+        const uNameLower = String(currentUser.username || '').trim().toLowerCase();
+        const uIdLower = String(currentUser.id || '').trim().toLowerCase();
+        const uRouteLower = String(resolvedRouteId || '').trim().toLowerCase();
+        const supIdLower = String(supId || '').trim().toLowerCase();
+
+        const matchesCurrentUserScope = (recSupervisorId, recAgentId, recRouteId) => {
+          if (isMasterUser) return true;
+          const cSup = String(recSupervisorId || '').trim().toLowerCase();
+          const cAgent = String(recAgentId || '').trim().toLowerCase();
+          const cRoute = String(recRouteId || '').trim().toLowerCase();
+
+          if (currentUser.role === 'Agente Independiente') {
+            return (cSup && cSup === uNameLower) ||
+                   (cAgent && cAgent === uNameLower) ||
+                   (!cSup && (!cAgent || cAgent === uNameLower));
+          } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
+            return (uRouteLower && cRoute && cRoute === uRouteLower) ||
+                   (cAgent && (cAgent === uNameLower || (uIdLower && cAgent === uIdLower)));
+          } else if (supIdLower) {
+            return (cSup && cSup === supIdLower) ||
+                   (cAgent && cAgent === supIdLower);
+          }
+          return true;
+        };
+
+        const addedCedulasForScope = new Set();
+
+        cartones.forEach(carton => {
+          const cedula = String(carton.cliente_id || '').trim();
+          if (!cedula || blacklistedCedulas.has(cedula)) return;
+
+          const joinedClient = (carton.clients && typeof carton.clients === 'object' && carton.clients.name)
+            ? carton.clients
+            : (clientsMap.get(cedula) || {});
+
+          const montoPrestado = Number(carton.monto_prestado || (joinedClient ? joinedClient.amount : 0) || 0);
+          const totalDebt = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
+          const outVal = Number(carton.outstanding);
+          const tdVal = Number(carton.total_debt || carton.totalDebt || (joinedClient ? joinedClient.totalDebt : 0) || (montoPrestado ? Math.round(montoPrestado * 1.2) : 0));
+          let outstanding = 0;
+          if (!isNaN(outVal) && outVal > 0) {
+            outstanding = Math.round(outVal);
+          } else if (tdVal > 0) {
+            outstanding = Math.round(tdVal);
+          } else {
+            outstanding = isNaN(outVal) ? 0 : Math.max(0, Math.round(outVal));
+          }
+          const installmentsCount = Number(carton.installments_count || 1);
+          const installmentAmount = Number(carton.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
+          const discountAmount = Number(carton.discount_amount || 0);
+          const netCash = Number(carton.net_cash || (montoPrestado - discountAmount));
+
+          const cartonSupervisorId = carton.supervisor_id || joinedClient.supervisor_id || null;
+          const cartonAgentId = carton.agent_id || joinedClient.agent_id || null;
+          const cartonRouteId = carton.route_id || carton.routeId || joinedClient.routeId || null;
+
+          if (!matchesCurrentUserScope(cartonSupervisorId, cartonAgentId, cartonRouteId)) return;
 
           addedCedulasForScope.add(cedula);
+
           activeCreditsList.push({
-            ...c,
+            ...joinedClient,
+            ...carton,
             cedula: cedula,
             cliente_id: cedula,
             client_id: cedula,
-            name: c.name || `Cliente ${cedula}`,
+            name: joinedClient.name || carton.nombre_cliente || `Cliente ${cedula}`,
+            phone: joinedClient.phone || '',
+            email: joinedClient.email || '',
+            city: joinedClient.city || '',
+            zone: joinedClient.zone || '',
+            risk: joinedClient.risk || 'Verde',
             monto_prestado: montoPrestado,
             amount: montoPrestado,
             total_debt: totalDebt,
             totalDebt: totalDebt,
-            outstanding: Math.round(outVal),
+            outstanding: outstanding,
             installments_count: installmentsCount,
             installmentsCount: installmentsCount,
             installment_amount: installmentAmount,
             installmentAmount: installmentAmount,
+            discount_amount: discountAmount,
+            discount_reason: carton.discount_reason || null,
+            net_cash: netCash,
             estado: 'activo',
             status: 'Activo',
-            routeId: c.routeId || c.route_id || null,
-            agent_id: c.agent_id || null,
-            supervisor_id: c.supervisor_id || null,
-            carton_id: c.carton_id || c.id || null,
-            fecha_apertura: c.fecha_apertura || c.created_at,
-            created_at: c.created_at
+            routeId: carton.route_id || joinedClient.routeId || null,
+            agent_id: carton.agent_id || joinedClient.agent_id || null,
+            supervisor_id: carton.supervisor_id || joinedClient.supervisor_id || null,
+            carton_id: carton.id,
+            numero_carton: carton.numero_carton,
+            fecha_apertura: carton.fecha_apertura || carton.fecha_inicio || carton.created_at || joinedClient.created_at,
+            created_at: carton.created_at || carton.fecha_apertura || carton.fecha_inicio || joinedClient.created_at
           });
         });
-      }
 
-      console.log('✅ [BulaPay DB] Cartones activos re-mapeados con clients (loadActiveCredits):', activeCreditsList);
-      return activeCreditsList;
-    } catch (err) {
-      console.error("Excepción en loadActiveCredits:", err);
-      return [];
-    }
+        // Fallback para clientes con deuda activa en la tabla 'clients' cuyo cartón aún no esté activo en 'cartones'
+        if (allRawClients && allRawClients.length > 0) {
+          allRawClients.forEach(c => {
+            const cedula = String(c.cedula || '').trim();
+            if (!cedula || addedCedulasForScope.has(cedula) || blacklistedCedulas.has(cedula)) return;
+            if (this.isBlacklistedClient(c)) return;
+            const outVal = Number(c.outstanding || 0);
+            if (outVal <= 0) return;
+            if (!matchesCurrentUserScope(c.supervisor_id, c.agent_id, c.routeId || c.route_id)) return;
+
+            const montoPrestado = Number(c.amount || c.monto_prestado || 0);
+            const totalDebt = Number(c.totalDebt || c.total_debt || (montoPrestado ? Math.round(montoPrestado * 1.2) : outVal));
+            const installmentsCount = Number(c.installmentsCount || c.installments_count || 30);
+            const installmentAmount = Number(c.installmentAmount || c.installment_amount || (installmentsCount ? Math.round(totalDebt / installmentsCount) : 0));
+
+            addedCedulasForScope.add(cedula);
+            activeCreditsList.push({
+              ...c,
+              cedula: cedula,
+              cliente_id: cedula,
+              client_id: cedula,
+              name: c.name || `Cliente ${cedula}`,
+              monto_prestado: montoPrestado,
+              amount: montoPrestado,
+              total_debt: totalDebt,
+              totalDebt: totalDebt,
+              outstanding: Math.round(outVal),
+              installments_count: installmentsCount,
+              installmentsCount: installmentsCount,
+              installment_amount: installmentAmount,
+              installmentAmount: installmentAmount,
+              estado: 'activo',
+              status: 'Activo',
+              routeId: c.routeId || c.route_id || null,
+              agent_id: c.agent_id || null,
+              supervisor_id: c.supervisor_id || null,
+              carton_id: c.carton_id || c.id || null,
+              fecha_apertura: c.fecha_apertura || c.created_at,
+              created_at: c.created_at
+            });
+          });
+        }
+
+        return activeCreditsList;
+      } catch (err) {
+        console.error("Excepción en loadActiveCredits:", err);
+        return [];
+      }
+    });
   },
 
   async getClients() {
@@ -2614,23 +2661,27 @@ const db = {
   },
 
   async getCierreCajaDataForRoute(routeId = null, agentUserObj = null) {
-    const supabase = await initSupabase();
+    // Ejecutar consultas principales en paralelo desde caché en memoria para respuesta instantánea
+    const [allRoutes, allClients, allPayments] = await Promise.all([
+      this.getRoutes(),
+      this.getClients(),
+      this.getPayments()
+    ]);
 
     let route = null;
     let targetRouteId = routeId || (!agentUserObj ? 'ALL' : null);
 
     if (targetRouteId && targetRouteId !== 'ALL') {
-      route = await this.getRouteById(targetRouteId);
+      route = (allRoutes || []).find(r => String(r.id) === String(targetRouteId)) || (await this.getRouteById(targetRouteId));
     }
 
     if (!route && agentUserObj) {
       targetRouteId = agentUserObj.routeId || agentUserObj.route_id || (await this.getActiveRouteIdForUser(agentUserObj));
       if (targetRouteId && targetRouteId !== 'ALL') {
-        route = await this.getRouteById(targetRouteId);
+        route = (allRoutes || []).find(r => String(r.id) === String(targetRouteId)) || (await this.getRouteById(targetRouteId));
       }
     }
 
-    const allRoutes = await this.getRoutes();
     if (!route && agentUserObj) {
       const uName = agentUserObj.username || agentUserObj.id;
       const uFull = agentUserObj.name;
@@ -2638,11 +2689,11 @@ const db = {
       if (route) targetRouteId = route.id;
     }
 
-    // Obtener ventana de la jornada operativa según horario de la ruta (6:00 AM a 5:59 AM)
+    // Obtener ventana estricta de la jornada operativa según Regla de las 6:00 AM (06:00:00 AM hoy a 05:59:59.999 AM mañana)
     const shiftWindow = await this.getRouteOperationalShiftWindow(route || targetRouteId, null, agentUserObj?.username);
     const todayStr = shiftWindow.shiftDateStr;
 
-    // 1. Capital Base (Inversión)
+    // 1. Capital Base (Inversión consolidada de rutas activas o ruta individual)
     let capitalBase = 0;
     if (route) {
       capitalBase = Number(route.capital || route.monto_inicial || 0);
@@ -2685,7 +2736,6 @@ const db = {
     const routeName = route?.name || (targetRouteId === 'ALL' ? 'Consolidado General (Todas las rutas)' : 'Ruta sin asignar');
 
     // 2. En Calle (Cartera activa en poder de los clientes)
-    const allClients = await this.getClients();
     const routeClients = (allClients || []).filter(c => {
       if (!c) return false;
       const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
@@ -2718,26 +2768,6 @@ const db = {
     // FÓRMULA SOLICITADA: Efectivo en Bolsillo Inicial = (Capital Base - En Calle)
     const efectivoInicial = Math.max(0, capitalBase - enCalle);
 
-    // Función de fecha para evaluar si cae en la jornada operativa [effectiveStart, shiftEnd)
-    const isDateInShift = (rawVal, useEffective = true) => {
-      if (!rawVal) return false;
-      let d = null;
-      if (rawVal instanceof Date) d = rawVal;
-      else {
-        const s = String(rawVal).trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-          d = new Date(`${s}T12:00:00-05:00`);
-        } else {
-          d = new Date(s);
-        }
-      }
-      if (!d || isNaN(d.getTime())) return false;
-      const ms = d.getTime();
-      const startMs = useEffective ? shiftWindow.effectiveStart.getTime() : shiftWindow.shiftStart.getTime();
-      return ms >= startMs && ms < shiftWindow.shiftEnd.getTime();
-    };
-
-    const allPayments = await this.getPayments();
     const doesPaymentBelong = (p) => {
       if (!p) return false;
       const pId = String(p.id || '').trim();
@@ -2760,28 +2790,18 @@ const db = {
       return false;
     };
 
+    // 3. Pagos estrictamente dentro de la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
+    // Cualquier transacción hecha antes de las 6:00 AM (de la jornada anterior) queda totalmente excluida.
+    // Al cruzar las 6:00 AM sin cobros reales en la nueva jornada, la caja y el recaudo amanecen en $0.
     const allBelongingPayments = (allPayments || []).filter(doesPaymentBelong);
-    const shiftPayments = allBelongingPayments.filter(p => {
-      const hasExactTimestamp = !!(p.created_at || p.fecha_pago || p.fecha);
-      return hasExactTimestamp
-        ? (isDateInShift(p.created_at, !!agentUserObj) || isDateInShift(p.fecha_pago, !!agentUserObj) || isDateInShift(p.fecha, !!agentUserObj))
-        : isDateInShift(p.date, !!agentUserObj);
-    });
+    const shiftPayments = allBelongingPayments.filter(p => this.isRecordInOperationalShift(p, shiftWindow, !!agentUserObj));
 
-    // Regla crítica:
-    // - Si es consulta individual del Agente (agentUserObj presente), el contador se resetea estrictamente a $0 en su nueva jornada diaria.
-    // - Si es el panel global del Supervisor (!agentUserObj), muestra permanentemente la información consolidada de las rutas activas aunque el recaudo diario individual esté en $0.
-    const isSupervisorGlobalView = !agentUserObj;
-    const effectivePayments = (isSupervisorGlobalView && shiftPayments.length === 0)
-      ? allBelongingPayments
-      : shiftPayments;
-
-    const renewalPayments = effectivePayments.filter(p => {
+    const renewalPayments = shiftPayments.filter(p => {
       const pType = String(p.payment_type || '').toLowerCase();
       const pId = String(p.id || '').toLowerCase();
       return pType.includes('renov') || pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999;
     });
-    const normalPayments = effectivePayments.filter(p => {
+    const normalPayments = shiftPayments.filter(p => {
       const pType = String(p.payment_type || '').toLowerCase();
       const pId = String(p.id || '').toLowerCase();
       return !pType.includes('renov') && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999;
@@ -2790,15 +2810,13 @@ const db = {
     const totalCobrado = normalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
     const renewalPaymentsTotal = renewalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    const pagosMasivos = effectivePayments.filter(p => {
+    const pagosMasivos = shiftPayments.filter(p => {
       const pStatus = String(p.status || '').toLowerCase();
       return p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('masivo');
     }).reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    // 4. Créditos creados en la jornada operativa
-    const todayClients = routeClients.filter(c => {
-      return isDateInShift(c.created_at, false) || isDateInShift(c.fecha_apertura, false) || isDateInShift(c.date, false);
-    });
+    // 4. Créditos creados estrictamente en la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
+    const todayClients = routeClients.filter(c => this.isRecordInOperationalShift(c, shiftWindow, false));
 
     let totalPrestado = 0;
     let desembolsosRenovacion = 0;
@@ -2830,7 +2848,7 @@ const db = {
       entradasRenovacion = renewalPaymentsTotal;
     }
 
-    // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda solo como dato informativo en la UI):
+    // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda como dato patrimonial en la UI):
     // TOTAL A ENTREGAR = (Total Cobrado Hoy + Entradas por Renovación Hoy + Descuentos Retenidos) - (Total Prestado Hoy + Desembolsos por Renovación)
     const totalEntregar = Math.max(0, (totalCobrado + entradasRenovacion + descuentosRetenidos) - (totalPrestado + desembolsosRenovacion));
 
@@ -2891,46 +2909,18 @@ const db = {
       created_at: now.toISOString()
     };
 
-    // Intento 1: Llamar RPC cerrar_jornada_ruta en Supabase
-    let rpcSuccess = false;
-    try {
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc('cerrar_jornada_ruta', {
-        p_route_id: data.routeId,
-        p_agent_id: payload.agent_id,
-        p_supervisor_id: payload.supervisor_id,
-        p_tipo_cierre: tipoCierre,
-        p_detalles: payload.detalles
-      });
-      if (!rpcErr && rpcRes && rpcRes.success) {
-        rpcSuccess = true;
-        console.log(`✅ [RPC cerrar_jornada_ruta] Cierre registrado con éxito. ID: ${rpcRes.cierre_id}`);
-      }
-    } catch (e) {
-      console.warn("Aviso llamando RPC cerrar_jornada_ruta:", e);
-    }
-
-    // Intento 2: Inserción directa en tabla cierres_jornada y actualización en routes
-    if (!rpcSuccess) {
+    if (data.routeId && data.routeId !== 'ALL') {
       try {
-        await supabase.from('cierres_jornada').upsert(payload);
-      } catch (eIns) {
-        console.warn("Aviso insertando en cierres_jornada:", eIns);
-      }
-
-      if (data.routeId) {
-        try {
-          await supabase.from('routes').update({
-            fecha_ultimo_cierre: now.toISOString(),
-            ultimo_recaudo_cierre: payload.total_recaudado,
-            collected: 0
-          }).eq('id', data.routeId);
-        } catch (eUp) {
-          console.warn("Aviso actualizando fecha_ultimo_cierre en routes:", eUp);
-        }
+        await supabase.from('routes').update({
+          collected: 0
+        }).eq('id', data.routeId);
+        this.invalidateCache('routes_');
+      } catch (eUp) {
+        console.warn("Aviso actualizando ruta tras cierre:", eUp);
       }
     }
 
-    // Respaldo en localStorage
+    // Respaldo instantáneo en localStorage
     try {
       const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
       localHist.unshift(payload);
@@ -2941,24 +2931,6 @@ const db = {
   },
 
   async getHistorialCierres(routeId = null, agentId = null) {
-    try {
-      const supabase = await initSupabase();
-      let query = supabase.from('cierres_jornada').select('*').order('fecha_cierre', { ascending: false }).limit(50);
-      if (routeId && routeId !== 'ALL') {
-        query = query.eq('route_id', routeId);
-      }
-      if (agentId) {
-        query = query.eq('agent_id', agentId);
-      }
-      const { data, error } = await query;
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data;
-      }
-    } catch (e) {
-      console.warn("Aviso consultando cierres_jornada:", e);
-    }
-
-    // Fallback a localStorage
     try {
       const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
       return localHist.filter(c => {
@@ -2975,52 +2947,43 @@ const db = {
     try {
       // 1. Obtener la ventana de la jornada actual (iniciada a las 6:00 AM)
       const currentShift = await this.getRouteOperationalShiftWindow(routeId, null, agentId);
-      // Fecha de la jornada anterior (shiftStart - 24 horas)
       const prevShiftStartMs = currentShift.shiftStart.getTime() - (24 * 60 * 60 * 1000);
       const prevShiftDateStr = this.getColombiaLocalDateStr(new Date(prevShiftStartMs));
 
-      // Verificar si ya existe cierre registrado para la jornada previa
+      // Verificar en memoria/localStorage si ya existe cierre registrado para la jornada previa (sin bloquear red)
       const cierres = await this.getHistorialCierres(currentShift.routeId, agentId);
       const yaCerrado = (cierres || []).some(c => c.fecha_jornada === prevShiftDateStr);
       if (yaCerrado) return;
 
-      // Si no fue cerrada, archivar únicamente la jornada previa sin afectar ni resetear la jornada activa actual
       const recaudoPrevio = await this.getAgentRecaudoHoyDirect(agentId, prevShiftDateStr, currentShift.routeId);
-      if (recaudoPrevio > 0) {
-        console.log(`ℹ️ [Auto-Cierre 6:00 AM] Archivando jornada laboral anterior (${prevShiftDateStr}) con recaudo: $${recaudoPrevio}`);
-        const supabase = await initSupabase();
-        const currentUser = this.getCurrentUser();
-        const effectiveSupId = currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId();
-        const archivePayload = {
-          id: `cierre_${currentShift.routeId || 'gral'}_${prevShiftDateStr}_auto6am`,
-          route_id: currentShift.routeId,
-          agent_id: agentId || currentUser?.username || '',
-          agent_name: currentUser?.name || agentId || 'Agente de Ruta',
-          supervisor_id: effectiveSupId,
-          fecha_jornada: prevShiftDateStr,
-          hora_apertura: '06:00',
-          inicio_jornada: new Date(prevShiftStartMs).toISOString(),
-          fin_jornada: currentShift.shiftStart.toISOString(),
-          fecha_cierre: currentShift.shiftStart.toISOString(),
-          total_recaudado: recaudoPrevio,
-          total_prestado: 0,
-          efectivo_inicial: 0,
-          efectivo_entregar: recaudoPrevio,
-          detalles: { motivo: 'Reinicio diario estricto a las 6:00 AM', recaudo_archivado: recaudoPrevio },
-          tipo_cierre: 'automatico_reinicio',
-          created_at: currentShift.shiftStart.toISOString()
-        };
-        try {
-          await supabase.from('cierres_jornada').upsert(archivePayload);
-        } catch (_) {}
-        try {
-          const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
-          if (!localHist.some(x => x.fecha_jornada === prevShiftDateStr && x.route_id === currentShift.routeId)) {
-            localHist.unshift(archivePayload);
-            localStorage.setItem('bulapay_cierres_jornada', JSON.stringify(localHist.slice(0, 100)));
-          }
-        } catch (_) {}
-      }
+      const currentUser = this.getCurrentUser();
+      const effectiveSupId = currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId();
+      const archivePayload = {
+        id: `cierre_${currentShift.routeId || 'gral'}_${prevShiftDateStr}_auto6am`,
+        route_id: currentShift.routeId,
+        agent_id: agentId || currentUser?.username || '',
+        agent_name: currentUser?.name || agentId || 'Agente de Ruta',
+        supervisor_id: effectiveSupId,
+        fecha_jornada: prevShiftDateStr,
+        hora_apertura: '06:00',
+        inicio_jornada: new Date(prevShiftStartMs).toISOString(),
+        fin_jornada: currentShift.shiftStart.toISOString(),
+        fecha_cierre: currentShift.shiftStart.toISOString(),
+        total_recaudado: recaudoPrevio,
+        total_prestado: 0,
+        efectivo_inicial: 0,
+        efectivo_entregar: recaudoPrevio,
+        detalles: { motivo: 'Reinicio diario estricto a las 6:00 AM', recaudo_archivado: recaudoPrevio },
+        tipo_cierre: 'automatico_reinicio',
+        created_at: currentShift.shiftStart.toISOString()
+      };
+      try {
+        const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
+        if (!localHist.some(x => x.fecha_jornada === prevShiftDateStr && x.route_id === currentShift.routeId)) {
+          localHist.unshift(archivePayload);
+          localStorage.setItem('bulapay_cierres_jornada', JSON.stringify(localHist.slice(0, 100)));
+        }
+      } catch (_) {}
     } catch (e) {
       console.warn("Aviso en verificarYAutoCerrarJornadaPrevia:", e);
     }
@@ -3608,12 +3571,61 @@ const db = {
       const insertRenovPaymentRecord = async () => {
         if (rolloverVal <= 0) return;
         const todayStr = this.getColombiaOperationalDateStr(new Date());
+
+        // Evaluar si el cartón anterior fue originado/renovado en esta misma jornada operativa
+        let realRecaudoVal = rolloverVal;
+        let oldCartonObj = null;
+        if (payload.old_carton_id) {
+          const cartones = await this.getCartones();
+          oldCartonObj = (cartones || []).find(c => c && String(c.id).toLowerCase() === String(payload.old_carton_id).toLowerCase());
+        }
+        const shiftWin = await this.getRouteOperationalShiftWindow(routeId, todayStr, agentId);
+        if (oldCartonObj && this.isRecordInOperationalShift(oldCartonObj, shiftWin, true)) {
+          const oldMonto = Number(oldCartonObj.monto_prestado || 0);
+          const oldDebt = Number(oldCartonObj.total_debt || 0);
+          const oldInterest = Math.max(0, oldDebt - oldMonto);
+          if (rolloverVal > oldMonto) {
+            realRecaudoVal = rolloverVal - oldMonto;
+          } else {
+            realRecaudoVal = Math.min(rolloverVal, oldInterest);
+          }
+        }
+        if (realRecaudoVal <= 0) return;
+
+        // Verificar si ya existe un pago de liquidación por renovación hoy para este cartón
+        if (payload.old_carton_id) {
+          try {
+            const { data: existPays } = await supabase
+              .from('payments')
+              .select('id, created_at, date')
+              .eq('carton_id', String(payload.old_carton_id))
+              .in('installmentNumber', [999]);
+            const sameShiftPay = (existPays || []).find(p => this.isRecordInOperationalShift(p, shiftWin, true));
+            if (sameShiftPay && sameShiftPay.id) {
+              await supabase
+                .from('payments')
+                .update({
+                  amount: realRecaudoVal,
+                  date: todayStr,
+                  status: 'Pagado',
+                  payment_type: 'Renovacion',
+                  liquidado: true,
+                  agent_id: agentId,
+                  routeId: routeId,
+                  updated_at: nowIso
+                })
+                .eq('id', sameShiftPay.id);
+              return;
+            }
+          } catch (_) {}
+        }
+
         const renovPayRecord = {
           id: `pay_renov_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
           clientCedula: String(clientId).trim(),
           carton_id: payload.old_carton_id || null,
           installmentNumber: 999,
-          amount: rolloverVal,
+          amount: realRecaudoVal,
           date: todayStr,
           status: 'Pagado',
           payment_type: 'Renovacion',
@@ -3956,6 +3968,8 @@ const db = {
       console.warn("Excepción al registrar cuotas pendientes iniciales:", e.message);
     }
 
+    this.invalidateCache();
+
     // Notificar eventos para que la lista izquierda, el recaudo y liquidados se sincronicen de inmediato
     if (typeof window !== 'undefined') {
       try {
@@ -4278,6 +4292,7 @@ const db = {
         console.error("❌ Excepción al actualizar tabla clients:", eCl);
       }
     }
+    this.invalidateCache();
   },
 
   async checkAndHandleLastInstallment(client, onCompleteCallback) {
@@ -4333,31 +4348,35 @@ const db = {
   },
 
   // PAYMENTS
-  async getPayments() {
-    const supabase = await initSupabase();
+  async getPayments(forceRefresh = false) {
     const currentUser = this.getCurrentUser();
     if (!currentUser) return [];
-    
     const supId = await this.getSupervisorIdForUser(currentUser);
-    let query = supabase.from('payments').select('*');
-    
-    if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
-      const agentId = currentUser.id || currentUser.username;
-      if (supId) {
+    const cacheKey = `payments_${supId || currentUser.username || currentUser.id || 'anon'}`;
+    if (forceRefresh) this.invalidateCache(cacheKey);
+
+    return await this._getCachedOrFetch(cacheKey, 3000, async () => {
+      const supabase = await initSupabase();
+      let query = supabase.from('payments').select('*');
+      
+      if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente') {
+        const agentId = currentUser.id || currentUser.username;
+        if (supId) {
+          query = query.eq('supervisor_id', supId);
+        } else if (agentId) {
+          query = query.eq('agent_id', agentId);
+        }
+      } else if (supId) {
         query = query.eq('supervisor_id', supId);
-      } else if (agentId) {
-        query = query.eq('agent_id', agentId);
       }
-    } else if (supId) {
-      query = query.eq('supervisor_id', supId);
-    }
-    
-    const { data, error } = await query;
-    if (error) {
-      console.error("Error al obtener pagos en Supabase:", error);
-      return [];
-    }
-    return data || [];
+      
+      const { data, error } = await query;
+      if (error) {
+        console.error("Error al obtener pagos en Supabase:", error);
+        return [];
+      }
+      return data || [];
+    });
   },
 
   async syncCartonLiquidadoStates() {
@@ -4491,19 +4510,11 @@ const db = {
     }
 
     const currentUser = this.getCurrentUser();
-    // currentUser ya fue declarado arriba
     const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
 
     if (client.routeId && !isIndependent) {
-      const { data: route, error: routeErr } = await supabase
-        .from('routes')
-        .select('*')
-        .eq('id', client.routeId)
-        .maybeSingle();
-
-      if (routeErr) {
-        console.error("Error al verificar horario de la ruta:", routeErr);
-      } else if (route) {
+      const route = await this.getRouteById(client.routeId);
+      if (route) {
         const now = new Date();
         const isOpen = this.isRouteOpen(route, now);
 
@@ -4591,7 +4602,6 @@ const db = {
       .select();
 
     if (payError) {
-      // Si falla porque la columna 'liquidado' aún no está creada, reintentar sin ella
       if (payError.code === 'PGRST204' || (payError.message && payError.message.includes('liquidado'))) {
         delete newPayment.liquidado;
         const retryRes = await supabase.from('payments').insert([newPayment]).select();
@@ -4605,13 +4615,18 @@ const db = {
       }
     }
 
-    // 2. Actualizar saldo pendiente del cliente (Redondeo estricto a números enteros) y arreglo de cuotas en cartones
+    // Invalidar cachés para que el nuevo pago se refleje de inmediato en tiempo real
+    this.invalidateCache();
+
+    // 2. Actualizar saldo pendiente del cliente y arreglo de cuotas en cartones
     await this.updateClientOutstanding(payment.clientCedula, amountPaid, payment.installmentNumber || installmentNumber, newPayment);
 
-    // 3. Registrar abono a la ruta del cliente (Redondeo estricto a números enteros)
+    // 3. Registrar abono a la ruta del cliente
     if (client && client.routeId) {
       await this.updateRouteCollected(client.routeId, amountPaid);
     }
+
+    this.invalidateCache();
     
     // Dispatch custom event to notify supervisor SPA & agent UI in real-time
     window.dispatchEvent(new CustomEvent('bulapay-payment-registered', { detail: newPayment }));
@@ -8157,7 +8172,6 @@ const db = {
 
   async getSupervisorCajaGlobalData(supervisorId, filterRouteId = null) {
     const supabase = await initSupabase();
-    const todayStr = this.getColombiaLocalDateStr(new Date());
     const supId = supervisorId || (this.getCurrentUser() ? this.getCurrentUser().username : 'admin');
 
     try {
@@ -8165,20 +8179,15 @@ const db = {
       let routeIds = [];
 
       if (supabase) {
-        const { data: agentesRuta } = await supabase
-          .from('agentes_ruta')
-          .select('username, ruta_id')
-          .eq('supervisor_id', supId);
+        const [{ data: agentesRuta }, { data: routesData }] = await Promise.all([
+          supabase.from('agentes_ruta').select('username, ruta_id').eq('supervisor_id', supId),
+          supabase.from('routes').select('id, capital, collected').or(`supervisor_id.eq.${supId}`)
+        ]);
 
         if (agentesRuta && agentesRuta.length > 0) {
           agentUsernames = agentesRuta.map(a => a.username).filter(Boolean);
           routeIds = agentesRuta.map(a => a.ruta_id).filter(Boolean);
         }
-
-        const { data: routesData } = await supabase
-          .from('routes')
-          .select('id, capital, collected')
-          .or(`supervisor_id.eq.${supId}`);
 
         if (routesData && routesData.length > 0) {
           routesData.forEach(r => { if (r.id) routeIds.push(r.id); });
@@ -8206,6 +8215,7 @@ const db = {
       let payments = [];
       let cajaMovimientos = [];
       let capitalInjections = [];
+      let routesList = [];
 
       if (supabase) {
         let cQuery = supabase.from('clients').select('*');
@@ -8214,8 +8224,6 @@ const db = {
         } else {
           cQuery = cQuery.or(`supervisor_id.eq.${supId}`);
         }
-        const { data: cData } = await cQuery;
-        clients = cData || [];
 
         let pQuery = supabase.from('payments').select('*');
         if (agentUsernames.length > 0) {
@@ -8223,8 +8231,6 @@ const db = {
         } else {
           pQuery = pQuery.or(`supervisor_id.eq.${supId}`);
         }
-        const { data: pData } = await pQuery;
-        payments = pData || [];
 
         let movQuery = supabase.from('caja_movimientos').select('*');
         if (agentUsernames.length > 0) {
@@ -8232,8 +8238,6 @@ const db = {
         } else {
           movQuery = movQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId}`);
         }
-        const { data: movData } = await movQuery;
-        cajaMovimientos = movData || [];
 
         let injQuery = supabase.from('capital_injections').select('*');
         if (routeIds.length > 0) {
@@ -8241,13 +8245,29 @@ const db = {
         } else {
           injQuery = injQuery.or(`supervisor_id.eq.${supId},agent_id.eq.${supId}`);
         }
-        const { data: injData } = await injQuery;
+
+        const rQuery = routeIds.length > 0 ? supabase.from('routes').select('*').in('id', routeIds) : Promise.resolve({ data: [] });
+
+        const [{ data: cData }, { data: pData }, { data: movData }, { data: injData }, { data: rData }] = await Promise.all([
+          cQuery,
+          pQuery,
+          movQuery,
+          injQuery,
+          rQuery
+        ]);
+
+        clients = cData || [];
+        payments = pData || [];
+        cajaMovimientos = movData || [];
         capitalInjections = injData || [];
+        routesList = rData || [];
       } else {
         clients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
         payments = JSON.parse(localStorage.getItem('bulapay_payments') || '[]');
         cajaMovimientos = JSON.parse(localStorage.getItem('bulapay_caja_movimientos') || '[]');
         capitalInjections = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
+        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+        routesList = localRoutes.filter(r => routeIds.includes(r.id));
       }
 
       let supervisorClients = clients.filter(c => 
@@ -8255,15 +8275,6 @@ const db = {
         (c.routeId && routeIds.includes(c.routeId)) ||
         (c.agent_id && agentUsernames.includes(c.agent_id))
       );
-
-      let routesList = [];
-      if (supabase && routeIds.length > 0) {
-        const { data: rData } = await supabase.from('routes').select('*').in('id', routeIds);
-        routesList = rData || [];
-      } else {
-        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
-        routesList = localRoutes.filter(r => routeIds.includes(r.id));
-      }
 
       if (filterRouteId && String(filterRouteId).trim() !== '') {
         supervisorClients = supervisorClients.filter(c => c.routeId === filterRouteId);
@@ -8273,7 +8284,7 @@ const db = {
         routesList = routesList.filter(r => r.id === filterRouteId);
       }
 
-      // Ventana de la jornada operativa para caja global
+      // Ventana estricta de la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
       const shiftWindow = await this.getRouteOperationalShiftWindow(filterRouteId || (routesList[0]?.id || null));
       const hoyPayments = payments.filter(p => {
         if (!p) return false;
@@ -8281,26 +8292,12 @@ const db = {
         if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
         const pStatus = String(p.status || '').trim().toUpperCase();
         if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'LIQUIDADO_MORA') return false;
+        if (pStatus === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
         if (Number(p.amount || 0) <= 0) return false;
         const belongsToSup = p.supervisor_id === supId || (p.agent_id && agentUsernames.includes(p.agent_id));
         if (!belongsToSup) return false;
-        
-        let pDateObj = null;
-        if (p.created_at) {
-          const d = new Date(p.created_at);
-          if (!isNaN(d.getTime())) pDateObj = d;
-        }
-        if (!pDateObj) {
-          const rawD = p.date || p.fecha_pago || p.fecha;
-          if (rawD) {
-            const cleanD = String(rawD).split('T')[0];
-            const d = new Date(`${cleanD}T12:00:00-05:00`);
-            if (!isNaN(d.getTime())) pDateObj = d;
-          }
-        }
-        if (!pDateObj) return false;
-        const pTime = pDateObj.getTime();
-        return (pTime >= shiftWindow.effectiveStart.getTime() && pTime < shiftWindow.shiftEnd.getTime());
+
+        return this.isRecordInOperationalShift(p, shiftWindow, true);
       });
       const recaudoHoy = hoyPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const carteraEnCalle = supervisorClients.reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
@@ -8402,6 +8399,7 @@ const db = {
     if (supabase) {
       await supabase.from('capital_injections').insert([record]);
     }
+    this.invalidateCache();
 
     const currentLocal = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
     currentLocal.push(record);
@@ -8424,6 +8422,7 @@ const db = {
     if (supabase) {
       await supabase.from('caja_movimientos').insert([record]);
     }
+    this.invalidateCache();
 
     const currentLocal = JSON.parse(localStorage.getItem('bulapay_caja_movimientos') || '[]');
     currentLocal.push(record);
@@ -8452,6 +8451,7 @@ const db = {
         .eq('id', routeId);
       if (routeErr) console.error("Error al actualizar capital base de ruta:", routeErr);
     }
+    this.invalidateCache('routes_');
 
     // Actualizar local storage de rutas
     const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');

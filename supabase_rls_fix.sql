@@ -239,8 +239,19 @@ BEGIN
         AND COALESCE(c.rollover_amount, c.saldo_anterior, 0) > 0
         AND NOT EXISTS (
             SELECT 1 FROM payments p 
-            WHERE p.carton_id = c.id::text 
-            AND (LOWER(COALESCE(p.payment_type, '')) = 'renovacion' OR p."installmentNumber" = 999)
+            WHERE (
+                p.carton_id = c.id::text 
+                OR p."clientCedula" = c.cliente_id
+            )
+            AND (
+                LOWER(COALESCE(p.payment_type, '')) = 'renovacion' 
+                OR p."installmentNumber" = 999 
+                OR p.id LIKE 'pay_renov_%'
+            )
+            AND (
+                (p.created_at IS NOT NULL AND p.created_at >= v_effective_start AND p.created_at < v_shift_end)
+                OR (p.created_at IS NULL AND p.date = v_shift_start_local::date)
+            )
         );
     EXCEPTION WHEN OTHERS THEN
         v_carton_rollover := 0;
@@ -497,15 +508,37 @@ DECLARE
     v_old_carton cartones%ROWTYPE;
     v_target_old_id uuid := NULL;
     v_saldo_liquidar numeric := 0;
+    v_recaudo_real numeric := 0;
+    v_monto_prestado_anterior numeric := 0;
+    v_intereses_actuales numeric := 0;
+    v_is_old_carton_same_shift boolean := false;
+    v_existing_payment_id text := NULL;
     v_new_id uuid;
     v_new_numero bigint;
     v_today_str text;
     v_payment_id text;
     v_agent_name text;
     v_now timestamptz := NOW();
+    v_now_bogota timestamp;
+    v_today_date date;
+    v_shift_today timestamp;
+    v_shift_start timestamptz;
+    v_shift_end timestamptz;
     v_route_final text := NULL;
 BEGIN
-    v_today_str := to_char(v_now AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD');
+    -- Ventana de la Jornada Operativa actual (Regla estricta de las 06:00 AM en Colombia America/Bogota)
+    v_now_bogota := v_now AT TIME ZONE 'America/Bogota';
+    v_today_date := v_now_bogota::date;
+    v_shift_today := v_today_date + '06:00:00'::time;
+    IF v_now_bogota >= v_shift_today THEN
+        v_shift_start := v_shift_today AT TIME ZONE 'America/Bogota';
+        v_shift_end := (v_shift_today + INTERVAL '1 day') AT TIME ZONE 'America/Bogota';
+        v_today_str := to_char(v_today_date, 'YYYY-MM-DD');
+    ELSE
+        v_shift_start := (v_shift_today - INTERVAL '1 day') AT TIME ZONE 'America/Bogota';
+        v_shift_end := v_shift_today AT TIME ZONE 'America/Bogota';
+        v_today_str := to_char(v_today_date - 1, 'YYYY-MM-DD');
+    END IF;
 
     -- Paso 0: Identificar el cartón viejo a liquidar
     IF p_old_carton_id IS NOT NULL AND p_old_carton_id != '' THEN
@@ -535,7 +568,7 @@ BEGIN
         v_target_old_id := v_old_carton.id;
     END IF;
 
-    -- Saldo a liquidar
+    -- Saldo total a liquidar
     v_saldo_liquidar := COALESCE(p_saldo_restante, 0);
     IF v_saldo_liquidar <= 0 AND v_old_carton.id IS NOT NULL THEN
         v_saldo_liquidar := COALESCE(v_old_carton.outstanding, 0);
@@ -553,10 +586,77 @@ BEGIN
         v_agent_name := COALESCE(p_agent_id, 'Sistema');
     END IF;
 
+    -- Evaluar si el cartón a renovar fue creado o renovado en esta MISMA jornada operativa
+    IF v_old_carton.id IS NOT NULL THEN
+        IF (v_old_carton.created_at IS NOT NULL AND v_old_carton.created_at >= v_shift_start AND v_old_carton.created_at < v_shift_end)
+           OR (v_old_carton.created_at IS NULL AND v_old_carton.fecha_apertura IS NOT NULL AND v_old_carton.fecha_apertura >= v_shift_start AND v_old_carton.fecha_apertura < v_shift_end) THEN
+            v_is_old_carton_same_shift := true;
+        END IF;
+    END IF;
+
     -- ========================================================
-    -- PASO 1: INSERT a la tabla de pagos liquidando el saldo exacto restante del cartón viejo
+    -- CÁLCULO ESTRICTO DE RECAUDO REAL:
+    -- Evitar acumular sumas fantasmas o duplicar el monto prestado/saldo anterior en el total del día
     -- ========================================================
-    IF v_saldo_liquidar > 0 THEN
+    IF v_is_old_carton_same_shift THEN
+        -- Retanqueo/Renovación sucesiva sobre un cartón originado en la misma jornada:
+        -- El capital prestado de este cartón ya fue entregado hoy. Para no duplicar dicho capital
+        -- en el "Recaudado Hoy", el recaudo registrado toma ÚNICAMENTE el valor real de los intereses
+        -- o la ganancia/saldo neto cancelado en esta transacción.
+        v_monto_prestado_anterior := COALESCE(v_old_carton.monto_prestado, 0);
+        v_intereses_actuales := GREATEST(0, COALESCE(v_old_carton.total_debt, 0) - v_monto_prestado_anterior);
+        
+        IF v_saldo_liquidar > v_monto_prestado_anterior THEN
+            v_recaudo_real := v_saldo_liquidar - v_monto_prestado_anterior;
+        ELSE
+            v_recaudo_real := LEAST(v_saldo_liquidar, v_intereses_actuales);
+        END IF;
+    ELSE
+        -- Cartón originado en jornadas anteriores: todo el saldo restante a liquidar es recaudo legítimo
+        v_recaudo_real := v_saldo_liquidar;
+    END IF;
+
+    -- ========================================================
+    -- PASO 1: Registro en payments (con deduplicación estricta)
+    -- ========================================================
+    -- Verificar si ya existe un registro de liquidación por renovación para este cartón en la jornada actual
+    IF v_target_old_id IS NOT NULL THEN
+        BEGIN
+            SELECT id INTO v_existing_payment_id
+            FROM payments
+            WHERE carton_id = v_target_old_id
+              AND (
+                  LOWER(COALESCE(payment_type, '')) = 'renovacion' 
+                  OR "installmentNumber" = 999 
+                  OR id LIKE 'pay_renov_%'
+              )
+              AND (
+                  (created_at IS NOT NULL AND created_at >= v_shift_start AND created_at < v_shift_end)
+                  OR (created_at IS NULL AND date = v_today_str)
+              )
+            ORDER BY created_at DESC
+            LIMIT 1;
+        EXCEPTION WHEN OTHERS THEN
+            v_existing_payment_id := NULL;
+        END;
+    END IF;
+
+    IF v_existing_payment_id IS NOT NULL THEN
+        -- Si ya existe un pago de renovación en la misma jornada para este cartón, se actualiza
+        -- evitando filas duplicadas que sumen doble en el recaudo diario
+        UPDATE payments
+        SET amount = v_recaudo_real,
+            date = v_today_str,
+            status = 'Pagado',
+            payment_type = 'Renovacion',
+            liquidado = true,
+            "agentName" = v_agent_name,
+            agent_id = p_agent_id,
+            "routeId" = v_route_final,
+            updated_at = v_now
+        WHERE id = v_existing_payment_id;
+        v_payment_id := v_existing_payment_id;
+    ELSIF v_recaudo_real > 0 THEN
         v_payment_id := 'pay_renov_' || floor(extract(epoch from v_now))::text || '_' || floor(random() * 1000)::text;
         
         BEGIN
@@ -582,7 +682,7 @@ BEGIN
                 p_cliente_id,
                 v_target_old_id,
                 999,
-                v_saldo_liquidar,
+                v_recaudo_real,
                 v_today_str,
                 'Pagado', -- Cruza directo con get_agent_recaudo_hoy
                 'Renovacion',
@@ -612,7 +712,7 @@ BEGIN
                 v_payment_id,
                 p_cliente_id,
                 999,
-                v_saldo_liquidar,
+                v_recaudo_real,
                 v_today_str,
                 'Pagado',
                 v_agent_name,
@@ -714,7 +814,8 @@ BEGIN
     RETURN jsonb_build_object(
         'success', true,
         'old_carton_id', v_target_old_id,
-        'saldo_liquidado', v_saldo_liquidar,
+        'saldo_liquidado', v_recaudo_real,
+        'saldo_restante_total', v_saldo_liquidar,
         'new_carton_id', v_new_id,
         'new_numero_carton', v_new_numero,
         'payment_id', v_payment_id

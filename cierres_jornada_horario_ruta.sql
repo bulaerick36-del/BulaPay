@@ -164,8 +164,19 @@ BEGIN
         AND COALESCE(c.rollover_amount, c.saldo_anterior, 0) > 0
         AND NOT EXISTS (
             SELECT 1 FROM payments p 
-            WHERE p.carton_id = c.id::text 
-            AND (LOWER(COALESCE(p.payment_type, '')) = 'renovacion' OR p."installmentNumber" = 999)
+            WHERE (
+                p.carton_id = c.id::text 
+                OR p."clientCedula" = c.cliente_id
+            )
+            AND (
+                LOWER(COALESCE(p.payment_type, '')) = 'renovacion' 
+                OR p."installmentNumber" = 999 
+                OR p.id LIKE 'pay_renov_%'
+            )
+            AND (
+                (p.created_at IS NOT NULL AND p.created_at >= v_effective_start AND p.created_at < v_shift_end)
+                OR (p.created_at IS NULL AND p.date = v_shift_start_local::date)
+            )
         );
     EXCEPTION WHEN OTHERS THEN
         v_carton_rollover := 0;
