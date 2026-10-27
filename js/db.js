@@ -1067,12 +1067,13 @@ const db = {
       const lowerAgentId = cleanAgentId ? cleanAgentId.toLowerCase() : null;
       const lowerRouteId = cleanRouteId ? cleanRouteId.toLowerCase() : null;
 
-      // Ejecutar lecturas en paralelo
+      // Ejecutar lecturas en paralelo forzando refresco de pagos
       const [userObj, paymentList] = await Promise.all([
         cleanAgentId ? this.getUserByUsername(cleanAgentId) : Promise.resolve(null),
-        this.getPayments()
+        this.getPayments(true)
       ]);
 
+      const agentUuidLower = userObj && userObj.id ? String(userObj.id).trim().toLowerCase() : null;
       const agentNameLower = userObj ? String(userObj.name || '').trim().toLowerCase() : null;
       const effectiveRouteIdLower = lowerRouteId || (userObj && (userObj.routeId || userObj.route_id) ? String(userObj.routeId || userObj.route_id).trim().toLowerCase() : null);
 
@@ -1087,8 +1088,8 @@ const db = {
         const rawId = String(p.id || '').trim();
         if (rawId.startsWith('pay_init_') || rawId.startsWith('pend_')) return;
 
-        // Validar estrictamente dentro de la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
-        if (!this.isRecordInOperationalShift(p, shiftWindow, true)) return;
+        // Validar estrictamente dentro de la jornada operativa actual desde las 6:00 AM (useEffective = false)
+        if (!this.isRecordInOperationalShift(p, shiftWindow, false)) return;
 
         // Validar monto
         const amount = Number(p.amount || 0);
@@ -1105,6 +1106,7 @@ const db = {
         let matches = false;
         if (lowerAgentId) {
           if (pAgentId === lowerAgentId || pAgentName === lowerAgentId) matches = true;
+          if (agentUuidLower && (pAgentId === agentUuidLower || pAgentName === agentUuidLower)) matches = true;
           if (agentNameLower && (pAgentName === agentNameLower || pAgentId === agentNameLower)) matches = true;
           if (effectiveRouteIdLower && pRouteId === effectiveRouteIdLower) matches = true;
         } else if (effectiveRouteIdLower) {
