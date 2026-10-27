@@ -1563,22 +1563,143 @@ const supervisorModule = {
         return;
       }
 
+      // Cargar datos complementarios de cartones y pagos para desglosar renovaciones con total precisión
+      let allCartones = [];
+      let allPayments = [];
+      try {
+        if (cards.some(c => c.category === 'blue')) {
+          const pCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
+            ? window.BulaPayDB.getCartones()
+            : [];
+          const pPayments = (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function')
+            ? window.BulaPayDB.getPayments()
+            : [];
+          [allCartones, allPayments] = await Promise.all([pCartones, pPayments]);
+        }
+      } catch (eComplement) {
+        console.warn("Aviso al consultar datos complementarios para modal de cartones liquidados:", eComplement);
+      }
+
       container.innerHTML = cards.map(c => {
         const timeStr = c.fechaLiquidacion ? new Date(c.fechaLiquidacion).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : 'Hoy';
-        return `
-          <div style="padding: 0.9rem 1rem; background: ${c.categoryBg}; border: 1.5px solid ${c.categoryBorder}; border-radius: 12px; display: flex; flex-direction: column; gap: 0.6rem; transition: transform 0.15s ease;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
-              <div>
-                <strong style="color: #ffffff; font-size: 0.95rem; display: block; word-break: break-word;">${c.clientName}</strong>
-                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem;">
-                  C.C. ${c.cedula || 'N/A'} • <span style="color: #cbd5e1; font-weight: 600;">Cartón #${c.numeroCarton}</span>
-                </div>
-              </div>
-              <span style="padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                ${c.categoryIcon} ${c.categoryLabel}
-              </span>
-            </div>
+        const isRenewal = c.category === 'blue';
 
+        let financialDetailsHtml = '';
+        let newCartonNumberBadge = '';
+
+        if (isRenewal) {
+          const cIdLower = String(c.id || '').trim().toLowerCase();
+          const cedStr = String(c.cedula || c.cliente_id || '').trim();
+
+          // 1. Identificar el nuevo cartón refinanciado asociado a la renovación
+          const newCarton = (allCartones || []).find(nc => {
+            if (!nc) return false;
+            const nId = String(nc.id || '').trim().toLowerCase();
+            if (nId && nId === cIdLower) return false;
+            const nCed = String(nc.cliente_id || nc.client_id || nc.cedula || '').trim();
+            if (nCed !== cedStr) return false;
+            const nEst = String(nc.estado || nc.status || '').trim().toLowerCase();
+            const nRollover = Number(nc.saldo_anterior || nc.rollover_amount || 0);
+            return nEst === 'activo_por_renovacion' || nRollover > 0 || nEst.includes('renov');
+          }) || (allCartones || []).find(nc => {
+            if (!nc) return false;
+            const nId = String(nc.id || '').trim().toLowerCase();
+            if (nId && nId === cIdLower) return false;
+            const nCed = String(nc.cliente_id || nc.client_id || nc.cedula || '').trim();
+            return nCed === cedStr && String(nc.estado || nc.status || '').toLowerCase().startsWith('activo');
+          });
+
+          // 2. Identificar el pago de renovación registrado en el sistema
+          const renovPay = (allPayments || []).find(p => {
+            if (!p) return false;
+            const pCartonId = String(p.carton_id || '').trim().toLowerCase();
+            if (pCartonId && pCartonId === cIdLower) return true;
+            const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+            const pId = String(p.id || '').trim();
+            const isRenovPay = pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999 || pType === 'renovacion';
+            return isRenovPay && pCed === cedStr;
+          });
+
+          if (newCarton && newCarton.numero_carton) {
+            newCartonNumberBadge = ` ➔ <span style="color: #93c5fd; font-weight: 700;">Nuevo #${newCarton.numero_carton}</span>`;
+          }
+
+          // 3. Desglose Financiero de la Renovación (Estructura exacta para supervisor)
+          // Cartón antes de la renovación: (Mostrar el valor del crédito anterior, ej: $200.000)
+          const cartonAntes = Number(c.montoPrestado || c.monto_prestado || c.amount || 0);
+
+          // Valor del nuevo préstamo / Deuda total: (Mostrar el monto del crédito nuevo, ej: $240.000)
+          let nuevoPrestamoDeudaTotal = newCarton
+            ? Number(newCarton.total_debt || newCarton.totalDebt || newCarton.monto_prestado || 0)
+            : Number(c.totalDeuda || 0);
+          if (nuevoPrestamoDeudaTotal <= 0 && newCarton) {
+            nuevoPrestamoDeudaTotal = Number(newCarton.monto_prestado || 0);
+          }
+
+          // Pago en renovación (Abono aplicado): (Mostrar el valor descontado del saldo viejo, ej: $80.000)
+          const pagoRenovacion = Number(
+            newCarton?.saldo_anterior ||
+            newCarton?.rollover_amount ||
+            renovPay?.amount ||
+            c.saldo_anterior ||
+            c.rollover_amount ||
+            0
+          );
+
+          // Saldo al cierre: ($0)
+          const saldoCierre = Number(c.saldoPendiente || c.outstanding || 0);
+
+          // Total entregado al cliente (con descuento y cuotas): (Efectivo neto real entregado, ej: $104.000)
+          let totalEntregado = 0;
+          if (newCarton && newCarton.net_cash != null && Number(newCarton.net_cash) > 0) {
+            totalEntregado = Number(newCarton.net_cash);
+          } else if (newCarton) {
+            const nMonto = Number(newCarton.monto_prestado || 0);
+            const nDesc = Number(newCarton.discount_amount || 0);
+            totalEntregado = Math.max(0, nMonto - nDesc - pagoRenovacion);
+          } else if (c.net_cash != null && Number(c.net_cash) > 0) {
+            totalEntregado = Number(c.net_cash);
+          } else {
+            totalEntregado = Math.max(0, cartonAntes - pagoRenovacion);
+          }
+
+          // Nuevo cartón generado: (El saldo final del nuevo crédito, ej: $240.000)
+          let nuevoCartonGenerado = newCarton
+            ? Number(newCarton.outstanding || newCarton.total_debt || newCarton.totalDebt || 0)
+            : nuevoPrestamoDeudaTotal;
+          if (nuevoCartonGenerado <= 0) nuevoCartonGenerado = nuevoPrestamoDeudaTotal;
+
+          financialDetailsHtml = `
+            <div style="background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 10px; padding: 0.65rem 0.85rem; display: flex; flex-direction: column; gap: 0.45rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
+                <span style="color: #94a3b8; font-weight: 500;">Cartón antes de la renovación:</span>
+                <strong style="color: #ffffff; font-size: 0.84rem;">$${cartonAntes.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
+                <span style="color: #94a3b8; font-weight: 500;">Valor del nuevo préstamo / Deuda total:</span>
+                <strong style="color: #60a5fa; font-size: 0.84rem;">$${nuevoPrestamoDeudaTotal.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
+                <span style="color: #94a3b8; font-weight: 500;">Pago en renovación (Abono aplicado):</span>
+                <strong style="color: #fbbf24; font-size: 0.84rem;">$${pagoRenovacion.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
+                <span style="color: #94a3b8; font-weight: 500;">Saldo al cierre:</span>
+                <strong style="color: #34d399; font-size: 0.84rem;">$${saldoCierre.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.77rem;">
+                <span style="color: #94a3b8; font-weight: 500;">Total entregado al cliente (con descuento y cuotas):</span>
+                <strong style="color: #38bdf8; font-size: 0.84rem;">$${totalEntregado.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; font-size: 0.77rem;">
+                <span style="color: #94a3b8; font-weight: 500;">Nuevo cartón generado:</span>
+                <strong style="color: #a78bfa; font-size: 0.84rem;">$${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
+              </div>
+            </div>
+          `;
+        } else {
+          financialDetailsHtml = `
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.75rem;">
               <div>
                 <span style="color: #94a3b8; display: block; font-size: 0.68rem;">Monto Prestado</span>
@@ -1593,6 +1714,24 @@ const supervisorModule = {
                 <strong style="color: ${c.saldoPendiente > 0 ? '#f87171' : '#34d399'};">$${Number(c.saldoPendiente || 0).toLocaleString('es-CO')}</strong>
               </div>
             </div>
+          `;
+        }
+
+        return `
+          <div style="padding: 0.9rem 1rem; background: ${c.categoryBg}; border: 1.5px solid ${c.categoryBorder}; border-radius: 12px; display: flex; flex-direction: column; gap: 0.6rem; transition: transform 0.15s ease;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
+              <div>
+                <strong style="color: #ffffff; font-size: 0.95rem; display: block; word-break: break-word;">${c.clientName}</strong>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem;">
+                  C.C. ${c.cedula || 'N/A'} • <span style="color: #cbd5e1; font-weight: 600;">Cartón #${c.numeroCarton}</span>${newCartonNumberBadge}
+                </div>
+              </div>
+              <span style="padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                ${c.categoryIcon} ${c.categoryLabel}
+              </span>
+            </div>
+
+            ${financialDetailsHtml}
 
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.4rem;">
               <span style="color: ${c.categoryColor}; font-weight: 500;">ℹ️ ${c.explanation}</span>
