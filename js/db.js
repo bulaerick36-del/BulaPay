@@ -1523,10 +1523,20 @@ const db = {
       renewalsByCedula.forEach((items, ced) => {
         const newCartonsTodayCount = (newRenewalCartonsTodayByCedula.get(ced) || []).length;
         const directMatched = items.filter(it => it._hasDirectRenovPayToday);
-        if (directMatched.length > 0) {
-          verifiedRenewals.push(...directMatched);
-        } else {
-          // Ordenar del más reciente al más antiguo por fecha de creación/cierre y número de cartón
+        const remainingItems = items.filter(it => !it._hasDirectRenovPayToday);
+
+        verifiedRenewals.push(...directMatched);
+
+        const needed = Math.max(0, newCartonsTodayCount - directMatched.length);
+        if (needed > 0 && remainingItems.length > 0) {
+          remainingItems.sort((a, b) => {
+            const tA = new Date(a.fecha_cierre || a.created_at || a.fecha_apertura || a.updated_at || 0).getTime();
+            const tB = new Date(b.fecha_cierre || b.created_at || b.fecha_apertura || b.updated_at || 0).getTime();
+            if (tB !== tA) return tB - tA;
+            return Number(b.numeroCarton || 0) - Number(a.numeroCarton || 0);
+          });
+          verifiedRenewals.push(...remainingItems.slice(0, needed));
+        } else if (directMatched.length === 0 && items.length > 0) {
           items.sort((a, b) => {
             const tA = new Date(a.fecha_cierre || a.created_at || a.fecha_apertura || a.updated_at || 0).getTime();
             const tB = new Date(b.fecha_cierre || b.created_at || b.fecha_apertura || b.updated_at || 0).getTime();
