@@ -1622,30 +1622,57 @@ const supervisorModule = {
           });
 
           // 2. Identificar el nuevo cartón resultante asociado a esta renovación
-          const candidateNewCartons = (allCartones || []).filter(nc => {
+          const clientCartons = (allCartones || []).filter(nc => {
             if (!nc) return false;
-            const nId = String(nc.id || '').trim().toLowerCase();
-            if (nId && nId === cIdLower) return false;
             const nCed = String(nc.cliente_id || nc.client_id || nc.cedula || '').trim();
             return nCed === cedStr;
           });
 
+          const candidateNewCartons = clientCartons.filter(nc => {
+            const nId = String(nc.id || '').trim().toLowerCase();
+            return !nId || nId !== cIdLower;
+          });
+
           const renovPayAmount = Math.round(Number(renovPay?.amount || 0));
 
-          // Priorizar coincidencia por old_carton_id, old_numero_carton o coincidencia exacta de saldo_anterior con el abono
+          // 1º: Coincidencia directa por old_carton_id o old_numero_carton
           let newCarton = candidateNewCartons.find(nc => {
-            const nOldId = String(nc.old_carton_id || '').trim().toLowerCase();
+            const nOldId = String(nc.old_carton_id || nc.old_carton || '').trim().toLowerCase();
             return nOldId && nOldId === cIdLower;
           }) || candidateNewCartons.find(nc => {
             const nOldNum = String(nc.old_numero_carton || '').trim();
             return nOldNum && nOldNum === String(c.numeroCarton).trim();
-          }) || candidateNewCartons.find(nc => {
-            const nRollover = Math.round(Number(nc.saldo_anterior || nc.rollover_amount || 0));
-            return nRollover > 0 && renovPayAmount > 0 && nRollover === renovPayAmount;
-          }) || candidateNewCartons.find(nc => {
-            const nEst = String(nc.estado || nc.status || '').trim().toLowerCase();
-            return nEst === 'activo_por_renovacion' || nEst.includes('renov');
-          }) || candidateNewCartons[0] || null;
+          });
+
+          // 2º: Si no hay enlace explícito, buscar en la cadena cronológica del cliente: el cartón creado inmediatamente después de este
+          if (!newCarton && candidateNewCartons.length > 0) {
+            const cTime = new Date(c.fechaLiquidacion || c.fecha_cierre || c.created_at || c.fecha_apertura || c.updated_at || 0).getTime();
+            const futureCartons = candidateNewCartons
+              .filter(nc => {
+                const ncTime = new Date(nc.fecha_apertura || nc.created_at || nc.updated_at || 0).getTime();
+                return ncTime >= (cTime - 60000); // margen de 1 minuto
+              })
+              .sort((a, b) => {
+                const tA = new Date(a.fecha_apertura || a.created_at || a.updated_at || 0).getTime();
+                const tB = new Date(b.fecha_apertura || b.created_at || b.updated_at || 0).getTime();
+                return tA - tB;
+              });
+
+            if (futureCartons.length > 0) {
+              newCarton = futureCartons[0];
+            }
+          }
+
+          // 3º: Fallback por saldo refinanciado o estado activo
+          if (!newCarton) {
+            newCarton = candidateNewCartons.find(nc => {
+              const nRollover = Math.round(Number(nc.saldo_anterior || nc.rollover_amount || 0));
+              return nRollover > 0 && renovPayAmount > 0 && nRollover === renovPayAmount;
+            }) || candidateNewCartons.find(nc => {
+              const nEst = String(nc.estado || nc.status || '').trim().toLowerCase();
+              return nEst === 'activo_por_renovacion' || nEst.includes('renov');
+            }) || candidateNewCartons[0] || null;
+          }
 
           const nuevoNumeroCartonStr = newCarton?.numero_carton || newCarton?.numeroCarton || 'S/N';
           if (newCarton) {
@@ -1705,32 +1732,32 @@ const supervisorModule = {
           }
 
           financialDetailsHtml = `
-            <div style="background: rgba(15, 23, 42, 0.65); border: 1.5px solid rgba(59, 130, 246, 0.35); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; width: 100%; box-sizing: border-box;">
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.1); font-size: 0.8rem;">
+            <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(59, 130, 246, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
                 <span style="color: #cbd5e1; font-weight: 500;">Cartón antes de la renovación:</span>
-                <strong style="color: #f8fafc; font-weight: 700; font-size: 0.88rem;">$${cartonAntes.toLocaleString('es-CO')}</strong>
+                <strong style="color: #ffffff; font-weight: 800; font-size: 0.9rem;">$${cartonAntes.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.1); font-size: 0.8rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
                 <span style="color: #cbd5e1; font-weight: 500;">Pago en renovación (Abono aplicado):</span>
-                <strong style="color: #60a5fa; font-weight: 800; font-size: 0.88rem;">$${pagoRenovacion.toLocaleString('es-CO')}</strong>
+                <strong style="color: #60a5fa; font-weight: 800; font-size: 0.9rem;">$${pagoRenovacion.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.1); font-size: 0.8rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
                 <span style="color: #cbd5e1; font-weight: 500;">Saldo al cierre:</span>
-                <strong style="color: #34d399; font-weight: 800; font-size: 0.88rem;">$0</strong>
+                <strong style="color: #34d399; font-weight: 800; font-size: 0.9rem;">$0</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.1); font-size: 0.8rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
                 <span style="color: #cbd5e1; font-weight: 500;">Total entregado al cliente:</span>
-                <strong style="color: #fbbf24; font-weight: 800; font-size: 0.88rem;">$${totalEntregado.toLocaleString('es-CO')}</strong>
+                <strong style="color: #fbbf24; font-weight: 800; font-size: 0.9rem;">$${totalEntregado.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
                 <span style="color: #cbd5e1; font-weight: 500;">Nuevo cartón generado:</span>
-                <strong style="color: #a78bfa; font-weight: 800; font-size: 0.88rem;">#${nuevoNumeroCartonStr} &bull; $${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
+                <strong style="color: #c084fc; font-weight: 800; font-size: 0.9rem;">#${nuevoNumeroCartonStr} &bull; $${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
               </div>
             </div>
           `;
         } else {
           financialDetailsHtml = `
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: rgba(15, 23, 42, 0.6); padding: 0.65rem 0.85rem; border-radius: 8px; font-size: 0.78rem; border: 1px solid rgba(255,255,255,0.08); box-sizing: border-box;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: rgba(15, 23, 42, 0.85); padding: 0.75rem 0.85rem; border-radius: 8px; font-size: 0.78rem; border: 1.5px solid rgba(255,255,255,0.1); box-sizing: border-box; flex-shrink: 0;">
               <div>
                 <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Monto Prestado</span>
                 <strong style="color: #ffffff; font-size: 0.85rem;">$${Number(c.montoPrestado || 0).toLocaleString('es-CO')}</strong>
@@ -1750,26 +1777,26 @@ const supervisorModule = {
         const transIdClean = String(c.id || `trans_${c.numeroCarton}_${index}`).replace(/[^a-zA-Z0-9_-]/g, '_');
 
         return `
-          <div id="card-liq-${transIdClean}" style="padding: 1rem 1.15rem; background: ${c.categoryBg}; border: 1.5px solid ${c.categoryBorder}; border-radius: 12px; display: flex; flex-direction: column; gap: 0.75rem; width: 100%; box-sizing: border-box; overflow: hidden; isolation: isolate; position: relative; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);">
+          <div id="card-liq-${transIdClean}" style="padding: 1.15rem; background: #0f172a; border: 1.5px solid ${c.categoryBorder}; border-radius: 14px; display: flex; flex-direction: column; gap: 0.85rem; width: 100%; box-sizing: border-box; flex-shrink: 0 !important; min-height: fit-content !important; overflow: visible !important; position: relative; box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
               <div>
-                <strong style="color: #ffffff; font-size: 0.95rem; display: block; word-break: break-word;">${c.clientName}</strong>
-                <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 0.2rem; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+                <strong style="color: #ffffff; font-size: 1.02rem; font-weight: 800; display: block; word-break: break-word;">${c.clientName}</strong>
+                <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
                   <span>C.C. ${c.cedula || 'N/A'}</span>
                   <span>•</span>
-                  <span style="color: #cbd5e1; font-weight: 600;">Cartón #${c.numeroCarton}</span>${newCartonNumberBadge}
+                  <span style="color: #cbd5e1; font-weight: 700;">Cartón #${c.numeroCarton}</span>${newCartonNumberBadge}
                 </div>
               </div>
-              <span style="padding: 0.3rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 4px rgba(0,0,0,0.25); white-space: nowrap;">
+              <span style="padding: 0.35rem 0.85rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap;">
                 ${c.categoryIcon} ${c.categoryLabel}
               </span>
             </div>
 
             ${financialDetailsHtml}
 
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.5rem; gap: 0.5rem; flex-wrap: wrap;">
-              <span style="color: ${c.categoryColor}; font-weight: 600; display: flex; align-items: center; gap: 0.3rem;">ℹ️ ${c.explanation}</span>
-              <span style="white-space: nowrap; color: #cbd5e1; font-weight: 500;">⏰ ${timeStr}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.55rem; gap: 0.5rem; flex-wrap: wrap;">
+              <span style="color: ${c.categoryColor}; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">ℹ️ ${c.explanation}</span>
+              <span style="white-space: nowrap; color: #e2e8f0; font-weight: 600;">⏰ ${timeStr}</span>
             </div>
           </div>
         `;
