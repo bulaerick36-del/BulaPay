@@ -362,17 +362,46 @@ const agentModule = {
 
         const saldoTotalInicial = Math.round(Number(client.totalDebt || client.total_debt || client.monto_total || (Number(client.amount || client.monto_prestado || 0) * 1.2)));
         const saldoRealRemanente = Math.max(0, saldoTotalInicial - totalPagadoReal);
+        const formattedMonto = saldoRealRemanente.toLocaleString('es-CO');
+        const clientNameClean = String(client.name || 'Cliente').trim();
+        const clientCedulaClean = String(client.cedula || '').trim();
 
-        const confirmMsg = `¿Estás seguro de renovar el préstamo del cliente ${client.name} (C.C. ${client.cedula})?\nSaldo real a refinanciar: $${saldoRealRemanente.toLocaleString('es-CO')}.\nSe habilitará el formulario de registro para el nuevo crédito y la transacción atómica se ejecutará al guardar.`;
-        if (!(await window.showCrediConfirm(confirmMsg, "BulaPay"))) return;
+        let isConfirmed = false;
+        if (typeof Swal !== 'undefined') {
+          const res = await Swal.fire({
+            title: '<span style="font-size: 1.25rem; font-weight: 800; color: #ffffff;">🔄 Confirmar Renovación</span>',
+            html: `
+              <div style="text-align: center; color: #cbd5e1; font-size: 0.95rem; line-height: 1.5; margin-top: 0.5rem;">
+                <p style="margin-bottom: 0.75rem;">¿Estás seguro de renovar el préstamo de <strong style="color: #ffffff;">${clientNameClean}</strong>${clientCedulaClean ? ` (C.C. ${clientCedulaClean})` : ''}?</p>
+                <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(59, 130, 246, 0.45); border-radius: 12px; padding: 0.9rem 1rem; margin: 1.1rem 0; box-shadow: 0 4px 14px rgba(0,0,0,0.4);">
+                  <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 600;">Saldo pendiente a refinanciar</div>
+                  <div style="font-size: 1.55rem; font-weight: 900; color: #60a5fa; margin-top: 0.25rem;">$${formattedMonto}</div>
+                </div>
+                <p style="font-size: 0.84rem; color: #94a3b8; margin: 0;">Se abrirá el formulario para el nuevo crédito.</p>
+              </div>
+            `,
+            icon: 'question',
+            iconColor: '#3b82f6',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, Renovar Préstamo',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#2563eb',
+            cancelButtonColor: '#334155',
+            background: '#0f172a',
+            color: '#ffffff',
+            reverseButtons: true,
+            focusConfirm: false
+          });
+          isConfirmed = res.isConfirmed;
+        } else {
+          isConfirmed = confirm(`¿Estás seguro de renovar el préstamo de ${clientNameClean}?\nSaldo pendiente a refinanciar: $${formattedMonto}.\nSe abrirá el formulario para el nuevo crédito.`);
+        }
+
+        if (!isConfirmed) return;
 
         try {
           const oldCartonId = client.carton_id || client.id || null;
           const oldNumeroCarton = client.numero_carton || null;
-
-          // Alerta con el Saldo Real Remanente (v177)
-          const formattedMonto = saldoRealRemanente.toLocaleString('es-CO');
-          alert(`¡Modo Renovación Activado! Saldo restante a refinanciar: $${formattedMonto}.\nDiligencie el nuevo monto y guarde para ejecutar la liquidación y renovación atómica.`);
 
           this.switchTab('register');
           this.setRenewalMode(true, saldoRealRemanente, oldCartonId, oldNumeroCarton);

@@ -1590,29 +1590,38 @@ const supervisorModule = {
         const cedStr = String(c.cedula || c.cliente_id || '').trim();
 
         if (isRenewal) {
-          // 1. Identificar el pago de renovación específico registrado para este cartón viejo
-          const renovPay = (allPayments || []).find(p => {
+          // 1. Identificar pagos ordinarios vs pago de renovación para este cartón viejo
+          const isGenuineRenovPay = (p) => {
             if (!p) return false;
-            const pCartonId = String(p.carton_id || '').trim().toLowerCase();
-            return pCartonId && pCartonId === cIdLower;
-          }) || (allPayments || []).find(p => {
-            if (!p) return false;
-            const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
-            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
             const pId = String(p.id || '').trim();
-            const isRenovPay = pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999 || pType === 'renovacion';
-            return isRenovPay && pCed === cedStr;
+            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+            const pStatus = String(p.status || '').trim().toLowerCase();
+            const instNum = Number(p.installmentNumber || 0);
+            return pId.startsWith('pay_renov_') || instNum === 999 || pType === 'renovacion' || pStatus.includes('renovac');
+          };
+
+          // Pago específico de liquidación por renovación (NUNCA una cuota u abono suelto como $8.000)
+          const renovPay = (allPayments || []).find(p => {
+            const pCartonId = String(p.carton_id || '').trim().toLowerCase();
+            return pCartonId && pCartonId === cIdLower && isGenuineRenovPay(p);
+          }) || (allPayments || []).find(p => {
+            const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+            return pCed === cedStr && isGenuineRenovPay(p);
+          }) || null;
+
+          // Suma de pagos normales previos a la renovación en este cartón viejo
+          let normalPaymentsTotal = 0;
+          (allPayments || []).forEach(p => {
+            if (!p) return;
+            const pCartonId = String(p.carton_id || '').trim().toLowerCase();
+            if (pCartonId !== cIdLower) return;
+            if (isGenuineRenovPay(p)) return;
+            const pStatus = String(p.status || '').trim().toUpperCase();
+            if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return;
+            normalPaymentsTotal += Math.round(Number(p.amount || 0));
           });
 
-          // 2. Abono aplicado en esta liquidación específica por renovación
-          const pagoRenovacion = Math.round(Number(
-            renovPay?.amount ||
-            c.saldo_anterior ||
-            c.rollover_amount ||
-            0
-          ));
-
-          // 3. Identificar el nuevo cartón resultante asociado a esta renovación
+          // 2. Identificar el nuevo cartón resultante asociado a esta renovación
           const candidateNewCartons = (allCartones || []).filter(nc => {
             if (!nc) return false;
             const nId = String(nc.id || '').trim().toLowerCase();
@@ -1620,6 +1629,8 @@ const supervisorModule = {
             const nCed = String(nc.cliente_id || nc.client_id || nc.cedula || '').trim();
             return nCed === cedStr;
           });
+
+          const renovPayAmount = Math.round(Number(renovPay?.amount || 0));
 
           // Priorizar coincidencia por old_carton_id, old_numero_carton o coincidencia exacta de saldo_anterior con el abono
           let newCarton = candidateNewCartons.find(nc => {
@@ -1630,7 +1641,7 @@ const supervisorModule = {
             return nOldNum && nOldNum === String(c.numeroCarton).trim();
           }) || candidateNewCartons.find(nc => {
             const nRollover = Math.round(Number(nc.saldo_anterior || nc.rollover_amount || 0));
-            return nRollover > 0 && nRollover === pagoRenovacion;
+            return nRollover > 0 && renovPayAmount > 0 && nRollover === renovPayAmount;
           }) || candidateNewCartons.find(nc => {
             const nEst = String(nc.estado || nc.status || '').trim().toLowerCase();
             return nEst === 'activo_por_renovacion' || nEst.includes('renov');
@@ -1641,17 +1652,28 @@ const supervisorModule = {
             newCartonNumberBadge = ` <span style="color: #60a5fa; font-weight: 700;">➔</span> <span style="color: #93c5fd; font-weight: 700;">Nuevo Cartón #${nuevoNumeroCartonStr}</span>`;
           }
 
-          // 4. Cartón antes de la renovación: Saldo pendiente de ese cartón específico al momento de liquidarlo
-          let cartonAntes = 0;
-          if (newCarton?.old_outstanding != null && Number(newCarton.old_outstanding) > 0) {
-            cartonAntes = Math.round(Number(newCarton.old_outstanding));
-          } else if (c.old_outstanding != null && Number(c.old_outstanding) > 0) {
-            cartonAntes = Math.round(Number(c.old_outstanding));
-          } else if (pagoRenovacion > 0) {
-            cartonAntes = pagoRenovacion;
+          // 3. Cartón antes de la renovación: Saldo pendiente total real del crédito al momento del retanqueo (ej: los $80.000)
+          // REGLA CRÍTICA: NUNCA tomar valores residuales pequeños como $8.000 de una cuota suelta
+          const newCartonRollover = Math.round(Number(newCarton?.saldo_anterior || newCarton?.rollover_amount || newCarton?.old_outstanding || 0));
+          const cardRollover = Math.round(Number(c.old_outstanding || c.saldo_anterior || c.rollover_amount || 0));
+          const totDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (Number(c.montoPrestado || c.amount || 0) * 1.2)));
+          const saldoCalculadoPorPagos = totDeuda > 0 ? Math.max(0, totDeuda - normalPaymentsTotal) : 0;
+
+          let saldoRealRefinanciado = 0;
+          if (newCartonRollover > 0) {
+            saldoRealRefinanciado = newCartonRollover;
+          } else if (renovPayAmount > 0) {
+            saldoRealRefinanciado = renovPayAmount;
+          } else if (saldoCalculadoPorPagos > 0) {
+            saldoRealRefinanciado = saldoCalculadoPorPagos;
+          } else if (cardRollover > 0) {
+            saldoRealRefinanciado = cardRollover;
           } else {
-            cartonAntes = Math.round(Number(c.totalDeuda || c.total_debt || c.montoPrestado || 0));
+            saldoRealRefinanciado = totDeuda;
           }
+
+          const cartonAntes = saldoRealRefinanciado;
+          const pagoRenovacion = renovPayAmount > 0 ? renovPayAmount : saldoRealRefinanciado;
 
           // 5. Saldo al cierre: Siempre $0
           const saldoCierre = 0;
