@@ -2566,10 +2566,11 @@ const db = {
 
   async getCierreCajaDataForRoute(routeId = null, agentUserObj = null) {
     // Ejecutar consultas principales en paralelo desde caché en memoria para respuesta instantánea
-    const [allRoutes, allClients, allPayments] = await Promise.all([
+    const [allRoutes, allClients, allPayments, allCartones] = await Promise.all([
       this.getRoutes(),
       this.getClients(),
-      this.getPayments()
+      this.getPayments(),
+      this.getCartones()
     ]);
 
     let route = null;
@@ -2720,14 +2721,43 @@ const db = {
     }).reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
     // 4. Créditos creados estrictamente en la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
-    const todayClients = routeClients.filter(c => this.isRecordInOperationalShift(c, shiftWindow, false));
+    // Filtramos todos los cartones/créditos de la jornada que pertenecen a la ruta
+    const shiftCartones = (allCartones || []).filter(c => {
+      if (!c) return false;
+      const cRoute = String(c.route_id || c.routeId || '').trim().toLowerCase();
+      const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+      if (targetRouteId === 'ALL') {
+        const matchesRoute = activeRouteIds.size === 0 || activeRouteIds.has(cRoute) || activeAgentUsernames.has(cAgent);
+        if (!matchesRoute) return false;
+      } else {
+        const matchesRoute = (cRoute && activeRouteIds.has(cRoute)) || (cAgent && (activeAgentUsernames.has(cAgent) || activeAgentNames.has(cAgent)));
+        if (!matchesRoute) return false;
+      }
+      return this.isRecordInOperationalShift(c, shiftWindow, false);
+    });
+
+    const shiftCartonIds = new Set(shiftCartones.map(c => String(c.id || '').toLowerCase()).filter(Boolean));
+    const shiftCartonClientIds = new Set(shiftCartones.map(c => String(c.cliente_id || '').toLowerCase()).filter(Boolean));
+
+    // Incluir clientes de hoy que no estén duplicados en cartones
+    const shiftClients = routeClients.filter(c => {
+      if (!c) return false;
+      const cId = String(c.id || '').toLowerCase();
+      const cCed = String(c.cedula || '').toLowerCase();
+      if (shiftCartonIds.has(cId) || (shiftCartonClientIds.has(cCed) && shiftCartones.length > 0)) {
+        return false;
+      }
+      return this.isRecordInOperationalShift(c, shiftWindow, false);
+    });
+
+    const todayCredits = [...shiftCartones, ...shiftClients];
 
     let totalPrestado = 0;
     let desembolsosRenovacion = 0;
     let entradasRenovacion = 0;
     let descuentosRetenidos = 0;
 
-    todayClients.forEach(c => {
+    todayCredits.forEach(c => {
       const amt = Math.round(Number(c.amount || c.monto_prestado || (c.totalDebt ? Number(c.totalDebt) / 1.2 : 0)));
       const isRenov = !!(c.isRenewal || c.is_renewal || String(c.status || c.estado || '').toLowerCase().includes('renov') || Number(c.rollover_amount || c.saldo_anterior || 0) > 0);
 
@@ -2737,12 +2767,13 @@ const db = {
         totalPrestado += amt;
       }
 
-      const seg = Number(c.segVal || 0);
-      const pap = Number(c.papVal || 0);
-      let ret = Number(c.retained_fees || c.retained_amount || (seg + pap));
-      if (ret <= 0 && c.discount_amount && !isRenov) {
-        ret = Number(c.discount_amount);
-      }
+      const seg = Number(c.segVal || c.seg_val || c.seguro || 0);
+      const pap = Number(c.papVal || c.pap_val || c.papeleria || c.software || 0);
+      const retFees = Number(c.retained_fees || c.retained_amount || 0);
+      const discAmt = Number(c.discount_amount || c.descuento || 0);
+
+      // Descuento exacto por papelería/software/seguro de cada transacción (ej. si hubo dos, acumula fielmente $32.000)
+      let ret = Math.max(retFees, seg + pap, discAmt);
       descuentosRetenidos += Math.round(ret);
     });
 
@@ -3210,6 +3241,10 @@ const db = {
       installments_count: installmentsCount,
       installment_amount: installmentAmount,
       discount_amount: discountVal,
+      retained_fees: Number(client.retained_fees || client.retained_amount || discountVal),
+      retained_amount: Number(client.retained_fees || client.retained_amount || discountVal),
+      seg_val: Number(client.segVal || 0),
+      pap_val: Number(client.papVal || 0),
       net_cash: netCashVal,
       route_id: routeId,
       agent_id: agentId,
@@ -3327,6 +3362,10 @@ const db = {
       installmentAmount: installmentAmount,
       installment_amount: installmentAmount,
       discount_amount: discountVal,
+      retained_fees: Number(client.retained_fees || client.retained_amount || discountVal),
+      retained_amount: Number(client.retained_fees || client.retained_amount || discountVal),
+      seg_val: Number(client.segVal || 0),
+      pap_val: Number(client.papVal || 0),
       net_cash: netCashVal,
       carton_id: newCartonUuid,
       numero_carton: newNumeroCarton,
@@ -3691,6 +3730,10 @@ const db = {
           installments_count: Number(payload.installmentsCount || 30),
           installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
           discount_amount: discountVal,
+          retained_fees: Number(payload.retained_fees || payload.retained_amount || discountVal),
+          retained_amount: Number(payload.retained_fees || payload.retained_amount || discountVal),
+          seg_val: Number(payload.segVal || 0),
+          pap_val: Number(payload.papVal || 0),
           net_cash: netCashVal,
           route_id: routeId,
           agent_id: agentId,
@@ -5995,6 +6038,20 @@ const db = {
       for (const inj of uniqueInjectionsMap.values()) {
         if (isForSelectedAgent(inj)) {
           totalInjected += Math.round(parseFloat(inj.amount) || 0);
+        }
+      }
+
+      // Fallback para rutas que tienen capital asignado inicial en 'routes' si no registraron aún entrada en 'capital_injections'
+      if (totalInjected === 0 && targetRouteIdStr) {
+        try {
+          const allRoutes = await this.getRoutes();
+          const targetRouteObj = (allRoutes || []).find(r => String(r.id) === targetRouteIdStr);
+          const baseCap = Math.round(Number(targetRouteObj?.capital || targetRouteObj?.capital_asignado || 0));
+          if (baseCap > 0) {
+            totalInjected = baseCap;
+          }
+        } catch (eR) {
+          console.warn("Aviso obteniendo capital base de ruta para liquidCash:", eR);
         }
       }
 

@@ -3586,11 +3586,11 @@ const agentModule = {
 
         let reasons = ['Saldo Cartón Anterior (Renovación)'];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
-          segVal = 4000;
+          segVal = 8000;
           reasons.push('Seguro');
         }
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
-          papVal = 4000;
+          papVal = 8000;
           reasons.push('Papelería / Software');
         }
         if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
@@ -3603,11 +3603,11 @@ const agentModule = {
 
         let reasons = [];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
-          segVal = 4000;
+          segVal = 8000;
           reasons.push('Seguro');
         }
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
-          papVal = 4000;
+          papVal = 8000;
           reasons.push('Papelería / Software');
         }
         if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
@@ -3622,6 +3622,51 @@ const agentModule = {
         discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       }
 
+      // Descuento final consolidado por transacción ($16.000 por defecto si ambos checkboxes están marcados)
+      const finalDiscount = discountAmount > 0 ? discountAmount : Math.round(segVal + papVal);
+
+      // =========================================================================
+      // BLOQUEO ESTRICTO POR FALTA DE FONDOS EN CAJA DE LA RUTA
+      // =========================================================================
+      if (routeId) {
+        const efectivoDisponible = await window.BulaPayDB.getLiquidCash(routeId);
+        const montoDesembolso = this.isRenewalMode
+          ? Math.max(0, montoPrestamo - Number(this.currentRenewalOutstanding || 0) - finalDiscount)
+          : Math.max(0, montoPrestamo - finalDiscount);
+
+        const montoValidar = (this.isRenewalMode && montoDesembolso > 0) ? montoDesembolso : montoPrestamo;
+
+        if (montoValidar > efectivoDisponible || (efectivoDisponible <= 0 && montoPrestamo > 0)) {
+          const msgHtml = `
+            <div style="text-align: left; font-size: 0.9rem; line-height: 1.5;">
+              <p>No cuenta con suficiente efectivo disponible en la caja de la ruta para registrar este ${this.isRenewalMode ? 'crédito por renovación' : 'préstamo'}.</p>
+              <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem; margin: 0.75rem 0;">
+                <div>💵 <strong>Monto requerido a desembolsar:</strong> <span style="color: #f87171; font-weight: bold;">$${montoValidar.toLocaleString('es-CO')}</span></div>
+                <div>💼 <strong>Efectivo en caja disponible:</strong> <span style="color: #10b981; font-weight: bold;">$${Math.max(0, efectivoDisponible).toLocaleString('es-CO')}</span></div>
+              </div>
+              <p style="color: #fbbf24; font-size: 0.85rem; margin-top: 0.5rem;">
+                ⚠️ <strong>Fondos insuficientes:</strong> La operación ha sido denegada. Debe realizar cobros para recaudar efectivo en su ruta o solicitar una recarga/inyección de fondos a su supervisor.
+              </p>
+            </div>
+          `;
+
+          if (typeof Swal !== 'undefined') {
+            await Swal.fire({
+              icon: 'error',
+              title: '⛔ Fondos Insuficientes en Caja',
+              html: msgHtml,
+              confirmButtonColor: '#ef4444',
+              confirmButtonText: 'Entendido',
+              background: '#0f172a',
+              color: '#fff'
+            });
+          } else {
+            alert(`⛔ OPERACIÓN DENEGADA POR FALTA DE FONDOS:\n\nEl monto a prestar ($${montoValidar.toLocaleString('es-CO')}) supera el efectivo disponible en caja ($${Math.max(0, efectivoDisponible).toLocaleString('es-CO')}).\n\nDebe recaudar efectivo en la ruta o solicitar una recarga al supervisor.`);
+          }
+          return;
+        }
+      }
+
       const emailEl = document.getElementById('new-client-email');
       const emailVal = emailEl ? emailEl.value.trim() : '';
 
@@ -3634,16 +3679,16 @@ const agentModule = {
         zone,
         risk: 'Verde', // Inicia excelente
         amount: montoPrestamo, // Guardamos el capital prestado para la caja diaria
-        discount_amount: discountAmount, // Guardamos el descuento inicial total
-        retained_amount: Math.round(segVal + papVal), // Campo legado
-        retained_fees: Math.round(segVal + papVal), // AISLADO: Únicamente cobros por Seguro y Papelería
+        discount_amount: finalDiscount, // Guardamos el descuento inicial total
+        retained_amount: finalDiscount, // Campo legado sincronizado
+        retained_fees: finalDiscount, // AISLADO: Cobros por Seguro y Papelería acumulados fielmente
         rollover_amount: Math.round(otrVal || this.currentRenewalOutstanding || 0), // AISLADO: Saldo refinanciado / cartón anterior
         saldo_anterior: Math.round(otrVal || this.currentRenewalOutstanding || 0),
         old_carton_id: this.currentRenewalCartonId || null,
         old_numero_carton: this.currentRenewalNumeroCarton || null,
         old_outstanding: Math.round(this.currentRenewalOutstanding || otrVal || 0),
-        segVal: Math.round(segVal),
-        papVal: Math.round(papVal),
+        segVal: Math.round(segVal || (finalDiscount / 2)),
+        papVal: Math.round(papVal || (finalDiscount / 2)),
         discount_reason: discountReason, // Motivo del descuento
         totalDebt: debt,
         outstanding: debt,
@@ -4148,8 +4193,8 @@ const agentModule = {
       // Descuento general inicial (Seguro, Papelería, etc.) sólo si el checkbox principal está activado
       let generalDiscount = 0;
       if (discountCheckbox && discountCheckbox.checked) {
-        let segDeduction = (cbSeguro && cbSeguro.checked) ? 4000 : 0;
-        let papDeduction = (cbPapeleria && cbPapeleria.checked) ? 4000 : 0;
+        let segDeduction = (cbSeguro && cbSeguro.checked) ? 8000 : 0;
+        let papDeduction = (cbPapeleria && cbPapeleria.checked) ? 8000 : 0;
         let checkboxDiscount = segDeduction + papDeduction;
 
         let manualDiscount = discountAmountInput ? (parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0) : 0;

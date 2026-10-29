@@ -3321,54 +3321,128 @@ const supervisorModule = {
   },
 
   async openInjectRouteCapitalModal(routeId, routeName) {
-    if (!window.Swal) {
-      const amountStr = prompt(`Ingresa el monto a inyectar a la ruta "${routeName}" ($):`);
+    await this.promptRecargaRutaConAviso(routeId, routeName, 'dashboard');
+  },
+
+  async openInjectFromModal(modalType) {
+    const selectId = modalType === 'capital' ? 'modal-capital-route-select' : 'modal-cierre-route-select';
+    const routeSelect = document.getElementById(selectId);
+    let routeId = routeSelect ? routeSelect.value : null;
+
+    const routes = (await window.BulaPayDB.getRoutes()) || [];
+
+    if (!routeId || routeId === 'ALL') {
+      if (routes.length === 1) {
+        routeId = routes[0].id;
+      } else if (routes.length > 1) {
+        const inputOptions = {};
+        routes.forEach(r => {
+          inputOptions[r.id] = `Ruta: ${r.name} (${r.agentName || 'Sin agente'})`;
+        });
+
+        if (typeof Swal !== 'undefined') {
+          const { value: chosenRoute } = await Swal.fire({
+            title: '🟢 Seleccionar Ruta para Inyectar Capital',
+            text: 'Elija la ruta a la cual desea agregar fondos:',
+            input: 'select',
+            inputOptions: inputOptions,
+            inputPlaceholder: 'Seleccione una ruta...',
+            showCancelButton: true,
+            confirmButtonText: 'Continuar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#10b981',
+            background: '#0f172a',
+            color: '#fff'
+          });
+          if (!chosenRoute) return;
+          routeId = chosenRoute;
+        } else {
+          const chosen = prompt('Ingrese el nombre o ID de la ruta a recargar:');
+          const found = routes.find(r => r.id === chosen || r.name.toLowerCase() === (chosen || '').toLowerCase());
+          if (!found) return;
+          routeId = found.id;
+        }
+      } else {
+        alert('No hay rutas registradas para recargar fondos.');
+        return;
+      }
+    }
+
+    const targetRoute = routes.find(r => String(r.id) === String(routeId));
+    const routeName = targetRoute ? targetRoute.name : 'Ruta';
+    await this.promptRecargaRutaConAviso(routeId, routeName, modalType);
+  },
+
+  async promptRecargaRutaConAviso(routeId, routeName, modalType) {
+    if (typeof Swal === 'undefined') {
+      const amountStr = prompt(`💵 AGREGAR FONDO A LA RUTA "${routeName}"\n\n⚠️ AVISO DE RESPONSABILIDAD:\nComo supervisor, usted es el único responsable de auditar y custodiar los ingresos físicos reales y de garantizar la entrega real del dinero en efectivo en el bolsillo del agente.\n\nIngrese el monto a inyectar ($):`);
       if (!amountStr) return;
       const amount = parseFloat(amountStr.replace(/\D/g, '')) || 0;
       if (amount <= 0) return alert('Monto inválido.');
+
+      const confirmDelivery = confirm(`⚠️ CONFIRMACIÓN DE ENTREGA FÍSICA:\n\n¿Confirma que entrega físicamente $${amount.toLocaleString('es-CO')} en efectivo real a la ruta "${routeName}"?\n\nUsted es el único responsable del efectivo físico.`);
+      if (!confirmDelivery) return;
+
       try {
-        await window.BulaPayDB.injectCapitalToRoute(routeId, amount, "Inyección de capital adicional");
-        alert(`✅ Capital inyectado con éxito a la ruta "${routeName}".`);
+        await window.BulaPayDB.injectCapitalToRoute(routeId, amount, "Inyección de fondos de ruta por supervisor");
+        alert(`✅ Capital de $${amount.toLocaleString('es-CO')} agregado con éxito a la ruta "${routeName}".`);
+        if (modalType === 'capital') {
+          await this.populateKpiCapitalModal();
+        } else if (modalType === 'cierre') {
+          await this.calculateCierreCaja();
+        }
         await this.renderDashboard();
         await this.renderManagedRoutesList();
       } catch (e) {
-        alert('Error al inyectar capital: ' + (e.message || JSON.stringify(e)));
+        alert('Error al inyectar capital: ' + (e.message || e));
       }
       return;
     }
 
     const { value: formValues } = await Swal.fire({
-      title: `🟢 Inyectar Capital a Ruta`,
+      title: `➕ Agregar Fondo a la Ruta`,
       html: `
-        <div style="text-align: left; margin-bottom: 0.5rem;">
+        <div style="text-align: left; margin-bottom: 0.75rem;">
           <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Ruta Seleccionada</label>
-          <input type="text" class="swal2-input" value="${routeName}" readonly style="width: 100%; margin: 0; font-size: 0.95rem; font-weight: bold; background: rgba(255,255,255,0.05); color: #fff;">
+          <div style="padding: 0.6rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 6px; font-weight: 700; color: #38bdf8;">
+            🛣️ ${routeName}
+          </div>
         </div>
-        <div style="text-align: left; margin-bottom: 0.5rem; margin-top: 1rem;">
-          <label style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Monto Adicional a Inyectar ($)</label>
-          <input id="swal-route-inject-amount" type="text" inputmode="numeric" class="swal2-input" placeholder="Ej. 500.000" style="width: 100%; margin: 0; font-size: 1.1rem; font-weight: bold;">
+
+        <div style="text-align: left; margin-bottom: 0.75rem;">
+          <label for="swal-inject-route-amount" style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Monto a Recargar ($)</label>
+          <input id="swal-inject-route-amount" type="text" inputmode="numeric" class="swal2-input" placeholder="Ej. 500.000" style="width: 100%; margin: 0; font-size: 1.15rem; font-weight: 800; color: #10b981;">
+        </div>
+
+        <!-- AVISO DE RESPONSABILIDAD DEL EFECTIVO FÍSICO -->
+        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.4); border-left: 4px solid #f59e0b; border-radius: 8px; padding: 0.75rem 0.85rem; font-size: 0.8rem; color: #fbbf24; text-align: left; line-height: 1.45; margin-top: 0.85rem;">
+          <strong>⚠️ Aviso de Responsabilidad del Efectivo Físico:</strong><br>
+          Esta recarga aumentará el saldo disponible en caja de la ruta. Como supervisor, usted es el <u>único responsable</u> de auditar, custodiar y verificar la entrega real de los billetes físicos en el bolsillo del agente de la ruta.
         </div>
       `,
       focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: 'Confirmar Inyección',
+      confirmButtonText: 'Confirmar y Recargar Fondos',
       cancelButtonText: 'Cancelar',
       confirmButtonColor: '#10b981',
+      cancelButtonColor: '#64748b',
+      background: '#0f172a',
+      color: '#fff',
       didOpen: () => {
-        const amountInput = document.getElementById('swal-route-inject-amount');
-        if (amountInput) {
-          amountInput.focus();
-          amountInput.addEventListener('input', (e) => {
+        const input = document.getElementById('swal-inject-route-amount');
+        if (input) {
+          input.focus();
+          input.addEventListener('input', (e) => {
             const raw = e.target.value.replace(/\D/g, '');
             e.target.value = raw ? parseInt(raw, 10).toLocaleString('es-CO') : '';
           });
         }
       },
       preConfirm: () => {
-        const raw = document.getElementById('swal-route-inject-amount').value.replace(/\D/g, '');
+        const raw = document.getElementById('swal-inject-route-amount')?.value.replace(/\D/g, '');
         const amount = parseInt(raw, 10) || 0;
         if (amount <= 0) {
-          Swal.showValidationMessage('Por favor ingresa un monto válido mayor a 0');
+          Swal.showValidationMessage('Por favor ingrese un monto válido mayor a 0');
           return false;
         }
         return { amount };
@@ -3377,12 +3451,33 @@ const supervisorModule = {
 
     if (formValues && formValues.amount > 0) {
       try {
-        await window.BulaPayDB.injectCapitalToRoute(routeId, formValues.amount, "Inyección de capital adicional");
-        Swal.fire('✅ Capital Inyectado', `Se inyectaron $${formValues.amount.toLocaleString('es-CO')} a la ruta "${routeName}".`, 'success');
+        await window.BulaPayDB.injectCapitalToRoute(routeId, formValues.amount, "Recarga de fondos por supervisor");
+        await Swal.fire({
+          icon: 'success',
+          title: '✅ Fondo Agregado con Éxito',
+          html: `Se recargaron <b style="color:#10b981;">$${formValues.amount.toLocaleString('es-CO')}</b> a la ruta <b>${routeName}</b>.<br><br>
+                 <span style="font-size:0.8rem; color:#94a3b8;">El agente ya cuenta con este saldo disponible en caja para colocar préstamos y renovaciones.</span>`,
+          confirmButtonColor: '#10b981',
+          background: '#0f172a',
+          color: '#fff'
+        });
+
+        if (modalType === 'capital') {
+          await this.populateKpiCapitalModal();
+        } else if (modalType === 'cierre') {
+          await this.calculateCierreCaja();
+        }
         await this.renderDashboard();
         await this.renderManagedRoutesList();
-      } catch (e) {
-        Swal.fire('❌ Error', 'No se pudo registrar la inyección: ' + (e.message || JSON.stringify(e)), 'error');
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: '❌ Error al Recargar',
+          text: err.message || JSON.stringify(err),
+          confirmButtonColor: '#ef4444',
+          background: '#0f172a',
+          color: '#fff'
+        });
       }
     }
   },

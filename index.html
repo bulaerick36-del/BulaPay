@@ -2375,6 +2375,13 @@
         </select>
       </div>
 
+      <!-- Botón Agregar Fondo a la Ruta (Auditoría) -->
+      <div style="display: flex; justify-content: flex-end; margin-top: -0.5rem; margin-bottom: 1.15rem;">
+        <button type="button" id="btn-add-fund-capital" onclick="supervisorModule.openInjectFromModal('capital')" class="btn" style="padding: 0.45rem 0.85rem; font-size: 0.82rem; font-weight: 700; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
+          <span>➕</span> Agregar Fondo a la Ruta
+        </button>
+      </div>
+
       <!-- Grid de 5 Métricas Principales de Auditoría -->
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
         <!-- 1. Capital Base (Inversión Inicial) -->
@@ -2422,6 +2429,13 @@
         <select id="modal-cierre-route-select" onchange="supervisorModule.calculateCierreCaja()" style="width: 100%; padding: 0.6rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; font-size: 0.9rem; font-weight: 600;">
           <!-- Se llena dinámicamente con las rutas -->
         </select>
+      </div>
+
+      <!-- Botón Agregar Fondo a la Ruta (Cierre de Caja) -->
+      <div style="display: flex; justify-content: flex-end; margin-top: -0.5rem; margin-bottom: 1rem;">
+        <button type="button" id="btn-add-fund-cierre" onclick="supervisorModule.openInjectFromModal('cierre')" class="btn" style="padding: 0.45rem 0.85rem; font-size: 0.82rem; font-weight: 700; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
+          <span>➕</span> Agregar Fondo a la Ruta
+        </button>
       </div>
 
       <!-- Efectivo Inicial (Dato puramente visual/referencial) -->
