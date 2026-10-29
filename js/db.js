@@ -2749,9 +2749,24 @@ const db = {
     // Entradas por renovación deben reflejar única y exclusivamente el valor real de las transacciones de renovación ejecutadas en payments
     entradasRenovacion = renewalPaymentsTotal;
 
-    // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda como dato patrimonial en la UI):
-    // TOTAL A ENTREGAR = (Total Cobrado Hoy + Entradas por Renovación Hoy + Descuentos Retenidos) - (Total Prestado Hoy + Desembolsos por Renovación)
-    const totalEntregar = Math.max(0, (totalCobrado + entradasRenovacion + descuentosRetenidos) - (totalPrestado + desembolsosRenovacion));
+    // Desglose detallado de Recaudos
+    const cuotasNormales = Math.max(0, totalCobrado - pagosMasivos);
+    const moraPayments = shiftPayments.filter(p => {
+      const pStatus = String(p.status || '').toLowerCase();
+      const pType = String(p.payment_type || '').toLowerCase();
+      const pNotes = String(p.notes || p.nota || p.motivo || '').toLowerCase();
+      return pStatus.includes('mora') || pType.includes('mora') || pNotes.includes('mora');
+    });
+    const liquidacionesMora = moraPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+
+    // Suma exacta del Total Recaudado Hoy:
+    // Cuotas normales + pagos masivos + entradas por renovación + liquidaciones por mora + descuentos retenidos software/papelería
+    const totalRecaudado = (totalCobrado + entradasRenovacion + liquidacionesMora + descuentosRetenidos);
+    const totalDesembolsado = (totalPrestado + desembolsosRenovacion);
+
+    // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda puramente visual en la UI):
+    // TOTAL A ENTREGAR = Resta directa y exacta entre recaudo total y total prestado/desembolsado
+    const totalEntregar = Math.max(0, totalRecaudado - totalDesembolsado);
 
     return {
       routeId: targetRouteId || null,
@@ -2767,12 +2782,17 @@ const db = {
       capitalBase: Math.round(capitalBase),
       enCalle: Math.round(enCalle),
       efectivoInicial: Math.round(efectivoInicial),
+      totalRecaudado: Math.round(totalRecaudado),
+      cuotasNormales: Math.round(cuotasNormales),
       totalCobrado: Math.round(totalCobrado),
       pagosMasivos: Math.round(pagosMasivos),
       entradasRenovacion: Math.round(entradasRenovacion),
+      liquidacionesMora: Math.round(liquidacionesMora),
+      descuentosRetenidos: Math.round(descuentosRetenidos),
+      prestamosNuevos: Math.round(totalPrestado),
       totalPrestado: Math.round(totalPrestado),
       desembolsosRenovacion: Math.round(desembolsosRenovacion),
-      descuentosRetenidos: Math.round(descuentosRetenidos),
+      totalDesembolsado: Math.round(totalDesembolsado),
       totalEntregar: Math.round(totalEntregar)
     };
   },
@@ -2798,8 +2818,8 @@ const db = {
       inicio_jornada: data.shiftStart,
       fin_jornada: data.shiftEnd,
       fecha_cierre: now.toISOString(),
-      total_recaudado: data.totalCobrado + (data.entradasRenovacion || 0),
-      total_prestado: data.totalPrestado + (data.desembolsosRenovacion || 0),
+      total_recaudado: data.totalRecaudado !== undefined ? data.totalRecaudado : (data.totalCobrado + (data.entradasRenovacion || 0)),
+      total_prestado: data.totalDesembolsado !== undefined ? data.totalDesembolsado : (data.totalPrestado + (data.desembolsosRenovacion || 0)),
       efectivo_inicial: data.efectivoInicial,
       efectivo_entregar: data.totalEntregar,
       detalles: {

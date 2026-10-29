@@ -1259,6 +1259,17 @@ const supervisorModule = {
     const routeSelect = document.getElementById('modal-cierre-route-select');
     if (!modal || !routeSelect) return;
 
+    // Resetear acordeones para que de entrada solo muestre las tres opciones principales
+    const desgloseRecaudo = document.getElementById('cierre-desglose-recaudo');
+    const arrowRecaudo = document.getElementById('cierre-arrow-recaudo');
+    if (desgloseRecaudo) desgloseRecaudo.style.display = 'none';
+    if (arrowRecaudo) arrowRecaudo.textContent = '▼';
+
+    const desglosePrestado = document.getElementById('cierre-desglose-prestado');
+    const arrowPrestado = document.getElementById('cierre-arrow-prestado');
+    if (desglosePrestado) desglosePrestado.style.display = 'none';
+    if (arrowPrestado) arrowPrestado.textContent = '▼';
+
     const routes = await window.BulaPayDB.getRoutes();
     routeSelect.innerHTML = '<option value="ALL">Consolidado General (Todas las rutas)</option>';
     routes.forEach(r => {
@@ -1279,29 +1290,67 @@ const supervisorModule = {
     if (modal) modal.classList.remove('active');
   },
 
+  toggleCierreAccordion(section) {
+    const desglose = document.getElementById(`cierre-desglose-${section}`);
+    const arrow = document.getElementById(`cierre-arrow-${section}`);
+    if (!desglose) return;
+    const isHidden = desglose.style.display === 'none' || getComputedStyle(desglose).display === 'none';
+    if (isHidden) {
+      desglose.style.display = 'flex';
+      if (arrow) arrow.textContent = '▲';
+    } else {
+      desglose.style.display = 'none';
+      if (arrow) arrow.textContent = '▼';
+    }
+  },
+
   async calculateCierreCaja() {
     const routeSelect = document.getElementById('modal-cierre-route-select');
     const inicialEl = document.getElementById('cierre-efectivo-inicial');
+    
+    // Total Recaudado y su desglose detallado
+    const totalRecaudadoEl = document.getElementById('cierre-total-recaudado');
+    const cuotasNormalesEl = document.getElementById('cierre-cuotas-normales');
     const cobradoHoyEl = document.getElementById('cierre-cobrado-hoy');
     const pagosMasivosEl = document.getElementById('cierre-pagos-masivos');
     const renovInEl = document.getElementById('cierre-renov-in');
+    const liquidacionesMoraEl = document.getElementById('cierre-liquidaciones-mora');
+    const retenidosEl = document.getElementById('cierre-descuentos-retenidos');
+
+    // Total Prestado y su desglose detallado
+    const totalPrestadoEl = document.getElementById('cierre-total-prestado');
     const prestamosHoyEl = document.getElementById('cierre-prestamos-hoy');
     const renovOutEl = document.getElementById('cierre-renov-out');
-    const retenidosEl = document.getElementById('cierre-descuentos-retenidos');
+
+    // Total a Entregar
     const entregarEl = document.getElementById('cierre-efectivo-entregar');
 
     if (!routeSelect) return;
     const routeId = routeSelect.value || 'ALL';
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
 
-    if (inicialEl) inicialEl.textContent = `$${data.efectivoInicial.toLocaleString('es-CO')}`;
-    if (cobradoHoyEl) cobradoHoyEl.textContent = `+$${data.totalCobrado.toLocaleString('es-CO')}`;
+    const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
+    const prestadoTotal = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
+    const totalEntregar = Math.max(0, recaudoTotal - prestadoTotal);
+
+    if (inicialEl) inicialEl.textContent = `$${(data.efectivoInicial || 0).toLocaleString('es-CO')}`;
+
+    // Total Recaudado y desglose
+    if (totalRecaudadoEl) totalRecaudadoEl.textContent = `+$${recaudoTotal.toLocaleString('es-CO')}`;
+    if (cuotasNormalesEl) cuotasNormalesEl.textContent = `$${(data.cuotasNormales || 0).toLocaleString('es-CO')}`;
+    if (cobradoHoyEl) cobradoHoyEl.textContent = `+$${(data.totalCobrado || 0).toLocaleString('es-CO')}`;
     if (pagosMasivosEl) pagosMasivosEl.textContent = `$${(data.pagosMasivos || 0).toLocaleString('es-CO')}`;
-    if (renovInEl) renovInEl.textContent = `+$${(data.entradasRenovacion || 0).toLocaleString('es-CO')}`;
-    if (prestamosHoyEl) prestamosHoyEl.textContent = `-$${data.totalPrestado.toLocaleString('es-CO')}`;
-    if (renovOutEl) renovOutEl.textContent = `-$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
-    if (retenidosEl) retenidosEl.textContent = `+$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
-    if (entregarEl) entregarEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
+    if (renovInEl) renovInEl.textContent = `$${(data.entradasRenovacion || 0).toLocaleString('es-CO')}`;
+    if (liquidacionesMoraEl) liquidacionesMoraEl.textContent = `$${(data.liquidacionesMora || 0).toLocaleString('es-CO')}`;
+    if (retenidosEl) retenidosEl.textContent = `$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
+
+    // Total Prestado y desglose
+    if (totalPrestadoEl) totalPrestadoEl.textContent = `-$${prestadoTotal.toLocaleString('es-CO')}`;
+    if (prestamosHoyEl) prestamosHoyEl.textContent = `$${(data.prestamosNuevos || data.totalPrestado || 0).toLocaleString('es-CO')}`;
+    if (renovOutEl) renovOutEl.textContent = `$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
+
+    // Total a Entregar (Resta exacta)
+    if (entregarEl) entregarEl.textContent = `$${totalEntregar.toLocaleString('es-CO')}`;
 
     await this.renderHistorialCierresSupervisor();
   },
@@ -1347,7 +1396,7 @@ const supervisorModule = {
     const routeId = routeSelect.value;
 
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
-    const recaudo = Number(data.totalCobrado + (data.entradasRenovacion || 0));
+    const recaudo = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : (data.totalCobrado + (data.entradasRenovacion || 0)));
 
     let confirmRes = false;
     if (typeof Swal !== 'undefined') {
