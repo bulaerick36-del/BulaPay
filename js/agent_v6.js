@@ -140,6 +140,7 @@ const agentModule = {
     this.btnSearch = document.getElementById('btn-agent-search');
     this.searchPlaceholder = document.getElementById('agent-search-placeholder');
     this.searchError = document.getElementById('agent-search-error');
+    this.lastDismissed2MonthsCedula = null;
 
     // Vista Aislada de Cobro
     this.cobroActionContainer = document.getElementById('cobro-action-container');
@@ -277,11 +278,17 @@ const agentModule = {
 
     // Botón Búsqueda Cobro
     if (this.btnSearch) {
-      this.btnSearch.addEventListener('click', () => this.searchClient());
+      this.btnSearch.addEventListener('click', () => {
+        this.lastDismissed2MonthsCedula = null;
+        this.searchClient();
+      });
     }
     if (this.inputSearchCedula) {
       this.inputSearchCedula.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.searchClient();
+        if (e.key === 'Enter') {
+          this.lastDismissed2MonthsCedula = null;
+          this.searchClient();
+        }
       });
     }
 
@@ -461,200 +468,7 @@ const agentModule = {
 
     if (this.btnCobroLiquidarMora) {
       this.btnCobroLiquidarMora.addEventListener('click', async () => {
-        const btn = this.btnCobroLiquidarMora;
-        const cartonId = btn?.dataset?.cartonId || this.currentClient?.carton_id || this.currentClient?.id || null;
-        const numeroCarton = btn?.dataset?.numeroCarton || this.currentClient?.numero_carton || null;
-        const cedula = btn?.dataset?.cedula || this.currentClient?.cedula || (this.inputSearchCedula ? this.inputSearchCedula.value : '') || null;
-        const name = btn?.dataset?.name || this.currentClient?.name || `Cliente ${cedula || ''}`;
-        const cedulaStr = String(cedula || '').trim();
-
-        if (!cedulaStr && !cartonId && !numeroCarton) {
-          alert('❌ No se encontró la información del cartón a liquidar.');
-          return;
-        }
-
-        try {
-          if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Verificando...';
-          }
-
-          const supabase = await window.BulaPayDB.initSupabase();
-
-          const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
-
-          // 1. LECTURA EN TIEMPO REAL: Consultar obligatoriamente el cartón activo y cliente en la base de datos
-          let cartonQuery = supabase.from('cartones').select('*');
-          if (cartonId && isValidUuid(cartonId)) {
-            cartonQuery = cartonQuery.eq('id', cartonId);
-          } else if (numeroCarton) {
-            cartonQuery = cartonQuery.eq('numero_carton', Number(numeroCarton));
-          } else if (cedulaStr) {
-            cartonQuery = cartonQuery.eq('cliente_id', cedulaStr);
-          }
-          const { data: cartonesData } = await cartonQuery;
-          const activeCarton = (cartonesData || []).find(c => {
-            const st = String(c.estado || c.status || '').toLowerCase();
-            return st === 'activo' || st === 'activo_por_renovacion';
-          }) || (cartonesData || [])[0];
-
-          let { data: clientData } = await supabase
-            .from('clients')
-            .select('*')
-            .eq('cedula', cedulaStr)
-            .maybeSingle();
-
-          // Obtener abonos previos pagados para descontarlos de la deuda total inicial del cartón activo
-          const activeCartonId = activeCarton?.id || clientData?.carton_id;
-          let paymentsQuery = supabase
-            .from('payments')
-            .select('amount, status, carton_id, liquidado')
-            .eq('clientCedula', cedulaStr);
-
-          if (activeCartonId && isValidUuid(activeCartonId)) {
-            paymentsQuery = paymentsQuery.eq('carton_id', String(activeCartonId));
-          }
-
-          const { data: paymentsData } = await paymentsQuery;
-
-          const totalAbonosPrevios = (paymentsData || [])
-            .filter(p => {
-              if (p.liquidado === true || p.liquidado === 'true') return false;
-              const st = String(p.status || '').toUpperCase();
-              return st === 'PAGADO' || st === 'ABONADO';
-            })
-            .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-          const totalDebt = Math.round(Number(
-            activeCarton?.total_debt ||
-            activeCarton?.monto_total ||
-            activeCarton?.totalDebt ||
-            clientData?.totalDebt ||
-            (activeCarton?.monto_prestado ? activeCarton.monto_prestado * 1.2 : 0) ||
-            (clientData?.amount ? clientData.amount * 1.2 : 0)
-          ));
-
-          // Calcular el saldo pendiente real actual
-          let saldoPendienteReal = 0;
-          if (totalDebt > 0 && totalAbonosPrevios > 0) {
-            saldoPendienteReal = Math.max(0, totalDebt - totalAbonosPrevios);
-          } else if (activeCarton && activeCarton.outstanding !== undefined && activeCarton.outstanding !== null && Number(activeCarton.outstanding) > 0) {
-            saldoPendienteReal = Math.round(Number(activeCarton.outstanding));
-          } else if (clientData && clientData.outstanding !== undefined && clientData.outstanding !== null && Number(clientData.outstanding) > 0) {
-            saldoPendienteReal = Math.round(Number(clientData.outstanding));
-          } else {
-            saldoPendienteReal = Math.max(0, totalDebt - totalAbonosPrevios);
-          }
-
-          // 2. SINCRONIZACIÓN DE UI Y BACKEND: Prompt/confirmación mostrando exactamente el saldo pendiente real
-          if (saldoPendienteReal <= 0) {
-            alert('❌ Este cartón no tiene saldo pendiente. No se puede enviar a Lista Negra un cliente paz y salvo.');
-            if (btn) {
-              btn.disabled = false;
-              btn.textContent = '⛔ Liquidar / Lista Negra';
-            }
-            return;
-          }
-
-          const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${name} y enviarlo a Lista Negra (Liquidado por Mora)?\n` +
-            `Deuda Total a Lista Negra: $${saldoPendienteReal.toLocaleString('es-CO')}.\n` +
-            `Esta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
-
-          if (!(await window.showCrediConfirm(confirmMsg, "BulaPay"))) {
-            if (btn) {
-              btn.disabled = false;
-              btn.textContent = '⛔ Liquidar / Lista Negra';
-            }
-            return;
-          }
-
-          if (btn) btn.textContent = 'Procesando...';
-
-          // 3. REGISTRO EN BASE DE DATOS Y LISTA NEGRA CON EL SALDO PENDIENTE REAL
-          const rawTargetCartonId = activeCarton?.id || cartonId;
-          const targetCartonId = (rawTargetCartonId && isValidUuid(rawTargetCartonId)) ? rawTargetCartonId : null;
-
-          // Actualizar 'cartones' registrando el saldo pendiente real
-          if (targetCartonId) {
-            await supabase.from('cartones').update({
-              estado: 'liquidado_perdida',
-              outstanding: saldoPendienteReal
-            }).eq('id', targetCartonId);
-          }
-          if (cedulaStr) {
-            await supabase.from('cartones').update({
-              estado: 'liquidado_perdida',
-              outstanding: saldoPendienteReal
-            }).eq('cliente_id', cedulaStr).eq('estado', 'activo');
-          }
-
-          // Actualizar 'clients' con riesgo Rojo y el saldo pendiente real (tabla clients no tiene columna status)
-          if (cedulaStr) {
-            await supabase.from('clients').update({
-              risk: 'Rojo',
-              outstanding: saldoPendienteReal
-            }).eq('cedula', cedulaStr);
-          }
-
-          // Insertar en la tabla 'lista_negra' asegurando registrar los $80.000 restantes
-          try {
-            await supabase.from('lista_negra').insert([{
-              cliente_id: cedulaStr,
-              cedula: cedulaStr,
-              nombre: name,
-              monto: saldoPendienteReal,
-              outstanding: saldoPendienteReal,
-              total_debt: totalDebt,
-              carton_id: targetCartonId || null,
-              motivo: 'Liquidado por Mora',
-              created_at: new Date().toISOString()
-            }]);
-          } catch (eLn) {
-            console.warn("Aviso opcional al insertar en 'lista_negra':", eLn?.message);
-          }
-
-          // Invocación a la función RPC de Supabase 'liquidar_carton_por_morosidad'
-          try {
-            const { error: rpcErr } = await supabase.rpc('liquidar_carton_por_morosidad', { 
-              p_cliente_id: cedulaStr 
-            });
-            if (rpcErr) console.warn("Aviso RPC liquidar_carton_por_morosidad:", rpcErr.message);
-          } catch (eRpc) {
-            console.warn("Excepción RPC:", eRpc.message);
-          }
-
-          // INTEGRIDAD DE CAJA: Limpiar registros pendientes o vacíos en payments sin tocar abonos reales recibidos
-          try {
-            await supabase.from('payments').delete().eq('clientCedula', cedulaStr).eq('status', 'Pendiente');
-            await supabase.from('payments').delete().eq('clientCedula', cedulaStr).eq('amount', 0);
-          } catch (eDel) {
-            console.warn("Aviso al sanear tabla payments:", eDel?.message);
-          }
-
-          // Reset de cliente activo y formulario de UI
-          this.currentClient = null;
-          if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
-          if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
-          if (this.inputSearchCedula) this.inputSearchCedula.value = '';
-
-          // Forzar recarga limpia del mapa de clientes en DB y de la UI
-          console.log("🔄 [RECARGA INTERFAZ] Recargando cartones activos y métricas financieras...");
-          await window.BulaPayDB.loadActiveCredits();
-          await Promise.all([
-            this.updateRouteTracking(),
-            this.renderFinancialDashboard()
-          ]);
-
-          alert(`⚠️ El cliente ${name} (C.C. ${cedulaStr}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Pendiente Real registrada: $${saldoPendienteReal.toLocaleString('es-CO')}.\nEl saldo del Capital en Caja se mantiene estable.`);
-        } catch (e) {
-          console.error("Error al enviar a Lista Negra:", e);
-          alert('❌ Error al procesar liquidación por mora: ' + (e.message || e));
-        } finally {
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = '⛔ Liquidar / Lista Negra';
-          }
-        }
+        await this.ejecutarLiquidacionYListaNegra(null, { skipConfirm: false });
       });
     }
     
@@ -1635,6 +1449,7 @@ const agentModule = {
       
       // Limpiar Estado Cobro
       this.currentClient = null;
+      this.lastDismissed2MonthsCedula = null;
       if (this.inputCobroCedula) this.inputCobroCedula.value = '';
       if (this.inputSearchCedula) this.inputSearchCedula.value = '';
       if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'flex';
@@ -2375,7 +2190,7 @@ const agentModule = {
           btnPayRehab.textContent = "⏳ Procesando pago...";
           const success = await window.BulaPayDB.rehabilitateBlacklistedClient(client.cedula, targetAmount);
           if (success) {
-            await agentModule.searchClient();
+            await agentModule.searchClient(null, { isInternalRefresh: true });
             await agentModule.renderFinancialDashboard();
             await agentModule.updateRouteTracking();
           } else {
@@ -2439,6 +2254,7 @@ const agentModule = {
     }
 
     const isOverdue = this.isCartonOverdue(client, dailyStatusList);
+    const isOverdue2Months = this.isCartonOverdueBy2Months(client, dailyStatusList);
 
     // Aviso EXCLUSIVAMENTE informativo: alerta visual para el cobrador sin bloquear jamás pagos, abonos, pagos masivos ni liquidación
     if (isOverdue && Number(client.outstanding) > 0) {
@@ -2446,7 +2262,11 @@ const agentModule = {
       const infoEl = document.getElementById('overdue-banner-info');
       if (infoEl) {
         const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
-        infoEl.innerHTML = `⚠️ <b>Aviso Informativo:</b> El cartón ha superado su plazo proyectado (Saldo pendiente: <b>$${outstandingFmt}</b>). El cliente permanece accesible y 100% habilitado para pagos individuales, abonos, pagos masivos y liquidación de cartón.`;
+        if (isOverdue2Months) {
+          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón está vencido por 2 meses (Saldo pendiente: <b>$${outstandingFmt}</b>). Según la regla, se sugiere enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
+        } else {
+          infoEl.innerHTML = `⚠️ <b>Aviso Informativo:</b> El cartón ha superado su plazo proyectado (Saldo pendiente: <b>$${outstandingFmt}</b>). El cliente permanece accesible y 100% habilitado para pagos individuales, abonos, pagos masivos y liquidación de cartón.`;
+        }
       }
     } else {
       banner.style.display = 'none';
@@ -2514,6 +2334,317 @@ const agentModule = {
     const dueDateStr = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}`;
 
     return todayStr > dueDateStr;
+  },
+
+  isCartonOverdueBy2Months(client, dailyStatusList = null) {
+    if (!client) return false;
+    const outstanding = Number(client.outstanding ?? client.saldo_restante ?? 0);
+    if (outstanding <= 0) return false;
+
+    // Solo aplica para cartones activos (no liquidados previamente por mora o cancelados)
+    const rawEstado = String(client.estado || client.status || '').trim().toLowerCase();
+    if (rawEstado.includes('liquidado_perdida') || rawEstado.includes('liquidado_mora') || rawEstado.includes('castigado')) {
+      return false;
+    }
+
+    const today = new Date();
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    let dueDate = null;
+
+    // 1. Si existe fecha_vencimiento explícita en cliente o cartón
+    if (client.fecha_vencimiento) {
+      dueDate = this.parseLocalDate(client.fecha_vencimiento);
+    }
+
+    // 2. Si tenemos dailyStatusList, tomar la fecha proyectada de la última cuota del cartón
+    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    if (!dueDate && dailyStatusList && dailyStatusList.length > 0) {
+      const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
+      if (lastInstallment && lastInstallment.dateStr) {
+        dueDate = this.parseLocalDate(lastInstallment.dateStr);
+      }
+    }
+
+    // 3. O calcular dueDate a partir de fecha_apertura/fecha_inicio/created_at + totalInstallmentsCount (saltando domingos)
+    if (!dueDate) {
+      const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+      if (cartonDateStr) {
+        const startDate = this.parseLocalDate(cartonDateStr);
+        dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+      }
+    }
+
+    if (!dueDate || isNaN(dueDate.getTime())) return false;
+
+    // Verificar si hoy supera los 2 meses posteriores al vencimiento:
+    // Fecha de vencimiento + 2 meses calendario (ej. 15 de enero -> 15 de marzo)
+    const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const dueDatePlus2Months = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate());
+    
+    // O también en días de atraso tras vencer (60 días o más)
+    const diffTimeMs = todayZero.getTime() - dueDateZero.getTime();
+    const diffDays = Math.floor(diffTimeMs / (1000 * 60 * 60 * 24));
+
+    // También considerar si en dailyStatusList hay 60 o más cuotas/días en mora
+    const overdueDaysCount = (dailyStatusList && Array.isArray(dailyStatusList)) 
+      ? dailyStatusList.filter(s => s.isOverdue).length 
+      : 0;
+
+    return (todayZero >= dueDatePlus2Months || diffDays >= 60 || overdueDaysCount >= 60);
+  },
+
+  async promptOverdue2MonthsModal(client) {
+    const warningText = 'Este cartón está vencido por 2 meses. Según la regla, le sugerimos enviar a Lista Negra.';
+    
+    if (typeof Swal !== 'undefined') {
+      const res = await Swal.fire({
+        title: '⚠️ Aviso',
+        html: `<p style="font-size: 1.05rem; line-height: 1.5; margin: 0.5rem 0; color: #ffffff;">${warningText}</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Aceptar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#475569',
+        reverseButtons: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        background: '#0b132b',
+        color: '#ffffff',
+        customClass: {
+          popup: 'bulapay-swal-popup',
+          title: 'bulapay-swal-title',
+          confirmButton: 'bulapay-swal-confirm',
+          cancelButton: 'bulapay-swal-cancel'
+        }
+      });
+      return Boolean(res && res.isConfirmed);
+    }
+    
+    return window.confirm(`⚠️ Aviso: ${warningText}`);
+  },
+
+  async ejecutarLiquidacionYListaNegra(clientParam = null, { skipConfirm = false } = {}) {
+    const btn = this.btnCobroLiquidarMora;
+    const client = clientParam || this.currentClient || {};
+    const cartonId = client.carton_id || client.id || btn?.dataset?.cartonId || null;
+    const numeroCarton = client.numero_carton || btn?.dataset?.numeroCarton || null;
+    const cedula = client.cedula || btn?.dataset?.cedula || (this.inputSearchCedula ? this.inputSearchCedula.value : '') || null;
+    const name = client.name || btn?.dataset?.name || `Cliente ${cedula || ''}`;
+    const cedulaStr = String(cedula || '').trim();
+
+    if (!cedulaStr && !cartonId && !numeroCarton) {
+      alert('❌ No se encontró la información del cartón a liquidar.');
+      return false;
+    }
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Verificando...';
+      }
+
+      const supabase = await window.BulaPayDB.initSupabase();
+      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str).trim());
+
+      // 1. LECTURA EN TIEMPO REAL: Consultar obligatoriamente el cartón activo y cliente en la base de datos
+      let cartonQuery = supabase.from('cartones').select('*');
+      if (cartonId && isValidUuid(cartonId)) {
+        cartonQuery = cartonQuery.eq('id', cartonId);
+      } else if (numeroCarton) {
+        cartonQuery = cartonQuery.eq('numero_carton', Number(numeroCarton));
+      } else if (cedulaStr) {
+        cartonQuery = cartonQuery.eq('cliente_id', cedulaStr);
+      }
+      const { data: cartonesData } = await cartonQuery;
+      const activeCarton = (cartonesData || []).find(c => {
+        const st = String(c.estado || c.status || '').toLowerCase();
+        return st === 'activo' || st === 'activo_por_renovacion';
+      }) || (cartonesData || [])[0];
+
+      let { data: clientData } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('cedula', cedulaStr)
+        .maybeSingle();
+
+      // Obtener abonos previos pagados para descontarlos de la deuda total inicial del cartón activo
+      const activeCartonId = activeCarton?.id || clientData?.carton_id || cartonId;
+      let paymentsQuery = supabase
+        .from('payments')
+        .select('amount, status, carton_id, liquidado')
+        .eq('clientCedula', cedulaStr);
+
+      if (activeCartonId && isValidUuid(activeCartonId)) {
+        paymentsQuery = paymentsQuery.eq('carton_id', String(activeCartonId));
+      }
+
+      const { data: paymentsData } = await paymentsQuery;
+
+      const totalAbonosPrevios = (paymentsData || [])
+        .filter(p => {
+          if (p.liquidado === true || p.liquidado === 'true') return false;
+          const st = String(p.status || '').toUpperCase();
+          return st === 'PAGADO' || st === 'ABONADO';
+        })
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+      const totalDebt = Math.round(Number(
+        activeCarton?.total_debt ||
+        activeCarton?.monto_total ||
+        activeCarton?.totalDebt ||
+        clientData?.totalDebt ||
+        client?.totalDebt ||
+        (activeCarton?.monto_prestado ? activeCarton.monto_prestado * 1.2 : 0) ||
+        (clientData?.amount ? clientData.amount * 1.2 : 0) ||
+        (client?.amount ? client.amount * 1.2 : 0)
+      ));
+
+      // Calcular el saldo pendiente real actual
+      let saldoPendienteReal = 0;
+      if (totalDebt > 0 && totalAbonosPrevios > 0) {
+        saldoPendienteReal = Math.max(0, totalDebt - totalAbonosPrevios);
+      } else if (client?.outstanding !== undefined && client?.outstanding !== null && Number(client.outstanding) > 0) {
+        saldoPendienteReal = Math.round(Number(client.outstanding));
+      } else if (activeCarton && activeCarton.outstanding !== undefined && activeCarton.outstanding !== null && Number(activeCarton.outstanding) > 0) {
+        saldoPendienteReal = Math.round(Number(activeCarton.outstanding));
+      } else if (clientData && clientData.outstanding !== undefined && clientData.outstanding !== null && Number(clientData.outstanding) > 0) {
+        saldoPendienteReal = Math.round(Number(clientData.outstanding));
+      } else {
+        saldoPendienteReal = Math.max(0, totalDebt - totalAbonosPrevios);
+      }
+
+      if (saldoPendienteReal <= 0) {
+        alert('❌ Este cartón no tiene saldo pendiente. No se puede enviar a Lista Negra un cliente paz y salvo.');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '⛔ Liquidar / Lista Negra';
+        }
+        return false;
+      }
+
+      if (!skipConfirm) {
+        const confirmMsg = `⚠️ ATENCIÓN: ¿Deseas liquidar el cartón de ${name} y enviarlo a Lista Negra (Liquidado por Mora)?\n` +
+          `Deuda Total a Lista Negra: $${saldoPendienteReal.toLocaleString('es-CO')}.\n` +
+          `Esta acción removerá al cliente de la cartera activa. El Capital en Caja permanecerá intacto y sin desajustes.`;
+
+        if (!(await window.showCrediConfirm(confirmMsg, "BulaPay"))) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '⛔ Liquidar / Lista Negra';
+          }
+          return false;
+        }
+      }
+
+      if (btn) btn.textContent = 'Procesando...';
+
+      // 3. REGISTRO EN BASE DE DATOS Y LISTA NEGRA CON EL SALDO PENDIENTE REAL
+      const rawTargetCartonId = activeCarton?.id || cartonId;
+      const targetCartonId = (rawTargetCartonId && isValidUuid(rawTargetCartonId)) ? rawTargetCartonId : null;
+
+      // Actualizar 'cartones' registrando el saldo pendiente real
+      if (targetCartonId) {
+        await supabase.from('cartones').update({
+          estado: 'liquidado_perdida',
+          outstanding: saldoPendienteReal
+        }).eq('id', targetCartonId);
+      }
+      if (cedulaStr) {
+        await supabase.from('cartones').update({
+          estado: 'liquidado_perdida',
+          outstanding: saldoPendienteReal
+        }).eq('cliente_id', cedulaStr).eq('estado', 'activo');
+      }
+
+      // Actualizar 'clients' con riesgo Rojo y el saldo pendiente real (tabla clients no tiene columna status)
+      if (cedulaStr) {
+        await supabase.from('clients').update({
+          risk: 'Rojo',
+          outstanding: saldoPendienteReal
+        }).eq('cedula', cedulaStr);
+      }
+
+      // Insertar en la tabla 'lista_negra' asegurando registrar los datos de la ruta y cliente
+      try {
+        const currentUser = window.BulaPayDB.getCurrentUser();
+        const routeId = currentUser?.routeId || currentUser?.route_id || activeCarton?.route_id || client?.route_id || null;
+        const lnRecord = {
+          cliente_id: cedulaStr,
+          cedula: cedulaStr,
+          nombre: name,
+          monto: saldoPendienteReal,
+          outstanding: saldoPendienteReal,
+          total_debt: totalDebt,
+          carton_id: targetCartonId || null,
+          motivo: 'Liquidado por Mora',
+          created_at: new Date().toISOString()
+        };
+        if (routeId) lnRecord.route_id = routeId;
+        await supabase.from('lista_negra').insert([lnRecord]);
+      } catch (eLn) {
+        console.warn("Aviso opcional al insertar en 'lista_negra':", eLn?.message);
+      }
+
+      // Invocación a la función RPC de Supabase 'liquidar_carton_por_morosidad'
+      try {
+        const { error: rpcErr } = await supabase.rpc('liquidar_carton_por_morosidad', { 
+          p_cliente_id: cedulaStr 
+        });
+        if (rpcErr) console.warn("Aviso RPC liquidar_carton_por_morosidad:", rpcErr.message);
+      } catch (eRpc) {
+        console.warn("Excepción RPC:", eRpc.message);
+      }
+
+      // INTEGRIDAD DE CAJA: Limpiar registros pendientes o vacíos en payments sin tocar abonos reales recibidos
+      try {
+        await supabase.from('payments').delete().eq('clientCedula', cedulaStr).eq('status', 'Pendiente');
+        await supabase.from('payments').delete().eq('clientCedula', cedulaStr).eq('amount', 0);
+      } catch (eDel) {
+        console.warn("Aviso al sanear tabla payments:", eDel?.message);
+      }
+
+      // Sincronizar en caché local
+      try {
+        const localClients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
+        localClients.forEach(c => {
+          if (String(c.cedula).trim() === cedulaStr) {
+            c.risk = 'Rojo';
+            c.status = 'Liquidado_Mora';
+            c.outstanding = saldoPendienteReal;
+          }
+        });
+        localStorage.setItem('bulapay_clients', JSON.stringify(localClients));
+      } catch (eCache) {}
+
+      // Reset de cliente activo y formulario de UI
+      this.currentClient = null;
+      this.lastDismissed2MonthsCedula = null;
+      if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
+      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
+      if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+
+      // Forzar recarga limpia del mapa de clientes en DB y de la UI
+      console.log("🔄 [RECARGA INTERFAZ] Recargando cartones activos y métricas financieras...");
+      await window.BulaPayDB.loadActiveCredits();
+      await Promise.all([
+        this.updateRouteTracking(),
+        this.renderFinancialDashboard()
+      ]);
+
+      alert(`⚠️ El cliente ${name} (C.C. ${cedulaStr}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Pendiente Real registrada: $${saldoPendienteReal.toLocaleString('es-CO')}.\nEl saldo del Capital en Caja se mantiene estable.`);
+      return true;
+    } catch (e) {
+      console.error("Error al enviar a Lista Negra:", e);
+      alert('❌ Error al procesar liquidación por mora: ' + (e.message || e));
+      return false;
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '⛔ Liquidar / Lista Negra';
+      }
+    }
   },
 
   canRenovarCarton(client, dailyStatusList = null) {
@@ -2613,8 +2744,11 @@ const agentModule = {
     }
   },
 
-  async searchClient() {
-    const cedula = this.inputSearchCedula.value.trim();
+  async searchClient(forcedCedula = null, options = {}) {
+    const isInternalRefresh = Boolean(options && options.isInternalRefresh);
+    const cedula = (forcedCedula !== null && forcedCedula !== undefined) 
+      ? String(forcedCedula).trim() 
+      : (this.inputSearchCedula ? this.inputSearchCedula.value.trim() : '');
     if (!cedula) {
       alert('⚠️ Por favor ingrese un número de Cédula.');
       return;
@@ -2629,6 +2763,9 @@ const agentModule = {
 
       // 1. Verificar si el cliente existe en el sistema BulaPay (clients o cartones)
       const cedulaClean = String(cedula).trim();
+      if (!isInternalRefresh && this.lastDismissed2MonthsCedula && this.lastDismissed2MonthsCedula !== cedulaClean) {
+        this.lastDismissed2MonthsCedula = null;
+      }
       const { data: dbClientGlobal } = await supabase
         .from('clients')
         .select('*')
@@ -2864,6 +3001,18 @@ const agentModule = {
           console.error("Error al preparar cartón interactivo:", e);
         }
       }
+
+      // VALIDACIÓN CRÍTICA: Regla de Autoliquidación y Envío a Lista Negra por 2 Meses de Mora
+      if (!isInternalRefresh && this.lastDismissed2MonthsCedula !== cedulaClean && this.isCartonOverdueBy2Months(client, dailyStatusList)) {
+        const confirmed = await this.promptOverdue2MonthsModal(client);
+        if (confirmed) {
+          await this.ejecutarLiquidacionYListaNegra(client, { skipConfirm: true });
+          return;
+        } else {
+          // Si presiona [Cancelar], la alerta se cierra y el cartón queda visible para su gestión manual habitual.
+          this.lastDismissed2MonthsCedula = cedulaClean;
+        }
+      }
       
     } catch (err) {
       console.error(err);
@@ -3044,7 +3193,7 @@ const agentModule = {
       if (isFinalPayment) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
-        await this.searchClient(); // Recarga y repinta los datos completos
+        await this.searchClient(null, { isInternalRefresh: true }); // Recarga y repinta los datos completos
         // Mostrar modal obligatorio SMS para notificar el pago
         this.showMandatorySmsPrompt(updatedClient, 'payment');
       }
@@ -3226,7 +3375,7 @@ const agentModule = {
       if (isFinalPayment) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
-        await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
+        await this.searchClient(null, { isInternalRefresh: true }); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales
         this.showMandatorySmsPrompt(updatedClient, 'payment');
       }
       
@@ -4823,7 +4972,7 @@ const agentModule = {
           numeroCarton: client.numero_carton || null
         });
         if (typeof this.renderFinancialDashboard === 'function') await this.renderFinancialDashboard();
-        if (typeof this.searchClient === 'function') await this.searchClient();
+        if (typeof this.searchClient === 'function') await this.searchClient(null, { isInternalRefresh: true });
         if (typeof this.updateRouteTracking === 'function') await this.updateRouteTracking();
         if (typeof onCompleteCallback === 'function') await onCompleteCallback();
       } catch (e) {
