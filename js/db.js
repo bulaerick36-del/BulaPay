@@ -3032,34 +3032,105 @@ const db = {
     const modusOp = await this.evaluateClientModusOperandi(cedula);
     const calculatedRisk = modusOp ? modusOp.risk : (client.risk || 'Verde');
 
-    // Verificar cartón activo en la tabla 'cartones'
+    // Verificar cartón activo en la tabla 'cartones' (Regla de Vigencia Indefinida sin expiración por calendario)
     try {
       const { data: cartonsData } = await supabase
         .from('cartones')
         .select('*')
         .eq('cliente_id', String(cedula).trim())
-        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .order('created_at', { ascending: false });
 
-      const carton = (cartonsData && cartonsData.length > 0) ? cartonsData[0] : null;
+      const activeStatesSet = new Set(['activo', 'activo_por_renovacion', 'vencido', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']);
+      let carton = null;
+      if (cartonsData && cartonsData.length > 0) {
+        // Priorizar cartones con estado operativo activo o vencido
+        carton = cartonsData.find(c => {
+          const st = String(c.estado || c.status || '').trim().toLowerCase();
+          return activeStatesSet.has(st);
+        });
+        // Si no hay con ese estado explícito, tomar el cartón más reciente que no sea pérdida definitiva
+        if (!carton) {
+          carton = cartonsData.find(c => {
+            const st = String(c.estado || c.status || '').trim().toLowerCase();
+            return st !== 'liquidado_perdida' && st !== 'liquidado_mora';
+          }) || cartonsData[0];
+        }
+      }
 
       if (carton) {
+        const cMontoPrestado = Number(carton.monto_prestado || client.amount || client.monto_prestado || 0);
+        let cTotalDebt = Number(carton.total_debt || carton.totalDebt || client.totalDebt || client.total_debt || 0);
+        if (cTotalDebt <= 0 && cMontoPrestado > 0) {
+          cTotalDebt = Math.round(cMontoPrestado * 1.2);
+        }
+
+        // Consultar pagos reales del cartón para verificar si verdaderamente fue pagado al 100%
+        let totalPagadoReal = 0;
+        try {
+          const cartonUuid = carton.id ? String(carton.id).trim() : null;
+          let pQuery = supabase.from('payments').select('id, amount, status, payment_type, installmentNumber, carton_id').eq('clientCedula', String(cedula).trim());
+          if (cartonUuid) {
+            pQuery = pQuery.eq('carton_id', cartonUuid);
+          }
+          const { data: cPayments } = await pQuery;
+          (cPayments || []).forEach(p => {
+            const pId = String(p.id || '').trim();
+            const pStatus = String(p.status || '').trim().toLowerCase();
+            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+            const isCanceled = pStatus.includes('cancel') || pStatus.includes('rechaz') || pStatus === 'no pago' || pStatus === 'pendiente';
+            const isLiquidation = pId.startsWith('pay_liq_') || pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999 || pType === 'renovacion';
+            if (!isCanceled && !isLiquidation && Number(p.amount) > 0) {
+              totalPagadoReal += Math.round(Number(p.amount));
+            }
+          });
+        } catch (ePay) {
+          console.warn("Aviso al verificar pagos reales en getGlobalClientByCedula:", ePay);
+        }
+
+        // REGLA CRÍTICA BULAPAY:
+        // Un cartón NUNCA expira por fecha ni se marca como Liquidado en $0 a menos que se hayan registrado pagos reales del 100%.
+        const isFullyPaid = (cTotalDebt > 0 && totalPagadoReal >= cTotalDebt);
+        let calculatedOutstanding = 0;
+        let finalStatus = 'Activo';
+        let finalEstado = 'activo';
+
+        if (isFullyPaid) {
+          calculatedOutstanding = 0;
+          finalStatus = 'Liquidado_Pagado';
+          finalEstado = 'liquidado';
+        } else {
+          // El saldo permanece activo y exigible indefinidamente
+          if (totalPagadoReal > 0) {
+            calculatedOutstanding = Math.max(0, cTotalDebt - totalPagadoReal);
+          } else {
+            const dbOut = Number(carton.outstanding);
+            calculatedOutstanding = (!isNaN(dbOut) && dbOut > 0) ? dbOut : cTotalDebt;
+          }
+          finalStatus = 'Activo';
+          finalEstado = 'activo';
+        }
+
+        const installmentsCount = Number(carton.installments_count || carton.installmentsCount || 30);
+        const installmentAmount = Number(carton.installment_amount || (installmentsCount > 0 ? Math.round(cTotalDebt / installmentsCount) : 0));
+
         return {
           ...client,
           ...carton,
           carton_id: carton.id,
           cedula: client.cedula,
           name: client.name || client.nombre || `Cliente ${client.cedula}`,
-          amount: Number(carton.monto_prestado || 0),
-          monto_prestado: Number(carton.monto_prestado || 0),
-          totalDebt: Number(carton.total_debt || 0),
-          total_debt: Number(carton.total_debt || 0),
-          outstanding: Number(carton.outstanding || 0),
-          installmentsCount: Number(carton.installments_count || 1),
-          installmentAmount: Number(carton.installment_amount || 0),
-          status: 'Activo',
-          estado: 'activo',
+          amount: cMontoPrestado,
+          monto_prestado: cMontoPrestado,
+          totalDebt: cTotalDebt,
+          total_debt: cTotalDebt,
+          outstanding: calculatedOutstanding,
+          installmentsCount: installmentsCount,
+          installments_count: installmentsCount,
+          installmentAmount: installmentAmount,
+          installment_amount: installmentAmount,
+          status: finalStatus,
+          estado: finalEstado,
+          isFullyPaid: isFullyPaid,
           risk: calculatedRisk
         };
       } else {
@@ -4445,7 +4516,7 @@ const db = {
       }
       if (targetCartonId) {
         const pCartonId = String(p.carton_id || p.cartonId || p.credit_id || '').trim();
-        if (!pCartonId || pCartonId.toLowerCase() !== String(targetCartonId).trim().toLowerCase()) {
+        if (pCartonId && pCartonId.toLowerCase() !== String(targetCartonId).trim().toLowerCase()) {
           return false;
         }
       }
@@ -5744,7 +5815,7 @@ const db = {
       }
       if (!targetCarton && cedula) {
         try {
-          const { data: cData } = await supabase.from('cartones').select('*').eq('cliente_id', String(cedula)).in('estado', ['activo', 'activo_por_renovacion']).maybeSingle();
+          const { data: cData } = await supabase.from('cartones').select('*').eq('cliente_id', String(cedula)).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']).order('created_at', { ascending: false }).limit(1).maybeSingle();
           if (cData) targetCarton = cData;
         } catch(e){}
       }
@@ -5769,7 +5840,7 @@ const db = {
       } else if (numeroCarton && !isNaN(Number(numeroCarton))) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
       } else if (cedStr && isMora) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion']);
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']);
       }
 
       if (isMora && cedStr) {

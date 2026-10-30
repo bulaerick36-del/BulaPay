@@ -2682,16 +2682,22 @@ const agentModule = {
         effectiveRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
       }
       const effectiveAgentId = currentUser?.username || currentUser?.id;
+      const isMaster = currentUser?.username === 'admin' || currentUser?.role === 'Superadministrador' || currentUser?.role === 'Superadmin';
 
       const isCartonMine = (cartonObj) => {
         if (!cartonObj) return false;
+        if (isMaster) return true;
         const cartonRouteId = String(cartonObj.route_id || cartonObj.routeId || '').trim().toLowerCase();
         const cartonAgentId = String(cartonObj.agent_id || cartonObj.agentId || '').trim().toLowerCase();
         const effRoute = String(effectiveRouteId || '').trim().toLowerCase();
         const effAgent = String(effectiveAgentId || '').trim().toLowerCase();
         const effUser = String(currentUser?.username || '').trim().toLowerCase();
+        if (currentUser?.role === 'Agente Independiente') {
+          return !cartonAgentId || cartonAgentId === effAgent || cartonAgentId === effUser;
+        }
         return (effRoute && cartonRouteId && cartonRouteId === effRoute) ||
-               (effAgent && cartonAgentId && (cartonAgentId === effAgent || cartonAgentId === effUser));
+               (effAgent && cartonAgentId && (cartonAgentId === effAgent || cartonAgentId === effUser)) ||
+               (!cartonRouteId && (!cartonAgentId || cartonAgentId === effAgent || cartonAgentId === effUser));
       };
 
       const myActiveCarton = allActiveGlobalCartones.find(isCartonMine) || null;
@@ -2747,19 +2753,20 @@ const agentModule = {
         }
       });
 
-      const montoPrestado = Number(activeCarton.monto_prestado || activeCarton.amount || activeCarton.capital_prestado || 0);
-      let totalDebt = Number(activeCarton.total_debt || activeCarton.totalDebt || activeCarton.monto_total || 0);
+      const montoPrestado = Number(activeCarton.monto_prestado || activeCarton.amount || activeCarton.capital_prestado || (dbClientGlobal ? (dbClientGlobal.amount || dbClientGlobal.monto_prestado) : 0) || 0);
+      let totalDebt = Number(activeCarton.total_debt || activeCarton.totalDebt || activeCarton.monto_total || (dbClientGlobal ? (dbClientGlobal.totalDebt || dbClientGlobal.total_debt) : 0) || 0);
       if (totalDebt <= 0 && montoPrestado > 0) {
         totalDebt = Math.round(montoPrestado * 1.2);
       }
-      const installmentsCount = Number(activeCarton.installments_count || activeCarton.installmentsCount || 30);
+      const installmentsCount = Number(activeCarton.installments_count || activeCarton.installmentsCount || (dbClientGlobal ? (dbClientGlobal.installmentsCount || dbClientGlobal.installments_count) : 0) || 30);
       let installmentAmount = Number(activeCarton.installment_amount || activeCarton.installmentAmount || 0);
       if (installmentAmount <= 0 && totalDebt > 0 && installmentsCount > 0) {
         installmentAmount = Math.round(totalDebt / installmentsCount);
       }
 
-      // REGLA CRÍTICA CONTRA FALSA LIQUIDACIÓN:
+      // REGLA CRÍTICA CONTRA FALSA LIQUIDACIÓN Y VIGENCIA INDEFINIDA:
       // Un cartón NUNCA debe marcarse como "Liquidado" ni en $0 a menos que se hayan registrado pagos reales que sumen el 100% del valor del crédito.
+      // Ningún crédito expira por calendario: la deuda y las cuotas atrasadas persisten indefinidamente hasta cobro manual.
       const isFullyPaidByRecords = (totalDebt > 0 && totalPagadoReal >= totalDebt);
       let realOutstanding = 0;
       let realStatus = 'Activo';
@@ -2770,7 +2777,7 @@ const agentModule = {
         realStatus = 'Liquidado_Pagado';
         realEstado = 'liquidado';
       } else {
-        // Si no hay pagos registrados, el saldo pendiente es el 100% de la deuda
+        // Si no hay pagos registrados o son parciales, el saldo pendiente es la deuda real no pagada
         realOutstanding = Math.max(0, totalDebt - totalPagadoReal);
         realStatus = 'Activo';
         realEstado = 'activo';
