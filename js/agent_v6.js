@@ -2214,18 +2214,27 @@ const agentModule = {
 
       // Re-consultar los datos del cliente actualizados
       let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
-      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
-          risk: 'Verde'
+          risk: 'Verde',
+          isFullyPaid: true
+        };
+      } else {
+        const remaining = Math.max(0, currentDebt - Math.round(totalAmount));
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: remaining,
+          status: 'Activo',
+          estado: 'activo'
         };
       }
       this.currentClient = updatedClient;
       
-      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
         // Actualizar la interfaz principal del cobrador, Cartón y estado de liquidación
@@ -2386,8 +2395,10 @@ const agentModule = {
       if (cobroBlacklistBanner) cobroBlacklistBanner.style.setProperty('display', 'none', 'important');
     }
 
-    // Condición: El cliente no tiene deuda activa si outstanding <= 0 o sus saldos numéricos son 0 o su estado es liquidado
-    const isWithoutActiveDebt = (outstanding <= 0 || (amount <= 0 && totalDebt <= 0) || isLiquidadoStatus);
+    // REGLA CRÍTICA BULAPAY CONTRA FALSA LIQUIDACIÓN:
+    // Un cartón NUNCA debe marcarse como "Liquidado" ni en $0 a menos que se hayan registrado pagos reales que sumen el 100% del valor del crédito.
+    const isFullyPaidByRecords = Boolean(client.isFullyPaid || (totalDebt > 0 && totalPagado >= totalDebt));
+    const isWithoutActiveDebt = (outstanding <= 0 && isFullyPaidByRecords && !isLossStatus);
 
     if (isWithoutActiveDebt) {
       // 1. Ocultar el formulario de cobro (monto y botón de confirmar pago)
@@ -2395,7 +2406,7 @@ const agentModule = {
       // 2. Mostrar letrero verde claro "✅ Cartón Liquidado / Cliente sin deuda activa"
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'block', 'important');
     } else {
-      // Cliente con cuotas/deuda activa (outstanding > 0): SIEMPRE operable sin importar antigüedad o si está vencido
+      // Cliente con deuda pendiente real (outstanding > 0): SIEMPRE operable sin importar antigüedad o si está vencido
       if (cobroFormFields) cobroFormFields.style.setProperty('display', 'block', 'important');
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
     }
@@ -2719,18 +2730,68 @@ const agentModule = {
         return;
       }
 
+      // Consultar de inmediato los pagos reales del cartón para calcular saldo y estado real verificado
+      const targetCartonUuid = activeCarton.id || activeCarton.carton_id || null;
+      const rawPayments = await window.BulaPayDB.getPaymentsByClient(cedulaClean, targetCartonUuid);
+      const paymentsList = Array.isArray(rawPayments) ? rawPayments : [];
+
+      let totalPagadoReal = 0;
+      paymentsList.forEach(p => {
+        const pId = String(p.id || '').trim();
+        const pStatus = String(p.status || '').trim().toLowerCase();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const isCanceled = pStatus.includes('cancel') || pStatus.includes('rechaz') || pStatus === 'no pago' || pStatus === 'pendiente';
+        const isLiquidation = pId.startsWith('pay_liq_') || pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999 || pType === 'renovacion';
+        if (!isCanceled && !isLiquidation && Number(p.amount) > 0) {
+          totalPagadoReal += Math.round(Number(p.amount));
+        }
+      });
+
+      const montoPrestado = Number(activeCarton.monto_prestado || activeCarton.amount || activeCarton.capital_prestado || 0);
+      let totalDebt = Number(activeCarton.total_debt || activeCarton.totalDebt || activeCarton.monto_total || 0);
+      if (totalDebt <= 0 && montoPrestado > 0) {
+        totalDebt = Math.round(montoPrestado * 1.2);
+      }
+      const installmentsCount = Number(activeCarton.installments_count || activeCarton.installmentsCount || 30);
+      let installmentAmount = Number(activeCarton.installment_amount || activeCarton.installmentAmount || 0);
+      if (installmentAmount <= 0 && totalDebt > 0 && installmentsCount > 0) {
+        installmentAmount = Math.round(totalDebt / installmentsCount);
+      }
+
+      // REGLA CRÍTICA CONTRA FALSA LIQUIDACIÓN:
+      // Un cartón NUNCA debe marcarse como "Liquidado" ni en $0 a menos que se hayan registrado pagos reales que sumen el 100% del valor del crédito.
+      const isFullyPaidByRecords = (totalDebt > 0 && totalPagadoReal >= totalDebt);
+      let realOutstanding = 0;
+      let realStatus = 'Activo';
+      let realEstado = 'activo';
+
+      if (isFullyPaidByRecords) {
+        realOutstanding = 0;
+        realStatus = 'Liquidado_Pagado';
+        realEstado = 'liquidado';
+      } else {
+        // Si no hay pagos registrados, el saldo pendiente es el 100% de la deuda
+        realOutstanding = Math.max(0, totalDebt - totalPagadoReal);
+        realStatus = 'Activo';
+        realEstado = 'activo';
+      }
+
       // El cliente existe Y posee un cartón activo en la ruta del agente activo
       const client = {
         ...(dbClientGlobal || {}),
         ...activeCarton,
-        carton_id: activeCarton.id || activeCarton.carton_id,
+        carton_id: targetCartonUuid,
         cedula: cedulaClean,
         name: dbClientGlobal?.name || dbClientGlobal?.nombre || activeCarton.name || activeCarton.nombre_cliente || `Cliente ${cedulaClean}`,
-        amount: Number(activeCarton.monto_prestado || activeCarton.amount || 0),
-        totalDebt: Number(activeCarton.total_debt || activeCarton.totalDebt || 0),
-        outstanding: Number(activeCarton.outstanding !== undefined ? activeCarton.outstanding : (activeCarton.total_debt || 0)),
-        installmentsCount: Number(activeCarton.installments_count || activeCarton.installmentsCount || 1),
-        installmentAmount: Number(activeCarton.installment_amount || activeCarton.installmentAmount || 0)
+        amount: montoPrestado,
+        totalDebt: totalDebt,
+        outstanding: realOutstanding,
+        installmentsCount: installmentsCount,
+        installmentAmount: installmentAmount,
+        status: realStatus,
+        estado: realEstado,
+        totalPagadoReal: totalPagadoReal,
+        isFullyPaid: isFullyPaidByRecords
       };
 
       if (this.searchError) this.searchError.style.display = 'none';
@@ -2771,26 +2832,22 @@ const agentModule = {
         this.inputCobroAmount.value = Math.min(Number(client.installmentAmount), Math.max(0, Number(client.outstanding)));
       }
 
-      // Aplicar reactivamente el estado visual y bloqueo inteligente según el saldo del cliente
-      this.updateCobroViewState(client);
+      // Preparar el Cartón Interactivo (Flujo B) con pagos reales verificados
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, paymentsList);
+      const todayStr = this.getLocalDateString();
+      this.hasPaidRecordToday = paymentsList.some(p => {
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const rawStatus = String(p.status || '').trim().toLowerCase();
+        if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999 || pType === 'renovacion' || rawStatus.includes('liquidado')) return false;
+        return p.date === todayStr && Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente';
+      });
 
-      // Preparar el Cartón Interactivo (Flujo B)
+      // Aplicar reactivamente el estado visual verificado según el saldo real del cliente
+      this.updateCobroViewState(client, dailyStatusList);
+
       if (this.cobroOverdueDaysList) {
         try {
-          const payments = await window.BulaPayDB.getPaymentsByClient(client, client.carton_id || client.id);
-          const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, payments);
-          const todayStr = this.getLocalDateString();
-          this.hasPaidRecordToday = payments ? payments.some(p => {
-            const pId = String(p.id || '').trim();
-            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
-            const rawStatus = String(p.status || '').trim().toLowerCase();
-            if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999 || pType === 'renovacion' || rawStatus.includes('liquidado')) return false;
-            return p.date === todayStr && Number(p.amount) > 0 && rawStatus !== 'no pago' && rawStatus !== 'pendiente';
-          }) : false;
-          
-          // Re-evaluar estado de los botones de pago, renovación y liquidación por mora
-          this.updateCobroViewState(client, dailyStatusList);
-
           window.BulaPayDB.renderOverdueDaysList(
             this.cobroOverdueDaysList, 
             dailyStatusList, 
@@ -2952,13 +3009,22 @@ const agentModule = {
       }
 
       let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
-      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
-          risk: 'Verde'
+          risk: 'Verde',
+          isFullyPaid: true
+        };
+      } else {
+        const remaining = Math.max(0, currentOutstanding - amountPaid);
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: remaining,
+          status: 'Activo',
+          estado: 'activo'
         };
       }
       this.currentClient = updatedClient;
@@ -2968,7 +3034,7 @@ const agentModule = {
       }
 
       // Liquidación Automática de Última Cuota con Alerta y Aceptar
-      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
         await this.searchClient(); // Recarga y repinta los datos completos
@@ -3130,18 +3196,27 @@ const agentModule = {
       this.captureAndSendLocation();
 
       let updatedClient = await window.BulaPayDB.getClientByCedula(this.currentClient.cedula);
-      if (isFinalPayment || !updatedClient || Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment) {
         updatedClient = {
           ...(updatedClient || this.currentClient),
           outstanding: 0,
           status: 'Liquidado_Pagado',
           estado: 'liquidado',
-          risk: 'Verde'
+          risk: 'Verde',
+          isFullyPaid: true
+        };
+      } else {
+        const remaining = Math.max(0, currentDebt - amountToPayNum);
+        updatedClient = {
+          ...(updatedClient || this.currentClient),
+          outstanding: remaining,
+          status: 'Activo',
+          estado: 'activo'
         };
       }
       this.currentClient = updatedClient;
       
-      if (isFinalPayment || Number(updatedClient.outstanding) <= 0) {
+      if (isFinalPayment) {
         this.showSuccessLiquidationModal(updatedClient);
       } else {
         await this.searchClient(); // Refresca y actualiza cartón automáticamente ANTES del alert para evitar falsos positivos visuales

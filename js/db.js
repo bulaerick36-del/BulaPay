@@ -3687,7 +3687,7 @@ const db = {
               .from('cartones')
               .select('id')
               .eq('cliente_id', cedStr)
-              .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion']);
+              .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente', 'liquidado']);
             if (agentId) {
               findActiveQuery = findActiveQuery.eq('agent_id', agentId);
             }
@@ -4062,7 +4062,7 @@ const db = {
           .from('cartones')
           .select('*')
           .eq('cliente_id', cedStr)
-          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente', 'liquidado'])
           .order('created_at', { ascending: false })
           .limit(1);
 
@@ -4076,7 +4076,7 @@ const db = {
             .from('cartones')
             .select('*')
             .eq('cliente_id', cedStr)
-            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
+            .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente', 'liquidado'])
             .order('created_at', { ascending: false })
             .limit(1);
           if (cDataFallback && cDataFallback.length > 0) activeCarton = cDataFallback[0];
@@ -4385,7 +4385,7 @@ const db = {
           .from('cartones')
           .select('id')
           .eq('cliente_id', cedStr)
-          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion'])
+          .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente', 'liquidado'])
           .order('created_at', { ascending: false });
 
         if (currentAgentId && currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente')) {
