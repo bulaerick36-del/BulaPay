@@ -3367,10 +3367,7 @@ const db = {
       installments_count: installmentsCount,
       installment_amount: installmentAmount,
       discount_amount: discountVal,
-      retained_fees: Number(client.retained_fees || client.retained_amount || discountVal),
-      retained_amount: Number(client.retained_fees || client.retained_amount || discountVal),
-      seg_val: Number(client.segVal || 0),
-      pap_val: Number(client.papVal || 0),
+      discount_reason: client.discount_reason || 'Papelería y Seguro',
       net_cash: netCashVal,
       route_id: routeId,
       agent_id: agentId,
@@ -3384,37 +3381,29 @@ const db = {
     try {
       const { data: cData, error: cErr } = await supabase.from('cartones').insert([cartonPayload]).select();
       if (cErr) {
-        console.warn("⚠️ Error al insertar cartón completo en 'cartones'. Reintentando sin campo duplicate...", cErr);
-        const safeCartonPayload = { ...cartonPayload };
-        delete safeCartonPayload.ruta_id;
-        const { data: cData2, error: cErr2 } = await supabase.from('cartones').insert([safeCartonPayload]).select();
-        if (cErr2) {
-          console.warn("⚠️ Advertencia al insertar cartón en 'cartones'. Reintentando con payload esencial...", cErr2);
-          const essentialCartonPayload = {
-            cliente_id: cedulaStr,
-            numero_carton: newNumeroCarton,
-            fecha_apertura: nowIso,
-            monto_prestado: montoPrestado,
-            estado: cartonState,
-            total_debt: newTotalDebt,
-            outstanding: newOutstanding,
-            installments_count: installmentsCount,
-            installment_amount: installmentAmount,
-            discount_amount: discountVal,
-            net_cash: netCashVal,
-            route_id: routeId,
-            agent_id: agentId,
-            supervisor_id: supervisorId
-          };
-          const retryRes = await supabase.from('cartones').insert([essentialCartonPayload]).select();
-          if (retryRes.error) {
-            console.error("❌ Error definitivo al insertar cartón en 'cartones':", retryRes.error);
-            cartonError = retryRes.error;
-          } else if (retryRes.data && retryRes.data[0]) {
-            insertedCarton = retryRes.data[0];
-          }
-        } else if (cData2 && cData2[0]) {
-          insertedCarton = cData2[0];
+        console.warn("⚠️ Advertencia al insertar cartón completo en 'cartones'. Reintentando con payload esencial...", cErr);
+        const essentialCartonPayload = {
+          cliente_id: cedulaStr,
+          numero_carton: newNumeroCarton,
+          fecha_apertura: nowIso,
+          monto_prestado: montoPrestado,
+          estado: cartonState,
+          total_debt: newTotalDebt,
+          outstanding: newOutstanding,
+          installments_count: installmentsCount,
+          installment_amount: installmentAmount,
+          discount_amount: discountVal,
+          net_cash: netCashVal,
+          route_id: routeId,
+          agent_id: agentId,
+          supervisor_id: supervisorId
+        };
+        const retryRes = await supabase.from('cartones').insert([essentialCartonPayload]).select();
+        if (retryRes.error) {
+          console.error("❌ Error definitivo al insertar cartón en 'cartones':", retryRes.error);
+          cartonError = retryRes.error;
+        } else if (retryRes.data && retryRes.data[0]) {
+          insertedCarton = retryRes.data[0];
         }
       } else if (cData && cData[0]) {
         insertedCarton = cData[0];
@@ -3849,17 +3838,14 @@ const db = {
           fecha_apertura: nowIso,
           monto_prestado: newMontoPrestado,
           estado: newState,
-          status: newState,
           saldo_anterior: 0,
+          rollover_amount: 0,
           total_debt: newTotalDebt,
           outstanding: newTotalDebt,
           installments_count: Number(payload.installmentsCount || 30),
           installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
           discount_amount: discountVal,
-          retained_fees: Number(payload.retained_fees || payload.retained_amount || discountVal),
-          retained_amount: Number(payload.retained_fees || payload.retained_amount || discountVal),
-          seg_val: Number(payload.segVal || 0),
-          pap_val: Number(payload.papVal || 0),
+          discount_reason: payload.discount_reason || 'Papelería y Seguro',
           net_cash: netCashVal,
           route_id: routeId,
           agent_id: agentId,
@@ -3873,10 +3859,26 @@ const db = {
           .select();
 
         if (cartonErr) {
-          delete cartonPayload.status;
+          console.warn("⚠️ Advertencia en registerCreditToExistingClient al insertar cartón. Reintentando con payload esencial...", cartonErr);
+          const essentialCartonPayload = {
+            cliente_id: String(clientId),
+            numero_carton: newNumeroCarton,
+            fecha_apertura: nowIso,
+            monto_prestado: newMontoPrestado,
+            estado: newState,
+            total_debt: newTotalDebt,
+            outstanding: newTotalDebt,
+            installments_count: Number(payload.installmentsCount || 30),
+            installment_amount: Number(payload.installmentAmount || Math.round(newTotalDebt / (payload.installmentsCount || 30))),
+            discount_amount: discountVal,
+            net_cash: netCashVal,
+            route_id: routeId,
+            agent_id: agentId,
+            supervisor_id: supervisorId
+          };
           const { data: retryData, error: retryErr } = await supabase
             .from('cartones')
-            .insert([cartonPayload])
+            .insert([essentialCartonPayload])
             .select();
 
           if (retryErr) {

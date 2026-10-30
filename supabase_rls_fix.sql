@@ -815,3 +815,12 @@ CREATE TRIGGER trg_inherit_supervisor_vigencia
 BEFORE INSERT ON users
 FOR EACH ROW
 EXECUTE FUNCTION inherit_supervisor_vigencia_on_insert();
+
+-- Garantizar columnas en cartones para papelería, seguro y descuentos
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "discount_amount" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "discount_reason" TEXT;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "net_cash" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "pap_val" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "seg_val" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "retained_fees" NUMERIC DEFAULT 0;
+ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "retained_amount" NUMERIC DEFAULT 0;
