@@ -1937,8 +1937,14 @@ const db = {
           supabase.from('clients').select('*')
         ]);
 
-        const activeStates = new Set(['activo', 'activo_por_renovacion']);
-        const cartonesData = (allCartones || []).filter(c => c && activeStates.has(String(c.estado || '').trim().toLowerCase()));
+        const activeStates = new Set(['activo', 'activo_por_renovacion', 'vencido', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']);
+        const cartonesData = (allCartones || []).filter(c => {
+          if (!c) return false;
+          const st = String(c.estado || '').trim().toLowerCase();
+          if (activeStates.has(st)) return true;
+          const isClosed = st.includes('liquidado') || st.includes('cancelad') || st.includes('perdida');
+          return !isClosed && Number(c.outstanding || c.saldo_restante || 0) > 0;
+        });
 
         // Pre-cargar mapa de la tabla clients para asociar nombres e información de contacto
         const clientsMap = new Map();
@@ -2641,6 +2647,11 @@ const db = {
     const routeName = route?.name || (targetRouteId === 'ALL' ? 'Consolidado General (Todas las rutas)' : 'Ruta sin asignar');
 
     // 2. En Calle (Cartera activa en poder de los clientes)
+    const clientMap = new Map();
+    (allClients || []).forEach(c => {
+      if (c && c.cedula) clientMap.set(String(c.cedula).trim(), c);
+    });
+
     const routeClients = (allClients || []).filter(c => {
       if (!c) return false;
       const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
@@ -2682,8 +2693,9 @@ const db = {
       if (pStatus === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
       if (Number(p.amount || 0) <= 0) return false;
 
-      const pRoute = String(p.routeId || p.route_id || '').trim().toLowerCase();
-      const pAgent = String(p.agent_id || p.agentId || '').trim().toLowerCase();
+      const client = clientMap.get(String(p.clientCedula || '').trim());
+      const pRoute = String(p.routeId || p.route_id || client?.routeId || client?.route_id || '').trim().toLowerCase();
+      const pAgent = String(p.agent_id || p.agentId || client?.agent_id || client?.agentId || '').trim().toLowerCase();
       const pAgentName = String(p.agentName || '').trim().toLowerCase();
 
       if (targetRouteId === 'ALL') {
@@ -2701,24 +2713,76 @@ const db = {
     const allBelongingPayments = (allPayments || []).filter(doesPaymentBelong);
     const shiftPayments = allBelongingPayments.filter(p => this.isRecordInOperationalShift(p, shiftWindow, !!agentUserObj));
 
-    const renewalPayments = shiftPayments.filter(p => {
+    // Helpers de clasificación precisa de pagos
+    const isRenewalPayment = (p) => {
       const pType = String(p.payment_type || '').toLowerCase();
       const pId = String(p.id || '').toLowerCase();
-      return pType.includes('renov') || pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999;
-    });
-    const normalPayments = shiftPayments.filter(p => {
-      const pType = String(p.payment_type || '').toLowerCase();
-      const pId = String(p.id || '').toLowerCase();
-      return !pType.includes('renov') && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999;
-    });
+      const pStatus = String(p.status || '').toLowerCase();
+      return pType.includes('renov') || pId.startsWith('pay_renov_') || Number(p.installmentNumber) === 999 || pStatus.includes('renov');
+    };
 
-    const totalCobrado = normalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    const isMassPayment = (p) => {
+      const pStatus = String(p.status || '').toLowerCase();
+      const pType = String(p.payment_type || '').toLowerCase();
+      const pNotes = String(p.notes || p.nota || '').toLowerCase();
+      return p.is_mass_payment === true || p.is_mass_payment === 'true' ||
+             pStatus.includes('masivo') || pType.includes('masivo') || pNotes.includes('masivo');
+    };
+
+    const isMoraPayment = (p) => {
+      const pStatus = String(p.status || '').toLowerCase();
+      const pType = String(p.payment_type || '').toLowerCase();
+      const pNotes = String(p.notes || p.nota || p.motivo || '').toLowerCase();
+      const pId = String(p.id || '').toLowerCase();
+      return pStatus.includes('mora') || pType.includes('mora') || pNotes.includes('mora') || pId.startsWith('pay_liq_');
+    };
+
+    const isAbonoParcial = (p) => {
+      const pStatus = String(p.status || '').toLowerCase();
+      const pType = String(p.payment_type || '').toLowerCase();
+      const pNotes = String(p.notes || p.nota || '').toLowerCase();
+      if (p.is_partial === true || p.is_partial === 'true') return true;
+      return pStatus.includes('abono') || pStatus.includes('parcial') ||
+             pType.includes('abono') || pType.includes('parcial') ||
+             pNotes.includes('abono') || pNotes.includes('parcial');
+    };
+
+    const renewalPayments = shiftPayments.filter(isRenewalPayment);
     const renewalPaymentsTotal = renewalPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
 
-    const pagosMasivos = shiftPayments.filter(p => {
-      const pStatus = String(p.status || '').toLowerCase();
-      return p.is_mass_payment === true || p.is_mass_payment === 'true' || pStatus.includes('masivo');
-    }).reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    const massPayments = shiftPayments.filter(p => !isRenewalPayment(p) && isMassPayment(p));
+    const pagosMasivos = massPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+
+    const moraPayments = shiftPayments.filter(p => !isRenewalPayment(p) && !isMassPayment(p) && isMoraPayment(p));
+    const liquidacionesMora = moraPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+
+    // Condición de filtrado estricta para Cuotas Normales:
+    // Agrupa ÚNICAMENTE los pagos regulares que corresponden a cuotas diarias individuales limpias.
+    // Excluye renovaciones, pagos masivos, liquidaciones por mora, abonos parciales extraños o pagos atípicos.
+    const regularInstallmentPayments = shiftPayments.filter(p => {
+      if (isRenewalPayment(p)) return false;
+      if (isMassPayment(p)) return false;
+      if (isMoraPayment(p)) return false;
+      if (isAbonoParcial(p)) return false;
+
+      const pStatus = String(p.status || '').trim().toUpperCase();
+      if (pStatus !== 'PAGADO') return false;
+
+      const amt = Math.round(Number(p.amount || 0));
+      if (amt <= 0) return false;
+
+      // Validación con la cuota diaria unitaria del cliente/cartón
+      const client = clientMap.get(String(p.clientCedula || '').trim());
+      const expectedInstallment = client ? Math.round(Number(client.installmentAmount || client.valor_cuota || 0)) : 0;
+      if (expectedInstallment > 0 && amt !== expectedInstallment) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const cuotasNormales = regularInstallmentPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+    const totalCobrado = (cuotasNormales + pagosMasivos);
 
     // 4. Créditos creados estrictamente en la jornada operativa [06:00:00 AM hoy, 05:59:59.999 AM mañana)
     // Filtramos todos los cartones/créditos de la jornada que pertenecen a la ruta
@@ -2781,18 +2845,9 @@ const db = {
     entradasRenovacion = renewalPaymentsTotal;
 
     // Desglose detallado de Recaudos
-    const cuotasNormales = Math.max(0, totalCobrado - pagosMasivos);
-    const moraPayments = shiftPayments.filter(p => {
-      const pStatus = String(p.status || '').toLowerCase();
-      const pType = String(p.payment_type || '').toLowerCase();
-      const pNotes = String(p.notes || p.nota || p.motivo || '').toLowerCase();
-      return pStatus.includes('mora') || pType.includes('mora') || pNotes.includes('mora');
-    });
-    const liquidacionesMora = moraPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
-
     // Suma exacta del Total Recaudado Hoy:
     // Cuotas normales + pagos masivos + entradas por renovación + liquidaciones por mora + descuentos retenidos software/papelería
-    const totalRecaudado = (totalCobrado + entradasRenovacion + liquidacionesMora + descuentosRetenidos);
+    const totalRecaudado = (cuotasNormales + pagosMasivos + entradasRenovacion + liquidacionesMora + descuentosRetenidos);
     const totalDesembolsado = (totalPrestado + desembolsosRenovacion);
 
     // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda puramente visual en la UI):
@@ -5419,11 +5474,11 @@ const db = {
         console.warn("Aviso al obtener lista negra para métricas v118:", eB);
       }
 
-      // 2. AUDITORÍA V182: Consulta estricta a la tabla 'cartones' con estado = 'activo' / 'activo_por_renovacion'
+      // 2. AUDITORÍA V182: Consulta estricta a la tabla 'cartones' con estado activo/operable
       const { data: cartonesActivos, error } = await supabase
         .from('cartones')
         .select('*')
-        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO']);
+        .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'vencido', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']);
 
       console.log("🔍 [v182 AUDIT] Cartones Activos devueltos por Supabase:", cartonesActivos, "Error:", error);
       console.log("🔍 [v182 AUDIT] Cédulas en Lista Negra detectadas:", Array.from(blacklistedCedulas));
@@ -5442,12 +5497,12 @@ const db = {
           const rawEstado = String(c.estado || '').trim().toUpperCase();
           const rawStatus = String(c.status || '').trim().toUpperCase();
 
-          const isLoss = rawEstado.includes('PERDIDA') || rawEstado.includes('MORA') || rawStatus.includes('PERDIDA') || rawStatus.includes('MORA') || blacklistedCedulas.has(ced);
+          const isLoss = rawEstado === 'LIQUIDADO_PERDIDA' || rawEstado === 'LIQUIDADO_MORA' || rawStatus === 'LIQUIDADO_PERDIDA' || rawStatus === 'LIQUIDADO_MORA' || blacklistedCedulas.has(ced);
           const isClosedOrRenewed = rawEstado === 'CERRADO' || rawEstado === 'RENOVADO' || rawEstado === 'LIQUIDADO_POR_RENOVACION' || rawEstado === 'LIQUIDADO' || rawStatus === 'CERRADO' || rawStatus === 'RENOVADO' || rawStatus === 'LIQUIDADO_POR_RENOVACION' || rawStatus === 'LIQUIDADO';
 
-          const isStrictlyActive = (rawEstado === 'ACTIVO' || rawEstado === 'ACTIVO_POR_RENOVACION' || rawStatus === 'ACTIVO') && !isLoss && !isClosedOrRenewed;
+          const isOperableCarton = !isLoss && !isClosedOrRenewed;
 
-          if (isStrictlyActive && ced) {
+          if (isOperableCarton && ced) {
             const existingCarton = activeMap.get(ced);
             if (!existingCarton || (new Date(c.created_at || c.fecha_apertura || 0) > new Date(existingCarton.created_at || existingCarton.fecha_apertura || 0))) {
               activeMap.set(ced, c);

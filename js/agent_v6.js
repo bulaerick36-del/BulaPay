@@ -1916,11 +1916,13 @@ const agentModule = {
     const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Juan Pérez' };
 
     try {
-      // Validar si ya pagó hoy
+      // Validar si ya pagó hoy (solo para clientes al día sin atrasos)
       const todayStr = this.getLocalDateString();
       const payments = await window.BulaPayDB.getPaymentsByClient(this.currentClient.cedula);
-      if (payments.some(p => p.date === todayStr)) {
-        alert('Precaución: Ya se registró un pago hoy para este cliente. Por seguridad, solo se permite una transacción diaria por cliente.');
+      const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(this.currentClient, payments);
+      const tieneAtrasos = dailyStatusList.some(s => s.isOverdue);
+      if (!tieneAtrasos && payments.some(p => p.date === todayStr)) {
+        alert('Precaución: El cliente está al día y ya registró un pago hoy. Por seguridad, solo se permite una transacción diaria para clientes al día.');
         return;
       }
 
@@ -2209,12 +2211,22 @@ const agentModule = {
     const amount = Number(client.amount || client.monto_prestado || 0);
     const totalDebt = Number(client.totalDebt || client.total_debt || 0);
     const rawStatus = String(client.status || client.estado || '').trim().toUpperCase();
-    const isLossStatus = rawStatus.includes('PERDIDA') || rawStatus.includes('MORA') || rawStatus.includes('NEGRA') || rawStatus.includes('CASTIGADO');
+    const rawEstado = String(client.estado || '').trim().toLowerCase();
+
+    // DEFINICIÓN ESTRICTA DE LISTA NEGRA:
+    // Solo clientes formalmente liquidados como pérdida / en mora (Lista Negra confirmada).
+    // Jamás clasificar como Lista Negra ni bloquear a un cartón activo por superar su plazo, estar demorado o tener mora.
+    const isLossStatus = rawStatus === 'LIQUIDADO_PERDIDA' || 
+                         rawStatus === 'LIQUIDADO_MORA' || 
+                         rawStatus === 'BLACKLISTED' || 
+                         rawStatus === 'LISTA NEGRA' || 
+                         rawEstado === 'liquidado_perdida' || 
+                         rawEstado === 'liquidado_mora' ||
+                         client.risk === 'Lista Negra';
+
     const isLiquidadoStatus = (rawStatus.includes('LIQUIDADO') || rawStatus.includes('CANCELAD') || rawStatus === 'SIN DEUDA ACTIVA') && !isLossStatus;
 
-    const isBlacklisted = client.risk === 'Rojo' || 
-                          String(client.risk || '').trim().toLowerCase() === 'rojo' || 
-                          isLossStatus;
+    const isBlacklisted = isLossStatus;
 
     const cobroFormFields = document.getElementById('cobro-form-fields');
     const cobroLiquidatedBanner = document.getElementById('cobro-liquidated-banner');
@@ -2225,7 +2237,7 @@ const agentModule = {
       cobroActionButtonsWrapper.style.setProperty('display', 'flex', 'important');
     }
 
-    // RENDERIZADO CONDICIONAL DE MÁXIMA PRIORIDAD: Cliente en Lista Negra (risk === 'Rojo')
+    // RENDERIZADO CONDICIONAL DE MÁXIMA PRIORIDAD: Cliente efectivamente en Lista Negra
     if (isBlacklisted) {
       if (cobroFormFields) cobroFormFields.style.setProperty('display', 'none', 'important');
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
@@ -2296,11 +2308,12 @@ const agentModule = {
       // 2. Mostrar letrero verde claro "✅ Cartón Liquidado / Cliente sin deuda activa"
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'block', 'important');
     } else {
-      // Cliente con cuotas/deuda activa (outstanding > 0)
+      // Cliente con cuotas/deuda activa (outstanding > 0): SIEMPRE operable sin importar antigüedad o si está vencido
       if (cobroFormFields) cobroFormFields.style.setProperty('display', 'block', 'important');
       if (cobroLiquidatedBanner) cobroLiquidatedBanner.style.setProperty('display', 'none', 'important');
     }
 
+    // El botón Liquidar Cartón permanece SIEMPRE disponible y operable para el agente
     if (this.btnLiquidarCarton) {
       if (!isLossStatus) {
         this.btnLiquidarCarton.style.removeProperty('display');
@@ -2329,12 +2342,13 @@ const agentModule = {
 
     const isOverdue = this.isCartonOverdue(client, dailyStatusList);
 
+    // Aviso EXCLUSIVAMENTE informativo: alerta visual para el cobrador sin bloquear jamás pagos, abonos, pagos masivos ni liquidación
     if (isOverdue && Number(client.outstanding) > 0) {
       banner.style.display = 'block';
       const infoEl = document.getElementById('overdue-banner-info');
       if (infoEl) {
         const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
-        infoEl.textContent = `El cliente ${client.name} (C.C. ${client.cedula}) tiene el plazo vencido con un saldo de $${outstandingFmt}.`;
+        infoEl.innerHTML = `⚠️ <b>Aviso Informativo:</b> El cartón ha superado su plazo proyectado (Saldo pendiente: <b>$${outstandingFmt}</b>). El cliente permanece accesible y 100% habilitado para pagos individuales, abonos, pagos masivos y liquidación de cartón.`;
       }
     } else {
       banner.style.display = 'none';
@@ -2533,11 +2547,30 @@ const agentModule = {
         return;
       }
 
-      // 2. REGLA ESTRICTA DE PRIVACIDAD: Verificar si el cliente tiene cartón activo globalmente en Supabase
-      const allActiveGlobalCartones = (dbCartonesGlobal || []).filter(c => {
-        const st = String(c.estado || c.status || '').toLowerCase();
-        return st === 'activo' || st === 'activo_por_renovacion';
-      });
+      // 2. REGLA DE ACCESIBILIDAD TOTAL: Cartones operables sin importar antigüedad o si están vencidos
+      const isCartonOperable = (c) => {
+        if (!c) return false;
+        const st = String(c.estado || c.status || '').trim().toLowerCase();
+        // Solo excluir si fue expresamente liquidado por pérdida o mora en lista negra
+        if (st === 'liquidado_perdida' || st === 'liquidado_mora') return false;
+        // Si está marcado como liquidado o cancelado y no tiene deuda restante
+        const remDebt = Number(c.outstanding ?? c.saldo_restante ?? c.total_debt ?? c.totalDebt ?? 0);
+        if ((st === 'liquidado' || st === 'liquidado_exitoso' || st === 'liquidado_renovacion' || st === 'cancelado') && remDebt <= 0) {
+          return false;
+        }
+        // Cartones con estado activo, activo_por_renovacion, vencido, en mora, mora, atrasado, demorado o saldo pendiente
+        return true;
+      };
+
+      let allActiveGlobalCartones = (dbCartonesGlobal || []).filter(isCartonOperable);
+      if (allActiveGlobalCartones.length === 0 && dbCartonesGlobal && dbCartonesGlobal.length > 0) {
+        // Fallback: Tomar el cartón más reciente del cliente si no está liquidado por mora
+        const nonLossCartones = dbCartonesGlobal.filter(c => {
+          const st = String(c.estado || c.status || '').trim().toLowerCase();
+          return st !== 'liquidado_perdida' && st !== 'liquidado_mora';
+        });
+        allActiveGlobalCartones = nonLossCartones.length > 0 ? [nonLossCartones[0]] : [dbCartonesGlobal[0]];
+      }
 
       let effectiveRouteId = currentUser?.routeId || currentUser?.route_id;
       if (!effectiveRouteId && currentUser && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
@@ -3069,8 +3102,7 @@ const agentModule = {
                                   rawStatusDetail === 'BLACKLISTED' || 
                                   rawStatusDetail === 'LISTA NEGRA' || 
                                   rawStatusDetail === 'LIQUIDADO_PERDIDA' || 
-                                  rawStatusDetail === 'LIQUIDADO_MORA' ||
-                                  (String(client.risk || '').trim().toUpperCase() === 'ROJO' && rawStatusDetail !== 'ACTIVO');
+                                  rawStatusDetail === 'LIQUIDADO_MORA';
 
     const isDayZeroCarton = window.BulaPayDB && typeof window.BulaPayDB.isCartonCreatedOnDate === 'function'
       ? window.BulaPayDB.isCartonCreatedOnDate(client)
@@ -4419,11 +4451,10 @@ const agentModule = {
     const rawStatus = String(c.status || c.estado || '').trim().toUpperCase();
     const rawEstado = String(c.estado || '').trim().toLowerCase();
 
-    // Exclusión categórica: cualquier estado de liquidación por mora o pérdida
+    // Exclusión categórica: estados formales de liquidación definitiva o pérdida en lista negra
     const isExcluded = rawStatus.includes('LIQUIDADO') || 
                        rawStatus.includes('CANCELAD') || 
                        rawStatus.includes('PERDIDA') || 
-                       rawStatus.includes('MORA') || 
                        rawStatus.includes('NEGRA') || 
                        rawStatus.includes('CASTIGADO') ||
                        rawStatus === 'SIN DEUDA ACTIVA' ||
@@ -4432,8 +4463,8 @@ const agentModule = {
 
     if (isExcluded) return false;
 
-    // Si el registro tiene estado 'activo' o 'activo_por_renovacion', es un cartón activo
-    if (rawEstado === 'activo' || rawEstado === 'activo_por_renovacion' || rawStatus === 'ACTIVO' || rawStatus === 'ACTIVO_POR_RENOVACION') {
+    // Cartones activos, renovados, vencidos o en mora con deuda vigente
+    if (rawEstado === 'activo' || rawEstado === 'activo_por_renovacion' || rawEstado === 'vencido' || rawEstado === 'en mora' || rawEstado === 'mora' || rawEstado === 'atrasado' || rawStatus === 'ACTIVO' || rawStatus === 'ACTIVO_POR_RENOVACION' || rawStatus === 'VENCIDO') {
       return true;
     }
 

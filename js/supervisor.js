@@ -1278,7 +1278,21 @@ const supervisorModule = {
       opt.textContent = `Ruta: ${r.name} (${r.agentName || 'Sin agente'})`;
       routeSelect.appendChild(opt);
     });
-    routeSelect.value = 'ALL';
+
+    // Detectar si el supervisor ya tiene una ruta seleccionada en auditoría de capital, filtro de caja o auditoría general
+    const selCapitalRoute = document.getElementById('modal-capital-route-select')?.value;
+    const supCajaRoute = document.getElementById('sup-caja-route-filter')?.value;
+    const auditRoute = document.getElementById('modal-audit-route-filter')?.value;
+    const activeRouteId = (selCapitalRoute && selCapitalRoute !== 'ALL') ? selCapitalRoute :
+                          ((supCajaRoute && supCajaRoute !== 'ALL' && supCajaRoute !== '') ? supCajaRoute : 
+                          ((auditRoute && auditRoute !== 'ALL' && auditRoute !== 'Todos') ? auditRoute :
+                          (this.selectedCajaRouteId && this.selectedCajaRouteId !== 'ALL' ? this.selectedCajaRouteId : null)));
+
+    if (activeRouteId && routes.some(r => r.id === activeRouteId)) {
+      routeSelect.value = activeRouteId;
+    } else {
+      routeSelect.value = 'ALL';
+    }
 
     modal.classList.add('active');
     await this.calculateCierreCaja();
