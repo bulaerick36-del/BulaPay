@@ -159,6 +159,8 @@ const agentModule = {
     this.btnLiquidarCarton = document.getElementById('btn-liquidar-carton');
     this.btnCobroRenovar = document.getElementById('btn-cobro-renovar');
     this.btnCobroLiquidarMora = document.getElementById('btn-cobro-liquidar-mora');
+    this.btnLiquidatedNewCredit = document.getElementById('btn-liquidated-new-credit');
+    this.btnLiquidatedViewHistory = document.getElementById('btn-liquidated-view-history');
     
     // Modal Factura
     this.cobroInvoiceModal = document.getElementById('cobro-invoice-modal');
@@ -309,10 +311,34 @@ const agentModule = {
       });
     }
 
+    if (this.btnLiquidatedNewCredit) {
+      this.btnLiquidatedNewCredit.addEventListener('click', () => {
+        this.startNewCreditForLiquidatedClient(this.currentClient);
+      });
+    }
+
+    if (this.btnLiquidatedViewHistory) {
+      this.btnLiquidatedViewHistory.addEventListener('click', () => {
+        this.viewHistoryForClient(this.currentClient);
+      });
+    }
+
     if (this.btnCobroRenovar) {
       this.btnCobroRenovar.addEventListener('click', async () => {
         if (!this.currentClient) return;
         const client = this.currentClient;
+
+        // Si el cliente está a paz y salvo / saldo en $0 / Cartón Liquidado, iniciar de inmediato nuevo crédito
+        const outstanding = Number(client.outstanding || 0);
+        const amount = Number(client.amount || client.monto_prestado || 0);
+        const totalDebt = Number(client.totalDebt || client.total_debt || 0);
+        const rawStatus = String(client.status || client.estado || '').trim().toUpperCase();
+        const isLiquidado = (outstanding <= 0 || (amount <= 0 && totalDebt <= 0) || rawStatus.includes('LIQUIDADO'));
+
+        if (isLiquidado) {
+          this.startNewCreditForLiquidatedClient(client);
+          return;
+        }
 
         // Validación de Regla de Renovación (v85/v160)
         const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula);
@@ -995,6 +1021,67 @@ const agentModule = {
     } else {
       if (agentNameElement) agentNameElement.textContent = 'Cargando...';
       if (agentRouteElement) agentRouteElement.textContent = 'Verificando sesión';
+    }
+  },
+
+  startNewCreditForLiquidatedClient(client = null) {
+    const targetClient = client || this.currentClient;
+    if (!targetClient) return;
+
+    const oldCartonId = targetClient.carton_id || targetClient.id || null;
+    const oldNumeroCarton = targetClient.numero_carton || null;
+
+    // Cambiar de inmediato a la pestaña de registro de crédito
+    this.switchTab('register');
+
+    // Configurar modo renovación o nuevo crédito limpio sin deuda anterior (saldo $0)
+    this.setRenewalMode(true, 0, oldCartonId, oldNumeroCarton);
+
+    // Auto-completar los datos personales del cliente
+    const inputName = document.getElementById('new-client-name');
+    const inputCedula = document.getElementById('new-client-cedula');
+    const inputPhone = document.getElementById('new-client-phone');
+    const inputDept = document.getElementById('new-client-department');
+    const inputCity = document.getElementById('new-client-city');
+    const inputZone = document.getElementById('new-client-zone');
+    const inputAmount = document.getElementById('new-client-amount');
+
+    if (inputName) inputName.value = targetClient.name || '';
+    if (inputCedula) inputCedula.value = targetClient.cedula || '';
+    if (inputPhone) inputPhone.value = targetClient.phone || '';
+    if (inputZone) inputZone.value = targetClient.zone || targetClient.barrio || targetClient.direccion || targetClient.address || '';
+
+    if (inputDept && (targetClient.department || targetClient.departamento)) {
+      const targetDept = targetClient.department || targetClient.departamento;
+      inputDept.value = targetDept;
+      inputDept.dispatchEvent(new Event('change'));
+      if (inputCity && (targetClient.city || targetClient.ciudad || targetClient.municipio)) {
+        inputCity.value = targetClient.city || targetClient.ciudad || targetClient.municipio;
+      }
+    }
+
+    // Enfocar automáticamente el campo de monto para agilizar la operación
+    if (inputAmount) {
+      setTimeout(() => {
+        inputAmount.focus();
+        inputAmount.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 150);
+    }
+  },
+
+  viewHistoryForClient(client = null) {
+    const targetClient = client || this.currentClient;
+    if (!targetClient || !targetClient.cedula) return;
+
+    this.switchTab('history');
+    if (this.inputHistoryCedula) {
+      this.inputHistoryCedula.value = targetClient.cedula;
+    }
+    const btnSearchHistory = document.getElementById('btn-agent-history-search');
+    if (btnSearchHistory) {
+      btnSearchHistory.click();
+    } else if (typeof this.verificarHistorialCliente === 'function') {
+      this.verificarHistorialCliente(targetClient.cedula);
     }
   },
 
@@ -2480,11 +2567,18 @@ const agentModule = {
         btnRenovar.disabled = false;
         btnRenovar.style.opacity = '1';
         btnRenovar.style.cursor = 'pointer';
-        btnRenovar.title = 'Liquidar cartón actual para solicitar renovación';
+        if (isWithoutActiveDebt) {
+          btnRenovar.innerHTML = '🚀 Nuevo Crédito / Retanqueo';
+          btnRenovar.title = 'Cliente a paz y salvo: Registrar nuevo crédito inmediato';
+        } else {
+          btnRenovar.innerHTML = '🔄 Liquidar para Renovar';
+          btnRenovar.title = 'Liquidar cartón actual para solicitar renovación';
+        }
       } else {
         btnRenovar.disabled = true; // Deshabilitado hasta cumplir la mitad del cobro (cuota 15+)
         btnRenovar.style.opacity = '0.4';
         btnRenovar.style.cursor = 'not-allowed';
+        btnRenovar.innerHTML = '🔄 Liquidar para Renovar';
         btnRenovar.title = 'Solo se habilita desde la cuota 15 en adelante (mitad del cobro cumplida)';
       }
     }
