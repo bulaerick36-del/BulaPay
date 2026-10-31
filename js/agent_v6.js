@@ -228,6 +228,11 @@ const agentModule = {
     this.startLocationMonitoring();
     this.startMidnightCheck();
 
+    // Verificación proactiva opcional de créditos con mora grave (> 2 meses) al cargar el panel
+    setTimeout(() => {
+      this.checkGraveOverdueLoansOnLoad();
+    }, 1500);
+
     // Si el acceso está bloqueado, aplicar el bloqueo visual de inmediato
     if (window.gpsBlocked) {
       if (this.panelCollect) this.panelCollect.style.setProperty('display', 'none', 'important');
@@ -2338,7 +2343,7 @@ const agentModule = {
 
   isCartonOverdueBy2Months(client, dailyStatusList = null) {
     if (!client) return false;
-    const outstanding = Number(client.outstanding ?? client.saldo_restante ?? 0);
+    const outstanding = Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0);
     if (outstanding <= 0) return false;
 
     // Solo aplica para cartones activos (no liquidados previamente por mora o cancelados)
@@ -2350,48 +2355,76 @@ const agentModule = {
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-    let dueDate = null;
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    const startDate = cartonDateStr ? this.parseLocalDate(cartonDateStr) : null;
+    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
 
+    let dueDate = null;
     // 1. Si existe fecha_vencimiento explícita en cliente o cartón
     if (client.fecha_vencimiento) {
       dueDate = this.parseLocalDate(client.fecha_vencimiento);
-    }
-
-    // 2. Si tenemos dailyStatusList, tomar la fecha proyectada de la última cuota del cartón
-    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
-    if (!dueDate && dailyStatusList && dailyStatusList.length > 0) {
+    } else if (dailyStatusList && dailyStatusList.length > 0) {
+      // 2. Si tenemos dailyStatusList, tomar la fecha proyectada de la última cuota del cartón
       const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
       if (lastInstallment && lastInstallment.dateStr) {
         dueDate = this.parseLocalDate(lastInstallment.dateStr);
       }
+    } else if (startDate) {
+      // 3. O calcular dueDate a partir de fecha_apertura/fecha_inicio/created_at + totalInstallmentsCount (saltando domingos)
+      dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
     }
 
-    // 3. O calcular dueDate a partir de fecha_apertura/fecha_inicio/created_at + totalInstallmentsCount (saltando domingos)
-    if (!dueDate) {
-      const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
-      if (cartonDateStr) {
-        const startDate = this.parseLocalDate(cartonDateStr);
-        dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+    // Regla 1: Vencimiento superado por 2 meses (60 días tras la fecha de vencimiento)
+    if (dueDate && !isNaN(dueDate.getTime())) {
+      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      const dueDatePlus2Months = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate());
+      const diffDaysAfterDue = Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24));
+      if (todayZero >= dueDatePlus2Months || diffDaysAfterDue >= 60) {
+        return true;
       }
     }
 
-    if (!dueDate || isNaN(dueDate.getTime())) return false;
+    // Regla 2: Fecha de apertura / creación tiene más de 60 días (2 meses) y el crédito está en mora/vencido
+    if (startDate && !isNaN(startDate.getTime())) {
+      const startDateZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const startDatePlus2Months = new Date(startDateZero.getFullYear(), startDateZero.getMonth() + 2, startDateZero.getDate());
+      const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDateZero.getTime()) / (1000 * 60 * 60 * 24));
+      const isPastDue = dueDate ? (todayZero > dueDate) : (diffDaysSinceStart >= 35);
+      if ((todayZero >= startDatePlus2Months || diffDaysSinceStart >= 60) && isPastDue) {
+        return true;
+      }
+    }
 
-    // Verificar si hoy supera los 2 meses posteriores al vencimiento:
-    // Fecha de vencimiento + 2 meses calendario (ej. 15 de enero -> 15 de marzo)
-    const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-    const dueDatePlus2Months = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate());
-    
-    // O también en días de atraso tras vencer (60 días o más)
-    const diffTimeMs = todayZero.getTime() - dueDateZero.getTime();
-    const diffDays = Math.floor(diffTimeMs / (1000 * 60 * 60 * 24));
-
-    // También considerar si en dailyStatusList hay 60 o más cuotas/días en mora
+    // Regla 3: Si 30 cuotas o más están en mora (isOverdue)
     const overdueDaysCount = (dailyStatusList && Array.isArray(dailyStatusList)) 
       ? dailyStatusList.filter(s => s.isOverdue).length 
       : 0;
+    if (overdueDaysCount >= 30) {
+      return true;
+    }
 
-    return (todayZero >= dueDatePlus2Months || diffDays >= 60 || overdueDaysCount >= 60);
+    return false;
+  },
+
+  async checkGraveOverdueLoansOnLoad() {
+    try {
+      const activeCredits = await window.BulaPayDB.loadActiveCredits();
+      if (!Array.isArray(activeCredits) || activeCredits.length === 0) return;
+      const graveCredit = activeCredits.find(c => this.isCartonOverdueBy2Months(c));
+      if (graveCredit) {
+        const cedClean = String(graveCredit.cedula || '').trim();
+        if (cedClean && this.lastDismissed2MonthsCedula !== cedClean) {
+          const confirmed = await this.promptOverdue2MonthsModal(graveCredit);
+          if (confirmed) {
+            await this.ejecutarLiquidacionYListaNegra(graveCredit, { skipConfirm: true });
+          } else {
+            this.lastDismissed2MonthsCedula = cedClean;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Verificación de mora grave al cargar panel:", e);
+    }
   },
 
   async promptOverdue2MonthsModal(client) {
@@ -2790,14 +2823,15 @@ const agentModule = {
       }
 
       // 2. REGLA DE ACCESIBILIDAD TOTAL: Cartones operables sin importar antigüedad o si están vencidos
+      // Un cartón vencido por meses NUNCA debe decir "Sin créditos activos"
       const isCartonOperable = (c) => {
         if (!c) return false;
         const st = String(c.estado || c.status || '').trim().toLowerCase();
         // Solo excluir si fue expresamente liquidado por pérdida o mora en lista negra
-        if (st === 'liquidado_perdida' || st === 'liquidado_mora') return false;
-        // Si está marcado como liquidado o cancelado y no tiene deuda restante
+        if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st === 'castigado') return false;
+        // Si está marcado como cancelado y no tiene deuda restante
         const remDebt = Number(c.outstanding ?? c.saldo_restante ?? c.total_debt ?? c.totalDebt ?? 0);
-        if ((st === 'liquidado' || st === 'liquidado_exitoso' || st === 'liquidado_renovacion' || st === 'cancelado') && remDebt <= 0) {
+        if (st === 'cancelado' && remDebt <= 0) {
           return false;
         }
         // Cartones con estado activo, activo_por_renovacion, vencido, en mora, mora, atrasado, demorado o saldo pendiente
@@ -2809,9 +2843,29 @@ const agentModule = {
         // Fallback: Tomar el cartón más reciente del cliente si no está liquidado por mora
         const nonLossCartones = dbCartonesGlobal.filter(c => {
           const st = String(c.estado || c.status || '').trim().toLowerCase();
-          return st !== 'liquidado_perdida' && st !== 'liquidado_mora';
+          return st !== 'liquidado_perdida' && st !== 'liquidado_mora' && st !== 'castigado';
         });
         allActiveGlobalCartones = nonLossCartones.length > 0 ? [nonLossCartones[0]] : [dbCartonesGlobal[0]];
+      }
+
+      // Si no hay cartones registrados en la tabla cartones pero el cliente existe en clients:
+      if (allActiveGlobalCartones.length === 0 && dbClientGlobal) {
+        const synthCarton = {
+          id: dbClientGlobal.carton_id || dbClientGlobal.id || `carton_synth_${cedulaClean}`,
+          cliente_id: cedulaClean,
+          monto_prestado: Number(dbClientGlobal.amount || dbClientGlobal.monto_prestado || 0),
+          total_debt: Number(dbClientGlobal.totalDebt || dbClientGlobal.total_debt || Math.round(Number(dbClientGlobal.amount || 0) * 1.2)),
+          outstanding: Number(dbClientGlobal.outstanding ?? dbClientGlobal.saldo_restante ?? dbClientGlobal.totalDebt ?? 0),
+          installments_count: Number(dbClientGlobal.installmentsCount || dbClientGlobal.installments_count || 30),
+          installment_amount: Number(dbClientGlobal.installmentAmount || dbClientGlobal.installment_amount || 0),
+          estado: dbClientGlobal.status || dbClientGlobal.estado || 'activo',
+          status: dbClientGlobal.status || dbClientGlobal.estado || 'Activo',
+          route_id: dbClientGlobal.routeId || dbClientGlobal.route_id || null,
+          agent_id: dbClientGlobal.agent_id || null,
+          fecha_apertura: dbClientGlobal.fecha_apertura || dbClientGlobal.created_at || new Date().toISOString(),
+          created_at: dbClientGlobal.created_at || dbClientGlobal.fecha_apertura || new Date().toISOString()
+        };
+        allActiveGlobalCartones = [synthCarton];
       }
 
       let effectiveRouteId = currentUser?.routeId || currentUser?.route_id;
@@ -2838,30 +2892,16 @@ const agentModule = {
       };
 
       const myActiveCarton = allActiveGlobalCartones.find(isCartonMine) || null;
-      const globalActiveCarton = myActiveCarton || (allActiveGlobalCartones.length > 0 ? allActiveGlobalCartones[0] : null);
 
       // También verificar en la lista precargada de créditos activos del agente
       const activeCredits = await window.BulaPayDB.loadActiveCredits();
       const activeCreditLocal = activeCredits.find(c => String(c.cedula).trim() === cedulaClean);
 
-      if (globalActiveCarton && !myActiveCarton && !activeCreditLocal) {
-        const crossRouteMsg = 'Este cliente tiene un crédito activo en otra ruta';
-        if (this.searchError) {
-          this.searchError.style.display = 'block';
-          this.searchError.textContent = crossRouteMsg;
-        }
-        alert(`⚠️ ${crossRouteMsg}`);
-        if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
-        if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
-        this.currentClient = null;
-        return;
-      }
-
-      const activeCarton = myActiveCarton || activeCreditLocal || globalActiveCarton;
+      // Priorizar el cartón asignado al agente, o permitir el cartón disponible para cobro y gestión de mora
+      const activeCarton = myActiveCarton || activeCreditLocal || (allActiveGlobalCartones.length > 0 ? allActiveGlobalCartones[0] : null);
 
       if (!activeCarton) {
-        // Si el cliente existe pero no tiene créditos activos en esta ruta:
-        const errorMsg = 'Este cliente no tiene créditos activos en tu ruta';
+        const errorMsg = 'No se encontró un crédito o cartón disponible para este cliente.';
         if (this.searchError) {
           this.searchError.style.display = 'block';
           this.searchError.textContent = errorMsg;
@@ -3002,6 +3042,15 @@ const agentModule = {
         }
       }
 
+      // Si el cartón tiene cuotas en mora o supera tiempo de vencimiento, mostrar directamente el cartón interactivo completo con sus cuotas en rojo
+      const hasOverdueQuotas = (dailyStatusList || []).some(s => s.isOverdue);
+      if (hasOverdueQuotas || this.isCartonOverdueBy2Months(client, dailyStatusList)) {
+        if (this.cobroInputState && this.cobroCartonState) {
+          this.cobroInputState.style.setProperty('display', 'none', 'important');
+          this.cobroCartonState.style.setProperty('display', 'block', 'important');
+        }
+      }
+
       // VALIDACIÓN CRÍTICA: Regla de Autoliquidación y Envío a Lista Negra por 2 Meses de Mora
       if (!isInternalRefresh && this.lastDismissed2MonthsCedula !== cedulaClean && this.isCartonOverdueBy2Months(client, dailyStatusList)) {
         const confirmed = await this.promptOverdue2MonthsModal(client);
@@ -3015,14 +3064,14 @@ const agentModule = {
       }
       
     } catch (err) {
-      console.error(err);
-      const errorMsg = 'Este cliente no tiene créditos activos en tu ruta';
+      console.error('Error al consultar cliente:', err);
+      const errorMsg = 'Error al consultar información del cliente: ' + (err.message || 'Intente nuevamente.');
       if (this.searchError) {
         this.searchError.style.display = 'block';
         this.searchError.textContent = errorMsg;
       }
       if (this.cobroActionContainer) this.cobroActionContainer.style.display = 'none';
-      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'none';
+      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
     }
   },
 

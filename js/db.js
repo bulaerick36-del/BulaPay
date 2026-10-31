@@ -1961,7 +1961,7 @@ const db = {
         const blacklistedCedulas = new Set();
         allRawClients.forEach(c => {
           const st = String(c.status || c.estado || '').trim().toUpperCase();
-          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('MORA') || st.includes('CASTIGADO'));
+          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('LIQUIDADO_MORA') || st.includes('CASTIGADO'));
           if (isLoss) {
             const ced = String(c.cedula || '').trim();
             if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
@@ -1970,7 +1970,7 @@ const db = {
         (allCartones || []).forEach(c => {
           const st = String(c.status || c.estado || '').trim().toUpperCase();
           const rawEst = String(c.estado || '').trim().toLowerCase();
-          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || st === 'MOROSO' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
+          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
           if (isLoss && c.cliente_id) {
             const ced = String(c.cliente_id).trim();
             if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
