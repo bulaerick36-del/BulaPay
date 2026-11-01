@@ -2428,12 +2428,71 @@ const agentModule = {
   },
 
   async promptOverdue2MonthsModal(client) {
-    const warningText = 'Este cartón está vencido por 2 meses. Según la regla, le sugerimos enviar a Lista Negra.';
-    
+    if (!client) return false;
+
+    const nombre = client.name || client.nombre || client.nombre_cliente || `Cliente ${client.cedula || ''}`;
+    const cedula = String(client.cedula || client.cliente_id || client.client_id || 'N/A').trim();
+    const direccion = client.address || client.direccion || client.zone || 'No registrada';
+    const barrio = client.neighborhood || client.barrio || client.zone || client.city || 'No registrado';
+    const saldoVal = Math.round(Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0));
+    const saldoFmt = `$${saldoVal.toLocaleString('es-CO')}`;
+
+    // Calcular días de vencimiento
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    const startDate = cartonDateStr ? this.parseLocalDate(cartonDateStr) : null;
+    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    let dueDate = null;
+    if (client.fecha_vencimiento) {
+      dueDate = this.parseLocalDate(client.fecha_vencimiento);
+    } else if (startDate) {
+      dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+    }
+
+    let diasVencimiento = 0;
+    const today = new Date();
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (dueDate && !isNaN(dueDate.getTime())) {
+      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      diasVencimiento = Math.max(0, Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24)));
+    } else if (startDate && !isNaN(startDate.getTime())) {
+      const startDateZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const diffDays = Math.floor((todayZero.getTime() - startDateZero.getTime()) / (1000 * 60 * 60 * 24));
+      diasVencimiento = Math.max(0, diffDays - 35);
+    }
+    const diasVencimientoStr = diasVencimiento > 0 
+      ? `${diasVencimiento} días (~${Math.floor(diasVencimiento / 30)} meses)` 
+      : 'Supera 60 días (2 meses)';
+
+    const warningHtml = `
+      <p style="font-size: 1.05rem; line-height: 1.5; margin: 0.5rem 0 0.85rem 0; color: #ffffff;">
+        Este cartón está vencido por 2 meses. Según la regla, le sugerimos enviar a Lista Negra.
+      </p>
+
+      <div style="margin: 0.75rem 0;">
+        <button id="swal-btn-view-client-data" type="button" class="btn" style="background: linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(37,99,235,0.3) 100%); color: #60a5fa; border: 1px solid #3b82f6; border-radius: 8px; padding: 0.55rem 1.1rem; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+          👁️ Ver Datos del Cliente
+        </button>
+      </div>
+
+      <div id="swal-client-data-box" style="display: none; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 10px; padding: 0.9rem; text-align: left; margin: 0.75rem 0; font-size: 0.85rem; line-height: 1.6;">
+        <div style="font-weight: 800; font-size: 0.9rem; color: #38bdf8; margin-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+          📋 Resumen del Cliente y Cartón
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+          <div><span style="color: #94a3b8; font-weight: 600;">👤 Nombre:</span> <b style="color: #f8fafc;">${nombre}</b></div>
+          <div><span style="color: #94a3b8; font-weight: 600;">🆔 Cédula:</span> <b style="color: #f8fafc;">${cedula}</b></div>
+          <div><span style="color: #94a3b8; font-weight: 600;">📍 Dirección:</span> <span style="color: #e2e8f0;">${direccion}</span></div>
+          <div><span style="color: #94a3b8; font-weight: 600;">🏘️ Barrio:</span> <span style="color: #e2e8f0;">${barrio}</span></div>
+          <div><span style="color: #94a3b8; font-weight: 600;">💰 Saldo Pendiente:</span> <b style="color: #ef4444; font-size: 0.95rem;">${saldoFmt}</b></div>
+          <div><span style="color: #94a3b8; font-weight: 600;">⏳ Días de Vencimiento:</span> <b style="color: #f59e0b;">${diasVencimientoStr}</b></div>
+        </div>
+      </div>
+    `;
+
     if (typeof Swal !== 'undefined') {
       const res = await Swal.fire({
         title: '⚠️ Aviso',
-        html: `<p style="font-size: 1.05rem; line-height: 1.5; margin: 0.5rem 0; color: #ffffff;">${warningText}</p>`,
+        html: warningHtml,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Aceptar',
@@ -2450,12 +2509,34 @@ const agentModule = {
           title: 'bulapay-swal-title',
           confirmButton: 'bulapay-swal-confirm',
           cancelButton: 'bulapay-swal-cancel'
+        },
+        didOpen: (popup) => {
+          const btnView = popup.querySelector('#swal-btn-view-client-data');
+          const dataBox = popup.querySelector('#swal-client-data-box');
+          if (btnView && dataBox) {
+            btnView.addEventListener('click', (e) => {
+              e.preventDefault();
+              const isHidden = dataBox.style.display === 'none';
+              dataBox.style.display = isHidden ? 'block' : 'none';
+              btnView.innerHTML = isHidden ? '🙈 Ocultar Datos del Cliente' : '👁️ Ver Datos del Cliente';
+            });
+          }
         }
       });
       return Boolean(res && res.isConfirmed);
     }
-    
-    return window.confirm(`⚠️ Aviso: ${warningText}`);
+
+    const confirmText = `⚠️ Aviso: Este cartón está vencido por 2 meses. Según la regla, le sugerimos enviar a Lista Negra.\n\n` +
+      `Datos del Cliente:\n` +
+      `- Nombre: ${nombre}\n` +
+      `- Cédula: ${cedula}\n` +
+      `- Dirección: ${direccion}\n` +
+      `- Barrio: ${barrio}\n` +
+      `- Saldo Pendiente: ${saldoFmt}\n` +
+      `- Días de Vencimiento: ${diasVencimientoStr}\n\n` +
+      `¿Desea enviar este cliente a Lista Negra?`;
+
+    return window.confirm(confirmText);
   },
 
   async ejecutarLiquidacionYListaNegra(clientParam = null, { skipConfirm = false } = {}) {
