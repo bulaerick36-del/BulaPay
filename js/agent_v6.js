@@ -4216,43 +4216,59 @@ const agentModule = {
       // =========================================================================
       // BLOQUEO ESTRICTO POR FALTA DE FONDOS EN CAJA DE LA RUTA
       // =========================================================================
-      if (routeId) {
-        const efectivoDisponible = await window.BulaPayDB.getLiquidCash(routeId);
-        const montoDesembolso = this.isRenewalMode
-          ? Math.max(0, montoPrestamo - Number(this.currentRenewalOutstanding || 0) - finalDiscount)
-          : Math.max(0, montoPrestamo - finalDiscount);
+      let effectiveRouteId = routeId || (currentUser ? (currentUser.routeId || currentUser.route_id) : null);
+      if (!effectiveRouteId && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
+        effectiveRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
+      }
 
-        const montoValidar = (this.isRenewalMode && montoDesembolso > 0) ? montoDesembolso : montoPrestamo;
+      const efectivoDisponible = await window.BulaPayDB.getLiquidCash(effectiveRouteId, currentUser);
+      const montoDesembolso = this.isRenewalMode
+        ? Math.max(0, montoPrestamo - Number(this.currentRenewalOutstanding || 0) - finalDiscount)
+        : Math.max(0, montoPrestamo - finalDiscount);
 
-        if (montoValidar > efectivoDisponible || (efectivoDisponible <= 0 && montoPrestamo > 0)) {
-          const msgHtml = `
-            <div style="text-align: left; font-size: 0.9rem; line-height: 1.5;">
-              <p>No cuenta con suficiente efectivo disponible en la caja de la ruta para registrar este ${this.isRenewalMode ? 'crédito por renovación' : 'préstamo'}.</p>
-              <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem; margin: 0.75rem 0;">
-                <div>💵 <strong>Monto requerido a desembolsar:</strong> <span style="color: #f87171; font-weight: bold;">$${montoValidar.toLocaleString('es-CO')}</span></div>
-                <div>💼 <strong>Efectivo en caja disponible:</strong> <span style="color: #10b981; font-weight: bold;">$${Math.max(0, efectivoDisponible).toLocaleString('es-CO')}</span></div>
+      const montoValidar = (this.isRenewalMode && montoDesembolso > 0) ? montoDesembolso : montoPrestamo;
+
+      if (montoValidar > efectivoDisponible || (efectivoDisponible <= 0 && montoPrestamo > 0)) {
+        const msgTexto = "⚠️ Fondos insuficientes en caja: No puedes prestar un monto mayor al efectivo físico que posees. Te sugerimos seguir recaudando hasta tener los fondos necesarios o comunicarte con el supervisor si es un caso urgente.";
+
+        const msgHtml = `
+          <div style="text-align: left; font-size: 0.95rem; line-height: 1.5; color: #f1f5f9;">
+            <p style="font-weight: 600; color: #fbbf24; margin-bottom: 0.85rem; font-size: 0.95rem;">
+              ⚠️ Fondos insuficientes en caja: No puedes prestar un monto mayor al efectivo físico que posees. Te sugerimos seguir recaudando hasta tener los fondos necesarios o comunicarte con el supervisor si es un caso urgente.
+            </p>
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 0.85rem; margin: 0.75rem 0;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
+                <span style="color: #cbd5e1;">💵 Monto a desembolsar (${this.isRenewalMode ? 'Renovación' : 'Préstamo'}):</span>
+                <strong style="color: #f87171;">$${montoValidar.toLocaleString('es-CO')}</strong>
               </div>
-              <p style="color: #fbbf24; font-size: 0.85rem; margin-top: 0.5rem;">
-                ⚠️ <strong>Fondos insuficientes:</strong> La operación ha sido denegada. Debe realizar cobros para recaudar efectivo en su ruta o solicitar una recarga/inyección de fondos a su supervisor.
-              </p>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: #cbd5e1;">💼 Efectivo físico disponible en caja:</span>
+                <strong style="color: #10b981;">$${Math.max(0, efectivoDisponible).toLocaleString('es-CO')}</strong>
+              </div>
             </div>
-          `;
+          </div>
+        `;
 
-          if (typeof Swal !== 'undefined') {
-            await Swal.fire({
-              icon: 'error',
-              title: '⛔ Fondos Insuficientes en Caja',
-              html: msgHtml,
-              confirmButtonColor: '#ef4444',
-              confirmButtonText: 'Entendido',
-              background: '#0f172a',
-              color: '#fff'
-            });
-          } else {
-            alert(`⛔ OPERACIÓN DENEGADA POR FALTA DE FONDOS:\n\nEl monto a prestar ($${montoValidar.toLocaleString('es-CO')}) supera el efectivo disponible en caja ($${Math.max(0, efectivoDisponible).toLocaleString('es-CO')}).\n\nDebe recaudar efectivo en la ruta o solicitar una recarga al supervisor.`);
-          }
-          return;
+        if (typeof Swal !== 'undefined') {
+          await Swal.fire({
+            icon: 'warning',
+            title: '⚠️ Fondos insuficientes en caja',
+            html: msgHtml,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Entendido',
+            background: '#0f172a',
+            color: '#fff'
+          });
+        } else {
+          alert(msgTexto);
         }
+
+        if (btnGuardar) {
+          btnGuardar.disabled = false;
+          btnGuardar.innerText = btnGuardar.dataset.originalText || 'Guardar Cliente';
+        }
+        this.isRegisteringClient = false;
+        return;
       }
 
       const emailEl = document.getElementById('new-client-email');

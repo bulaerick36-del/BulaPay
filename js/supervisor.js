@@ -3233,6 +3233,10 @@ const supervisorModule = {
     }, 3000);
   },
 
+  async renderManagedRoutesList() {
+    return this.renderManageRoutesList();
+  },
+
   async renderManageRoutesList() {
     const listContainer = document.getElementById('manage-routes-list');
     if (!listContainer) return;
@@ -3405,7 +3409,7 @@ const supervisorModule = {
           await this.calculateCierreCaja();
         }
         await this.renderDashboard();
-        await this.renderManagedRoutesList();
+        await this.renderManageRoutesList();
       } catch (e) {
         alert('Error al inyectar capital: ' + (e.message || e));
       }
@@ -3481,7 +3485,7 @@ const supervisorModule = {
           await this.calculateCierreCaja();
         }
         await this.renderDashboard();
-        await this.renderManagedRoutesList();
+        await this.renderManageRoutesList();
       } catch (err) {
         Swal.fire({
           icon: 'error',
