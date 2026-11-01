@@ -2645,7 +2645,7 @@ const supervisorModule = {
     const totalCapital = (routes || []).reduce((acc, curr) => acc + Number(curr.capital || curr.capital_asignado || 0), 0);
 
     if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
-    if (this.kpiTotalCapital) this.kpiTotalCapital.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
+    // Montos grandes removidos: tarjeta limpia como acceso directo estético
 
     const payments = await window.BulaPayDB.getPayments();
     const clients = await window.BulaPayDB.getClients();
@@ -2752,8 +2752,7 @@ const supervisorModule = {
 
     // Inyectar KPIs globales consolidados permanentemente
     if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
-    if (this.kpiTotalCapital) this.kpiTotalCapital.textContent = `$${totalCapital.toLocaleString('es-CO')}`;
-    if (this.kpiTotalCollected) this.kpiTotalCollected.textContent = `$${consolidatedTotalCollected.toLocaleString('es-CO')}`;
+    // Montos numéricos removidos del panel principal para tarjetas limpias como accesos directos estéticos
     
     const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
     if (kpiBlacklistEl) {
