@@ -1094,7 +1094,7 @@
                 <div id="cobro-input-state">
                   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; padding-bottom: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Detalle del Crédito</span>
-                    <button type="button" id="btn-cobro-input-close" title="Cerrar consulta y volver al buscador" style="background: none; border: none; color: var(--text-muted); font-size: 1.15rem; cursor: pointer; padding: 0.1rem 0.4rem; line-height: 1; transition: color 0.15s;">✕</button>
+                    <button type="button" id="btn-cobro-input-close" title="Cerrar consulta y volver al buscador" onclick="if (window.agentModule && typeof window.agentModule.closeClientConsultation === 'function') { window.agentModule.closeClientConsultation(); } else { const act = document.getElementById('cobro-action-container'); const ph = document.getElementById('agent-search-placeholder'); const inp = document.getElementById('cobrar-search-input'); if (act) act.style.setProperty('display', 'none', 'important'); if (ph) ph.style.setProperty('display', 'block', 'important'); if (inp) inp.value = ''; }" style="background: none; border: none; color: var(--text-muted); font-size: 1.15rem; cursor: pointer; padding: 0.1rem 0.4rem; line-height: 1; transition: color 0.15s;">✕</button>
                   </div>
                   <h4 id="cobro-client-name" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); text-align: center; margin-bottom: 0.5rem; text-transform: uppercase;">Nombre del Cliente</h4>
                   
@@ -1179,11 +1179,11 @@
                 <div id="cobro-carton-state" style="display: none !important;">
                   <!-- BARRA SUPERIOR DE RETORNO RÁPIDO (Sticky / Visible sin hacer scroll) -->
                   <div class="carton-top-nav" style="position: sticky; top: 0; z-index: 10; background: var(--bg-primary); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 1rem; padding-bottom: 0.75rem; padding-top: 0.25rem; border-bottom: 1px solid var(--border-color);">
-                    <button type="button" id="btn-cobro-back-top" class="btn btn-secondary" style="padding: 0.5rem 0.9rem; font-size: 0.85rem; font-weight: 800; background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; transition: background 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <button type="button" id="btn-cobro-back-top" class="btn btn-secondary" onclick="if (window.agentModule && typeof window.agentModule.returnFromCartonView === 'function') { window.agentModule.returnFromCartonView(); } else { const cState = document.getElementById('cobro-carton-state'); const iState = document.getElementById('cobro-input-state'); if (cState) cState.style.setProperty('display', 'none', 'important'); if (iState) iState.style.setProperty('display', 'block', 'important'); }" style="padding: 0.5rem 0.9rem; font-size: 0.85rem; font-weight: 800; background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; transition: background 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                       ⬅️ Volver
                     </button>
                     <h4 style="font-size: 1rem; font-weight: 800; color: var(--text-primary); margin: 0; text-transform: uppercase; text-align: center; flex: 1;">Seleccionar Día a Pagar</h4>
-                    <button type="button" id="btn-cobro-close-carton" class="btn btn-secondary" title="Cerrar consulta y volver al buscador" style="padding: 0.5rem 0.75rem; font-size: 0.85rem; font-weight: 800; background: transparent; color: var(--text-muted); border: 1px solid transparent; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
+                    <button type="button" id="btn-cobro-close-carton" class="btn btn-secondary" title="Cerrar consulta y volver al buscador" onclick="if (window.agentModule && typeof window.agentModule.closeClientConsultation === 'function') { window.agentModule.closeClientConsultation(); } else { const act = document.getElementById('cobro-action-container'); const ph = document.getElementById('agent-search-placeholder'); const inp = document.getElementById('cobrar-search-input'); if (act) act.style.setProperty('display', 'none', 'important'); if (ph) ph.style.setProperty('display', 'block', 'important'); if (inp) inp.value = ''; }" style="padding: 0.5rem 0.75rem; font-size: 0.85rem; font-weight: 800; background: transparent; color: var(--text-muted); border: 1px solid transparent; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
                       ✕
                     </button>
                   </div>
@@ -1213,7 +1213,7 @@
                     <button id="btn-process-mass-payment" class="btn btn-primary" style="display: none; width: 100%; margin-bottom: 0.5rem; padding: 1rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(90deg, var(--primary), var(--accent)); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
                       Procesar Pago Masivo (0)
                     </button>
-                    <button type="button" class="btn btn-secondary" id="btn-cobro-back" style="flex: 1; min-width: 45%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer;">
+                    <button type="button" class="btn btn-secondary" id="btn-cobro-back" onclick="if (window.agentModule && typeof window.agentModule.returnFromCartonView === 'function') { window.agentModule.returnFromCartonView(); } else { const cState = document.getElementById('cobro-carton-state'); const iState = document.getElementById('cobro-input-state'); if (cState) cState.style.setProperty('display', 'none', 'important'); if (iState) iState.style.setProperty('display', 'block', 'important'); }" style="flex: 1; min-width: 45%; padding: 0.8rem; font-size: 1rem; font-weight: 700; background-color: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer;">
                       ⬅️ Volver
                     </button>
                     <button type="button" class="btn btn-primary" id="btn-liquidar-carton" style="flex: 1; min-width: 45%; padding: 0.8rem; font-size: 0.95rem; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 6px rgba(16,185,129,0.2);">
@@ -2246,7 +2246,7 @@
   <script src="js/ads.js?v=11025"></script>
   <script src="js/auth.js?v=11025"></script>
   <script src="js/supervisor.js?v=11030"></script>
-  <script src="js/agent_v6.js?v=11030"></script>
+  <script src="js/agent_v6.js?v=11032"></script>
   <script src="js/agent_ruta.js?v=11025"></script>
   <script src="js/customer.js?v=11025"></script>
   <script src="js/superadmin.js?v=11025"></script>

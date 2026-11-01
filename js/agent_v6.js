@@ -250,6 +250,26 @@ const agentModule = {
     return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Bogota' });
   },
 
+  returnFromCartonView() {
+    if (this.cobroCartonState) this.cobroCartonState.style.setProperty('display', 'none', 'important');
+    if (this.cobroInputState) this.cobroInputState.style.setProperty('display', 'block', 'important');
+    if (this.cobroActionContainer) {
+      this.cobroActionContainer.style.setProperty('display', 'block', 'important');
+      this.cobroActionContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  },
+
+  closeClientConsultation() {
+    this.currentClient = null;
+    if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
+    if (this.cobroCartonState) this.cobroCartonState.style.setProperty('display', 'none', 'important');
+    if (this.cobroInputState) this.cobroInputState.style.setProperty('display', 'none', 'important');
+    if (this.searchPlaceholder) this.searchPlaceholder.style.setProperty('display', 'block', 'important');
+    if (this.searchError) this.searchError.style.display = 'none';
+    if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
   startMidnightCheck() {
     if (this._midnightInterval) clearInterval(this._midnightInterval);
     this._lastActiveDateStr = this.getLocalDateString();
@@ -3200,12 +3220,16 @@ const agentModule = {
         }
       }
 
-      // Si el cartón tiene cuotas en mora o supera tiempo de vencimiento, mostrar directamente el cartón interactivo completo con sus cuotas en rojo
-      const hasOverdueQuotas = (dailyStatusList || []).some(s => s.isOverdue);
-      if (hasOverdueQuotas || this.isCartonOverdueBy2Months(client, dailyStatusList)) {
+      // Si el cartón tiene mora prolongada grave (> 2 meses), mostrar directamente el cartón interactivo
+      if (this.isCartonOverdueBy2Months(client, dailyStatusList)) {
         if (this.cobroInputState && this.cobroCartonState) {
           this.cobroInputState.style.setProperty('display', 'none', 'important');
           this.cobroCartonState.style.setProperty('display', 'block', 'important');
+        }
+      } else {
+        if (this.cobroInputState && this.cobroCartonState) {
+          this.cobroInputState.style.setProperty('display', 'block', 'important');
+          this.cobroCartonState.style.setProperty('display', 'none', 'important');
         }
       }
 
