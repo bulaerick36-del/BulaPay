@@ -1611,8 +1611,31 @@
                 </div>
 
                 <div style="border-top: 1px dashed var(--border-color); padding-top: 0.85rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; font-weight: 800;">
-                  <span style="color: #34d399;">🏛️ TOTAL EFECTIVO:</span>
+                  <div>
+                    <span style="color: #34d399;">🏛️ TOTAL EFECTIVO A ENTREGAR:</span>
+                    <div style="font-size: 0.72rem; color: #94a3b8; font-weight: normal; margin-top: 0.15rem;">Fórmula: (Efectivo Inicial + Total Cobrado) − Total Prestado</div>
+                  </div>
                   <strong id="cash-report-net" style="color: #34d399; font-size: 1.35rem; font-weight: 900;">$0</strong>
+                </div>
+
+                <!-- ACLARACIÓN VISUAL Y SEPARACIÓN CONTABLE DE FONDOS PARA AGENTE -->
+                <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 0.75rem 0.95rem; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.45rem;">
+                  <div style="font-weight: 700; color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.3rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📊 Separación Contable de Fondos</span>
+                    <span style="font-size: 0.7rem; color: #38bdf8; font-weight: normal;">Arqueo de Turno</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #cbd5e1;">📤 Dinero que queda en la calle (Nuevos créditos):</span>
+                    <strong id="cash-report-calle" style="color: #f87171; font-weight: 700;">$0</strong>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #cbd5e1;">📈 Flujo Operativo del Día (Recaudo − Prestado):</span>
+                    <strong id="cash-report-flujo-dia" style="color: #10b981; font-weight: 700;">$0</strong>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 0.35rem;">
+                    <span style="color: #cbd5e1; font-weight: 600;">💵 Efectivo neto físico a entregar al supervisor:</span>
+                    <strong id="cash-report-entregar-sub" style="color: #34d399; font-weight: 800;">$0</strong>
+                  </div>
                 </div>
               </div>
               
@@ -2242,11 +2265,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="js/checkout.js?v=11025"></script>
-  <script src="js/db.js?v=11030"></script>
+  <script src="js/db.js?v=11035"></script>
   <script src="js/ads.js?v=11025"></script>
   <script src="js/auth.js?v=11025"></script>
-  <script src="js/supervisor.js?v=11031"></script>
-  <script src="js/agent_v6.js?v=11033"></script>
+  <script src="js/supervisor.js?v=11035"></script>
+  <script src="js/agent_v6.js?v=11035"></script>
   <script src="js/agent_ruta.js?v=11025"></script>
   <script src="js/customer.js?v=11025"></script>
   <script src="js/superadmin.js?v=11025"></script>
@@ -2462,9 +2485,9 @@
       <!-- Efectivo Inicial (Dato puramente visual/referencial) -->
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.85rem; background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.12); border-radius: 8px; margin-bottom: 1.15rem; font-size: 0.82rem;">
         <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem;">
-          💼 <span>Efectivo en Bolsillo Inicial <small style="color: #64748b;">(Referencia patrimonial, no altera entrega)</small>:</span>
+          💼 <span>Efectivo en Bolsillo Inicial:</span>
         </span>
-        <strong id="cierre-efectivo-inicial" style="color: #94a3b8;">$0</strong>
+        <strong id="cierre-efectivo-inicial" style="color: #38bdf8; font-size: 1.05rem; font-weight: 800;">$0</strong>
       </div>
 
       <!-- CONTENEDOR DE LAS 3 OPCIONES PRINCIPALES (LIMPIO Y DESPLEGABLE) -->
@@ -2539,11 +2562,31 @@
           <div>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
               <span style="font-size: 1.2rem;">🏛️</span>
-              <span style="font-size: 1.05rem; font-weight: 800; color: #34d399; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL A ENTREGAR</span>
+              <span style="font-size: 1.05rem; font-weight: 800; color: #34d399; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL EFECTIVO A ENTREGAR</span>
             </div>
-            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.2rem;">Resta directa: Total Recaudado − Total Prestado</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.2rem;">Fórmula: (Efectivo Inicial + Total Recaudado) − Total Prestado</div>
           </div>
           <strong id="cierre-efectivo-entregar" style="color: #34d399; font-size: 1.55rem; font-weight: 900; text-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">$0</strong>
+        </div>
+
+        <!-- ACLARACIÓN VISUAL Y SEPARACIÓN CONTABLE DE FONDOS -->
+        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 10px; padding: 0.85rem 1.15rem; font-size: 0.82rem; display: flex; flex-direction: column; gap: 0.5rem;">
+          <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>📊 Separación Contable de Fondos</span>
+            <span style="font-size: 0.7rem; color: #38bdf8; font-weight: normal;">Auditoría de Caja</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #cbd5e1;">📤 Dinero que queda en la calle (Nuevos créditos):</span>
+            <strong id="cierre-dinero-calle" style="color: #f87171; font-weight: 700;">$0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #cbd5e1;">📈 Flujo Operativo del Día (Recaudo − Prestado):</span>
+            <strong id="cierre-flujo-dia" style="color: #10b981; font-weight: 700;">$0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 0.4rem;">
+            <span style="color: #cbd5e1; font-weight: 600;">💵 Efectivo neto físico a reportar / custodiar:</span>
+            <strong id="cierre-neto-entregar" style="color: #34d399; font-weight: 800;">$0</strong>
+          </div>
         </div>
 
       </div>

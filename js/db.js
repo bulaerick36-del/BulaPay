@@ -2681,8 +2681,8 @@ const db = {
       } catch (eM) {}
     }
 
-    // FÓRMULA SOLICITADA: Efectivo en Bolsillo Inicial = (Capital Base - En Calle)
-    const efectivoInicial = Math.max(0, capitalBase - enCalle);
+    // FÓRMULA BASE: Efectivo en Bolsillo Inicial preliminar
+    let efectivoInicial = Math.max(0, capitalBase - enCalle);
 
     const doesPaymentBelong = (p) => {
       if (!p) return false;
@@ -2850,9 +2850,31 @@ const db = {
     const totalRecaudado = (cuotasNormales + pagosMasivos + entradasRenovacion + liquidacionesMora + descuentosRetenidos);
     const totalDesembolsado = (totalPrestado + desembolsosRenovacion);
 
-    // Fórmula Estricta Flujo de Caja del Día (Efectivo en Bolsillo Inicial queda puramente visual en la UI):
-    // TOTAL A ENTREGAR = Resta directa y exacta entre recaudo total y total prestado/desembolsado
-    const totalEntregar = Math.max(0, totalRecaudado - totalDesembolsado);
+    // Cartera en calle al inicio de la jornada (antes de los préstamos y cobros de hoy)
+    const enCalleInicio = Math.max(0, enCalle - totalDesembolsado + totalCobrado);
+
+    // Efectivo en Bolsillo Inicial con el que arrancó el agente su jornada operativa:
+    efectivoInicial = Math.max(0, capitalBase - enCalleInicio);
+    if (efectivoInicial <= 0 && capitalBase > enCalle) {
+      efectivoInicial = Math.max(0, capitalBase - enCalle);
+    }
+    if (efectivoInicial <= 0 && targetRouteId && targetRouteId !== 'ALL') {
+      try {
+        const liquid = await this.getLiquidCash(targetRouteId, agentUserObj);
+        if (liquid > 0) {
+          efectivoInicial = Math.max(0, Math.round(liquid - totalRecaudado + totalDesembolsado));
+        }
+      } catch (eL) {}
+    }
+
+    // Flujo operativo neto exclusivo del día (recaudos menos desembolsos):
+    const flujoNetoDia = (totalRecaudado - totalDesembolsado);
+
+    // ECUACIÓN CONTABLE DE CAJA AJUSTADA (REGLA MAESTRA DE CIERRE Y ARQUEO FÍSICO):
+    // El dinero prestado en el día sale del fondo disponible del agente (Efectivo en Bolsillo Inicial + Total Recaudado).
+    // Total Efectivo Físico a Entregar = (Efectivo en Bolsillo Inicial + Total Recaudado) - Total Prestado
+    const totalEntregar = Math.max(0, (efectivoInicial + totalRecaudado) - totalDesembolsado);
+    const dineroEnCalleNuevos = totalDesembolsado;
 
     return {
       routeId: targetRouteId || null,
@@ -2867,6 +2889,7 @@ const db = {
       fechaUltimoCierre: shiftWindow.fechaUltimoCierre ? shiftWindow.fechaUltimoCierre.toISOString() : null,
       capitalBase: Math.round(capitalBase),
       enCalle: Math.round(enCalle),
+      enCalleInicio: Math.round(enCalleInicio),
       efectivoInicial: Math.round(efectivoInicial),
       totalRecaudado: Math.round(totalRecaudado),
       cuotasNormales: Math.round(cuotasNormales),
@@ -2879,6 +2902,8 @@ const db = {
       totalPrestado: Math.round(totalPrestado),
       desembolsosRenovacion: Math.round(desembolsosRenovacion),
       totalDesembolsado: Math.round(totalDesembolsado),
+      dineroEnCalleNuevos: Math.round(dineroEnCalleNuevos),
+      flujoNetoDia: Math.round(flujoNetoDia),
       totalEntregar: Math.round(totalEntregar)
     };
   },

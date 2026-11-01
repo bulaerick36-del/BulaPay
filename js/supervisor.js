@@ -1336,18 +1336,25 @@ const supervisorModule = {
     const prestamosHoyEl = document.getElementById('cierre-prestamos-hoy');
     const renovOutEl = document.getElementById('cierre-renov-out');
 
-    // Total a Entregar
+    // Total a Entregar y desglose contable
     const entregarEl = document.getElementById('cierre-efectivo-entregar');
+    const dineroCalleEl = document.getElementById('cierre-dinero-calle');
+    const netoEntregarEl = document.getElementById('cierre-neto-entregar');
+    const flujoDiaEl = document.getElementById('cierre-flujo-dia');
 
     if (!routeSelect) return;
     const routeId = routeSelect.value || 'ALL';
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
 
+    const efectivoInicial = Number(data.efectivoInicial || 0);
     const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
     const prestadoTotal = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
-    const totalEntregar = Math.max(0, recaudoTotal - prestadoTotal);
+    
+    // Ecuación Contable Ajustada: (Efectivo en Bolsillo Inicial + Total Recaudado) - Total Prestado
+    const totalEntregar = data.totalEntregar !== undefined ? Number(data.totalEntregar) : Math.max(0, (efectivoInicial + recaudoTotal) - prestadoTotal);
+    const flujoNetoDia = recaudoTotal - prestadoTotal;
 
-    if (inicialEl) inicialEl.textContent = `$${(data.efectivoInicial || 0).toLocaleString('es-CO')}`;
+    if (inicialEl) inicialEl.textContent = `$${efectivoInicial.toLocaleString('es-CO')}`;
 
     // Total Recaudado y desglose
     if (totalRecaudadoEl) totalRecaudadoEl.textContent = `+$${recaudoTotal.toLocaleString('es-CO')}`;
@@ -1363,8 +1370,14 @@ const supervisorModule = {
     if (prestamosHoyEl) prestamosHoyEl.textContent = `$${(data.prestamosNuevos || data.totalPrestado || 0).toLocaleString('es-CO')}`;
     if (renovOutEl) renovOutEl.textContent = `$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
 
-    // Total a Entregar (Resta exacta)
+    // Total a Entregar y Desglose Visual Contable
     if (entregarEl) entregarEl.textContent = `$${totalEntregar.toLocaleString('es-CO')}`;
+    if (dineroCalleEl) dineroCalleEl.textContent = `$${prestadoTotal.toLocaleString('es-CO')}`;
+    if (netoEntregarEl) netoEntregarEl.textContent = `$${totalEntregar.toLocaleString('es-CO')}`;
+    if (flujoDiaEl) {
+      flujoDiaEl.textContent = `${flujoNetoDia >= 0 ? '+' : ''}$${flujoNetoDia.toLocaleString('es-CO')}`;
+      flujoDiaEl.style.color = flujoNetoDia >= 0 ? '#10b981' : '#f87171';
+    }
 
     await this.renderHistorialCierresSupervisor();
   },
@@ -1411,15 +1424,22 @@ const supervisorModule = {
 
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
     const recaudo = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : (data.totalCobrado + (data.entradasRenovacion || 0)));
+    const prestado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : (data.totalPrestado + (data.desembolsosRenovacion || 0)));
 
     let confirmRes = false;
     if (typeof Swal !== 'undefined') {
       const res = await Swal.fire({
         title: '¿Confirmar Cierre de Jornada?',
         html: `Se cerrará la jornada operativa actual de la ruta <strong>${data.routeName}</strong>.<br><br>
-               <strong>Recaudo a archivar:</strong> <span style="color:#10b981; font-weight:bold;">$${recaudo.toLocaleString('es-CO')}</span><br>
-               <strong>Total a entregar:</strong> <span style="color:#38bdf8; font-weight:bold;">$${data.totalEntregar.toLocaleString('es-CO')}</span><br><br>
-               <span style="color:#f59e0b; font-size:0.85rem;">⚠️ Al confirmar, el contador de 'Recaudado Hoy' del agente reiniciará inmediatamente a $0.</span>`,
+               <div style="text-align: left; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.85rem; line-height: 1.6;">
+                 <div>💼 <strong>Efectivo Inicial en Bolsillo:</strong> $${(data.efectivoInicial || 0).toLocaleString('es-CO')}</div>
+                 <div>💰 <strong>Total Recaudado Hoy:</strong> <span style="color:#10b981; font-weight:bold;">+$${recaudo.toLocaleString('es-CO')}</span></div>
+                 <div>📤 <strong>Total Prestado (Queda en la calle):</strong> <span style="color:#f87171; font-weight:bold;">-$${prestado.toLocaleString('es-CO')}</span></div>
+                 <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin-top: 0.4rem; padding-top: 0.4rem;">
+                   🏛️ <strong>Total Efectivo Físico a Entregar:</strong> <span style="color:#38bdf8; font-weight:bold; font-size: 1.05rem;">$${data.totalEntregar.toLocaleString('es-CO')}</span>
+                 </div>
+               </div><br>
+               <span style="color:#f59e0b; font-size:0.8rem;">⚠️ Al confirmar, el contador de 'Recaudado Hoy' del agente reiniciará inmediatamente a $0.</span>`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Sí, Realizar Cierre',
