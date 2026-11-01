@@ -157,6 +157,8 @@ const agentModule = {
     this.btnCobroInvoice = document.getElementById('btn-cobro-invoice');
     this.btnCobroCarton = document.getElementById('btn-cobro-carton');
     this.btnCobroBack = document.getElementById('btn-cobro-back');
+    this.btnCobroBackTop = document.getElementById('btn-cobro-back-top');
+    this.btnCobroCloseCarton = document.getElementById('btn-cobro-close-carton');
     this.btnLiquidarCarton = document.getElementById('btn-liquidar-carton');
     this.btnCobroRenovar = document.getElementById('btn-cobro-renovar');
     this.btnCobroLiquidarMora = document.getElementById('btn-cobro-liquidar-mora');
@@ -314,13 +316,34 @@ const agentModule = {
         }
       });
     }
+    const returnFromCarton = () => {
+      if (this.cobroInputState && this.cobroCartonState) {
+        this.cobroCartonState.style.setProperty('display', 'none', 'important');
+        this.cobroInputState.style.setProperty('display', 'block', 'important');
+      }
+    };
+
     if (this.btnCobroBack) {
-      this.btnCobroBack.addEventListener('click', () => {
-        if (this.cobroInputState && this.cobroCartonState) {
-          this.cobroCartonState.style.setProperty('display', 'none', 'important');
-          this.cobroInputState.style.setProperty('display', 'block', 'important');
-        }
-      });
+      this.btnCobroBack.addEventListener('click', returnFromCarton);
+    }
+    if (this.btnCobroBackTop) {
+      this.btnCobroBackTop.addEventListener('click', returnFromCarton);
+    }
+
+    const closeClientConsultation = () => {
+      this.currentClient = null;
+      if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
+      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
+      if (this.searchError) this.searchError.style.display = 'none';
+      if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+    };
+
+    if (this.btnCobroCloseCarton) {
+      this.btnCobroCloseCarton.addEventListener('click', closeClientConsultation);
+    }
+    const btnCobroInputClose = document.getElementById('btn-cobro-input-close');
+    if (btnCobroInputClose) {
+      btnCobroInputClose.addEventListener('click', closeClientConsultation);
     }
 
     if (this.btnLiquidatedNewCredit) {
