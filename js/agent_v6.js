@@ -2427,7 +2427,7 @@ const agentModule = {
     }
   },
 
-  async promptOverdue2MonthsModal(client) {
+  async promptOverdue2MonthsModal(client, dailyStatusList = null) {
     if (!client) return false;
 
     const nombre = client.name || client.nombre || client.nombre_cliente || `Cliente ${client.cedula || ''}`;
@@ -2463,6 +2463,45 @@ const agentModule = {
       ? `${diasVencimiento} días (~${Math.floor(diasVencimiento / 30)} meses)` 
       : 'Supera 60 días (2 meses)';
 
+    // Obtener la lista real de las 30 cuotas para auditoría visual
+    let quotas = Array.isArray(dailyStatusList) ? dailyStatusList : null;
+    if (!quotas || quotas.length === 0) {
+      try {
+        const rawPayments = await window.BulaPayDB.getPaymentsByClient(cedula, client.carton_id || client.id || null);
+        quotas = window.BulaPayDB.getDailyPaymentStatus(client, rawPayments || []);
+      } catch (e) {
+        quotas = null;
+      }
+    }
+
+    if (!quotas || quotas.length === 0) {
+      quotas = [];
+      for (let i = 1; i <= totalInstallmentsCount; i++) {
+        quotas.push({
+          dayNumber: i,
+          hasPaid: false,
+          isOverdue: true
+        });
+      }
+    }
+
+    const paidCount = quotas.filter(q => q.hasPaid).length;
+    const overdueCount = quotas.length - paidCount;
+
+    const quotasGridHtml = quotas.map(q => {
+      const isPaid = Boolean(q.hasPaid);
+      const bg = isPaid ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+      const color = isPaid ? '#34d399' : '#f87171';
+      const border = isPaid ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid rgba(239, 68, 68, 0.45)';
+      const label = isPaid ? '✔ Pagada' : '⚠️ Mora';
+      return `
+        <div style="background: ${bg}; color: ${color}; border: ${border}; border-radius: 6px; padding: 0.35rem 0.2rem; text-align: center; font-size: 0.65rem;">
+          <div style="font-weight: 800; font-size: 0.72rem;">Día ${q.dayNumber}</div>
+          <div style="font-size: 0.58rem; font-weight: 700; opacity: 0.95; margin-top: 0.1rem;">${label}</div>
+        </div>
+      `;
+    }).join('');
+
     const warningHtml = `
       <p style="font-size: 1.05rem; line-height: 1.5; margin: 0.5rem 0 0.85rem 0; color: #ffffff;">
         Este cartón está vencido por 2 meses. Según la regla, le sugerimos enviar a Lista Negra.
@@ -2474,17 +2513,29 @@ const agentModule = {
         </button>
       </div>
 
-      <div id="swal-client-data-box" style="display: none; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 10px; padding: 0.9rem; text-align: left; margin: 0.75rem 0; font-size: 0.85rem; line-height: 1.6;">
+      <div id="swal-client-data-box" style="display: none; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 0.9rem; text-align: left; margin: 0.75rem 0; font-size: 0.85rem; line-height: 1.5; max-height: 420px; overflow-y: auto;">
         <div style="font-weight: 800; font-size: 0.9rem; color: #38bdf8; margin-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
           📋 Resumen del Cliente y Cartón
         </div>
-        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-          <div><span style="color: #94a3b8; font-weight: 600;">👤 Nombre:</span> <b style="color: #f8fafc;">${nombre}</b></div>
+        <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.85rem;">
+          <div><span style="color: #94a3b8; font-weight: 600;">👤 Nombre Completo:</span> <b style="color: #f8fafc;">${nombre}</b></div>
           <div><span style="color: #94a3b8; font-weight: 600;">🆔 Cédula:</span> <b style="color: #f8fafc;">${cedula}</b></div>
           <div><span style="color: #94a3b8; font-weight: 600;">📍 Dirección:</span> <span style="color: #e2e8f0;">${direccion}</span></div>
           <div><span style="color: #94a3b8; font-weight: 600;">🏘️ Barrio:</span> <span style="color: #e2e8f0;">${barrio}</span></div>
           <div><span style="color: #94a3b8; font-weight: 600;">💰 Saldo Pendiente:</span> <b style="color: #ef4444; font-size: 0.95rem;">${saldoFmt}</b></div>
           <div><span style="color: #94a3b8; font-weight: 600;">⏳ Días de Vencimiento:</span> <b style="color: #f59e0b;">${diasVencimientoStr}</b></div>
+        </div>
+
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.6rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.3rem;">
+            <span style="font-weight: 800; font-size: 0.82rem; color: #38bdf8;">📅 Cartón de Cuotas (30 Días)</span>
+            <span style="font-size: 0.72rem; font-weight: 700;">
+              <span style="color: #34d399;">✔ ${paidCount} pagadas</span> | <span style="color: #f87171;">⚠️ ${overdueCount} vencidas</span>
+            </span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.35rem;">
+            ${quotasGridHtml}
+          </div>
         </div>
       </div>
     `;
@@ -2533,7 +2584,8 @@ const agentModule = {
       `- Dirección: ${direccion}\n` +
       `- Barrio: ${barrio}\n` +
       `- Saldo Pendiente: ${saldoFmt}\n` +
-      `- Días de Vencimiento: ${diasVencimientoStr}\n\n` +
+      `- Días de Vencimiento: ${diasVencimientoStr}\n` +
+      `- Cuotas: ${paidCount} pagadas / ${overdueCount} vencidas\n\n` +
       `¿Desea enviar este cliente a Lista Negra?`;
 
     return window.confirm(confirmText);
@@ -3134,7 +3186,7 @@ const agentModule = {
 
       // VALIDACIÓN CRÍTICA: Regla de Autoliquidación y Envío a Lista Negra por 2 Meses de Mora
       if (!isInternalRefresh && this.lastDismissed2MonthsCedula !== cedulaClean && this.isCartonOverdueBy2Months(client, dailyStatusList)) {
-        const confirmed = await this.promptOverdue2MonthsModal(client);
+        const confirmed = await this.promptOverdue2MonthsModal(client, dailyStatusList);
         if (confirmed) {
           await this.ejecutarLiquidacionYListaNegra(client, { skipConfirm: true });
           return;
