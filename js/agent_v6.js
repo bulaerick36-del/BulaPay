@@ -2217,6 +2217,7 @@ const agentModule = {
 
     // REGLA CRÍTICA BULAPAY CONTRA FALSA LIQUIDACIÓN:
     // Un cartón NUNCA debe marcarse como "Liquidado" ni en $0 a menos que se hayan registrado pagos reales que sumen el 100% del valor del crédito.
+    const totalPagado = Number(client.totalPagadoReal ?? client.totalPagado ?? 0);
     const isFullyPaidByRecords = Boolean(client.isFullyPaid || (totalDebt > 0 && totalPagado >= totalDebt));
     const isWithoutActiveDebt = (outstanding <= 0 && isFullyPaidByRecords && !isLossStatus);
 
@@ -3107,6 +3108,7 @@ const agentModule = {
         installmentAmount: installmentAmount,
         status: realStatus,
         estado: realEstado,
+        totalPagado: totalPagadoReal,
         totalPagadoReal: totalPagadoReal,
         isFullyPaid: isFullyPaidByRecords
       };
