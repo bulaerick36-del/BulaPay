@@ -2872,34 +2872,26 @@ const db = {
 
     // SISTEMA INTELIGENTE DE DOBLE FUENTE DE FONDOS Y AUDITORÍA DE CAJA:
     // 1. Recaudo Disponible: Fondos frescos de cobro aún no utilizados en préstamos de hoy
-    // 2. Capital Asignado Utilizado: Monto de capital inicial consumido para completar préstamos cuando el recaudo no alcanza
+    // 2. Capital Asignado Utilizado: Monto neto de capital asignado consumido para completar préstamos cuando el recaudo no alcanza
     // 3. Capital Asignado Remanente: Saldo disponible del capital entregado por el supervisor
     let recaudoDisponible = 0;
     let capitalAsignadoUtilizado = 0;
 
+    // Reinversión natural del recaudo diario: en el modelo de calle, el dinero recaudado
+    // se re-invierte de forma natural en los créditos colocados el mismo día.
     if (totalRecaudado >= totalDesembolsado) {
-      recaudoDisponible = totalRecaudado - totalDesembolsado;
+      // El recaudo del día cubrió el 100% de los desembolsos.
+      // El capital asignado queda totalmente intacto y el remanente de recaudo queda disponible.
+      recaudoDisponible = Math.round(totalRecaudado - totalDesembolsado);
       capitalAsignadoUtilizado = 0;
     } else {
+      // Los desembolsos superaron el recaudo del día: todo el recaudo se reinvirtió,
+      // y la diferencia restante se extrajo del capital asignado remanente.
       recaudoDisponible = 0;
-      capitalAsignadoUtilizado = totalDesembolsado - totalRecaudado;
+      capitalAsignadoUtilizado = Math.round(totalDesembolsado - totalRecaudado);
     }
 
-    // Verificar si hay registros explícitos de autorización de capital en localStorage para esta jornada
-    let capitalAutorizadoAudit = 0;
-    try {
-      const allAuditLogs = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
-      const todayAuditLogs = allAuditLogs.filter(log => {
-        if (log.shiftDateStr && log.shiftDateStr === todayStr) {
-          if (targetRouteId && targetRouteId !== 'ALL' && log.routeId && String(log.routeId) !== String(targetRouteId)) return false;
-          return true;
-        }
-        return false;
-      });
-      capitalAutorizadoAudit = todayAuditLogs.reduce((sum, l) => sum + Number(l.capitalAsignadoUtilizado || 0), 0);
-    } catch (eA) {}
-
-    const capitalAsignadoUtilizadoFinal = Math.round(Math.max(capitalAsignadoUtilizado, capitalAutorizadoAudit));
+    const capitalAsignadoUtilizadoFinal = Math.min(Math.round(efectivoInicial), Math.round(capitalAsignadoUtilizado));
     const capitalAsignadoRemanenteFinal = Math.max(0, Math.round(efectivoInicial - capitalAsignadoUtilizadoFinal));
 
     // ECUACIÓN CONTABLE DE CAJA AJUSTADA (REGLA MAESTRA DE CIERRE Y ARQUEO FÍSICO):

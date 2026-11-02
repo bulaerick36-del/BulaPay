@@ -4228,11 +4228,13 @@ const agentModule = {
         effectiveRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
       }
 
+      // Efectivo físico neto real que debe salir del bolsillo del agente
       const montoDesembolso = this.isRenewalMode
         ? Math.max(0, montoPrestamo - Number(this.currentRenewalOutstanding || 0) - finalDiscount)
         : Math.max(0, montoPrestamo - finalDiscount);
 
-      const montoValidar = (this.isRenewalMode && montoDesembolso > 0) ? montoDesembolso : montoPrestamo;
+      // Monto de efectivo físico a validar contra la caja disponible
+      const montoValidar = this.isRenewalMode ? montoDesembolso : (finalDiscount > 0 ? montoDesembolso : montoPrestamo);
 
       const fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(effectiveRouteId, currentUser);
       const recaudoDisponibleHoy = Number(fondosInfo.recaudoDisponibleHoy || 0);
@@ -4242,12 +4244,16 @@ const agentModule = {
       let usoCapitalAutorizado = false;
       let capitalAsignadoAUsar = 0;
 
-      // Caso 1 (Fondos Suficientes con Recaudo):
-      // Si el recaudo del día cubre el préstamo, se procesa normalmente usando el recaudo.
-      if (recaudoDisponibleHoy >= montoValidar) {
+      // Si no se requiere desembolso físico de efectivo (ej. renovación cubierta 100% por saldo anterior)
+      if (montoValidar <= 0) {
+        console.log(`[BulaPay] Préstamo / Renovación sin requerimiento de desembolso físico en caja: $0`);
+      }
+      // Caso 1 (Fondos Suficientes con Recaudo del Día):
+      // Si el recaudo del día cubre el préstamo, se procesa normalmente reinvirtiendo el recaudo de forma natural.
+      else if (recaudoDisponibleHoy >= montoValidar) {
         console.log(`[BulaPay] Préstamo cubierto 100% con Recaudo del Día: $${montoValidar.toLocaleString('es-CO')}`);
       }
-      // Caso 2 (Uso de Fondo Asignado):
+      // Caso 2 (Uso de Capital Asignado Remanente bajo Aceptación de Responsabilidad):
       // Si el recaudo del día es insuficiente pero cuenta con suficiente Capital Asignado Remanente:
       else if (fondosTotalesDisponibles >= montoValidar && capitalAsignadoRemanente > 0) {
         const capitalNecesario = montoValidar - recaudoDisponibleHoy;
@@ -4274,7 +4280,7 @@ const agentModule = {
         }
 
         if (!isAccepted) {
-          const cancelMsg = "Te sugerimos seguir recaudando hasta tener fondos necesarios o comunícate con el supervisor";
+          const cancelMsg = "⚠️ Fondos insuficientes: No cuentas con suficiente efectivo físico en caja (recaudo o capital asignado) para este préstamo. Te sugerimos seguir recaudando en la ruta o comunicarte de inmediato con el supervisor para que te asigne y habilite nuevos fondos.";
           if (typeof Swal !== 'undefined') {
             await Swal.fire({
               icon: 'info',
@@ -4302,27 +4308,35 @@ const agentModule = {
         capitalAsignadoAUsar = capitalNecesario;
         console.log(`[BulaPay] Autorizado uso de Capital Asignado Remanente: $${capitalAsignadoAUsar.toLocaleString('es-CO')}`);
       }
-      // Caso 3 (Fondos Insuficientes en ambas fuentes):
+      // Caso 3 (Fondos Insuficientes en ambas fuentes - Denegación limpia obligatoria):
       else {
-        const msgTexto = "⚠️ Fondos insuficientes en caja: No puedes prestar un monto mayor al efectivo físico que posees. Te sugerimos seguir recaudando hasta tener los fondos necesarios o comunicarte con el supervisor si es un caso urgente.";
+        const msgTexto = "⚠️ Fondos insuficientes: No cuentas con suficiente efectivo físico en caja (recaudo o capital asignado) para este préstamo. Te sugerimos seguir recaudando en la ruta o comunicarte de inmediato con el supervisor para que te asigne y habilite nuevos fondos.";
 
         const msgHtml = `
           <div style="text-align: left; font-size: 0.95rem; line-height: 1.5; color: #f1f5f9;">
             <p style="font-weight: 600; color: #fbbf24; margin-bottom: 0.85rem; font-size: 0.95rem;">
-              ⚠️ Fondos insuficientes en caja: No puedes prestar un monto mayor al efectivo físico que posees. Te sugerimos seguir recaudando hasta tener los fondos necesarios o comunicarte con el supervisor si es un caso urgente.
+              ⚠️ Fondos insuficientes: No cuentas con suficiente efectivo físico en caja (recaudo o capital asignado) para este préstamo. Te sugerimos seguir recaudando en la ruta o comunicarte de inmediato con el supervisor para que te asigne y habilite nuevos fondos.
             </p>
             <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 0.85rem; margin: 0.75rem 0;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
-                <span style="color: #cbd5e1;">💵 Monto a desembolsar (${this.isRenewalMode ? 'Renovación' : 'Préstamo'}):</span>
+                <span style="color: #cbd5e1;">💵 Efectivo requerido (${this.isRenewalMode ? 'Renovación' : 'Préstamo'}):</span>
                 <strong style="color: #f87171;">$${montoValidar.toLocaleString('es-CO')}</strong>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
                 <span style="color: #cbd5e1;">📥 Recaudo hoy disponible:</span>
                 <strong style="color: #10b981;">$${recaudoDisponibleHoy.toLocaleString('es-CO')}</strong>
               </div>
-              <div style="display: flex; justify-content: space-between;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
                 <span style="color: #cbd5e1;">💼 Capital asignado remanente:</span>
                 <strong style="color: #38bdf8;">$${capitalAsignadoRemanente.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.4rem; margin-top: 0.4rem;">
+                <span style="color: #cbd5e1; font-weight: 600;">💰 Total efectivo disponible:</span>
+                <strong style="color: #fbbf24; font-weight: 800;">$${fondosTotalesDisponibles.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 0.3rem;">
+                <span style="color: #fca5a5; font-weight: 600;">❌ Faltante de efectivo en caja:</span>
+                <strong style="color: #ef4444; font-weight: 800;">$${Math.max(0, montoValidar - fondosTotalesDisponibles).toLocaleString('es-CO')}</strong>
               </div>
             </div>
           </div>
@@ -4331,7 +4345,7 @@ const agentModule = {
         if (typeof Swal !== 'undefined') {
           await Swal.fire({
             icon: 'warning',
-            title: '⚠️ Fondos insuficientes en caja',
+            title: '⚠️ Fondos insuficientes',
             html: msgHtml,
             confirmButtonColor: '#ef4444',
             confirmButtonText: 'Entendido',
