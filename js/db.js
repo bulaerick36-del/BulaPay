@@ -2870,6 +2870,38 @@ const db = {
     // Flujo operativo neto exclusivo del día (recaudos menos desembolsos):
     const flujoNetoDia = (totalRecaudado - totalDesembolsado);
 
+    // SISTEMA INTELIGENTE DE DOBLE FUENTE DE FONDOS Y AUDITORÍA DE CAJA:
+    // 1. Recaudo Disponible: Fondos frescos de cobro aún no utilizados en préstamos de hoy
+    // 2. Capital Asignado Utilizado: Monto de capital inicial consumido para completar préstamos cuando el recaudo no alcanza
+    // 3. Capital Asignado Remanente: Saldo disponible del capital entregado por el supervisor
+    let recaudoDisponible = 0;
+    let capitalAsignadoUtilizado = 0;
+
+    if (totalRecaudado >= totalDesembolsado) {
+      recaudoDisponible = totalRecaudado - totalDesembolsado;
+      capitalAsignadoUtilizado = 0;
+    } else {
+      recaudoDisponible = 0;
+      capitalAsignadoUtilizado = totalDesembolsado - totalRecaudado;
+    }
+
+    // Verificar si hay registros explícitos de autorización de capital en localStorage para esta jornada
+    let capitalAutorizadoAudit = 0;
+    try {
+      const allAuditLogs = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
+      const todayAuditLogs = allAuditLogs.filter(log => {
+        if (log.shiftDateStr && log.shiftDateStr === todayStr) {
+          if (targetRouteId && targetRouteId !== 'ALL' && log.routeId && String(log.routeId) !== String(targetRouteId)) return false;
+          return true;
+        }
+        return false;
+      });
+      capitalAutorizadoAudit = todayAuditLogs.reduce((sum, l) => sum + Number(l.capitalAsignadoUtilizado || 0), 0);
+    } catch (eA) {}
+
+    const capitalAsignadoUtilizadoFinal = Math.round(Math.max(capitalAsignadoUtilizado, capitalAutorizadoAudit));
+    const capitalAsignadoRemanenteFinal = Math.max(0, Math.round(efectivoInicial - capitalAsignadoUtilizadoFinal));
+
     // ECUACIÓN CONTABLE DE CAJA AJUSTADA (REGLA MAESTRA DE CIERRE Y ARQUEO FÍSICO):
     // El dinero prestado en el día sale del fondo disponible del agente (Efectivo en Bolsillo Inicial + Total Recaudado).
     // Total Efectivo Físico a Entregar = (Efectivo en Bolsillo Inicial + Total Recaudado) - Total Prestado
@@ -2892,6 +2924,9 @@ const db = {
       enCalleInicio: Math.round(enCalleInicio),
       efectivoInicial: Math.round(efectivoInicial),
       totalRecaudado: Math.round(totalRecaudado),
+      recaudoDisponible: Math.round(recaudoDisponible),
+      capitalAsignadoUtilizado: capitalAsignadoUtilizadoFinal,
+      capitalAsignadoRemanente: capitalAsignadoRemanenteFinal,
       cuotasNormales: Math.round(cuotasNormales),
       totalCobrado: Math.round(totalCobrado),
       pagosMasivos: Math.round(pagosMasivos),
@@ -2906,6 +2941,64 @@ const db = {
       flujoNetoDia: Math.round(flujoNetoDia),
       totalEntregar: Math.round(totalEntregar)
     };
+  },
+
+  // Consulta en tiempo real de Doble Fuente de Fondos para el Agente
+  async getDobleFuenteFondos(routeId = null, agentUserObj = null) {
+    try {
+      const data = await this.getCierreCajaDataForRoute(routeId, agentUserObj);
+      return {
+        routeId: data.routeId,
+        shiftDateStr: data.dateStr,
+        recaudoTotalHoy: Number(data.totalRecaudado || 0),
+        recaudoDisponibleHoy: Number(data.recaudoDisponible || 0),
+        capitalAsignadoInicial: Number(data.efectivoInicial || 0),
+        capitalAsignadoRemanente: Number(data.capitalAsignadoRemanente || 0),
+        capitalAsignadoUtilizadoHoy: Number(data.capitalAsignadoUtilizado || 0),
+        totalDesembolsadoHoy: Number(data.totalDesembolsado || 0),
+        totalEntregar: Number(data.totalEntregar || 0)
+      };
+    } catch (err) {
+      console.error("Error al obtener doble fuente de fondos:", err);
+      return {
+        routeId: routeId,
+        shiftDateStr: new Date().toISOString().split('T')[0],
+        recaudoTotalHoy: 0,
+        recaudoDisponibleHoy: 0,
+        capitalAsignadoInicial: 0,
+        capitalAsignadoRemanente: 0,
+        capitalAsignadoUtilizadoHoy: 0,
+        totalDesembolsadoHoy: 0,
+        totalEntregar: 0
+      };
+    }
+  },
+
+  // Registro auditable de uso de Capital Asignado Remanente por el Agente
+  async registrarUsoCapitalAsignado({ routeId, agentUsername, shiftDateStr, montoPrestamo, recaudoDisponible, capitalAsignadoUtilizado, capitalRemanenteNuevo }) {
+    try {
+      const record = {
+        id: 'cap_uso_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        routeId: String(routeId || ''),
+        agentUsername: String(agentUsername || ''),
+        shiftDateStr: String(shiftDateStr || ''),
+        montoPrestamo: Math.round(Number(montoPrestamo) || 0),
+        recaudoDisponible: Math.round(Number(recaudoDisponible) || 0),
+        capitalAsignadoUtilizado: Math.round(Number(capitalAsignadoUtilizado) || 0),
+        capitalRemanenteNuevo: Math.round(Number(capitalRemanenteNuevo) || 0),
+        timestamp: new Date().toISOString(),
+        aceptadoPorAgente: true
+      };
+
+      const allRecords = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
+      allRecords.push(record);
+      localStorage.setItem('bulapay_capital_autorizado_uso', JSON.stringify(allRecords.slice(-200)));
+
+      return record;
+    } catch (err) {
+      console.warn("Aviso al registrar uso de capital asignado:", err);
+      return null;
+    }
   },
 
   async realizarCierreJornada({ routeId = null, agentId = null, supervisorId = null, tipoCierre = 'manual', detalles = {} } = {}) {
@@ -3156,6 +3249,8 @@ const db = {
           status: finalStatus,
           estado: finalEstado,
           isFullyPaid: isFullyPaid,
+          totalPagado: totalPagadoReal || 0,
+          totalPagadoReal: totalPagadoReal || 0,
           risk: calculatedRisk
         };
       } else {
@@ -3210,11 +3305,19 @@ const db = {
           installmentAmount: 0,
           status: isLoss ? 'liquidado_perdida' : fallbackStatus,
           estado: isLoss ? 'liquidado_perdida' : fallbackStatus,
+          isFullyPaid: !isLoss,
+          totalPagado: Number(client.totalPagadoReal ?? client.totalPagado ?? 0),
+          totalPagadoReal: Number(client.totalPagadoReal ?? client.totalPagado ?? 0),
           risk: calculatedRisk
         };
       }
     } catch (eCarton) {
-      return { ...client, risk: calculatedRisk };
+      return {
+        ...client,
+        totalPagado: Number(client?.totalPagadoReal ?? client?.totalPagado ?? 0),
+        totalPagadoReal: Number(client?.totalPagadoReal ?? client?.totalPagado ?? 0),
+        risk: calculatedRisk
+      };
     }
   },
 

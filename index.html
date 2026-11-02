@@ -1538,6 +1538,7 @@
               </div>
               
               <!-- Contenido del Modal -->
+              <div style="padding: 0.5rem 1.25rem 0 1.25rem;"><input type="text" id="input-filter-tracking-clients" placeholder="🔍 Filtrar por nombre o cédula..." style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 0.8rem;"></div>
               <div id="route-tracking-modal-content" style="padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
                 <!-- Lista de clientes inyectada dinámicamente -->
               </div>
@@ -1622,8 +1623,8 @@
                 <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 0.75rem 0.95rem; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.45rem;">
                   <div style="font-weight: 700; color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.3rem; display: flex; justify-content: space-between; align-items: center;">
                     <span>📊 Separación Contable de Fondos</span>
-                    <span style="font-size: 0.7rem; color: #38bdf8; font-weight: normal;">Arqueo de Turno</span>
-                  </div>
+                    <div style="display: flex; align-items: center; gap: 0.4rem;"><span style="font-size: 0.7rem; color: #38bdf8; font-weight: normal;">Arqueo de Turno</span><button type="button" id="agent-cash-report-bell-btn" title="Alerta de Auditoría de Caja: El agente utilizó fondos de su Capital Asignado" style="display: none; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; border-radius: 20px; padding: 0.15rem 0.5rem; color: #f87171; font-weight: 800; font-size: 0.72rem; cursor: pointer; align-items: center; gap: 0.25rem;"><span>🔔</span> Auditoría</button></div></div>
+                  <div id="agent-cash-report-row-capital-utilizado" style="display: none; justify-content: space-between; align-items: center; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 0.35rem 0.6rem;"><span style="color: #fca5a5; display: flex; align-items: center; gap: 0.3rem; font-weight: 600;"><span>🔔</span> <span>Capital Asignado Utilizado:</span></span><strong id="agent-cash-report-capital-utilizado-val" style="color: #f87171; font-weight: 800;">$0</strong></div>
                   <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="color: #cbd5e1;">📤 Dinero que queda en la calle (Nuevos créditos):</span>
                     <strong id="cash-report-calle" style="color: #f87171; font-weight: 700;">$0</strong>
@@ -2573,7 +2574,18 @@
         <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 10px; padding: 0.85rem 1.15rem; font-size: 0.82rem; display: flex; flex-direction: column; gap: 0.5rem;">
           <div style="font-weight: 700; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
             <span>📊 Separación Contable de Fondos</span>
-            <span style="font-size: 0.7rem; color: #38bdf8; font-weight: normal;">Auditoría de Caja</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 0.7rem; color: #38bdf8; font-weight: normal;">Auditoría de Caja</span>
+              <button type="button" id="cierre-audit-bell-btn" title="Alerta de Auditoría de Caja: El agente utilizó fondos de su Capital Asignado" style="display: none; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; border-radius: 20px; padding: 0.15rem 0.55rem; color: #f87171; font-weight: 800; font-size: 0.75rem; cursor: pointer; align-items: center; gap: 0.25rem;">
+                <span style="font-size: 0.85rem;">🔔</span> Alerta Auditoría
+              </button>
+            </div>
+          </div>
+          <div id="cierre-row-capital-utilizado" style="display: none; justify-content: space-between; align-items: center; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 0.4rem 0.65rem;">
+            <span style="color: #fca5a5; display: flex; align-items: center; gap: 0.35rem; font-weight: 600;">
+              <span>🔔</span> <span>Capital Asignado Utilizado:</span>
+            </span>
+            <strong id="cierre-capital-utilizado-val" style="color: #f87171; font-weight: 800;">$0</strong>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: #cbd5e1;">📤 Dinero que queda en la calle (Nuevos créditos):</span>
@@ -2886,6 +2898,7 @@
         <!-- Columna 1: Lista de Clientes -->
         <div>
           <h4 style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem; text-transform: uppercase;">Clientes Asignados</h4>
+          <div style="margin-bottom: 0.5rem;"><input type="text" id="input-filter-audit-clients" placeholder="🔍 Filtrar clientes..." style="width: 100%; padding: 0.45rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 0.8rem;"></div>
           <div id="agent-audit-clients-list" style="display: grid; gap: 0.5rem; max-height: 400px; overflow-y: auto; padding-right: 0.5rem;">
             <!-- Se inyecta dinámicamente -->
           </div>
@@ -2893,6 +2906,7 @@
 
         <!-- Columna 2: Detalle del Cartón Virtual (Solo Lectura) -->
         <div id="agent-audit-ledger-container" style="border-left: 1px solid var(--border-color); padding-left: 1.5rem; display: none; min-height: 300px;">
+          <button type="button" id="btn-back-to-audit-clients" class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; margin-bottom: 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; cursor: pointer;">⬅️ Volver a Lista de Clientes</button>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
             <h4 id="agent-audit-client-name" style="color: var(--text-primary); margin: 0; font-size: 1.1rem; font-weight: 700;">Roberto Gómez</h4>
             <span class="read-only-badge" style="background-color: rgba(16, 185, 129, 0.1); color: var(--color-verde); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; border: 1px solid rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600; text-transform: uppercase;">

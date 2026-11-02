@@ -665,6 +665,8 @@ const supervisorModule = {
       }
 
       clients.forEach(client => {
+        client.totalPagado = Number(client.totalPagadoReal ?? client.totalPagado ?? 0);
+        client.totalPagadoReal = Number(client.totalPagadoReal ?? client.totalPagado ?? 0);
         const clientCedStr = String(client.cedula || '').trim();
         const rawCartonId = String(client.carton_id || client.cartonId || client.credit_id || '').trim();
         const clientCartonIdStr = rawCartonId || (client.id && String(client.id).trim() !== clientCedStr ? String(client.id).trim() : '');
@@ -766,6 +768,7 @@ const supervisorModule = {
         const agentNameLabel = associatedAgent ? associatedAgent.name : (agent.name || 'No asignado');
 
         const item = document.createElement('div');
+        item.className = 'agent-audit-item';
         item.style.padding = '0.75rem 1rem';
         item.style.background = bgLight;
         item.style.border = `1px solid ${borderLight}`;
@@ -797,6 +800,28 @@ const supervisorModule = {
         item.addEventListener('click', () => this.showAgentClientAuditLedger(client.cedula, client.agent_id || agent.username || username, client.carton_id || client.credit_id || client.id));
         listContainer.appendChild(item);
       });
+
+      // Accesos rápidos de navegación y filtro en auditoría de cartera
+      const filterInput = document.getElementById('input-filter-audit-clients');
+      if (filterInput) {
+        filterInput.value = '';
+        filterInput.oninput = (e) => {
+          const term = e.target.value.trim().toLowerCase();
+          const items = listContainer.querySelectorAll('.agent-audit-item');
+          items.forEach(it => {
+            const text = it.textContent.toLowerCase();
+            it.style.display = text.includes(term) ? 'flex' : 'none';
+          });
+        };
+      }
+
+      const btnBackAudit = document.getElementById('btn-back-to-audit-clients');
+      if (btnBackAudit) {
+        btnBackAudit.onclick = () => {
+          if (ledgerContainer) ledgerContainer.style.display = 'none';
+          if (listContainer) listContainer.scrollIntoView({ behavior: 'smooth' });
+        };
+      }
 
     } catch (err) {
       console.error(err);
@@ -919,6 +944,10 @@ const supervisorModule = {
       const saldoPendiente = Math.max(0, Number(client.outstanding ?? 0));
       const montoRecaudadoCalculado = Math.max(0, montoTotalBase - saldoPendiente);
       const paidCuotasByBalance = (valorCuota > 0) ? Math.floor(montoRecaudadoCalculado / valorCuota) : 0;
+
+      // Garantizar variables contables seguras para consultas del cartón
+      client.totalPagado = Number(montoRecaudadoCalculado || client.totalPagado || 0);
+      client.totalPagadoReal = Number(montoRecaudadoCalculado || client.totalPagadoReal || 0);
 
       // Parsear arreglo/JSON de cuotas fresco guardado en el cartón activo (solo si hay saldo recaudado en el cartón actual)
       let cartonCuotasArray = [];
@@ -1379,7 +1408,71 @@ const supervisorModule = {
       flujoDiaEl.style.color = flujoNetoDia >= 0 ? '#10b981' : '#f87171';
     }
 
+    // Auditoría de Uso de Capital Asignado Remanente (Campana Roja)
+    const bellBtn = document.getElementById('cierre-audit-bell-btn');
+    const rowCapUtilizado = document.getElementById('cierre-row-capital-utilizado');
+    const valCapUtilizado = document.getElementById('cierre-capital-utilizado-val');
+    const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
+
+    if (capitalUtilizado > 0) {
+      if (bellBtn) {
+        bellBtn.style.display = 'inline-flex';
+        bellBtn.onclick = () => this.mostrarAlertaAuditoriaCaja(data);
+      }
+      if (rowCapUtilizado) rowCapUtilizado.style.display = 'flex';
+      if (valCapUtilizado) valCapUtilizado.textContent = `$${capitalUtilizado.toLocaleString('es-CO')}`;
+    } else {
+      if (bellBtn) bellBtn.style.display = 'none';
+      if (rowCapUtilizado) rowCapUtilizado.style.display = 'none';
+    }
+
     await this.renderHistorialCierresSupervisor();
+  },
+
+  mostrarAlertaAuditoriaCaja(data) {
+    const capitalUtilizado = Number(data?.capitalAsignadoUtilizado || 0);
+    const mensajeTexto = `🔍 Auditoría de Caja: El agente utilizó $${capitalUtilizado.toLocaleString('es-CO')} de su fondo de Capital Asignado Remanente y aceptó la responsabilidad del efectivo. Esta operación combinó recaudo diario con capital base, justificando la diferencia actual en el arqueo.`;
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: '🔔 Alerta de Auditoría de Caja',
+        html: `
+          <div style="text-align: left; font-size: 0.95rem; line-height: 1.5; color: #f1f5f9;">
+            <p style="margin-bottom: 0.85rem; color: #e2e8f0;">
+              🔍 <strong>Auditoría de Caja:</strong> El agente utilizó <strong style="color: #f87171;">$${capitalUtilizado.toLocaleString('es-CO')}</strong> de su fondo de <strong>Capital Asignado Remanente</strong> y aceptó la responsabilidad del efectivo.
+            </p>
+            <p style="margin-bottom: 0.75rem; color: #94a3b8; font-size: 0.85rem;">
+              Esta operación combinó recaudo diario con capital base, justificando la diferencia actual en el arqueo.
+            </p>
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 0.75rem; font-size: 0.82rem;">
+              <div style="display:flex; justify-content:space-between; margin-bottom: 0.35rem;">
+                <span style="color: #94a3b8;">📥 Recaudo del Día:</span>
+                <strong style="color: #10b981;">+$${Number(data?.totalRecaudado || 0).toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom: 0.35rem;">
+                <span style="color: #94a3b8;">📤 Total Prestado / Desembolsado:</span>
+                <strong style="color: #f87171;">-$${Number(data?.totalDesembolsado || 0).toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom: 0.35rem;">
+                <span style="color: #94a3b8;">💼 Capital Asignado Utilizado:</span>
+                <strong style="color: #f87171;">$${capitalUtilizado.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display:flex; justify-content:space-between; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.35rem;">
+                <span style="color: #94a3b8;">💼 Capital Asignado Remanente:</span>
+                <strong style="color: #38bdf8;">$${Number(data?.capitalAsignadoRemanente || 0).toLocaleString('es-CO')}</strong>
+              </div>
+            </div>
+          </div>
+        `,
+        icon: 'warning',
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Entendido',
+        background: '#0f172a',
+        color: '#fff'
+      });
+    } else {
+      alert(mensajeTexto);
+    }
   },
 
   async renderHistorialCierresSupervisor() {
