@@ -1379,8 +1379,11 @@ const supervisorModule = {
     const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
     const prestadoTotal = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
     
-    // Ecuación Contable Ajustada: (Efectivo en Bolsillo Inicial + Total Recaudado) - Total Prestado
-    const totalEntregar = data.totalEntregar !== undefined ? Number(data.totalEntregar) : Math.max(0, (efectivoInicial + recaudoTotal) - prestadoTotal);
+    // Fórmula Base Estricta: Flujo operativo diario (Total Recaudado Hoy - Total Prestado con Recaudo)
+    // El Efectivo Inicial (Fondo base de bolsillo del agente) NO se suma al total a entregar al supervisor.
+    const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
+    const prestadoConRecaudo = Math.max(0, prestadoTotal - capitalUtilizado);
+    const totalEntregar = data.totalEntregar !== undefined ? Number(data.totalEntregar) : Math.max(0, recaudoTotal - prestadoConRecaudo);
     const flujoNetoDia = recaudoTotal - prestadoTotal;
 
     if (inicialEl) inicialEl.textContent = `$${efectivoInicial.toLocaleString('es-CO')}`;
@@ -1412,7 +1415,6 @@ const supervisorModule = {
     const bellBtn = document.getElementById('cierre-audit-bell-btn');
     const rowCapUtilizado = document.getElementById('cierre-row-capital-utilizado');
     const valCapUtilizado = document.getElementById('cierre-capital-utilizado-val');
-    const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
 
     if (capitalUtilizado > 0) {
       if (bellBtn) {

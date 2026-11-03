@@ -2873,31 +2873,42 @@ const db = {
     // SISTEMA INTELIGENTE DE DOBLE FUENTE DE FONDOS Y AUDITORÍA DE CAJA:
     // 1. Recaudo Disponible: Fondos frescos de cobro aún no utilizados en préstamos de hoy
     // 2. Capital Asignado Utilizado: Monto neto de capital asignado consumido para completar préstamos cuando el recaudo no alcanza
-    // 3. Capital Asignado Remanente: Saldo disponible del capital entregado por el supervisor
+    // 3. Capital Asignado Remanente: Saldo disponible del fondo base de bolsillo del agente
     let recaudoDisponible = 0;
     let capitalAsignadoUtilizado = 0;
 
-    // Reinversión natural del recaudo diario: en el modelo de calle, el dinero recaudado
-    // se re-invierte de forma natural en los créditos colocados el mismo día.
-    if (totalRecaudado >= totalDesembolsado) {
-      // El recaudo del día cubrió el 100% de los desembolsos.
-      // El capital asignado queda totalmente intacto y el remanente de recaudo queda disponible.
-      recaudoDisponible = Math.round(totalRecaudado - totalDesembolsado);
-      capitalAsignadoUtilizado = 0;
-    } else {
-      // Los desembolsos superaron el recaudo del día: todo el recaudo se reinvirtió,
-      // y la diferencia restante se extrajo del capital asignado remanente.
-      recaudoDisponible = 0;
+    // Verificar si el agente detonó explícitamente el uso de Capital Asignado mediante el botón [Aceptar] en la jornada
+    let capitalAutorizadoAceptado = 0;
+    try {
+      const allAuditLogs = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
+      const todayAuditLogs = allAuditLogs.filter(log => {
+        if (log.shiftDateStr && log.shiftDateStr === todayStr && (log.aceptadoPorAgente === true || Number(log.capitalAsignadoUtilizado) > 0)) {
+          if (targetRouteId && targetRouteId !== 'ALL' && log.routeId && String(log.routeId) !== String(targetRouteId)) return false;
+          return true;
+        }
+        return false;
+      });
+      capitalAutorizadoAceptado = todayAuditLogs.reduce((sum, l) => sum + Number(l.capitalAsignadoUtilizado || 0), 0);
+    } catch (eA) {}
+
+    // El capital asignado solo interviene en la matemática de entrega y genera diferencia de caja SI Y SOLO SI
+    // el agente autorizó explícitamente su uso mediante [Aceptar] ante la advertencia de fondos insuficientes
+    if (totalDesembolsado > totalRecaudado) {
       capitalAsignadoUtilizado = Math.round(totalDesembolsado - totalRecaudado);
+    } else if (capitalAutorizadoAceptado > 0) {
+      capitalAsignadoUtilizado = Math.round(capitalAutorizadoAceptado);
     }
 
     const capitalAsignadoUtilizadoFinal = Math.min(Math.round(efectivoInicial), Math.round(capitalAsignadoUtilizado));
     const capitalAsignadoRemanenteFinal = Math.max(0, Math.round(efectivoInicial - capitalAsignadoUtilizadoFinal));
 
-    // ECUACIÓN CONTABLE DE CAJA AJUSTADA (REGLA MAESTRA DE CIERRE Y ARQUEO FÍSICO):
-    // El dinero prestado en el día sale del fondo disponible del agente (Efectivo en Bolsillo Inicial + Total Recaudado).
-    // Total Efectivo Físico a Entregar = (Efectivo en Bolsillo Inicial + Total Recaudado) - Total Prestado
-    const totalEntregar = Math.max(0, (efectivoInicial + totalRecaudado) - totalDesembolsado);
+    // FÓRMULA BASE ESTRICTA DEL "TOTAL EFECTIVO A ENTREGAR":
+    // El arqueo diario se calcula exclusivamente con base en el flujo operativo del día:
+    // Total Efectivo a Entregar = Total Recaudado Hoy - Total Prestado Hoy (con el recaudo diario).
+    // El Efectivo en Bolsillo Inicial (Capital Asignado) NO se suma al total a entregar.
+    const prestadoConRecaudo = Math.max(0, totalDesembolsado - capitalAsignadoUtilizadoFinal);
+    const totalEntregar = Math.max(0, totalRecaudado - prestadoConRecaudo);
+    recaudoDisponible = totalEntregar;
     const dineroEnCalleNuevos = totalDesembolsado;
 
     return {
@@ -2985,6 +2996,25 @@ const db = {
       const allRecords = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
       allRecords.push(record);
       localStorage.setItem('bulapay_capital_autorizado_uso', JSON.stringify(allRecords.slice(-200)));
+
+      // Dejar constancia auditable en la base de datos (caja_movimientos)
+      try {
+        const supabase = await initSupabase();
+        if (supabase) {
+          await supabase.from('caja_movimientos').insert([{
+            id: record.id,
+            type: 'egreso_capital_asignado',
+            amount: record.capitalAsignadoUtilizado,
+            agent_id: record.agentUsername,
+            route_id: record.routeId,
+            concept: `Uso de Capital Asignado Autorizado por Agente ($${record.capitalAsignadoUtilizado})`,
+            date: record.shiftDateStr,
+            created_at: record.timestamp
+          }]);
+        }
+      } catch (eDb) {
+        console.warn("Aviso al registrar auditoría en caja_movimientos:", eDb);
+      }
 
       return record;
     } catch (err) {
