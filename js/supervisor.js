@@ -1375,7 +1375,7 @@ const supervisorModule = {
     const routeId = routeSelect.value || 'ALL';
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
 
-    const efectivoInicial = Number(data.efectivoInicial || 0);
+    const efectivoInicial = Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0));
     const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
     const prestadoTotal = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
     
@@ -1531,7 +1531,7 @@ const supervisorModule = {
         title: '¿Confirmar Cierre de Jornada?',
         html: `Se cerrará la jornada operativa actual de la ruta <strong>${data.routeName}</strong>.<br><br>
                <div style="text-align: left; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.85rem; line-height: 1.6;">
-                 <div>💼 <strong>Efectivo Inicial en Bolsillo:</strong> $${(data.efectivoInicial || 0).toLocaleString('es-CO')}</div>
+                 <div>💼 <strong>Efectivo en Bolsillo:</strong> $${Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0)).toLocaleString('es-CO')}</div>
                  <div>💰 <strong>Total Recaudado Hoy:</strong> <span style="color:#10b981; font-weight:bold;">+$${recaudo.toLocaleString('es-CO')}</span></div>
                  <div>📤 <strong>Total Prestado (Queda en la calle):</strong> <span style="color:#f87171; font-weight:bold;">-$${prestado.toLocaleString('es-CO')}</span></div>
                  <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin-top: 0.4rem; padding-top: 0.4rem;">

@@ -5631,7 +5631,8 @@ const agentModule = {
       if (agentEl) agentEl.textContent = `Cobrador: ${data.agentName}`;
       if (routeEl) routeEl.textContent = `Ruta: ${data.routeName}`;
 
-      if (initialEl) initialEl.textContent = `$${data.efectivoInicial.toLocaleString('es-CO')}`;
+      const efectivoBolsillo = Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0));
+      if (initialEl) initialEl.textContent = `$${efectivoBolsillo.toLocaleString('es-CO')}`;
       if (incomeEl) incomeEl.textContent = `+$${data.totalCobrado.toLocaleString('es-CO')}`;
       if (massEl) massEl.textContent = `$${(data.pagosMasivos || 0).toLocaleString('es-CO')}`;
       if (renovInEl) renovInEl.textContent = `+$${(data.entradasRenovacion || 0).toLocaleString('es-CO')}`;
@@ -5781,7 +5782,7 @@ const agentModule = {
         title: '¿Confirmar Cierre de Caja?',
         html: `Se registrará el cierre de tu jornada actual.<br><br>
                <div style="text-align: left; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.85rem; line-height: 1.6;">
-                 <div>💼 <strong>Efectivo Inicial en Bolsillo:</strong> $${(data.efectivoInicial || 0).toLocaleString('es-CO')}</div>
+                 <div>💼 <strong>Efectivo en Bolsillo:</strong> $${Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0)).toLocaleString('es-CO')}</div>
                  <div>💰 <strong>Total Recaudado Hoy:</strong> <span style="color:#10b981; font-weight:bold;">+$${recaudo.toLocaleString('es-CO')}</span></div>
                  <div>📤 <strong>Total Prestado (Queda en la calle):</strong> <span style="color:#f87171; font-weight:bold;">-$${prestado.toLocaleString('es-CO')}</span></div>
                  <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin-top: 0.4rem; padding-top: 0.4rem;">

@@ -2682,7 +2682,7 @@ const db = {
     }
 
     // FÓRMULA BASE: Efectivo en Bolsillo Inicial preliminar
-    let efectivoInicial = Math.max(0, capitalBase - enCalle);
+    let efectivoInicial = Math.round(capitalBase);
 
     const doesPaymentBelong = (p) => {
       if (!p) return false;
@@ -2853,20 +2853,6 @@ const db = {
     // Cartera en calle al inicio de la jornada (antes de los préstamos y cobros de hoy)
     const enCalleInicio = Math.max(0, enCalle - totalDesembolsado + totalCobrado);
 
-    // Efectivo en Bolsillo Inicial con el que arrancó el agente su jornada operativa:
-    efectivoInicial = Math.max(0, capitalBase - enCalleInicio);
-    if (efectivoInicial <= 0 && capitalBase > enCalle) {
-      efectivoInicial = Math.max(0, capitalBase - enCalle);
-    }
-    if (efectivoInicial <= 0 && targetRouteId && targetRouteId !== 'ALL') {
-      try {
-        const liquid = await this.getLiquidCash(targetRouteId, agentUserObj);
-        if (liquid > 0) {
-          efectivoInicial = Math.max(0, Math.round(liquid - totalRecaudado + totalDesembolsado));
-        }
-      } catch (eL) {}
-    }
-
     // Flujo operativo neto exclusivo del día (recaudos menos desembolsos):
     const flujoNetoDia = (totalRecaudado - totalDesembolsado);
 
@@ -2878,10 +2864,11 @@ const db = {
     let capitalAsignadoUtilizado = 0;
 
     // Verificar si el agente detonó explícitamente el uso de Capital Asignado mediante el botón [Aceptar] en la jornada
+    let todayAuditLogs = [];
     let capitalAutorizadoAceptado = 0;
     try {
       const allAuditLogs = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
-      const todayAuditLogs = allAuditLogs.filter(log => {
+      todayAuditLogs = allAuditLogs.filter(log => {
         if (log.shiftDateStr && log.shiftDateStr === todayStr && (log.aceptadoPorAgente === true || Number(log.capitalAsignadoUtilizado) > 0)) {
           if (targetRouteId && targetRouteId !== 'ALL' && log.routeId && String(log.routeId) !== String(targetRouteId)) return false;
           return true;
@@ -2898,26 +2885,43 @@ const db = {
     } else if (totalDesembolsado > totalRecaudado) {
       capitalAsignadoUtilizado = Math.round(totalDesembolsado - totalRecaudado);
     }
+    const capitalAsignadoUtilizadoFinal = Math.round(capitalAsignadoUtilizado);
 
-    // Sincronización exacta del Capital Asignado Remanente (Efectivo en Bolsillo)
+    // Sincronización exacta del Capital Asignado Remanente (Efectivo en Bolsillo Real del Agente)
     const lastAuditLog = todayAuditLogs.length > 0 ? todayAuditLogs[todayAuditLogs.length - 1] : null;
     let capitalAsignadoRemanenteFinal = 0;
+
     if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
       capitalAsignadoRemanenteFinal = Math.round(Number(lastAuditLog.capitalRemanenteNuevo));
     } else if (route && route.capital !== undefined && route.capital !== null) {
+      // El saldo real remanente de bolsillo según el capital registrado en la ruta
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(route.capital)));
+    } else if (targetRouteId === 'ALL') {
+      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
     } else {
-      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(efectivoInicial - capitalAsignadoUtilizado));
+      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
     }
-    const capitalAsignadoUtilizadoFinal = Math.round(capitalAsignadoUtilizado);
+
+    // Capital Asignado Inicial (fondo base asignado con el que arrancó el agente la jornada, ej. $558.000)
+    let capitalAsignadoInicialFinal = Math.round(capitalAsignadoRemanenteFinal + capitalAsignadoUtilizadoFinal);
+    if (capitalAsignadoInicialFinal <= 0 && capitalBase > 0) {
+      capitalAsignadoInicialFinal = Math.round(capitalBase);
+    }
+
+    // Efectivo en Bolsillo Inicial / Saldo real de bolsillo del agente:
+    // Muestra el saldo real de bolsillo (ej. los $558.000 iniciales menos el capital utilizado en créditos, ej. $408.000)
+    efectivoInicial = capitalAsignadoRemanenteFinal;
 
     // FÓRMULA BASE ESTRICTA DEL "TOTAL EFECTIVO A ENTREGAR / EFECTIVO NETO FÍSICO":
-    // 1. Recaudo neto de cobranza (cuotas, pagos masivos, entradas renovación, liquidaciones mora) menos préstamos con recaudo:
+    // Total Efectivo a Entregar = Recaudo Neto del Día + Descuentos Retenidos (papelería/software) - Préstamos hechos con recaudo del día
+    // 1. Recaudo neto de cobranza (cuotas, pagos masivos, entradas renovación, liquidaciones mora):
     const recaudoCobranza = (cuotasNormales + pagosMasivos + entradasRenovacion + liquidacionesMora);
+    // 2. Préstamos hechos con recaudo del día (el total desembolsado menos lo cubierto por capital asignado utilizado):
     const prestadoConRecaudo = Math.max(0, totalDesembolsado - capitalAsignadoUtilizadoFinal);
+    // 3. Recaudo neto operativo tras colocar créditos con recaudo:
     const recaudoNetoOperativo = Math.max(0, recaudoCobranza - prestadoConRecaudo);
 
-    // 2. Inclusión obligatoria de los rubros de descuento (papelería, software, tramitología, etc.):
+    // 4. Inclusión obligatoria de los rubros de descuento (papelería, software, tramitología, etc.):
     // Representan efectivo físico real que el cobrador recauda en la calle y debe entregar obligatoriamente al supervisor al cierre:
     const totalEntregar = Math.round(recaudoNetoOperativo + descuentosRetenidos);
     recaudoDisponible = totalEntregar;
@@ -2938,6 +2942,8 @@ const db = {
       enCalle: Math.round(enCalle),
       enCalleInicio: Math.round(enCalleInicio),
       efectivoInicial: Math.round(efectivoInicial),
+      capitalAsignadoInicial: Math.round(capitalAsignadoInicialFinal),
+      capitalAsignadoRemanente: Math.round(capitalAsignadoRemanenteFinal),
       totalRecaudado: Math.round(totalRecaudado),
       recaudoDisponible: Math.round(recaudoDisponible),
       capitalAsignadoUtilizado: capitalAsignadoUtilizadoFinal,
