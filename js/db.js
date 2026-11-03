@@ -2893,10 +2893,10 @@ const db = {
 
     // El capital asignado solo interviene en la matemática de entrega y genera diferencia de caja SI Y SOLO SI
     // el agente autorizó explícitamente su uso mediante [Aceptar] ante la advertencia de fondos insuficientes
-    if (totalDesembolsado > totalRecaudado) {
-      capitalAsignadoUtilizado = Math.round(totalDesembolsado - totalRecaudado);
-    } else if (capitalAutorizadoAceptado > 0) {
+    if (capitalAutorizadoAceptado > 0) {
       capitalAsignadoUtilizado = Math.round(capitalAutorizadoAceptado);
+    } else if (totalDesembolsado > totalRecaudado) {
+      capitalAsignadoUtilizado = Math.round(totalDesembolsado - totalRecaudado);
     }
 
     const capitalAsignadoUtilizadoFinal = Math.min(Math.round(efectivoInicial), Math.round(capitalAsignadoUtilizado));
@@ -2997,7 +2997,24 @@ const db = {
       allRecords.push(record);
       localStorage.setItem('bulapay_capital_autorizado_uso', JSON.stringify(allRecords.slice(-200)));
 
-      // Dejar constancia auditable en la base de datos (caja_movimientos)
+      // 1. Restar inmediatamente del Capital Asignado / Efectivo en Bolsillo de la ruta
+      if (routeId && capitalRemanenteNuevo !== undefined) {
+        try {
+          const supabase = await initSupabase();
+          if (supabase) {
+            await supabase.from('routes').update({ capital: Math.round(Number(capitalRemanenteNuevo)) }).eq('id', routeId);
+          }
+        } catch (eUpRoute) {
+          console.warn("Aviso al actualizar capital de ruta en Supabase:", eUpRoute);
+        }
+        if (this.routesCache) {
+          const cachedRoute = this.routesCache.find(r => String(r.id) === String(routeId));
+          if (cachedRoute) cachedRoute.capital = Math.round(Number(capitalRemanenteNuevo));
+        }
+        this.invalidateCache('routes_');
+      }
+
+      // 2. Dejar constancia auditable en la base de datos (caja_movimientos)
       try {
         const supabase = await initSupabase();
         if (supabase) {

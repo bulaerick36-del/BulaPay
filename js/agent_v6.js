@@ -862,9 +862,7 @@ const agentModule = {
             this.tabRegister.style.display = 'block';
           }
         } else {
-          agentRouteElement.textContent = myRoute 
-            ? `Ruta: ${myRoute.name} | Capital: $${Number(myRoute.capital).toLocaleString('es-CO')}` 
-            : 'Ruta no asignada';
+          await this.updateAgentHeaderCapital();
             
           // Bloquear interacción del panel privado
           if (profileTrigger) {
@@ -4256,13 +4254,12 @@ const agentModule = {
       // Caso 2 (Uso de Capital Asignado Remanente bajo Aceptación de Responsabilidad):
       // Si el recaudo del día es insuficiente pero cuenta con suficiente Capital Asignado Remanente:
       else if (fondosTotalesDisponibles >= montoValidar && capitalAsignadoRemanente > 0) {
-        const capitalNecesario = montoValidar - recaudoDisponibleHoy;
-        const confirmText = `⚠️ Fondos de recaudo insuficientes: Solo tienes $${recaudoDisponibleHoy.toLocaleString('es-CO')} recaudados hoy, pero detectamos un remanente de $${capitalAsignadoRemanente.toLocaleString('es-CO')} en tu Capital Asignado. ¿Deseas utilizar este fondo de capital para habilitar el préstamo? (Recuerda que el manejo y custodia de este efectivo es bajo tu entera responsabilidad).`;
+        const confirmText = `¿Deseas utilizar fondos de tu Capital Asignado para realizar este préstamo de $${montoValidar.toLocaleString('es-CO')}?`;
 
         let isAccepted = false;
         if (typeof Swal !== 'undefined') {
           const resSwal = await Swal.fire({
-            title: '⚠️ Fondos de recaudo insuficientes',
+            title: 'Fondos de recaudo insuficientes',
             text: confirmText,
             icon: 'warning',
             showCancelButton: true,
@@ -4276,25 +4273,10 @@ const agentModule = {
           });
           isAccepted = resSwal.isConfirmed;
         } else {
-          isAccepted = window.confirm(confirmText);
+          isAccepted = window.confirm(`Fondos de recaudo insuficientes\n\n${confirmText}`);
         }
 
         if (!isAccepted) {
-          const cancelMsg = "⚠️ Fondos insuficientes: No cuentas con suficiente efectivo físico en caja (recaudo o capital asignado) para este préstamo. Te sugerimos seguir recaudando en la ruta o comunicarte de inmediato con el supervisor para que te asigne y habilite nuevos fondos.";
-          if (typeof Swal !== 'undefined') {
-            await Swal.fire({
-              icon: 'info',
-              title: 'Operación Cancelada',
-              text: cancelMsg,
-              confirmButtonColor: '#38bdf8',
-              confirmButtonText: 'Entendido',
-              background: '#0f172a',
-              color: '#fff'
-            });
-          } else {
-            alert(cancelMsg);
-          }
-
           if (btnGuardar) {
             btnGuardar.disabled = false;
             btnGuardar.innerText = btnGuardar.dataset.originalText || 'Guardar Cliente';
@@ -4305,55 +4287,37 @@ const agentModule = {
 
         // El agente autorizó el uso de Capital Asignado Remanente
         usoCapitalAutorizado = true;
-        capitalAsignadoAUsar = capitalNecesario;
+        capitalAsignadoAUsar = montoValidar;
+
+        // Aviso breve de confirmación requerido
+        if (typeof Swal !== 'undefined') {
+          await Swal.fire({
+            icon: 'info',
+            title: 'Has utilizado fondos de tu Capital Asignado',
+            timer: 2000,
+            showConfirmButton: false,
+            background: '#0f172a',
+            color: '#fff'
+          });
+        }
         console.log(`[BulaPay] Autorizado uso de Capital Asignado Remanente: $${capitalAsignadoAUsar.toLocaleString('es-CO')}`);
       }
       // Caso 3 (Fondos Insuficientes en ambas fuentes - Denegación limpia obligatoria):
       else {
-        const msgTexto = "⚠️ Fondos insuficientes: No cuentas con suficiente efectivo físico en caja (recaudo o capital asignado) para este préstamo. Te sugerimos seguir recaudando en la ruta o comunicarte de inmediato con el supervisor para que te asigne y habilite nuevos fondos.";
-
-        const msgHtml = `
-          <div style="text-align: left; font-size: 0.95rem; line-height: 1.5; color: #f1f5f9;">
-            <p style="font-weight: 600; color: #fbbf24; margin-bottom: 0.85rem; font-size: 0.95rem;">
-              ⚠️ Fondos insuficientes: No cuentas con suficiente efectivo físico en caja (recaudo o capital asignado) para este préstamo. Te sugerimos seguir recaudando en la ruta o comunicarte de inmediato con el supervisor para que te asigne y habilite nuevos fondos.
-            </p>
-            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 0.85rem; margin: 0.75rem 0;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
-                <span style="color: #cbd5e1;">💵 Efectivo requerido (${this.isRenewalMode ? 'Renovación' : 'Préstamo'}):</span>
-                <strong style="color: #f87171;">$${montoValidar.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
-                <span style="color: #cbd5e1;">📥 Recaudo hoy disponible:</span>
-                <strong style="color: #10b981;">$${recaudoDisponibleHoy.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
-                <span style="color: #cbd5e1;">💼 Capital asignado remanente:</span>
-                <strong style="color: #38bdf8;">$${capitalAsignadoRemanente.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.4rem; margin-top: 0.4rem;">
-                <span style="color: #cbd5e1; font-weight: 600;">💰 Total efectivo disponible:</span>
-                <strong style="color: #fbbf24; font-weight: 800;">$${fondosTotalesDisponibles.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-top: 0.3rem;">
-                <span style="color: #fca5a5; font-weight: 600;">❌ Faltante de efectivo en caja:</span>
-                <strong style="color: #ef4444; font-weight: 800;">$${Math.max(0, montoValidar - fondosTotalesDisponibles).toLocaleString('es-CO')}</strong>
-              </div>
-            </div>
-          </div>
-        `;
+        const msgBloqueo = "Fondos insuficientes: comuníquese con el supervisor o vuelva cuando tenga recaudo";
 
         if (typeof Swal !== 'undefined') {
           await Swal.fire({
             icon: 'warning',
-            title: '⚠️ Fondos insuficientes',
-            html: msgHtml,
+            title: 'Fondos insuficientes',
+            text: msgBloqueo,
             confirmButtonColor: '#ef4444',
             confirmButtonText: 'Entendido',
             background: '#0f172a',
             color: '#fff'
           });
         } else {
-          alert(msgTexto);
+          alert(msgBloqueo);
         }
 
         if (btnGuardar) {
@@ -4422,6 +4386,7 @@ const agentModule = {
           capitalAsignadoUtilizado: capitalAsignadoAUsar,
           capitalRemanenteNuevo: Math.max(0, capitalAsignadoRemanente - capitalAsignadoAUsar)
         });
+        await this.updateAgentHeaderCapital();
       }
 
       // v160: Sin alteraciones automáticas en caja_movimientos durante renovación
@@ -5116,8 +5081,43 @@ const agentModule = {
       if (elCollected) {
         elCollected.textContent = `$${Math.abs(totalCollected).toLocaleString('es-CO')}`;
       }
+
+      if (typeof this.updateAgentHeaderCapital === 'function') {
+        await this.updateAgentHeaderCapital();
+      }
     } catch (e) {
       console.error("Error al actualizar vistas de caja:", e);
+    }
+  },
+
+  async updateAgentHeaderCapital() {
+    try {
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      const agentRouteElement = document.getElementById('agent-active-route');
+      if (!currentUser || !agentRouteElement) return;
+
+      if (currentUser.role === 'Agente Independiente') {
+        agentRouteElement.textContent = 'Cobrador Independiente';
+        return;
+      }
+
+      const activeRouteId = currentUser.routeId || currentUser.route_id || (await window.BulaPayDB.getActiveRouteIdForUser(currentUser));
+      const routes = await window.BulaPayDB.getRoutes();
+      const myRoute = (routes || []).find(r => (activeRouteId && String(r.id) === String(activeRouteId)) || (r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username)));
+
+      if (!myRoute) {
+        agentRouteElement.textContent = 'Ruta no asignada';
+        return;
+      }
+
+      const fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(myRoute.id, currentUser);
+      const capitalRemanente = Number(fondosInfo.capitalAsignadoRemanente !== undefined ? fondosInfo.capitalAsignadoRemanente : (myRoute.capital || 0));
+      const capitalUtilizado = Number(fondosInfo.capitalAsignadoUtilizadoHoy || 0);
+
+      const colorStyle = capitalUtilizado > 0 ? 'color: #ef4444; font-weight: 800;' : 'color: var(--text-secondary); font-weight: 600;';
+      agentRouteElement.innerHTML = `Ruta: ${myRoute.name} | Capital: <strong style="${colorStyle}">$${capitalRemanente.toLocaleString('es-CO')}</strong>`;
+    } catch (e) {
+      console.warn("Aviso al actualizar header de capital del agente:", e);
     }
   },
 

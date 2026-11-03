@@ -1411,12 +1411,14 @@ const supervisorModule = {
       flujoDiaEl.style.color = flujoNetoDia >= 0 ? '#10b981' : '#f87171';
     }
 
-    // Auditoría de Uso de Capital Asignado Remanente (Campana Roja)
+    // Campana Roja de Auditoría: Se dispara y visualiza ÚNICAMENTE cuando el supervisor filtre o seleccione
+    // la ruta específica del agente que efectivamente utilizó el fondo de capital asignado (evitando mostrarla en rutas limpias o a nivel general si no aplica)
+    const isSpecificRoute = routeId && routeId !== 'ALL';
     const bellBtn = document.getElementById('cierre-audit-bell-btn');
     const rowCapUtilizado = document.getElementById('cierre-row-capital-utilizado');
     const valCapUtilizado = document.getElementById('cierre-capital-utilizado-val');
 
-    if (capitalUtilizado > 0) {
+    if (isSpecificRoute && capitalUtilizado > 0) {
       if (bellBtn) {
         bellBtn.style.display = 'inline-flex';
         bellBtn.onclick = () => this.mostrarAlertaAuditoriaCaja(data);
