@@ -4226,13 +4226,8 @@ const agentModule = {
         effectiveRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
       }
 
-      // Efectivo físico neto real que debe salir del bolsillo del agente
-      const montoDesembolso = this.isRenewalMode
-        ? Math.max(0, montoPrestamo - Number(this.currentRenewalOutstanding || 0) - finalDiscount)
-        : Math.max(0, montoPrestamo - finalDiscount);
-
-      // Monto de efectivo físico a validar contra la caja disponible
-      const montoValidar = this.isRenewalMode ? montoDesembolso : (finalDiscount > 0 ? montoDesembolso : montoPrestamo);
+      // Monto bruto / nominal exacto del crédito a validar y descontar (sin restar papelería ni software)
+      const montoValidar = montoPrestamo;
 
       const fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(effectiveRouteId, currentUser);
       const recaudoDisponibleHoy = Number(fondosInfo.recaudoDisponibleHoy || 0);
@@ -4242,7 +4237,7 @@ const agentModule = {
       let usoCapitalAutorizado = false;
       let capitalAsignadoAUsar = 0;
 
-      // Si no se requiere desembolso físico de efectivo (ej. renovación cubierta 100% por saldo anterior)
+      // Si no se requiere desembolso físico de efectivo
       if (montoValidar <= 0) {
         console.log(`[BulaPay] Préstamo / Renovación sin requerimiento de desembolso físico en caja: $0`);
       }
@@ -4254,14 +4249,19 @@ const agentModule = {
       // Caso 2 (Uso de Capital Asignado Remanente bajo Aceptación de Responsabilidad):
       // Si el recaudo del día es insuficiente pero cuenta con suficiente Capital Asignado Remanente:
       else if (fondosTotalesDisponibles >= montoValidar && capitalAsignadoRemanente > 0) {
-        const confirmText = `¿Deseas utilizar fondos de tu Capital Asignado para realizar este préstamo de $${montoValidar.toLocaleString('es-CO')}?`;
+        const nuevoRemanente = Math.max(0, capitalAsignadoRemanente - montoValidar);
+        const montoTotalFmt = montoValidar.toLocaleString('es-CO');
+        const saldoRestanteFmt = nuevoRemanente.toLocaleString('es-CO');
+
+        const modalText = `Estás otorgando un nuevo crédito por $ ${montoTotalFmt} utilizando tu fondo base. Al aceptar, se te descontarán de tu Capital Asignado y te quedará un remanente de $ ${saldoRestanteFmt}. (Recuerda que la custodia de este efectivo es bajo tu responsabilidad).`;
+        const fullPromptText = `💡 Uso de Capital Asignado: ${modalText}`;
 
         let isAccepted = false;
         if (typeof Swal !== 'undefined') {
           const resSwal = await Swal.fire({
-            title: 'Fondos de recaudo insuficientes',
-            text: confirmText,
-            icon: 'warning',
+            title: '💡 Uso de Capital Asignado',
+            text: modalText,
+            icon: 'info',
             showCancelButton: true,
             confirmButtonText: 'Aceptar',
             cancelButtonText: 'Cancelar',
@@ -4273,7 +4273,7 @@ const agentModule = {
           });
           isAccepted = resSwal.isConfirmed;
         } else {
-          isAccepted = window.confirm(`Fondos de recaudo insuficientes\n\n${confirmText}`);
+          isAccepted = window.confirm(fullPromptText);
         }
 
         if (!isAccepted) {
@@ -4302,14 +4302,14 @@ const agentModule = {
         }
         console.log(`[BulaPay] Autorizado uso de Capital Asignado Remanente: $${capitalAsignadoAUsar.toLocaleString('es-CO')}`);
       }
-      // Caso 3 (Fondos Insuficientes en ambas fuentes - Denegación limpia obligatoria):
+      // Caso 3 (Fondos Insuficientes en ambas fuentes - Bloqueo estricto):
       else {
-        const msgBloqueo = "Fondos insuficientes: comuníquese con el supervisor o vuelva cuando tenga recaudo";
+        const msgBloqueo = "No cuentas con saldo disponible en recaudo ni en tu capital asignado. Comunícate de inmediato con el supervisor para que te asigne y habilite nuevos fondos de emergencia.";
 
         if (typeof Swal !== 'undefined') {
           await Swal.fire({
             icon: 'warning',
-            title: 'Fondos insuficientes',
+            title: '⚠️ Fondos insuficientes',
             text: msgBloqueo,
             confirmButtonColor: '#ef4444',
             confirmButtonText: 'Entendido',
@@ -4317,7 +4317,7 @@ const agentModule = {
             color: '#fff'
           });
         } else {
-          alert(msgBloqueo);
+          alert(`⚠️ Fondos insuficientes: ${msgBloqueo}`);
         }
 
         if (btnGuardar) {
