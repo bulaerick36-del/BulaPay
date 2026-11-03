@@ -4221,21 +4221,34 @@ const agentModule = {
       // =========================================================================
       // SISTEMA INTELIGENTE DE DOBLE FUENTE DE FONDOS Y AUDITORÍA DE CAJA
       // =========================================================================
-      let effectiveRouteId = routeId || (currentUser ? (currentUser.routeId || currentUser.route_id) : null);
-      if (!effectiveRouteId && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
-        effectiveRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
+      // Sincronización exacta de ruta y cálculo de fondos (idéntico a updateAgentHeaderCapital)
+      let activeRouteId = routeId || (currentUser ? (currentUser.routeId || currentUser.route_id) : null);
+      if (!activeRouteId && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
+        activeRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
       }
+
+      const routes = await window.BulaPayDB.getRoutes();
+      const myRoute = (routes || []).find(r => (activeRouteId && String(r.id) === String(activeRouteId)) || (r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username)));
+      const effectiveRouteId = myRoute ? myRoute.id : activeRouteId;
 
       // Monto bruto / nominal exacto del crédito a validar y descontar (sin restar papelería ni software)
       const montoValidar = montoPrestamo;
 
+      // Consultar la misma función y variable exacta que usa el sistema para Efectivo en Bolsillo / Capital Asignado
       const fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(effectiveRouteId, currentUser);
       const recaudoDisponibleHoy = Number(fondosInfo.recaudoDisponibleHoy || 0);
-      const capitalAsignadoRemanente = Number(fondosInfo.capitalAsignadoRemanente || 0);
+
+      // Usar la misma variable exacta de capital asignado remanente que actualiza la interfaz y base de datos
+      const capitalAsignadoRemanente = Number(
+        fondosInfo.capitalAsignadoRemanente !== undefined && fondosInfo.capitalAsignadoRemanente !== null
+          ? fondosInfo.capitalAsignadoRemanente
+          : (myRoute ? (myRoute.capital || 0) : 0)
+      );
       const fondosTotalesDisponibles = recaudoDisponibleHoy + capitalAsignadoRemanente;
 
       let usoCapitalAutorizado = false;
       let capitalAsignadoAUsar = 0;
+      let nuevoRemanente = capitalAsignadoRemanente;
 
       // Si no se requiere desembolso físico de efectivo
       if (montoValidar <= 0) {
@@ -4249,7 +4262,7 @@ const agentModule = {
       // Caso 2 (Uso de Capital Asignado Remanente bajo Aceptación de Responsabilidad):
       // Si el recaudo del día es insuficiente pero cuenta con suficiente Capital Asignado Remanente:
       else if (fondosTotalesDisponibles >= montoValidar && capitalAsignadoRemanente > 0) {
-        const nuevoRemanente = Math.max(0, capitalAsignadoRemanente - montoValidar);
+        nuevoRemanente = Math.max(0, capitalAsignadoRemanente - montoValidar);
         const montoTotalFmt = montoValidar.toLocaleString('es-CO');
         const saldoRestanteFmt = nuevoRemanente.toLocaleString('es-CO');
 
@@ -4384,7 +4397,7 @@ const agentModule = {
           montoPrestamo: montoValidar,
           recaudoDisponible: recaudoDisponibleHoy,
           capitalAsignadoUtilizado: capitalAsignadoAUsar,
-          capitalRemanenteNuevo: Math.max(0, capitalAsignadoRemanente - capitalAsignadoAUsar)
+          capitalRemanenteNuevo: nuevoRemanente
         });
         await this.updateAgentHeaderCapital();
       }
@@ -5759,7 +5772,7 @@ const agentModule = {
 
     const activeRouteId = currentUser.routeId || currentUser.route_id || (await window.BulaPayDB.getActiveRouteIdForUser(currentUser));
     const data = this.currentCashReportData || (await window.BulaPayDB.getCierreCajaDataForRoute(activeRouteId, currentUser));
-    const recaudo = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : (data.totalCobrado + (data.entradasRenovacion || 0)));
+    const recaudo = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
     const prestado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : (data.totalPrestado + (data.desembolsosRenovacion || 0)));
 
     let confirmRes = false;

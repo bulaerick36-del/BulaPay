@@ -1379,11 +1379,13 @@ const supervisorModule = {
     const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
     const prestadoTotal = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
     
-    // Fórmula Base Estricta: Flujo operativo diario (Total Recaudado Hoy - Total Prestado con Recaudo)
-    // El Efectivo Inicial (Fondo base de bolsillo del agente) NO se suma al total a entregar al supervisor.
+    // Inclusión obligatoria de los rubros de descuento en el Total Efectivo a Entregar
     const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
+    const descuentosRetenidos = Number(data.descuentosRetenidos || 0);
     const prestadoConRecaudo = Math.max(0, prestadoTotal - capitalUtilizado);
-    const totalEntregar = data.totalEntregar !== undefined ? Number(data.totalEntregar) : Math.max(0, recaudoTotal - prestadoConRecaudo);
+    const recaudoCobranza = (Number(data.cuotasNormales || data.totalCobrado || 0) + Number(data.entradasRenovacion || 0) + Number(data.liquidacionesMora || 0));
+    const recaudoNetoOperativo = Math.max(0, recaudoCobranza - prestadoConRecaudo);
+    const totalEntregar = data.totalEntregar !== undefined ? Number(data.totalEntregar) : Math.round(recaudoNetoOperativo + descuentosRetenidos);
     const flujoNetoDia = recaudoTotal - prestadoTotal;
 
     if (inicialEl) inicialEl.textContent = `$${efectivoInicial.toLocaleString('es-CO')}`;
@@ -1520,7 +1522,7 @@ const supervisorModule = {
     const routeId = routeSelect.value;
 
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
-    const recaudo = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : (data.totalCobrado + (data.entradasRenovacion || 0)));
+    const recaudo = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
     const prestado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : (data.totalPrestado + (data.desembolsosRenovacion || 0)));
 
     let confirmRes = false;

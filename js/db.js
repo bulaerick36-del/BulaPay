@@ -2899,15 +2899,27 @@ const db = {
       capitalAsignadoUtilizado = Math.round(totalDesembolsado - totalRecaudado);
     }
 
-    const capitalAsignadoUtilizadoFinal = Math.min(Math.round(efectivoInicial), Math.round(capitalAsignadoUtilizado));
-    const capitalAsignadoRemanenteFinal = Math.max(0, Math.round(efectivoInicial - capitalAsignadoUtilizadoFinal));
+    // Sincronización exacta del Capital Asignado Remanente (Efectivo en Bolsillo)
+    const lastAuditLog = todayAuditLogs.length > 0 ? todayAuditLogs[todayAuditLogs.length - 1] : null;
+    let capitalAsignadoRemanenteFinal = 0;
+    if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
+      capitalAsignadoRemanenteFinal = Math.round(Number(lastAuditLog.capitalRemanenteNuevo));
+    } else if (route && route.capital !== undefined && route.capital !== null) {
+      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(route.capital)));
+    } else {
+      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(efectivoInicial - capitalAsignadoUtilizado));
+    }
+    const capitalAsignadoUtilizadoFinal = Math.round(capitalAsignadoUtilizado);
 
-    // FÓRMULA BASE ESTRICTA DEL "TOTAL EFECTIVO A ENTREGAR":
-    // El arqueo diario se calcula exclusivamente con base en el flujo operativo del día:
-    // Total Efectivo a Entregar = Total Recaudado Hoy - Total Prestado Hoy (con el recaudo diario).
-    // El Efectivo en Bolsillo Inicial (Capital Asignado) NO se suma al total a entregar.
+    // FÓRMULA BASE ESTRICTA DEL "TOTAL EFECTIVO A ENTREGAR / EFECTIVO NETO FÍSICO":
+    // 1. Recaudo neto de cobranza (cuotas, pagos masivos, entradas renovación, liquidaciones mora) menos préstamos con recaudo:
+    const recaudoCobranza = (cuotasNormales + pagosMasivos + entradasRenovacion + liquidacionesMora);
     const prestadoConRecaudo = Math.max(0, totalDesembolsado - capitalAsignadoUtilizadoFinal);
-    const totalEntregar = Math.max(0, totalRecaudado - prestadoConRecaudo);
+    const recaudoNetoOperativo = Math.max(0, recaudoCobranza - prestadoConRecaudo);
+
+    // 2. Inclusión obligatoria de los rubros de descuento (papelería, software, tramitología, etc.):
+    // Representan efectivo físico real que el cobrador recauda en la calle y debe entregar obligatoriamente al supervisor al cierre:
+    const totalEntregar = Math.round(recaudoNetoOperativo + descuentosRetenidos);
     recaudoDisponible = totalEntregar;
     const dineroEnCalleNuevos = totalDesembolsado;
 
