@@ -1360,9 +1360,10 @@ const supervisorModule = {
     const liquidacionesMoraEl = document.getElementById('cierre-liquidaciones-mora');
     const retenidosEl = document.getElementById('cierre-descuentos-retenidos');
 
-    // Total Prestado y su desglose detallado
+    // Total Prestado y su desglose detallado por Fuente de Fondos
     const totalPrestadoEl = document.getElementById('cierre-total-prestado');
-    const prestamosHoyEl = document.getElementById('cierre-prestamos-hoy');
+    const prestadoCapitalEl = document.getElementById('cierre-prestado-capital');
+    const prestadoRecaudoEl = document.getElementById('cierre-prestado-recaudo') || document.getElementById('cierre-prestamos-hoy');
     const renovOutEl = document.getElementById('cierre-renov-out');
 
     // Total a Entregar y desglose contable
@@ -1399,10 +1400,15 @@ const supervisorModule = {
     if (liquidacionesMoraEl) liquidacionesMoraEl.textContent = `$${(data.liquidacionesMora || 0).toLocaleString('es-CO')}`;
     if (retenidosEl) retenidosEl.textContent = `$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
 
-    // Total Prestado y desglose
-    if (totalPrestadoEl) totalPrestadoEl.textContent = `-$${prestadoTotal.toLocaleString('es-CO')}`;
-    if (prestamosHoyEl) prestamosHoyEl.textContent = `$${(data.prestamosNuevos || data.totalPrestado || 0).toLocaleString('es-CO')}`;
-    if (renovOutEl) renovOutEl.textContent = `$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
+    // Total Prestado y desglose por Fuente de Fondos
+    const prestadoCapitalVal = Number(data.prestadoCapitalAsignado !== undefined ? data.prestadoCapitalAsignado : (data.capitalAsignadoUtilizado || 0));
+    const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo !== undefined ? data.prestamosNuevosRecaudo : Math.max(0, (data.prestamosNuevos || data.totalPrestado || 0) - prestadoCapitalVal));
+    const renovOutVal = Number(data.desembolsosNetosRenovacion !== undefined ? data.desembolsosNetosRenovacion : Math.max(0, prestadoTotal - prestadoCapitalVal - prestadoRecaudoVal));
+
+    if (totalPrestadoEl) totalPrestadoEl.textContent = '-$' + prestadoTotal.toLocaleString('es-CO');
+    if (prestadoCapitalEl) prestadoCapitalEl.textContent = '$' + prestadoCapitalVal.toLocaleString('es-CO');
+    if (prestadoRecaudoEl) prestadoRecaudoEl.textContent = '$' + prestadoRecaudoVal.toLocaleString('es-CO');
+    if (renovOutEl) renovOutEl.textContent = '$' + renovOutVal.toLocaleString('es-CO');
 
     // Total a Entregar y Desglose Visual Contable
     if (entregarEl) entregarEl.textContent = `$${totalEntregar.toLocaleString('es-CO')}`;

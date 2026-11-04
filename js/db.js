@@ -2927,6 +2927,43 @@ const db = {
     recaudoDisponible = totalEntregar;
     const dineroEnCalleNuevos = totalDesembolsado;
 
+    // Desglose de "Total Prestado Hoy" por Fuente de Fondos:
+    // 1. Capital Asignado por el Supervisor
+    // 2. Préstamos Nuevos / Recaudo Diario
+    // 3. Desembolsos Netos por Renovación
+    const prestadoCapitalFinal = Math.min(totalDesembolsado, Math.max(0, capitalAsignadoUtilizadoFinal));
+
+    let capitalUsadoEnRenovacion = 0;
+    let capitalUsadoEnNuevos = 0;
+    todayAuditLogs.forEach(l => {
+      const amt = Number(l.capitalAsignadoUtilizado || 0);
+      if (l.isRenewal === true || l.is_renewal === true) {
+        capitalUsadoEnRenovacion += amt;
+      } else {
+        capitalUsadoEnNuevos += amt;
+      }
+    });
+
+    let prestamosNuevosRecaudoFinal = 0;
+    let desembolsosNetosRenovacionFinal = 0;
+
+    if (capitalUsadoEnRenovacion > 0 || capitalUsadoEnNuevos > 0) {
+      const capRenov = Math.min(desembolsosRenovacion, capitalUsadoEnRenovacion);
+      const capNuevos = Math.min(totalPrestado, Math.max(0, prestadoCapitalFinal - capRenov));
+      prestamosNuevosRecaudoFinal = Math.max(0, totalPrestado - capNuevos);
+      desembolsosNetosRenovacionFinal = Math.max(0, totalDesembolsado - prestadoCapitalFinal - prestamosNuevosRecaudoFinal);
+    } else {
+      const capNuevos = Math.min(totalPrestado, prestadoCapitalFinal);
+      const capRenov = Math.max(0, prestadoCapitalFinal - capNuevos);
+      prestamosNuevosRecaudoFinal = Math.max(0, totalPrestado - capNuevos);
+      desembolsosNetosRenovacionFinal = Math.max(0, desembolsosRenovacion - capRenov);
+    }
+
+    // Cuadre matemático exacto: La suma de las 3 subcategorías debe cuadrar exactamente con totalDesembolsado
+    if ((prestadoCapitalFinal + prestamosNuevosRecaudoFinal + desembolsosNetosRenovacionFinal) !== totalDesembolsado) {
+      prestamosNuevosRecaudoFinal = Math.max(0, totalDesembolsado - prestadoCapitalFinal - desembolsosNetosRenovacionFinal);
+    }
+
     return {
       routeId: targetRouteId || null,
       routeName,
@@ -2958,6 +2995,9 @@ const db = {
       totalPrestado: Math.round(totalPrestado),
       desembolsosRenovacion: Math.round(desembolsosRenovacion),
       totalDesembolsado: Math.round(totalDesembolsado),
+      prestadoCapitalAsignado: Math.round(prestadoCapitalFinal),
+      prestamosNuevosRecaudo: Math.round(prestamosNuevosRecaudoFinal),
+      desembolsosNetosRenovacion: Math.round(desembolsosNetosRenovacionFinal),
       dineroEnCalleNuevos: Math.round(dineroEnCalleNuevos),
       flujoNetoDia: Math.round(flujoNetoDia),
       totalEntregar: Math.round(totalEntregar)
@@ -2996,7 +3036,7 @@ const db = {
   },
 
   // Registro auditable de uso de Capital Asignado Remanente por el Agente
-  async registrarUsoCapitalAsignado({ routeId, agentUsername, shiftDateStr, montoPrestamo, recaudoDisponible, capitalAsignadoUtilizado, capitalRemanenteNuevo }) {
+  async registrarUsoCapitalAsignado({ routeId, agentUsername, shiftDateStr, montoPrestamo, recaudoDisponible, capitalAsignadoUtilizado, capitalRemanenteNuevo, isRenewal = false }) {
     try {
       const record = {
         id: 'cap_uso_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
@@ -3008,7 +3048,9 @@ const db = {
         capitalAsignadoUtilizado: Math.round(Number(capitalAsignadoUtilizado) || 0),
         capitalRemanenteNuevo: Math.round(Number(capitalRemanenteNuevo) || 0),
         timestamp: new Date().toISOString(),
-        aceptadoPorAgente: true
+        aceptadoPorAgente: true,
+        isRenewal: !!isRenewal,
+        is_renewal: !!isRenewal
       };
 
       const allRecords = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');

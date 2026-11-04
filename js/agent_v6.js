@@ -4397,7 +4397,8 @@ const agentModule = {
           montoPrestamo: montoValidar,
           recaudoDisponible: recaudoDisponibleHoy,
           capitalAsignadoUtilizado: capitalAsignadoAUsar,
-          capitalRemanenteNuevo: nuevoRemanente
+          capitalRemanenteNuevo: nuevoRemanente,
+          isRenewal: !!isRenov
         });
         await this.updateAgentHeaderCapital();
       }
@@ -5602,6 +5603,19 @@ const agentModule = {
     if (modal) modal.style.display = 'none';
   },
 
+  toggleCashReportAccordion(section) {
+    const desglose = document.getElementById('cash-report-desglose-' + section);
+    const arrow = document.getElementById('cash-report-arrow-' + section);
+    if (!desglose) return;
+    const isHidden = desglose.style.display === 'none' || getComputedStyle(desglose).display === 'none';
+    if (isHidden) {
+      desglose.style.display = 'flex';
+      if (arrow) arrow.textContent = '▲';
+    } else {
+      desglose.style.display = 'none';
+      if (arrow) arrow.textContent = '▼';
+    }
+  },
   async generateCashReport() {
     try {
       const currentUser = window.BulaPayDB.getCurrentUser();
@@ -5620,6 +5634,8 @@ const agentModule = {
       const massEl = document.getElementById('cash-report-mass');
       const renovInEl = document.getElementById('cash-report-renov-in');
       const expensesEl = document.getElementById('cash-report-expenses');
+      const prestadoCapitalEl = document.getElementById('cash-report-prestado-capital');
+      const prestadoRecaudoEl = document.getElementById('cash-report-prestado-recaudo');
       const renovOutEl = document.getElementById('cash-report-renov-out');
       const retainedEl = document.getElementById('cash-report-retained');
       const netEl = document.getElementById('cash-report-net');
@@ -5627,21 +5643,33 @@ const agentModule = {
       const flujoDiaEl = document.getElementById('cash-report-flujo-dia');
       const entregarSubEl = document.getElementById('cash-report-entregar-sub');
 
+      // Resetear acordeón de Total Prestado Hoy en el Agente
+      const desglosePrestado = document.getElementById('cash-report-desglose-prestado');
+      const arrowPrestado = document.getElementById('cash-report-arrow-prestado');
+      if (desglosePrestado) desglosePrestado.style.display = 'none';
+      if (arrowPrestado) arrowPrestado.textContent = '▼';
+
       if (dateEl) dateEl.textContent = `Fecha: ${data.dateStr}`;
       if (agentEl) agentEl.textContent = `Cobrador: ${data.agentName}`;
       if (routeEl) routeEl.textContent = `Ruta: ${data.routeName}`;
 
       const efectivoBolsillo = Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0));
-      if (initialEl) initialEl.textContent = `$${efectivoBolsillo.toLocaleString('es-CO')}`;
-      if (incomeEl) incomeEl.textContent = `+$${data.totalCobrado.toLocaleString('es-CO')}`;
-      if (massEl) massEl.textContent = `$${(data.pagosMasivos || 0).toLocaleString('es-CO')}`;
-      if (renovInEl) renovInEl.textContent = `+$${(data.entradasRenovacion || 0).toLocaleString('es-CO')}`;
-      if (expensesEl) expensesEl.textContent = `-$${data.totalPrestado.toLocaleString('es-CO')}`;
-      if (renovOutEl) renovOutEl.textContent = `-$${(data.desembolsosRenovacion || 0).toLocaleString('es-CO')}`;
-      if (retainedEl) retainedEl.textContent = `+$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
-      if (netEl) netEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
+      if (initialEl) initialEl.textContent = '$' + efectivoBolsillo.toLocaleString('es-CO');
+      if (incomeEl) incomeEl.textContent = '+$' + data.totalCobrado.toLocaleString('es-CO');
+      if (massEl) massEl.textContent = '$' + (data.pagosMasivos || 0).toLocaleString('es-CO');
+      if (renovInEl) renovInEl.textContent = '+$' + (data.entradasRenovacion || 0).toLocaleString('es-CO');
 
       const totalDesembolsado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
+      const prestadoCapitalVal = Number(data.prestadoCapitalAsignado !== undefined ? data.prestadoCapitalAsignado : (data.capitalAsignadoUtilizado || 0));
+      const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo !== undefined ? data.prestamosNuevosRecaudo : Math.max(0, (data.prestamosNuevos || data.totalPrestado || 0) - prestadoCapitalVal));
+      const renovOutVal = Number(data.desembolsosNetosRenovacion !== undefined ? data.desembolsosNetosRenovacion : Math.max(0, totalDesembolsado - prestadoCapitalVal - prestadoRecaudoVal));
+
+      if (expensesEl) expensesEl.textContent = '-$' + totalDesembolsado.toLocaleString('es-CO');
+      if (prestadoCapitalEl) prestadoCapitalEl.textContent = '$' + prestadoCapitalVal.toLocaleString('es-CO');
+      if (prestadoRecaudoEl) prestadoRecaudoEl.textContent = '$' + prestadoRecaudoVal.toLocaleString('es-CO');
+      if (renovOutEl) renovOutEl.textContent = '$' + renovOutVal.toLocaleString('es-CO');
+      if (retainedEl) retainedEl.textContent = '+$' + (data.descuentosRetenidos || 0).toLocaleString('es-CO');
+      if (netEl) netEl.textContent = '$' + data.totalEntregar.toLocaleString('es-CO');
       const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0)));
       const flujoNetoDia = recaudoTotal - totalDesembolsado;
 

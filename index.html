@@ -1596,14 +1596,34 @@
                   <strong id="cash-report-renov-in" style="font-size: 1rem;">+$0</strong>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
-                  <span>➖ Total Prestado Hoy:</span>
-                  <strong id="cash-report-expenses" style="font-size: 1rem;">-$0</strong>
-                </div>
+                <!-- TOTAL PRESTADO HOY (Desplegable) -->
+                <div style="background-color: var(--bg-primary); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; overflow: hidden; transition: all 0.2s ease;">
+                  <div onclick="agentModule.toggleCashReportAccordion('prestado')" style="padding: 0.85rem 1rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; background: rgba(239, 68, 68, 0.06);">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; color: #f87171;">
+                      <span style="font-size: 1.1rem;">📤</span>
+                      <span style="font-weight: 700; font-size: 0.92rem;">Total Prestado Hoy</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                      <strong id="cash-report-expenses" style="color: #f87171; font-size: 1.1rem; font-weight: 800;">-$0</strong>
+                      <span id="cash-report-arrow-prestado" style="font-size: 0.8rem; color: #f87171; transition: transform 0.2s ease;">▼</span>
+                    </div>
+                  </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-rojo);">
-                  <span>➖ Desembolsos por Renovación:</span>
-                  <strong id="cash-report-renov-out" style="font-size: 1rem;">-$0</strong>
+                  <!-- Desglose detallado de Préstamos (Oculto de entrada) -->
+                  <div id="cash-report-desglose-prestado" style="display: none; padding: 0.85rem 1rem; background: rgba(0, 0, 0, 0.15); border-top: 1px solid rgba(239, 68, 68, 0.15); font-size: 0.82rem; flex-direction: column; gap: 0.55rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="color: var(--text-secondary);">↳ Capital Asignado por el Supervisor:</span>
+                      <strong id="cash-report-prestado-capital" style="color: var(--text-primary);">$0</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="color: var(--text-secondary);">↳ Préstamos Nuevos / Recaudo Diario:</span>
+                      <strong id="cash-report-prestado-recaudo" style="color: var(--text-primary);">$0</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="color: var(--text-secondary);">↳ Desembolsos Netos por Renovación:</span>
+                      <strong id="cash-report-renov-out" style="color: var(--text-primary);">$0</strong>
+                    </div>
+                  </div>
                 </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
@@ -2548,8 +2568,12 @@
           <!-- Desglose detallado de Préstamos (Oculto de entrada) -->
           <div id="cierre-desglose-prestado" style="display: none; padding: 0.85rem 1.15rem; background: rgba(0, 0, 0, 0.15); border-top: 1px solid rgba(239, 68, 68, 0.15); font-size: 0.85rem; flex-direction: column; gap: 0.6rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: var(--text-secondary);">↳ Préstamos Nuevos:</span>
-              <strong id="cierre-prestamos-hoy" style="color: var(--text-primary);">$0</strong>
+              <span style="color: var(--text-secondary);">↳ Capital Asignado por el Supervisor:</span>
+              <strong id="cierre-prestado-capital" style="color: var(--text-primary);">$0</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: var(--text-secondary);">↳ Préstamos Nuevos / Recaudo Diario:</span>
+              <strong id="cierre-prestado-recaudo" style="color: var(--text-primary);">$0</strong>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span style="color: var(--text-secondary);">↳ Desembolsos Netos por Renovación:</span>
