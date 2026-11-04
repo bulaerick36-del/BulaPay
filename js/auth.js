@@ -356,8 +356,31 @@ const authModule = {
   },
 
   async loginUser(user) {
+    // 1. Limpieza de memoria caché previa para garantizar persistencia limpia por agente
+    window.BulaPayDB.invalidateCache();
+    window.BulaPayDB._currentUserRouteCache = null;
+    window.BulaPayDB._memCache = {};
+
     window.BulaPayDB.setCurrentUser(user);
     this.updateNavBar(user);
+
+    // 2. Si es agente de ruta, resolver dinámicamente y enlazar su ruta activa
+    if (user && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
+      try {
+        const route = await window.BulaPayDB.getRouteForCurrentUser(true);
+        if (route) {
+          user.routeId = route.id;
+          user.route_id = route.id;
+          if (route.supervisor_id) {
+            user.supervisor_id = route.supervisor_id;
+            user.supervisor = route.supervisor_id;
+          }
+          window.BulaPayDB.setCurrentUser(user);
+        }
+      } catch (eR) {
+        console.warn("Aviso resolviendo ruta en loginUser:", eR);
+      }
+    }
 
     if (user && user.username) {
       user.last_sign_in_at = new Date().toISOString();

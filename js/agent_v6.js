@@ -128,6 +128,32 @@ const agentModule = {
   selectedInstallments: [],
 
   async init() {
+    // 1. Validación de Sesión al Iniciar: lectura obligatoria e inmediata del agente autenticado
+    const currentUser = window.BulaPayDB.getCurrentUser();
+    if (!currentUser) {
+      console.warn("⚠️ No hay sesión de agente activa. Redirigiendo a pantalla de login...");
+      if (window.app && window.app.router) {
+        window.app.router.navigate('agent-login');
+      } else {
+        window.location.hash = '#agent-login';
+      }
+      return;
+    }
+
+    // 2. Actualización inmediata del nombre y rol en cabecera (elimina "Cargando Agente...")
+    const agentNameElement = document.getElementById('agent-welcome-name');
+    const agentRouteElement = document.getElementById('agent-active-route');
+    const roleTag = document.getElementById('agent-role-tag');
+    if (agentNameElement) {
+      agentNameElement.textContent = `Cobrador: ${currentUser.name || currentUser.username}`;
+    }
+    if (roleTag) {
+      roleTag.textContent = currentUser.role || 'Agente de Ruta';
+    }
+    if (agentRouteElement) {
+      agentRouteElement.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">🔍 Cargando ruta asignada...</span>`;
+    }
+
     this.tabCollect = document.getElementById('tab-agent-collect');
     this.tabHistory = document.getElementById('tab-agent-history');
     this.tabRegister = document.getElementById('tab-agent-register');
@@ -5108,20 +5134,37 @@ const agentModule = {
     try {
       const currentUser = window.BulaPayDB.getCurrentUser();
       const agentRouteElement = document.getElementById('agent-active-route');
+      const agentNameElement = document.getElementById('agent-welcome-name');
       if (!currentUser || !agentRouteElement) return;
+
+      if (agentNameElement) {
+        agentNameElement.textContent = `Cobrador: ${currentUser.name || currentUser.username}`;
+      }
 
       if (currentUser.role === 'Agente Independiente') {
         agentRouteElement.textContent = 'Cobrador Independiente';
         return;
       }
 
-      const activeRouteId = currentUser.routeId || currentUser.route_id || (await window.BulaPayDB.getActiveRouteIdForUser(currentUser));
-      const routes = await window.BulaPayDB.getRoutes();
-      const myRoute = (routes || []).find(r => (activeRouteId && String(r.id) === String(activeRouteId)) || (r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username)));
+      // Búsqueda dinámica y obligatoria de la ruta asignada al agente en db.js
+      let myRoute = await window.BulaPayDB.getRouteForCurrentUser(true);
+      if (!myRoute) {
+        const activeRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
+        if (activeRouteId) {
+          myRoute = await window.BulaPayDB.getRouteById(activeRouteId);
+        }
+      }
 
       if (!myRoute) {
-        agentRouteElement.textContent = 'Ruta no asignada';
+        agentRouteElement.innerHTML = `<span style="color: #f59e0b; font-weight: 600;">⚠️ Sin ruta asignada por supervisor</span>`;
         return;
+      }
+
+      // Sincronizar ruta en el usuario activo
+      if (!currentUser.routeId || currentUser.routeId !== myRoute.id) {
+        currentUser.routeId = myRoute.id;
+        currentUser.route_id = myRoute.id;
+        window.BulaPayDB.setCurrentUser(currentUser);
       }
 
       const fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(myRoute.id, currentUser);
@@ -5129,7 +5172,7 @@ const agentModule = {
       const capitalUtilizado = Number(fondosInfo.capitalAsignadoUtilizadoHoy || 0);
 
       const colorStyle = capitalUtilizado > 0 ? 'color: #ef4444; font-weight: 800;' : 'color: var(--text-secondary); font-weight: 600;';
-      agentRouteElement.innerHTML = `Ruta: ${myRoute.name} | Capital: <strong style="${colorStyle}">$${capitalRemanente.toLocaleString('es-CO')}</strong>`;
+      agentRouteElement.innerHTML = `Ruta: <strong style="color: #38bdf8;">${myRoute.name}</strong> | Capital: <strong style="${colorStyle}">$${capitalRemanente.toLocaleString('es-CO')}</strong>`;
     } catch (e) {
       console.warn("Aviso al actualizar header de capital del agente:", e);
     }
@@ -5918,6 +5961,15 @@ const agentModule = {
 
   destroy() {
     this.stopLocationMonitoring();
+    this.currentClient = null;
+    this.activeCarton = null;
+    this.currentCashReportData = null;
+    this.selectedInstallments = [];
+    if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+    const agentNameElement = document.getElementById('agent-welcome-name');
+    const agentRouteElement = document.getElementById('agent-active-route');
+    if (agentNameElement) agentNameElement.textContent = 'Cargando Agente...';
+    if (agentRouteElement) agentRouteElement.textContent = 'Ruta no asignada';
   }
 };
 

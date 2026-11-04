@@ -953,7 +953,21 @@ const db = {
   // CURRENT SESSION
   getCurrentUser() {
     try {
-      return JSON.parse(localStorage.getItem(DB_KEYS.CURRENT_USER)) || null;
+      const keys = [DB_KEYS.CURRENT_USER, 'bulapay_user', 'currentUser', 'credi_user'];
+      for (const k of keys) {
+        const raw = localStorage.getItem(k);
+        if (raw && raw !== 'null' && raw !== '{}' && raw !== 'undefined') {
+          const u = JSON.parse(raw);
+          if (u && (u.username || u.id || u.cedula || u.name)) {
+            if (u.route_id && !u.routeId) u.routeId = u.route_id;
+            if (u.routeId && !u.route_id) u.route_id = u.routeId;
+            if (u.supervisor && !u.supervisor_id) u.supervisor_id = u.supervisor;
+            if (u.supervisor_id && !u.supervisor) u.supervisor = u.supervisor_id;
+            return u;
+          }
+        }
+      }
+      return null;
     } catch(e) {
       console.warn("Acceso a localStorage bloqueado en getCurrentUser:", e);
       return null;
@@ -964,39 +978,16 @@ const db = {
     const user = this.getCurrentUser();
     if (!user) return null;
     if (user.role === 'Agente de Ruta' || user.role === 'agent') {
-      return user.supervisor || user.supervisor_id || user.username;
+      return user.supervisor || user.supervisor_id || 'admin';
     }
     return user.username;
   },
 
   async getActiveRouteIdForUser(user) {
     if (!user) return null;
-    if (user.routeId) return user.routeId;
-    
-    try {
-      const supabase = await initSupabase();
-      const supId = this.getSupervisorId();
-      let query = supabase.from('routes').select('*');
-      if (supId) {
-        query = query.eq('supervisor_id', supId);
-      }
-      const { data: routes } = await query;
-        
-      if (routes && routes.length > 0) {
-        const username = user.username || user.id;
-        const myRoute = routes.find(r => 
-          r.agentUsername && r.agentUsername.split(',').map(u => u.trim()).includes(username)
-        );
-        if (myRoute) {
-          user.routeId = myRoute.id;
-          this.setCurrentUser(user);
-          return myRoute.id;
-        }
-      }
-    } catch (e) {
-      console.warn("Fallo al resolver ruta activa para el usuario:", e);
-    }
-    return null;
+    if (user.routeId || user.route_id) return user.routeId || user.route_id;
+    const route = await this.getRouteForCurrentUser(true);
+    return route ? route.id : null;
   },
 
   async getRouteForCurrentUser(forceRefresh = false) {
@@ -1011,11 +1002,9 @@ const db = {
     try {
       const supabase = await initSupabase();
       let routeId = currentUser.routeId || currentUser.route_id;
-      if (!routeId && typeof this.getActiveRouteIdForUser === 'function') {
-        routeId = await this.getActiveRouteIdForUser(currentUser);
-      }
-      
       let route = null;
+
+      // 1. Si ya tiene routeId explícito, buscar la ruta directamente por ID en Supabase
       if (routeId && supabase) {
         const { data, error } = await supabase
           .from('routes')
@@ -1027,34 +1016,86 @@ const db = {
         }
       }
 
+      // 2. Si no se encontró por ID directo, búsqueda dinámica en routes por coincidencia de agente
       if (!route && supabase) {
-        const username = currentUser.username || currentUser.id;
-        const supId = this.getSupervisorId();
-        let query = supabase.from('routes').select('*');
-        if (supId) query = query.eq('supervisor_id', supId);
-        const { data: routes } = await query;
-        if (routes && routes.length > 0) {
-          route = routes.find(r => 
-            r.agentUsername && r.agentUsername.split(',').map(u => u.trim()).includes(username)
-          ) || routes[0];
+        const cleanUser = String(currentUser.username || currentUser.id || '').trim().toLowerCase();
+        const cleanName = String(currentUser.name || '').trim().toLowerCase();
+        const cleanCed = String(currentUser.documentNumber || currentUser.id || '').trim();
+
+        const { data: allRoutes } = await supabase.from('routes').select('*');
+        if (allRoutes && allRoutes.length > 0) {
+          route = allRoutes.find(r => {
+            if (!r) return false;
+            if (routeId && String(r.id) === String(routeId)) return true;
+            // Coincidencia por agentUsername (soporta listas separadas por coma, espacio o punto y coma)
+            if (r.agentUsername) {
+              const uList = String(r.agentUsername).toLowerCase().split(/[,;|\s]+/).map(x => x.trim()).filter(Boolean);
+              if (cleanUser && uList.includes(cleanUser)) return true;
+              if (cleanName && uList.includes(cleanName)) return true;
+            }
+            // Coincidencia por agent_id
+            if (r.agent_id) {
+              const aId = String(r.agent_id).trim().toLowerCase();
+              if (cleanUser && aId === cleanUser) return true;
+              if (cleanCed && aId === cleanCed) return true;
+            }
+            // Coincidencia por agentName
+            if (r.agentName) {
+              const nList = String(r.agentName).toLowerCase().split(/[,;|\s]+/).map(x => x.trim()).filter(Boolean);
+              if (cleanUser && nList.includes(cleanUser)) return true;
+              if (cleanName && (String(r.agentName).toLowerCase().includes(cleanName) || nList.some(part => cleanName.includes(part) && part.length > 2))) return true;
+            }
+            return false;
+          });
         }
       }
 
+      // 3. Búsqueda en la tabla agentes_ruta si aún no se halló
+      if (!route && supabase) {
+        const cleanUser = String(currentUser.username || currentUser.id || '').trim().toLowerCase();
+        const cleanName = String(currentUser.name || '').trim().toLowerCase();
+        const { data: agData } = await supabase
+          .from('agentes_ruta')
+          .select('*')
+          .or(`username.ilike.${cleanUser},nombre.ilike.${cleanName || cleanUser}`);
+        if (agData && agData.length > 0 && agData[0].ruta_id) {
+          const { data: rFound } = await supabase.from('routes').select('*').eq('id', agData[0].ruta_id).maybeSingle();
+          if (rFound) route = rFound;
+        }
+      }
+
+      // 4. Fallback a caché local bulapay_routes
       if (!route) {
         const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
         if (localRoutes.length > 0) {
-          const username = currentUser.username || currentUser.id;
-          route = localRoutes.find(r => r.id === currentUser.routeId || (r.agentUsername && r.agentUsername.includes(username))) || localRoutes[0];
+          const cleanUser = String(currentUser.username || currentUser.id || '').trim().toLowerCase();
+          const cleanName = String(currentUser.name || '').trim().toLowerCase();
+          route = localRoutes.find(r => {
+            if (!r) return false;
+            if (routeId && String(r.id) === String(routeId)) return true;
+            if (r.agentUsername && String(r.agentUsername).toLowerCase().includes(cleanUser)) return true;
+            if (r.agentName && cleanName && String(r.agentName).toLowerCase().includes(cleanName)) return true;
+            return false;
+          }) || (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' ? localRoutes[0] : null);
         }
       }
 
+      // 5. Vincular y persistir de inmediato la ruta hallada al currentUser
       if (route) {
+        currentUser.routeId = route.id;
+        currentUser.route_id = route.id;
+        if (route.supervisor_id && !currentUser.supervisor_id) {
+          currentUser.supervisor_id = route.supervisor_id;
+          currentUser.supervisor = route.supervisor_id;
+        }
+        this.setCurrentUser(currentUser);
         this._currentUserRouteCache = route;
         this._currentUserRouteCacheTime = now;
       }
+
       return route;
     } catch (e) {
-      console.warn("Error al recuperar ruta para el usuario actual:", e);
+      console.warn("Fallo al resolver ruta para usuario actual:", e);
       return this._currentUserRouteCache || null;
     }
   },
@@ -1605,30 +1646,94 @@ const db = {
   },
 
   setCurrentUser(user) {
-    localStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(user));
+    if (!user) {
+      localStorage.removeItem(DB_KEYS.CURRENT_USER);
+      localStorage.removeItem('bulapay_user');
+      localStorage.removeItem('currentUser');
+      return;
+    }
+    // Normalizar identificadores de ruta y supervisor
+    if (user.route_id && !user.routeId) user.routeId = user.route_id;
+    if (user.routeId && !user.route_id) user.route_id = user.routeId;
+    if (user.supervisor && !user.supervisor_id) user.supervisor_id = user.supervisor;
+    if (user.supervisor_id && !user.supervisor) user.supervisor = user.supervisor_id;
+
+    const userJson = JSON.stringify(user);
+    localStorage.setItem(DB_KEYS.CURRENT_USER, userJson);
+    localStorage.setItem('bulapay_user', userJson);
+    localStorage.setItem('currentUser', userJson);
   },
 
   logout() {
-    localStorage.removeItem(DB_KEYS.CURRENT_USER);
+    // 1. Limpieza total de claves de usuario y tema en localStorage y sessionStorage
+    const purgeKeys = [
+      DB_KEYS.CURRENT_USER, 'bulapay_user', 'currentUser', 'credi_user',
+      'crediRole', 'credi_superadmin_active', 'credi_supervisor_active', 'credi_agent_active',
+      'bulapay_routes', 'bulapay_clients', 'bulapay_cartones', 'bulapay_payments'
+    ];
+    purgeKeys.forEach(k => {
+      try { localStorage.removeItem(k); } catch(e) {}
+      try { sessionStorage.removeItem(k); } catch(e) {}
+    });
+
+    // 2. Limpieza total de memorias volátiles de BulaPayDB
+    this.invalidateCache();
+    this._memCache = {};
+    this._currentUserRouteCache = null;
+    this._currentUserRouteCacheTime = 0;
+    this.cachedUsers = null;
+
+    // 3. Resetear módulos de interfaz
+    if (window.agentModule) {
+      try {
+        window.agentModule.currentClient = null;
+        window.agentModule.activeCarton = null;
+        window.agentModule.currentCashReportData = null;
+      } catch(e) {}
+    }
   },
 
   // ROUTES
   async getRoutes(forceRefresh = false) {
+    const currentUser = this.getCurrentUser();
     const supId = this.getSupervisorId();
-    if (!supId) return [];
-    const cacheKey = `routes_${supId}`;
+    const cacheKey = `routes_${supId || currentUser?.username || 'all'}`;
     if (forceRefresh) this.invalidateCache(cacheKey);
-    return await this._getCachedOrFetch(cacheKey, 4000, async () => {
+
+    return await this._getCachedOrFetch(cacheKey, 3000, async () => {
       const supabase = await initSupabase();
-      const { data, error } = await supabase
-        .from('routes')
-        .select('*')
-        .eq('supervisor_id', supId);
-      if (error) {
-        console.error("Error al obtener rutas en Supabase:", error);
-        return [];
+      let routes = [];
+
+      // Si es supervisor, consultar sus rutas directas
+      if (supId && currentUser && currentUser.role !== 'Agente de Ruta' && currentUser.role !== 'agent') {
+        const { data, error } = await supabase
+          .from('routes')
+          .select('*')
+          .eq('supervisor_id', supId);
+        if (!error && data) routes = data;
+      } else {
+        // Si es agente o consulta general: consultar rutas vinculadas o todas las rutas
+        const uName = currentUser?.username || '';
+        let query = supabase.from('routes').select('*');
+        if (currentUser?.supervisor_id) {
+          query = query.or(`supervisor_id.eq.${currentUser.supervisor_id},agentUsername.ilike.%${uName}%`);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          routes = data;
+        } else {
+          const { data: allData } = await supabase.from('routes').select('*');
+          if (allData) routes = allData;
+        }
       }
-      return data || [];
+
+      if ((!routes || routes.length === 0) && typeof localStorage !== 'undefined') {
+        try {
+          routes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+        } catch (e) {}
+      }
+
+      return routes || [];
     });
   },
 
@@ -1639,16 +1744,14 @@ const db = {
     if (cached) return cached;
 
     const supabase = await initSupabase();
-    const supId = this.getSupervisorId();
-    if (!supId) return null;
+    if (!supabase) return null;
     const { data, error } = await supabase
       .from('routes')
       .select('*')
       .eq('id', id)
-      .eq('supervisor_id', supId)
       .maybeSingle();
     if (error) {
-      console.error(`Error al obtener ruta por ID "${id}":`, error);
+      console.warn(`Aviso al consultar ruta por ID "${id}":`, error);
       return null;
     }
     return data;
