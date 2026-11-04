@@ -5714,6 +5714,17 @@ const agentModule = {
     }
   },
 
+  toggleAgentHistorialCierres() {
+    const container = document.getElementById('agent-cierre-historial-container');
+    if (!container) return;
+    const isHidden = container.style.display === 'none' || getComputedStyle(container).display === 'none';
+    if (isHidden) {
+      container.style.display = 'flex';
+    } else {
+      container.style.display = 'none';
+    }
+  },
+
   async renderAgentCierreHistorial(routeId, agentUsername) {
     const container = document.getElementById('agent-cierre-historial-container');
     if (!container) return;
@@ -5731,16 +5742,41 @@ const agentModule = {
         const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : c.fecha_jornada;
         const recaudo = Number(c.total_recaudado || 0);
         const entrega = Number(c.efectivo_entregar || 0);
-        const tipo = c.tipo_cierre === 'automatico_reinicio' ? '⚡ Auto-reinicio' : '🔒 Cierre manual';
+        const prestado = Number(c.total_prestado || 0);
+        const tipo = c.tipo_cierre === 'automatico_reinicio' ? '⚡ Auto-reinicio' : '🔒 Manual';
+        const det = c.detalles || {};
+        const capitalUtilizado = Number(det.capital_asignado_utilizado || det.capitalAsignadoUtilizado || 0);
+        const hasAlert = det.auditoria_alerta || capitalUtilizado > 0;
+
         return `
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 0.4rem 0.6rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
-            <div>
-              <div style="font-weight: 700; color: #fff;">📅 ${c.fecha_jornada} <span style="font-size:0.68rem; color:#94a3b8;">(${tipo})</span></div>
-              <div style="font-size: 0.68rem; color: #94a3b8;">Cerrado: ${fCierre}</div>
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid ${hasAlert ? 'rgba(239, 68, 68, 0.35)' : 'rgba(255,255,255,0.08)'}; border-radius: 6px; padding: 0.45rem 0.65rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong style="color: #fff;">📅 Jornada ${c.fecha_jornada}</strong>
+                <span style="font-size: 0.68rem; color: #94a3b8;">(${tipo})</span>
+              </div>
+              <div style="font-size: 0.68rem; color: #94a3b8;">${fCierre}</div>
             </div>
-            <div style="text-align: right;">
-              <div style="color: #10b981; font-weight: 800;">+$${recaudo.toLocaleString('es-CO')}</div>
-              <div style="color: #38bdf8; font-size: 0.68rem; font-weight: 600;">Entrega: $${entrega.toLocaleString('es-CO')}</div>
+
+            ${hasAlert ? `
+              <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 4px; padding: 0.2rem 0.4rem; color: #fca5a5; font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; gap: 0.25rem;">
+                <span>🔔</span> Alerta: Usó $${capitalUtilizado.toLocaleString('es-CO')} de Capital Asignado
+              </div>
+            ` : `
+              <div style="color: #6ee7b7; font-size: 0.68rem; display: flex; align-items: center; gap: 0.2rem;">
+                <span>✅</span> Caja conforme
+              </div>
+            `}
+
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.06); padding-top: 0.25rem;">
+              <div>
+                <span style="color: #94a3b8; font-size: 0.68rem;">Recaudado: </span>
+                <strong style="color: #10b981;">+$${recaudo.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="text-align: right;">
+                <span style="color: #94a3b8; font-size: 0.68rem;">Entrega: </span>
+                <strong style="color: #38bdf8; font-weight: 700;">$${entrega.toLocaleString('es-CO')}</strong>
+              </div>
             </div>
           </div>
         `;
@@ -5751,7 +5787,7 @@ const agentModule = {
     }
   },
 
-  mostrarAlertaAuditoriaCaja(data) {
+    mostrarAlertaAuditoriaCaja(data) {
     const capitalUtilizado = Number(data?.capitalAsignadoUtilizado || 0);
     const mensajeTexto = `🔍 Auditoría de Caja: El agente utilizó $${capitalUtilizado.toLocaleString('es-CO')} de su fondo de Capital Asignado Remanente y aceptó la responsabilidad del efectivo. Esta operación combinó recaudo diario con capital base, justificando la diferencia actual en el arqueo.`;
 

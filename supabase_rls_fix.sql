@@ -824,3 +824,56 @@ ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "pap_val" NUMERIC DEFAULT 0;
 ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "seg_val" NUMERIC DEFAULT 0;
 ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "retained_fees" NUMERIC DEFAULT 0;
 ALTER TABLE cartones ADD COLUMN IF NOT EXISTS "retained_amount" NUMERIC DEFAULT 0;
+
+-- Tablas de Historial de Cierres de Jornada y Jornadas Archivadas
+CREATE TABLE IF NOT EXISTS cierres_jornada (
+    "id" TEXT PRIMARY KEY,
+    "route_id" TEXT,
+    "agent_id" TEXT,
+    "agent_name" TEXT,
+    "supervisor_id" TEXT,
+    "fecha_jornada" TEXT NOT NULL,
+    "hora_apertura" TEXT DEFAULT '06:00',
+    "inicio_jornada" TIMESTAMPTZ,
+    "fin_jornada" TIMESTAMPTZ,
+    "fecha_cierre" TIMESTAMPTZ DEFAULT NOW(),
+    "total_recaudado" NUMERIC NOT NULL DEFAULT 0,
+    "total_prestado" NUMERIC NOT NULL DEFAULT 0,
+    "efectivo_inicial" NUMERIC NOT NULL DEFAULT 0,
+    "efectivo_entregar" NUMERIC NOT NULL DEFAULT 0,
+    "detalles" JSONB DEFAULT '{}'::jsonb,
+    "tipo_cierre" TEXT DEFAULT 'manual',
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS jornadas_archivadas (
+    "id" TEXT PRIMARY KEY,
+    "route_id" TEXT,
+    "agent_id" TEXT,
+    "agent_name" TEXT,
+    "supervisor_id" TEXT,
+    "fecha_jornada" TEXT NOT NULL,
+    "hora_apertura" TEXT DEFAULT '06:00',
+    "inicio_jornada" TIMESTAMPTZ,
+    "fin_jornada" TIMESTAMPTZ,
+    "fecha_cierre" TIMESTAMPTZ DEFAULT NOW(),
+    "total_recaudado" NUMERIC NOT NULL DEFAULT 0,
+    "total_prestado" NUMERIC NOT NULL DEFAULT 0,
+    "efectivo_inicial" NUMERIC NOT NULL DEFAULT 0,
+    "efectivo_entregar" NUMERIC NOT NULL DEFAULT 0,
+    "detalles" JSONB DEFAULT '{}'::jsonb,
+    "tipo_cierre" TEXT DEFAULT 'manual',
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+GRANT ALL ON TABLE cierres_jornada TO anon, authenticated;
+ALTER TABLE cierres_jornada ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en cierres_jornada" ON cierres_jornada;
+DROP POLICY IF EXISTS "Permitir todo a usuarios en cierres_jornada" ON cierres_jornada;
+CREATE POLICY "Permitir todo a usuarios en cierres_jornada" ON cierres_jornada FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+GRANT ALL ON TABLE jornadas_archivadas TO anon, authenticated;
+ALTER TABLE jornadas_archivadas ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en jornadas_archivadas" ON jornadas_archivadas;
+DROP POLICY IF EXISTS "Permitir todo a usuarios en jornadas_archivadas" ON jornadas_archivadas;
+CREATE POLICY "Permitir todo a usuarios en jornadas_archivadas" ON jornadas_archivadas FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);

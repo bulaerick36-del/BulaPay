@@ -3120,15 +3120,57 @@ const db = {
     const currentUser = this.getCurrentUser();
     const effectiveSupId = supervisorId || (currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId());
 
-    // 1. Obtener la data contable fresca de la jornada operativa actual
+    // 1. Capturar el estado contable completo y riguroso de la jornada operativa actual
     const data = await this.getCierreCajaDataForRoute(routeId, agentId ? { username: agentId } : currentUser);
     const now = new Date();
-    const cierreId = `cierre_${data.routeId || 'gral'}_${data.dateStr}_${now.getTime()}`;
+    const cleanRouteId = (data.routeId && data.routeId !== 'ALL') ? data.routeId : (routeId && routeId !== 'ALL' ? routeId : null);
+    const cierreId = `cierre_${cleanRouteId || 'gral'}_${data.dateStr}_${now.getTime()}`;
+
+    const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
+    const totalPrestado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
+    const efectivoInicial = Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0));
+    const efectivoEntregar = Number(data.totalEntregar || 0);
+    const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
+    const auditoriaAlerta = capitalUtilizado > 0;
+
+    // Desglose contable completo y persistente
+    const snapshotCompleto = {
+      fecha: data.dateStr,
+      fecha_jornada: data.dateStr,
+      routeId: cleanRouteId,
+      routeName: data.routeName,
+      agentUsername: agentId || data.agentUsername || currentUser?.username || '',
+      agentName: data.agentName || currentUser?.name || 'Agente de Ruta',
+      efectivo_inicial: efectivoInicial,
+      capital_asignado_inicial: Number(data.capitalAsignadoInicial || 0),
+      capital_asignado_remanente: Number(data.capitalAsignadoRemanente || 0),
+      capital_asignado_utilizado: capitalUtilizado,
+      auditoria_alerta: auditoriaAlerta,
+      auditoria_status: auditoriaAlerta ? 'ALERTA_CAMPANA_ROJA_CAPITAL_UTILIZADO' : 'NORMAL_SIN_ALERTA',
+      auditoria_mensaje: auditoriaAlerta 
+        ? `Alerta de Auditoría: El agente utilizó ${capitalUtilizado.toLocaleString('es-CO')} de su fondo de Capital Asignado Remanente.` 
+        : 'Auditoría conforme: Arqueo sin uso de capital asignado.',
+      recaudo_total: recaudoTotal,
+      cuotas_normales: Number(data.cuotasNormales || 0),
+      pagos_masivos: Number(data.pagosMasivos || 0),
+      entradas_renovacion: Number(data.entradasRenovacion || 0),
+      liquidaciones_mora: Number(data.liquidacionesMora || 0),
+      descuentos_retenidos: Number(data.descuentosRetenidos || 0),
+      total_prestado: totalPrestado,
+      prestado_capital_asignado: Number(data.prestadoCapitalAsignado || 0),
+      prestamos_nuevos_recaudo: Number(data.prestamosNuevosRecaudo || 0),
+      desembolsos_netos_renovacion: Number(data.desembolsosNetosRenovacion || 0),
+      efectivo_neto_entregar: efectivoEntregar,
+      dinero_en_calle: Number(data.dineroEnCalleNuevos || totalPrestado),
+      flujo_neto_dia: Number(data.flujoNetoDia !== undefined ? data.flujoNetoDia : (recaudoTotal - totalPrestado)),
+      ...data,
+      ...detalles
+    };
 
     const payload = {
       id: cierreId,
-      route_id: data.routeId,
-      agent_id: agentId || data.agentUsername || currentUser?.username || '',
+      route_id: cleanRouteId,
+      agent_id: agentId || data.agentUsername || currentUser?.username || null,
       agent_name: data.agentName || currentUser?.name || 'Agente de Ruta',
       supervisor_id: effectiveSupId,
       fecha_jornada: data.dateStr,
@@ -3136,50 +3178,159 @@ const db = {
       inicio_jornada: data.shiftStart,
       fin_jornada: data.shiftEnd,
       fecha_cierre: now.toISOString(),
-      total_recaudado: data.totalRecaudado !== undefined ? data.totalRecaudado : (data.totalCobrado + (data.entradasRenovacion || 0)),
-      total_prestado: data.totalDesembolsado !== undefined ? data.totalDesembolsado : (data.totalPrestado + (data.desembolsosRenovacion || 0)),
-      efectivo_inicial: data.efectivoInicial,
-      efectivo_entregar: data.totalEntregar,
-      detalles: {
-        ...data,
-        ...detalles
-      },
+      total_recaudado: recaudoTotal,
+      total_prestado: totalPrestado,
+      efectivo_inicial: efectivoInicial,
+      efectivo_entregar: efectivoEntregar,
+      detalles: snapshotCompleto,
       tipo_cierre: tipoCierre,
       created_at: now.toISOString()
     };
 
-    if (data.routeId && data.routeId !== 'ALL') {
+    // 2. Persistir en la base de datos (cierres_jornada y/o jornadas_archivadas)
+    let savedInSupabase = false;
+    try {
+      const { error: err1 } = await supabase.from('cierres_jornada').upsert(payload);
+      if (!err1) {
+        savedInSupabase = true;
+      } else {
+        console.warn("Aviso al guardar en cierres_jornada:", err1);
+        if (err1.code === '23503' || String(err1.message).includes('foreign key')) {
+          const { error: errFk } = await supabase.from('cierres_jornada').upsert({
+            ...payload,
+            agent_id: null
+          });
+          if (!errFk) savedInSupabase = true;
+        }
+      }
+    } catch (eSup1) {
+      console.warn("Excepción al guardar en cierres_jornada:", eSup1);
+    }
+
+    try {
+      const { error: err2 } = await supabase.from('jornadas_archivadas').upsert({
+        ...payload,
+        agent_id: payload.agent_id || null
+      });
+      if (!err2) savedInSupabase = true;
+    } catch (eSup2) {}
+
+    // Respaldo de contingencia y aceleración en localStorage
+    try {
+      const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
+      const filtered = localHist.filter(x => x.id !== payload.id);
+      filtered.unshift(payload);
+      localStorage.setItem('bulapay_cierres_jornada', JSON.stringify(filtered.slice(0, 100)));
+    } catch (eLoc) {}
+
+    // 3. Reiniciar contadores diarios a $0 y actualizar el remanente de capital en bolsillo para el día siguiente
+    if (cleanRouteId) {
+      const routeUpdate = {
+        collected: 0,
+        fecha_ultimo_cierre: now.toISOString(),
+        ultimo_recaudo_cierre: recaudoTotal
+      };
+      if (data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null) {
+        routeUpdate.capital = Math.max(0, Math.round(Number(data.capitalAsignadoRemanente)));
+      }
+
       try {
-        await supabase.from('routes').update({
-          collected: 0
-        }).eq('id', data.routeId);
+        await supabase.from('routes').update(routeUpdate).eq('id', cleanRouteId);
         this.invalidateCache('routes_');
       } catch (eUp) {
         console.warn("Aviso actualizando ruta tras cierre:", eUp);
       }
-    }
 
-    // Respaldo instantáneo en localStorage
-    try {
-      const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
-      localHist.unshift(payload);
-      localStorage.setItem('bulapay_cierres_jornada', JSON.stringify(localHist.slice(0, 100)));
-    } catch (eLoc) {}
+      try {
+        const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+        const idx = localRoutes.findIndex(r => r.id === cleanRouteId);
+        if (idx !== -1) {
+          localRoutes[idx] = { ...localRoutes[idx], ...routeUpdate };
+          localStorage.setItem('bulapay_routes', JSON.stringify(localRoutes));
+        }
+      } catch (eLocR) {}
+    }
 
     return payload;
   },
 
   async getHistorialCierres(routeId = null, agentId = null) {
+    let records = [];
+    let dbSuccess = false;
+
+    // 1. Consultar en Supabase tabla cierres_jornada
+    try {
+      const supabase = await initSupabase();
+      let query = supabase
+        .from('cierres_jornada')
+        .select('*')
+        .order('fecha_cierre', { ascending: false });
+
+      if (routeId && routeId !== 'ALL') {
+        query = query.eq('route_id', routeId);
+      }
+      if (agentId) {
+        query = query.or(`agent_id.eq.${agentId},detalles->>agentUsername.eq.${agentId}`);
+      }
+
+      const { data, error } = await query;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        records = data;
+        dbSuccess = true;
+      }
+    } catch (e) {
+      console.warn("Aviso al consultar cierres_jornada en Supabase:", e);
+    }
+
+    // 2. Si cierres_jornada no retornó o falló, consultar en jornadas_archivadas
+    if (!dbSuccess || records.length === 0) {
+      try {
+        const supabase = await initSupabase();
+        let query2 = supabase
+          .from('jornadas_archivadas')
+          .select('*')
+          .order('fecha_cierre', { ascending: false });
+
+        if (routeId && routeId !== 'ALL') query2 = query2.eq('route_id', routeId);
+        if (agentId) query2 = query2.or(`agent_id.eq.${agentId},detalles->>agentUsername.eq.${agentId}`);
+
+        const { data: data2, error: err2 } = await query2;
+        if (!err2 && Array.isArray(data2) && data2.length > 0) {
+          records = data2;
+          dbSuccess = true;
+        }
+      } catch (e2) {}
+    }
+
+    // 3. Fusionar con registros en localStorage (asegura disponibilidad inmediata y offline)
     try {
       const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
-      return localHist.filter(c => {
-        if (routeId && routeId !== 'ALL' && c.route_id !== routeId) return false;
-        if (agentId && c.agent_id !== agentId) return false;
-        return true;
+      const map = new Map();
+      records.forEach(r => {
+        if (r && r.id) map.set(r.id, r);
       });
-    } catch (e) {
-      return [];
-    }
+
+      localHist.forEach(r => {
+        if (!r) return;
+        const matchesRoute = !routeId || routeId === 'ALL' || r.route_id === routeId;
+        const matchesAgent = !agentId || r.agent_id === agentId || r.detalles?.agentUsername === agentId;
+        if (matchesRoute && matchesAgent) {
+          if (!map.has(r.id)) {
+            map.set(r.id, r);
+          }
+        }
+      });
+      records = Array.from(map.values());
+    } catch (eLocal) {}
+
+    // 4. Ordenar estrictamente del más reciente al más antiguo
+    records.sort((a, b) => {
+      const timeA = new Date(a.fecha_cierre || a.created_at || a.fecha_jornada || 0).getTime();
+      const timeB = new Date(b.fecha_cierre || b.created_at || b.fecha_jornada || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return records;
   },
 
   async verificarYAutoCerrarJornadaPrevia(routeId = null, agentId = null) {
@@ -3189,40 +3340,31 @@ const db = {
       const prevShiftStartMs = currentShift.shiftStart.getTime() - (24 * 60 * 60 * 1000);
       const prevShiftDateStr = this.getColombiaLocalDateStr(new Date(prevShiftStartMs));
 
-      // Verificar en memoria/localStorage si ya existe cierre registrado para la jornada previa (sin bloquear red)
-      const cierres = await this.getHistorialCierres(currentShift.routeId, agentId);
+      const targetRouteId = currentShift.routeId;
+      if (!targetRouteId || targetRouteId === 'ALL') return;
+
+      // Verificar si ya existe cierre registrado para la jornada previa
+      const cierres = await this.getHistorialCierres(targetRouteId, agentId);
       const yaCerrado = (cierres || []).some(c => c.fecha_jornada === prevShiftDateStr);
       if (yaCerrado) return;
 
-      const recaudoPrevio = await this.getAgentRecaudoHoyDirect(agentId, prevShiftDateStr, currentShift.routeId);
+      const recaudoPrevio = await this.getAgentRecaudoHoyDirect(agentId, prevShiftDateStr, targetRouteId);
+      if (recaudoPrevio <= 0) return; // Si no hubo recaudo previo en esa jornada, no requiere auto-cierre
+
       const currentUser = this.getCurrentUser();
       const effectiveSupId = currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId();
-      const archivePayload = {
-        id: `cierre_${currentShift.routeId || 'gral'}_${prevShiftDateStr}_auto6am`,
-        route_id: currentShift.routeId,
-        agent_id: agentId || currentUser?.username || '',
-        agent_name: currentUser?.name || agentId || 'Agente de Ruta',
-        supervisor_id: effectiveSupId,
-        fecha_jornada: prevShiftDateStr,
-        hora_apertura: '06:00',
-        inicio_jornada: new Date(prevShiftStartMs).toISOString(),
-        fin_jornada: currentShift.shiftStart.toISOString(),
-        fecha_cierre: currentShift.shiftStart.toISOString(),
-        total_recaudado: recaudoPrevio,
-        total_prestado: 0,
-        efectivo_inicial: 0,
-        efectivo_entregar: recaudoPrevio,
-        detalles: { motivo: 'Reinicio diario estricto a las 6:00 AM', recaudo_archivado: recaudoPrevio },
-        tipo_cierre: 'automatico_reinicio',
-        created_at: currentShift.shiftStart.toISOString()
-      };
-      try {
-        const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
-        if (!localHist.some(x => x.fecha_jornada === prevShiftDateStr && x.route_id === currentShift.routeId)) {
-          localHist.unshift(archivePayload);
-          localStorage.setItem('bulapay_cierres_jornada', JSON.stringify(localHist.slice(0, 100)));
+
+      await this.realizarCierreJornada({
+        routeId: targetRouteId,
+        agentId: agentId || currentUser?.username || '',
+        supervisorId: effectiveSupId,
+        tipoCierre: 'automatico_reinicio',
+        detalles: {
+          motivo: 'Auto-archivo al cruzar las 6:00 AM',
+          recaudo_archivado: recaudoPrevio,
+          fecha_operativa: prevShiftDateStr
         }
-      } catch (_) {}
+      });
     } catch (e) {
       console.warn("Aviso en verificarYAutoCerrarJornadaPrevia:", e);
     }

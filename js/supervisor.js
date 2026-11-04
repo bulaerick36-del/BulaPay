@@ -1490,39 +1490,239 @@ const supervisorModule = {
     }
   },
 
-  async renderHistorialCierresSupervisor() {
+  toggleHistorialCierres() {
     const container = document.getElementById('cierre-historial-container');
+    const arrow = document.getElementById('cierre-historial-arrow');
+    if (!container) return;
+
+    const isHidden = container.style.display === 'none' || getComputedStyle(container).display === 'none';
+    if (isHidden) {
+      container.style.display = 'flex';
+      if (arrow) arrow.textContent = '▲';
+      this.renderHistorialCierresSupervisor(true);
+    } else {
+      container.style.display = 'none';
+      if (arrow) arrow.textContent = '▼';
+    }
+  },
+
+  toggleCierreCardDetail(cierreId) {
+    const detailEl = document.getElementById('cierre-card-detail-' + cierreId);
+    const arrowEl = document.getElementById('cierre-card-arrow-' + cierreId);
+    if (!detailEl) return;
+    const isHidden = detailEl.style.display === 'none' || getComputedStyle(detailEl).display === 'none';
+    if (isHidden) {
+      detailEl.style.display = 'flex';
+      if (arrowEl) arrowEl.textContent = '▲';
+    } else {
+      detailEl.style.display = 'none';
+      if (arrowEl) arrowEl.textContent = '▼';
+    }
+  },
+
+  async mostrarDetalleAuditoriaCierre(cierreId) {
+    const cierres = await window.BulaPayDB.getHistorialCierres();
+    const c = (cierres || []).find(x => x.id === cierreId);
+    if (!c) {
+      alert("No se encontró el detalle del cierre seleccionado.");
+      return;
+    }
+    const det = c.detalles || {};
+    const capitalUtilizado = Number(det.capital_asignado_utilizado || det.capitalAsignadoUtilizado || 0);
+    const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : c.fecha_jornada;
+
+    const modalHtml = `
+      <div style="text-align: left; font-size: 0.85rem; line-height: 1.5; color: #f1f5f9;">
+        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
+          <div>📅 <strong>Jornada Operativa:</strong> ${c.fecha_jornada}</div>
+          <div>🔒 <strong>Fecha y Hora de Cierre:</strong> ${fCierre}</div>
+          <div>👤 <strong>Agente de Ruta:</strong> ${c.agent_name || c.agent_id || 'Ruta'}</div>
+          <div>🏛️ <strong>Tipo de Cierre:</strong> ${c.tipo_cierre === 'automatico_reinicio' ? '⚡ Auto-reinicio (6:00 AM)' : '🔒 Cierre manual supervisado'}</div>
+        </div>
+
+        <div style="background: ${capitalUtilizado > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)'}; border: 1px solid ${capitalUtilizado > 0 ? 'rgba(239, 68, 68, 0.35)' : 'rgba(16, 185, 129, 0.35)'}; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem;">
+          <div style="font-weight: 800; color: ${capitalUtilizado > 0 ? '#f87171' : '#34d399'}; margin-bottom: 0.3rem;">
+            ${capitalUtilizado > 0 ? '🔔 ALERTA DE AUDITORÍA REGISTRADA' : '✅ ARQUEO DE CAJA CONFORME'}
+          </div>
+          <div style="font-size: 0.78rem; color: #cbd5e1;">
+            ${capitalUtilizado > 0 
+              ? `El cobrador utilizó <strong>$${capitalUtilizado.toLocaleString('es-CO')}</strong> de su fondo de Capital Asignado Remanente para completar préstamos de la jornada, comprometiendo parte de su base física.`
+              : 'La jornada se financió y liquidó íntegramente con el recaudo diario o sin afectar el capital base.'}
+          </div>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color:#94a3b8;">💼 Efectivo Inicial / Bolsillo:</span>
+            <strong>$${Number(c.efectivo_inicial || det.efectivo_inicial || 0).toLocaleString('es-CO')}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color:#94a3b8;">💰 Recaudo Total:</span>
+            <strong style="color:#10b981;">+$${Number(c.total_recaudado || 0).toLocaleString('es-CO')}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color:#94a3b8;">📤 Total Prestado:</span>
+            <strong style="color:#f87171;">-$${Number(c.total_prestado || 0).toLocaleString('es-CO')}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding-left: 0.8rem; font-size: 0.75rem;">
+            <span style="color:#64748b;">↳ Con Capital Asignado:</span>
+            <span>$${Number(det.prestado_capital_asignado || det.prestadoCapitalAsignado || 0).toLocaleString('es-CO')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding-left: 0.8rem; font-size: 0.75rem;">
+            <span style="color:#64748b;">↳ Con Recaudo Diario:</span>
+            <span>$${Number(det.prestamos_nuevos_recaudo || det.prestamosNuevosRecaudo || 0).toLocaleString('es-CO')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color:#94a3b8;">➕ Descuentos Retenidos:</span>
+            <strong style="color:#38bdf8;">+$${Number(det.descuentos_retenidos || det.descuentosRetenidos || 0).toLocaleString('es-CO')}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.4rem; font-size: 0.95rem; font-weight: 800;">
+            <span style="color:#34d399;">🏛️ Efectivo Neto a Entregar:</span>
+            <strong style="color:#34d399;">$${Number(c.efectivo_entregar || 0).toLocaleString('es-CO')}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: '📜 Detalle de Cierre Archivado',
+        html: modalHtml,
+        icon: capitalUtilizado > 0 ? 'warning' : 'info',
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Cerrar',
+        background: '#0f172a',
+        color: '#fff'
+      });
+    } else {
+      alert(`Cierre Jornada ${c.fecha_jornada}\nRecaudo: $${Number(c.total_recaudado).toLocaleString('es-CO')}\nEntrega: $${Number(c.efectivo_entregar).toLocaleString('es-CO')}`);
+    }
+  },
+
+  async renderHistorialCierresSupervisor(forceRefresh = false) {
+    const container = document.getElementById('cierre-historial-container');
+    const badgeCount = document.getElementById('cierre-historial-count-badge');
     if (!container) return;
 
     const routeSelect = document.getElementById('modal-cierre-route-select');
     const routeId = routeSelect ? routeSelect.value : null;
 
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.5rem;">Cargando historial...</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.6rem;">Cargando jornadas archivadas...</div>';
 
-    const cierres = await window.BulaPayDB.getHistorialCierres(routeId);
-    if (!cierres || cierres.length === 0) {
-      container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.5rem;">No hay cierres previos registrados para esta ruta.</div>';
-      return;
+    try {
+      const cierres = await window.BulaPayDB.getHistorialCierres(routeId);
+
+      if (badgeCount) {
+        badgeCount.textContent = cierres ? cierres.length : 0;
+        badgeCount.style.display = (cierres && cierres.length > 0) ? 'inline-block' : 'none';
+      }
+
+      if (!cierres || cierres.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.75rem; background: rgba(255,255,255,0.02); border-radius:8px; border:1px dashed rgba(255,255,255,0.08);">No hay cierres previos registrados para esta ruta.</div>';
+        return;
+      }
+
+      container.innerHTML = cierres.map(c => {
+        const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : c.fecha_jornada;
+        const recaudo = Number(c.total_recaudado || 0);
+        const prestado = Number(c.total_prestado || 0);
+        const inicial = Number(c.efectivo_inicial || c.detalles?.efectivo_inicial || 0);
+        const entrega = Number(c.efectivo_entregar || 0);
+        const descuentos = Number(c.detalles?.descuentos_retenidos || c.detalles?.descuentosRetenidos || 0);
+        const tipo = c.tipo_cierre === 'automatico_reinicio' ? '⚡ Auto-reinicio' : '🔒 Manual';
+        const det = c.detalles || {};
+        const capitalUtilizado = Number(det.capital_asignado_utilizado || det.capitalAsignadoUtilizado || 0);
+        const prestadoCap = Number(det.prestado_capital_asignado || det.prestadoCapitalAsignado || 0);
+        const prestadoRec = Number(det.prestamos_nuevos_recaudo || det.prestamosNuevosRecaudo || 0);
+        const hasAlert = det.auditoria_alerta || capitalUtilizado > 0;
+
+        return `
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid ${hasAlert ? 'rgba(239, 68, 68, 0.35)' : 'rgba(255,255,255,0.08)'}; border-radius: 8px; padding: 0.65rem 0.85rem; display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.8rem;">
+            
+            <!-- Fila Superior: Fecha, Tipo y Botón Detalle -->
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 0.35rem;">
+              <div>
+                <strong style="color: #fff; font-size: 0.85rem;">📅 Jornada ${c.fecha_jornada}</strong>
+                <span style="font-size: 0.7rem; color: #94a3b8; margin-left: 0.35rem;">(${tipo})</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #94a3b8;">
+                ${fCierre}
+              </div>
+            </div>
+
+            <!-- Estatus de Auditoría / Campana Roja -->
+            ${hasAlert ? `
+              <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 0.3rem 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #fca5a5; font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; gap: 0.3rem;">
+                  <span>🔔</span> <span>Alerta: Usó $${capitalUtilizado.toLocaleString('es-CO')} de Capital Asignado</span>
+                </span>
+                <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: #ef4444; color: #fff; border: none; border-radius: 4px; padding: 0.15rem 0.45rem; font-size: 0.68rem; font-weight: bold; cursor: pointer;">
+                  Auditoría
+                </button>
+              </div>
+            ` : `
+              <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px; padding: 0.2rem 0.45rem; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; color: #6ee7b7; font-weight: 600;">
+                <span>✅</span> Caja Conforme / Sin Alertas
+              </div>
+            `}
+
+            <!-- Montos Principales Contables -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 0.45rem 0.6rem; margin-top: 0.15rem;">
+              <div>
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">💰 Recaudo Total:</span>
+                <strong style="color: #10b981; font-size: 0.88rem;">+$${recaudo.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="text-align: right;">
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">📤 Total Prestado:</span>
+                <strong style="color: #f87171; font-size: 0.88rem;">-$${prestado.toLocaleString('es-CO')}</strong>
+              </div>
+              <div>
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">💼 Efectivo Inicial:</span>
+                <strong style="color: #38bdf8; font-size: 0.8rem;">$${inicial.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="text-align: right;">
+                <span style="font-size: 0.7rem; color: #94a3b8; display: block;">🏛️ Efectivo a Entregar:</span>
+                <strong style="color: #34d399; font-size: 0.92rem; font-weight: 900;">$${entrega.toLocaleString('es-CO')}</strong>
+              </div>
+            </div>
+
+            <!-- Desglose Toggleable -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem;">
+              <span style="font-size: 0.7rem; color: #94a3b8;">Agente: ${c.agent_name || c.agent_id || 'Ruta'}</span>
+              <button type="button" onclick="supervisorModule.toggleCierreCardDetail('${c.id}')" style="background: transparent; border: none; color: #38bdf8; font-size: 0.72rem; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">
+                <span>Desglose contable</span> <span id="cierre-card-arrow-${c.id}">▼</span>
+              </button>
+            </div>
+
+            <!-- Contenedor Desplegable de Desglose de Préstamos y Descuentos -->
+            <div id="cierre-card-detail-${c.id}" style="display: none; flex-direction: column; gap: 0.35rem; background: rgba(15,23,42,0.6); border: 1px solid rgba(148,163,184,0.15); border-radius: 6px; padding: 0.45rem 0.65rem; font-size: 0.73rem; margin-top: 0.25rem;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: #94a3b8;">↳ Prestado con Capital Asignado:</span>
+                <strong style="color: #fca5a5;">$${prestadoCap.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: #94a3b8;">↳ Prestado con Recaudo Diario:</span>
+                <strong style="color: #93c5fd;">$${prestadoRec.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: #94a3b8;">↳ Descuentos Retenidos (Software/Papelería):</span>
+                <strong style="color: #34d399;">+$${descuentos.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 0.25rem;">
+                <span style="color: #94a3b8;">↳ Flujo Operativo del Día:</span>
+                <strong style="color: ${(recaudo - prestado) >= 0 ? '#10b981' : '#f87171'};">
+                  ${(recaudo - prestado) >= 0 ? '+' : ''}$${(recaudo - prestado).toLocaleString('es-CO')}
+                </strong>
+              </div>
+            </div>
+
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error("Error al renderizar historial de cierres del supervisor:", err);
+      container.innerHTML = '<div style="text-align:center; color:#ef4444; font-size:0.8rem; padding:0.5rem;">Error al consultar el historial de cierres.</div>';
     }
-
-    container.innerHTML = cierres.map(c => {
-      const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : c.fecha_jornada;
-      const recaudo = Number(c.total_recaudado || 0);
-      const entrega = Number(c.efectivo_entregar || 0);
-      const tipo = c.tipo_cierre === 'automatico_reinicio' ? '⚡ Auto-reinicio' : '🔒 Cierre manual';
-      return `
-        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 0.5rem 0.75rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-          <div>
-            <div style="font-weight: 700; color: #fff;">📅 Jornada ${c.fecha_jornada} <span style="font-size:0.7rem; color:#94a3b8;">(${tipo})</span></div>
-            <div style="font-size: 0.72rem; color: #94a3b8;">Cerrado: ${fCierre} | Agente: ${c.agent_name || c.agent_id || 'Ruta'}</div>
-          </div>
-          <div style="text-align: right;">
-            <div style="color: #10b981; font-weight: 800;">+$${recaudo.toLocaleString('es-CO')}</div>
-            <div style="color: #38bdf8; font-size: 0.72rem; font-weight: 600;">Entrega: $${entrega.toLocaleString('es-CO')}</div>
-          </div>
-        </div>
-      `;
-    }).join('');
   },
 
   async confirmarCierreJornadaSupervisor() {
@@ -1540,14 +1740,14 @@ const supervisorModule = {
         title: '¿Confirmar Cierre de Jornada?',
         html: `Se cerrará la jornada operativa actual de la ruta <strong>${data.routeName}</strong>.<br><br>
                <div style="text-align: left; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.85rem; line-height: 1.6;">
-                 <div>💼 <strong>Efectivo en Bolsillo:</strong> $${Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0)).toLocaleString('es-CO')}</div>
+                 <div>💼 <strong>Efectivo en Bolsillo Inicial:</strong> $${Number(data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null ? data.capitalAsignadoRemanente : (data.efectivoInicial || 0)).toLocaleString('es-CO')}</div>
                  <div>💰 <strong>Total Recaudado Hoy:</strong> <span style="color:#10b981; font-weight:bold;">+$${recaudo.toLocaleString('es-CO')}</span></div>
                  <div>📤 <strong>Total Prestado (Queda en la calle):</strong> <span style="color:#f87171; font-weight:bold;">-$${prestado.toLocaleString('es-CO')}</span></div>
                  <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin-top: 0.4rem; padding-top: 0.4rem;">
                    🏛️ <strong>Total Efectivo Físico a Entregar:</strong> <span style="color:#38bdf8; font-weight:bold; font-size: 1.05rem;">$${data.totalEntregar.toLocaleString('es-CO')}</span>
                  </div>
                </div><br>
-               <span style="color:#f59e0b; font-size:0.8rem;">⚠️ Al confirmar, el contador de 'Recaudado Hoy' del agente reiniciará inmediatamente a $0.</span>`,
+               <span style="color:#f59e0b; font-size:0.8rem;">⚠️ Al confirmar, el estado contable se archivará en el historial y el contador de recaudo reiniciará inmediatamente a $0.</span>`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Sí, Realizar Cierre',
@@ -1574,18 +1774,18 @@ const supervisorModule = {
       if (typeof Swal !== 'undefined') {
         Swal.fire({
           title: '¡Cierre Exitoso!',
-          text: `La jornada fue archivada en el historial y el recaudo individual del agente se reinició a $0.`,
+          text: `La jornada fue archivada exitosamente en el historial y el recaudo individual de la ruta se reinició a $0.`,
           icon: 'success',
           confirmButtonColor: '#10b981',
           background: '#0f172a',
           color: '#fff'
         });
       } else {
-        alert('✅ Cierre de jornada realizado con éxito. Contador reiniciado a $0.');
+        alert('✅ Cierre de jornada realizado con éxito. Contador reiniciado a $0 y archivado en historial.');
       }
 
       await this.calculateCierreCaja();
-      await this.renderHistorialCierresSupervisor();
+      await this.renderHistorialCierresSupervisor(true);
       await this.renderDashboard();
     } catch (e) {
       console.error("Error al confirmar cierre de jornada:", e);
