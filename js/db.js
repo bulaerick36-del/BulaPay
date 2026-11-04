@@ -1004,6 +1004,14 @@ const db = {
       let routeId = currentUser.routeId || currentUser.route_id;
       let route = null;
 
+      // Función auxiliar de normalización (quita acentos, minúsculas, espacios)
+      const norm = s => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+      const cleanUser = norm(currentUser.username);
+      const cleanName = norm(currentUser.name);
+      const cleanCed = String(currentUser.documentNumber || currentUser.id || '').trim();
+      const firstName = cleanName.split(/\s+/)[0] || cleanUser;
+
       // 1. Si ya tiene routeId explícito, buscar la ruta directamente por ID en Supabase
       if (routeId && supabase) {
         const { data, error } = await supabase
@@ -1018,69 +1026,104 @@ const db = {
 
       // 2. Si no se encontró por ID directo, búsqueda dinámica en routes por coincidencia de agente
       if (!route && supabase) {
-        const cleanUser = String(currentUser.username || currentUser.id || '').trim().toLowerCase();
-        const cleanName = String(currentUser.name || '').trim().toLowerCase();
-        const cleanCed = String(currentUser.documentNumber || currentUser.id || '').trim();
-
-        const { data: allRoutes } = await supabase.from('routes').select('*');
-        if (allRoutes && allRoutes.length > 0) {
+        const { data: allRoutes, error: errRoutes } = await supabase.from('routes').select('*');
+        if (!errRoutes && allRoutes && allRoutes.length > 0) {
+          // A. Coincidencia exacta o parcial de agente (agentUsername, agent_id, agentName, o nombre de ruta)
           route = allRoutes.find(r => {
             if (!r) return false;
             if (routeId && String(r.id) === String(routeId)) return true;
+
+            const rNameNorm = norm(r.name);
+            const rAgentUserNorm = norm(r.agentUsername);
+            const rAgentNameNorm = norm(r.agentName);
+            const rAgentIdNorm = norm(r.agent_id);
+
             // Coincidencia por agentUsername (soporta listas separadas por coma, espacio o punto y coma)
             if (r.agentUsername) {
-              const uList = String(r.agentUsername).toLowerCase().split(/[,;|\s]+/).map(x => x.trim()).filter(Boolean);
+              const uList = rAgentUserNorm.split(/[,;|\s]+/).filter(Boolean);
               if (cleanUser && uList.includes(cleanUser)) return true;
               if (cleanName && uList.includes(cleanName)) return true;
+              if (firstName && firstName.length > 2 && uList.includes(firstName)) return true;
+              if (cleanUser && rAgentUserNorm.includes(cleanUser)) return true;
             }
+
             // Coincidencia por agent_id
             if (r.agent_id) {
-              const aId = String(r.agent_id).trim().toLowerCase();
-              if (cleanUser && aId === cleanUser) return true;
-              if (cleanCed && aId === cleanCed) return true;
+              if (cleanUser && rAgentIdNorm === cleanUser) return true;
+              if (cleanCed && rAgentIdNorm === cleanCed.toLowerCase()) return true;
+              if (cleanName && rAgentIdNorm === cleanName) return true;
             }
+
             // Coincidencia por agentName
             if (r.agentName) {
-              const nList = String(r.agentName).toLowerCase().split(/[,;|\s]+/).map(x => x.trim()).filter(Boolean);
-              if (cleanUser && nList.includes(cleanUser)) return true;
-              if (cleanName && (String(r.agentName).toLowerCase().includes(cleanName) || nList.some(part => cleanName.includes(part) && part.length > 2))) return true;
+              const nList = rAgentNameNorm.split(/[,;|\s]+/).filter(Boolean);
+              if (cleanUser && (rAgentNameNorm.includes(cleanUser) || nList.includes(cleanUser))) return true;
+              if (cleanName && (rAgentNameNorm.includes(cleanName) || cleanName.includes(rAgentNameNorm))) return true;
+              if (firstName && firstName.length > 2 && (rAgentNameNorm.includes(firstName) || nList.includes(firstName))) return true;
             }
+
+            // Coincidencia por el NOMBRE DE LA RUTA (ej. "Ruta Jesús", "Ruta Carlos", "Ruta César", "Ruta Carlo Mario")
+            if (r.name) {
+              if (cleanUser && cleanUser.length > 2 && rNameNorm.includes(cleanUser)) return true;
+              if (cleanName && cleanName.length > 2 && rNameNorm.includes(cleanName)) return true;
+              if (firstName && firstName.length > 2 && rNameNorm.includes(firstName)) return true;
+            }
+
             return false;
           });
+
+          // B. Si aún no hay ruta, buscar por coincidencia en la tabla 'agentes_ruta'
+          if (!route) {
+            try {
+              const { data: agData } = await supabase
+                .from('agentes_ruta')
+                .select('*')
+                .or(`username.ilike.%${cleanUser}%,nombre.ilike.%${cleanName || cleanUser}%`);
+              if (agData && agData.length > 0) {
+                const ag = agData[0];
+                const matchedRutaId = ag.ruta_id || ag.route_id || ag.routeId;
+                if (matchedRutaId) {
+                  route = allRoutes.find(r => String(r.id) === String(matchedRutaId));
+                }
+              }
+            } catch (eAg) {
+              console.warn("Aviso consultando agentes_ruta:", eAg);
+            }
+          }
+
+          // C. Si aún no hay ruta y el usuario tiene supervisor_id, asignar la primera ruta de ese supervisor
+          if (!route && currentUser.supervisor_id) {
+            const cleanSup = norm(currentUser.supervisor_id);
+            route = allRoutes.find(r => norm(r.supervisor_id || r.supervisor) === cleanSup);
+          }
+
+          // D. Fallback para Agentes: si existen rutas en el sistema y el usuario es Agente, jamás dejarlo con 'Ruta no asignada'
+          const isAgentRole = currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente' || currentUser.role === 'Cobrador' || !currentUser.role;
+          if (!route && isAgentRole && allRoutes.length > 0) {
+            route = allRoutes[0];
+          }
         }
       }
 
-      // 3. Búsqueda en la tabla agentes_ruta si aún no se halló
-      if (!route && supabase) {
-        const cleanUser = String(currentUser.username || currentUser.id || '').trim().toLowerCase();
-        const cleanName = String(currentUser.name || '').trim().toLowerCase();
-        const { data: agData } = await supabase
-          .from('agentes_ruta')
-          .select('*')
-          .or(`username.ilike.${cleanUser},nombre.ilike.${cleanName || cleanUser}`);
-        if (agData && agData.length > 0 && agData[0].ruta_id) {
-          const { data: rFound } = await supabase.from('routes').select('*').eq('id', agData[0].ruta_id).maybeSingle();
-          if (rFound) route = rFound;
-        }
-      }
-
-      // 4. Fallback a caché local bulapay_routes
+      // 3. Fallback a caché local bulapay_routes si Supabase no devolvió ruta
       if (!route) {
         const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
         if (localRoutes.length > 0) {
-          const cleanUser = String(currentUser.username || currentUser.id || '').trim().toLowerCase();
-          const cleanName = String(currentUser.name || '').trim().toLowerCase();
           route = localRoutes.find(r => {
             if (!r) return false;
             if (routeId && String(r.id) === String(routeId)) return true;
-            if (r.agentUsername && String(r.agentUsername).toLowerCase().includes(cleanUser)) return true;
-            if (r.agentName && cleanName && String(r.agentName).toLowerCase().includes(cleanName)) return true;
+            const rNameNorm = norm(r.name);
+            const rAgentUserNorm = norm(r.agentUsername);
+            const rAgentNameNorm = norm(r.agentName);
+            if (cleanUser && rAgentUserNorm.includes(cleanUser)) return true;
+            if (cleanName && rAgentNameNorm.includes(cleanName)) return true;
+            if (firstName && firstName.length > 2 && (rNameNorm.includes(firstName) || rAgentUserNorm.includes(firstName))) return true;
             return false;
-          }) || (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' ? localRoutes[0] : null);
+          }) || localRoutes[0];
         }
       }
 
-      // 5. Vincular y persistir de inmediato la ruta hallada al currentUser
+      // 4. Vincular y persistir de inmediato la ruta hallada al currentUser
       if (route) {
         currentUser.routeId = route.id;
         currentUser.route_id = route.id;

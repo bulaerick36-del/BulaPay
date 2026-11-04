@@ -365,7 +365,8 @@ const authModule = {
     this.updateNavBar(user);
 
     // 2. Si es agente de ruta, resolver dinámicamente y enlazar su ruta activa
-    if (user && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
+    const isAgent = user && (user.role === 'Agente de Ruta' || user.role === 'agent' || user.role === 'Agente' || user.role === 'Cobrador' || !user.role);
+    if (isAgent && user.role !== 'Agente Independiente') {
       try {
         const route = await window.BulaPayDB.getRouteForCurrentUser(true);
         if (route) {

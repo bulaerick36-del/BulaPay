@@ -128,8 +128,18 @@ const agentModule = {
   selectedInstallments: [],
 
   async init() {
-    // 1. Validación de Sesión al Iniciar: lectura obligatoria e inmediata del agente autenticado
-    const currentUser = window.BulaPayDB.getCurrentUser();
+    // 1. Validación de Sesión al Iniciar: lectura infalible e inmediata de credenciales del agente
+    let currentUser = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function')
+      ? window.BulaPayDB.getCurrentUser()
+      : null;
+
+    if (!currentUser) {
+      try {
+        const raw = localStorage.getItem('bulapay_current_user') || localStorage.getItem('bulapay_user') || localStorage.getItem('currentUser');
+        if (raw) currentUser = JSON.parse(raw);
+      } catch(e) {}
+    }
+
     if (!currentUser) {
       console.warn("⚠️ No hay sesión de agente activa. Redirigiendo a pantalla de login...");
       if (window.app && window.app.router) {
@@ -140,18 +150,19 @@ const agentModule = {
       return;
     }
 
-    // 2. Actualización inmediata del nombre y rol en cabecera (elimina "Cargando Agente...")
+    // 2. Renderizado Inmediato de Identidad en Cabecera (elimina 'Cargando Agente...')
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
     const roleTag = document.getElementById('agent-role-tag');
+    const cleanAgentName = currentUser.name || currentUser.username || 'Agente';
     if (agentNameElement) {
-      agentNameElement.textContent = `Cobrador: ${currentUser.name || currentUser.username}`;
+      agentNameElement.textContent = `Cobrador: ${cleanAgentName}`;
     }
     if (roleTag) {
       roleTag.textContent = currentUser.role || 'Agente de Ruta';
     }
     if (agentRouteElement) {
-      agentRouteElement.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">🔍 Cargando ruta asignada...</span>`;
+      agentRouteElement.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">🔍 Conectando con ruta...</span>`;
     }
 
     this.tabCollect = document.getElementById('tab-agent-collect');
@@ -5729,9 +5740,9 @@ const agentModule = {
       const bellBtn = document.getElementById('agent-cash-report-bell-btn');
       const rowCapUtilizado = document.getElementById('agent-cash-report-row-capital-utilizado');
       const valCapUtilizado = document.getElementById('agent-cash-report-capital-utilizado-val');
-      const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
+      const capUtilizadoReporte = Number(data.capitalAsignadoUtilizado || capitalUtilizado || 0);
 
-      if (capitalUtilizado > 0) {
+      if (capUtilizadoReporte > 0) {
         if (bellBtn) {
           bellBtn.style.display = 'inline-flex';
           bellBtn.onclick = () => this.mostrarAlertaAuditoriaCaja(data);
@@ -5966,10 +5977,13 @@ const agentModule = {
     this.currentCashReportData = null;
     this.selectedInstallments = [];
     if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+    const curU = window.BulaPayDB ? window.BulaPayDB.getCurrentUser() : null;
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
-    if (agentNameElement) agentNameElement.textContent = 'Cargando Agente...';
-    if (agentRouteElement) agentRouteElement.textContent = 'Ruta no asignada';
+    if (!curU) {
+      if (agentNameElement) agentNameElement.textContent = 'Cargando Agente...';
+      if (agentRouteElement) agentRouteElement.textContent = 'Ruta no asignada';
+    }
   }
 };
 
