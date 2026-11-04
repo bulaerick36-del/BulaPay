@@ -1381,10 +1381,10 @@ const supervisorModule = {
     const prestadoTotal = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
     
     // Inclusión obligatoria de los rubros de descuento en el Total Efectivo a Entregar
-    const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
+    const recaudoCobranza = (Number(data.cuotasNormales || data.totalCobrado || 0) + Number(data.entradasRenovacion || 0) + Number(data.liquidacionesMora || 0));
+    const capitalUtilizado = Number(data.capitalAsignadoUtilizado !== undefined && data.capitalAsignadoUtilizado !== null ? data.capitalAsignadoUtilizado : (recaudoCobranza <= 0 ? prestadoTotal : Math.max(0, prestadoTotal - recaudoCobranza)));
     const descuentosRetenidos = Number(data.descuentosRetenidos || 0);
     const prestadoConRecaudo = Math.max(0, prestadoTotal - capitalUtilizado);
-    const recaudoCobranza = (Number(data.cuotasNormales || data.totalCobrado || 0) + Number(data.entradasRenovacion || 0) + Number(data.liquidacionesMora || 0));
     const recaudoNetoOperativo = Math.max(0, recaudoCobranza - prestadoConRecaudo);
     const totalEntregar = data.totalEntregar !== undefined ? Number(data.totalEntregar) : Math.round(recaudoNetoOperativo + descuentosRetenidos);
     const flujoNetoDia = recaudoTotal - prestadoTotal;
@@ -1400,9 +1400,12 @@ const supervisorModule = {
     if (liquidacionesMoraEl) liquidacionesMoraEl.textContent = `$${(data.liquidacionesMora || 0).toLocaleString('es-CO')}`;
     if (retenidosEl) retenidosEl.textContent = `$${(data.descuentosRetenidos || 0).toLocaleString('es-CO')}`;
 
-    // Total Prestado y desglose por Fuente de Fondos
-    const prestadoCapitalVal = Number(data.prestadoCapitalAsignado !== undefined ? data.prestadoCapitalAsignado : (data.capitalAsignadoUtilizado || 0));
-    const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo !== undefined ? data.prestamosNuevosRecaudo : Math.max(0, (data.prestamosNuevos || data.totalPrestado || 0) - prestadoCapitalVal));
+    // Total Prestado y desglose por Fuente de Fondos:
+    // 1. Capital Asignado por el Supervisor: Valor nominal total / bruto cubierto con Capital Asignado
+    // 2. Préstamos Nuevos / Recaudo Diario: Créditos colocados con recaudo fresco (CERO mezcla con descuentos de papelería)
+    // 3. Desembolsos Netos por Renovación
+    const prestadoCapitalVal = Number(data.prestadoCapitalAsignado !== undefined ? data.prestadoCapitalAsignado : capitalUtilizado);
+    const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo !== undefined ? data.prestamosNuevosRecaudo : (recaudoCobranza <= 0 ? 0 : Math.min(recaudoCobranza, Math.max(0, (data.prestamosNuevos || data.totalPrestado || 0) - prestadoCapitalVal))));
     const renovOutVal = Number(data.desembolsosNetosRenovacion !== undefined ? data.desembolsosNetosRenovacion : Math.max(0, prestadoTotal - prestadoCapitalVal - prestadoRecaudoVal));
 
     if (totalPrestadoEl) totalPrestadoEl.textContent = '-$' + prestadoTotal.toLocaleString('es-CO');

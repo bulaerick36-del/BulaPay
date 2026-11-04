@@ -5660,8 +5660,10 @@ const agentModule = {
       if (renovInEl) renovInEl.textContent = '+$' + (data.entradasRenovacion || 0).toLocaleString('es-CO');
 
       const totalDesembolsado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
-      const prestadoCapitalVal = Number(data.prestadoCapitalAsignado !== undefined ? data.prestadoCapitalAsignado : (data.capitalAsignadoUtilizado || 0));
-      const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo !== undefined ? data.prestamosNuevosRecaudo : Math.max(0, (data.prestamosNuevos || data.totalPrestado || 0) - prestadoCapitalVal));
+      const recaudoCobranza = (Number(data.cuotasNormales || data.totalCobrado || 0) + Number(data.entradasRenovacion || 0) + Number(data.liquidacionesMora || 0));
+      const capitalUtilizado = Number(data.capitalAsignadoUtilizado !== undefined && data.capitalAsignadoUtilizado !== null ? data.capitalAsignadoUtilizado : (recaudoCobranza <= 0 ? totalDesembolsado : Math.max(0, totalDesembolsado - recaudoCobranza)));
+      const prestadoCapitalVal = Number(data.prestadoCapitalAsignado !== undefined ? data.prestadoCapitalAsignado : capitalUtilizado);
+      const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo !== undefined ? data.prestamosNuevosRecaudo : (recaudoCobranza <= 0 ? 0 : Math.min(recaudoCobranza, Math.max(0, (data.prestamosNuevos || data.totalPrestado || 0) - prestadoCapitalVal))));
       const renovOutVal = Number(data.desembolsosNetosRenovacion !== undefined ? data.desembolsosNetosRenovacion : Math.max(0, totalDesembolsado - prestadoCapitalVal - prestadoRecaudoVal));
 
       if (expensesEl) expensesEl.textContent = '-$' + totalDesembolsado.toLocaleString('es-CO');
