@@ -2837,10 +2837,18 @@ const agentModule = {
         }).eq('cedula', cedulaStr);
       }
 
-      // Insertar en la tabla 'lista_negra' asegurando registrar los datos de la ruta y cliente
+      // Insertar en la tabla 'lista_negra' asegurando registrar los datos de la ruta y supervisor
+      let targetSupervisorId = null;
       try {
         const currentUser = window.BulaPayDB.getCurrentUser();
         const routeId = currentUser?.routeId || currentUser?.route_id || activeCarton?.route_id || client?.route_id || null;
+        if (window.BulaPayDB.getSupervisorIdForUser) {
+          targetSupervisorId = await window.BulaPayDB.getSupervisorIdForUser(currentUser);
+        }
+        if (!targetSupervisorId) {
+          targetSupervisorId = activeCarton?.supervisor_id || client?.supervisor_id || currentUser?.supervisor_id || null;
+        }
+
         const lnRecord = {
           cliente_id: cedulaStr,
           cedula: cedulaStr,
@@ -2853,6 +2861,7 @@ const agentModule = {
           created_at: new Date().toISOString()
         };
         if (routeId) lnRecord.route_id = routeId;
+        if (targetSupervisorId) lnRecord.supervisor_id = targetSupervisorId;
         await supabase.from('lista_negra').insert([lnRecord]);
       } catch (eLn) {
         console.warn("Aviso opcional al insertar en 'lista_negra':", eLn?.message);
@@ -2895,6 +2904,21 @@ const agentModule = {
       if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
       if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
       if (this.inputSearchCedula) this.inputSearchCedula.value = '';
+
+      // Sincronización reactiva inmediata para supervisor y otros módulos
+      try {
+        window.dispatchEvent(new CustomEvent('bulapay-blacklist-updated', {
+          detail: { cedula: cedulaStr, action: 'liquidado_mora' }
+        }));
+      } catch (eEv) {}
+      try {
+        const bc = new BroadcastChannel('bulapay_sync');
+        bc.postMessage({ type: 'blacklist-updated', cedula: cedulaStr, action: 'liquidado_mora' });
+        bc.close();
+      } catch (eBc) {}
+      try {
+        localStorage.setItem('bulapay_blacklist_last_update', Date.now().toString());
+      } catch (eLs) {}
 
       // Forzar recarga limpia del mapa de clientes en DB y de la UI
       console.log("🔄 [RECARGA INTERFAZ] Recargando cartones activos y métricas financieras...");
@@ -5750,6 +5774,8 @@ const agentModule = {
       if (incomeEl) incomeEl.textContent = '+$' + data.totalCobrado.toLocaleString('es-CO');
       if (massEl) massEl.textContent = '$' + (data.pagosMasivos || 0).toLocaleString('es-CO');
       if (renovInEl) renovInEl.textContent = '+$' + (data.entradasRenovacion || 0).toLocaleString('es-CO');
+      const moraEl = document.getElementById('cash-report-liquidaciones-mora');
+      if (moraEl) moraEl.textContent = '+$' + (data.liquidacionesMora || 0).toLocaleString('es-CO');
 
       const totalDesembolsado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : ((data.totalPrestado || 0) + (data.desembolsosRenovacion || 0)));
       const capitalUtilizado = Number(data.capitalAsignadoUtilizado || 0);
@@ -5765,7 +5791,7 @@ const agentModule = {
       if (renovOutEl) renovOutEl.textContent = '$' + renovOutVal.toLocaleString('es-CO');
       if (retainedEl) retainedEl.textContent = '+$' + (data.descuentosRetenidos || 0).toLocaleString('es-CO');
       if (netEl) netEl.textContent = '$' + data.totalEntregar.toLocaleString('es-CO');
-      const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0)));
+      const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
       const flujoNetoDia = recaudoTotal - totalDesembolsado;
 
       

@@ -2492,7 +2492,30 @@ const db = {
         localStorage.setItem('bulapay_clients', JSON.stringify(localClients));
       } catch (eCache) {}
 
-      // 4. Recargar clientes activos en memoria
+      // 4. Eliminar de la tabla lista_negra si existía registro histórico
+      try {
+        await supabase.from('lista_negra').delete().eq('cliente_id', cedStr);
+        await supabase.from('lista_negra').delete().eq('cedula', cedStr);
+      } catch (eLn) {
+        console.warn("Aviso al eliminar de lista_negra en indulto:", eLn?.message);
+      }
+
+      // 5. Notificación reactiva inmediata a todas las pestañas y módulos (Supervisor y Agente)
+      try {
+        window.dispatchEvent(new CustomEvent('bulapay-blacklist-updated', {
+          detail: { cedula: cedStr, action: 'indultado' }
+        }));
+      } catch (eEv) {}
+      try {
+        const bc = new BroadcastChannel('bulapay_sync');
+        bc.postMessage({ type: 'blacklist-updated', cedula: cedStr, action: 'indultado' });
+        bc.close();
+      } catch (eBc) {}
+      try {
+        localStorage.setItem('bulapay_blacklist_last_update', Date.now().toString());
+      } catch (eLs) {}
+
+      // 6. Recargar clientes activos en memoria
       await this.loadActiveCredits();
 
       return { success: true };
@@ -2907,7 +2930,8 @@ const db = {
       const pId = String(p.id || '').trim();
       if (pId.startsWith('pay_init_') || pId.startsWith('pend_')) return false;
       const pStatus = String(p.status || '').toUpperCase();
-      if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'CANCELADO' || pStatus === 'RECHAZADO' || pStatus === 'LIQUIDADO_MORA') return false;
+      if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus === 'CANCELADO' || pStatus === 'RECHAZADO') return false;
+      if (pStatus === 'LIQUIDADO_MORA' && !pId.startsWith('pay_rehab_') && !pId.startsWith('pay_liq_')) return false;
       if (pStatus === 'LIQUIDADO_POR_RENOVACION' && !pId.startsWith('pay_renov_') && Number(p.installmentNumber) !== 999) return false;
       if (Number(p.amount || 0) <= 0) return false;
 
@@ -2951,8 +2975,13 @@ const db = {
       const pStatus = String(p.status || '').toLowerCase();
       const pType = String(p.payment_type || '').toLowerCase();
       const pNotes = String(p.notes || p.nota || p.motivo || '').toLowerCase();
+      const pConcept = String(p.concept || p.concepto || '').toLowerCase();
       const pId = String(p.id || '').toLowerCase();
-      return pStatus.includes('mora') || pType.includes('mora') || pNotes.includes('mora') || pId.startsWith('pay_liq_');
+      return pType.includes('mora') || pType.includes('rehab') || pType.includes('lista_negra') ||
+             pConcept.includes('mora') || pConcept.includes('lista negra') ||
+             pNotes.includes('mora') || pNotes.includes('lista negra') ||
+             pId.startsWith('pay_liq_') || pId.startsWith('pay_rehab_') ||
+             pStatus.includes('mora');
     };
 
     const isAbonoParcial = (p) => {
@@ -6554,32 +6583,54 @@ return {
     return true;
   },
 
-  async getBlacklistedClients(routeId) {
+  async getBlacklistedClients(routeId = null) {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
-      const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
-      const targetRouteId = routeId || (currentUser ? currentUser.routeId : null);
+      const isSupervisor = currentUser && (currentUser.role === 'Supervisor' || currentUser.role === 'supervisor' || currentUser.role === 'Usuario Supervisor');
+      const isMasterUser = currentUser && (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin');
+      const targetRouteId = (routeId && routeId !== 'ALL') ? routeId : (isSupervisor || isMasterUser ? null : (currentUser ? currentUser.routeId : null));
 
-      // 1. Obtener clientes de la tabla clients con risk = 'Rojo' o status moroso
+      let allowedRouteIds = new Set();
+      if (targetRouteId) {
+        allowedRouteIds.add(String(targetRouteId).trim());
+      } else if (isSupervisor && !isMasterUser) {
+        const routes = await this.getRoutes();
+        const supUser = String(currentUser.username || '').toLowerCase();
+        const supId = String(currentUser.id || '').toLowerCase();
+        (routes || []).forEach(r => {
+          const rSup = String(r.supervisor_id || r.supervisor || '').toLowerCase();
+          if (rSup === supUser || (supId && rSup === supId)) {
+            allowedRouteIds.add(String(r.id).trim());
+          }
+        });
+      }
+
+      // 1. Obtener clientes de la tabla clients
       let qClients = supabase.from('clients').select('*');
       if (targetRouteId) {
         qClients = qClients.eq('routeId', targetRouteId);
-      } else if (agentId) {
-        qClients = qClients.eq('agent_id', agentId);
       }
       const { data: clientsData } = await qClients;
 
-      // 2. Obtener cartones con estado = 'liquidado_mora' o 'liquidado_perdida' de la tabla cartones (select * simple v120)
+      // 2. Obtener cartones liquidados por mora/perdida
       let qCartones = supabase.from('cartones').select('*');
       if (targetRouteId) {
         qCartones = qCartones.eq('route_id', targetRouteId);
-      } else if (agentId) {
-        qCartones = qCartones.eq('agent_id', agentId);
       }
       const { data: cartonesData, error: cartonesErr } = await qCartones;
       if (cartonesErr) {
         console.error("Error al obtener cartones para lista negra:", cartonesErr);
+      }
+
+      // 3. Obtener registros directos de la tabla lista_negra
+      let qListaNegra = supabase.from('lista_negra').select('*');
+      if (targetRouteId) {
+        qListaNegra = qListaNegra.eq('route_id', targetRouteId);
+      }
+      const { data: lnData, error: lnErr } = await qListaNegra;
+      if (lnErr) {
+        console.warn("Aviso opcional consultando tabla lista_negra:", lnErr.message);
       }
 
       const allClientsByCedula = new Map();
@@ -6591,33 +6642,43 @@ return {
 
       const blacklistedMap = new Map();
 
+      // Procesar clientes en clients
       if (clientsData) {
         clientsData.forEach(c => {
           const rawStatus = String(c.status || c.estado || '').toUpperCase();
-          if (c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA')) {
+          const isRed = c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA') || rawStatus.includes('PERDIDA');
+          if (isRed) {
+            const cRoute = String(c.routeId || c.route_id || '').trim();
+            if (allowedRouteIds.size > 0 && cRoute && !allowedRouteIds.has(cRoute)) return;
             const ced = String(c.cedula).trim();
-            const realSaldoPendiente = Math.round(Number(c.outstanding ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
+            const realSaldo = Math.round(Number(c.outstanding ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
             blacklistedMap.set(ced, {
               ...c,
               cedula: ced,
               name: c.name || c.nombre || null,
+              phone: c.phone || c.telefono || '',
+              address: c.address || c.direccion || '',
+              routeId: c.routeId || c.route_id || null,
               status: 'Liquidado_Mora',
-              outstanding: realSaldoPendiente > 0 ? realSaldoPendiente : Number(c.amount || 0)
+              outstanding: realSaldo > 0 ? realSaldo : Number(c.amount || 0)
             });
           }
         });
       }
 
+      // Procesar cartones liquidados por mora / perdida
       if (cartonesData) {
         cartonesData.forEach(carton => {
           const rawEstado = String(carton.estado || carton.status || '').toLowerCase();
           if (rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora')) {
-            const ced = String(carton.cliente_id || '').trim();
+            const cRoute = String(carton.route_id || carton.routeId || '').trim();
+            if (allowedRouteIds.size > 0 && cRoute && !allowedRouteIds.has(cRoute)) return;
+            const ced = String(carton.cliente_id || carton.client_cedula || carton.cedula || '').trim();
             if (ced) {
               const clientFromDb = allClientsByCedula.get(ced) || {};
               const joinedClient = carton.clients || {};
               const existing = blacklistedMap.get(ced);
-              const realSaldoPendiente = Math.round(Number(
+              const realSaldo = Math.round(Number(
                 carton.outstanding ?? 
                 clientFromDb.outstanding ?? 
                 joinedClient.outstanding ?? 
@@ -6635,11 +6696,39 @@ return {
                 phone: clientFromDb.phone || joinedClient.phone || (existing ? existing.phone : ''),
                 city: clientFromDb.city || joinedClient.city || (existing ? existing.city : ''),
                 zone: clientFromDb.zone || joinedClient.zone || (existing ? existing.zone : ''),
+                address: clientFromDb.address || (existing ? existing.address : ''),
+                routeId: carton.route_id || carton.routeId || clientFromDb.routeId,
                 risk: 'Rojo',
-                status: 'liquidado_perdida',
-                outstanding: realSaldoPendiente > 0 ? realSaldoPendiente : Number(existing ? existing.outstanding : 0)
+                status: 'Liquidado_Mora',
+                outstanding: realSaldo > 0 ? realSaldo : Number(existing ? existing.outstanding : 0)
               });
             }
+          }
+        });
+      }
+
+      // Procesar tabla lista_negra
+      if (lnData) {
+        lnData.forEach(item => {
+          const cRoute = String(item.route_id || item.routeId || '').trim();
+          if (allowedRouteIds.size > 0 && cRoute && !allowedRouteIds.has(cRoute)) return;
+          const ced = String(item.cliente_id || item.cedula || '').trim();
+          if (ced) {
+            const clientFromDb = allClientsByCedula.get(ced) || {};
+            const existing = blacklistedMap.get(ced);
+            const realSaldo = Math.round(Number(item.outstanding ?? item.monto ?? (existing ? existing.outstanding : 0)));
+            blacklistedMap.set(ced, {
+              ...clientFromDb,
+              ...existing,
+              ...item,
+              cedula: ced,
+              name: item.nombre || (existing ? existing.name : (clientFromDb.name || 'Cliente')),
+              phone: clientFromDb.phone || (existing ? existing.phone : ''),
+              address: clientFromDb.address || (existing ? existing.address : ''),
+              routeId: item.route_id || (existing ? existing.routeId : clientFromDb.routeId),
+              status: 'Liquidado_Mora',
+              outstanding: realSaldo
+            });
           }
         });
       }
@@ -6718,12 +6807,26 @@ return {
 
       // PASO 2: Solo si Supabase respondió sin error, registrar movimiento en caja e insertar pago
       const agentId = currentUser ? (currentUser.id || currentUser.username) : null;
-      const routeId = currentUser ? currentUser.routeId : null;
-      const supId = await this.getSupervisorIdForUser(currentUser);
+      let targetRouteId = currentUser ? (currentUser.routeId || currentUser.route_id) : null;
+      let supId = await this.getSupervisorIdForUser(currentUser);
+      let agentUsername = currentUser ? currentUser.username : null;
+      let agentName = currentUser ? currentUser.name : null;
+
+      // Recuperar ruta y supervisor desde el cartón si el usuario no los tiene
+      try {
+        const { data: cData } = await supabase.from('cartones').select('route_id, supervisor_id, agent_id').eq('cliente_id', cedStr).limit(1);
+        if (cData && cData[0]) {
+          if (!targetRouteId) targetRouteId = cData[0].route_id;
+          if (!supId) supId = cData[0].supervisor_id;
+          if (!agentUsername && cData[0].agent_id) agentUsername = cData[0].agent_id;
+        }
+      } catch(eRouteSup) {}
+
       const now = new Date();
       const todayIso = now.toISOString();
       const todayClean = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+      // REGISTRO DEL PAGO COMO LIQUIDACIÓN POR MORA (se suma a Total Recaudado Hoy y al efectivo a entregar)
       const paymentRecord = {
         id: `pay_rehab_${Date.now()}_${Math.floor(Math.random()*1000)}`,
         clientCedula: cedStr,
@@ -6732,22 +6835,46 @@ return {
         date: todayClean,
         created_at: todayIso,
         status: 'Pagado',
-        payment_type: 'Rehabilitacion_Lista_Negra',
-        concept: 'Pago de Deuda Lista Negra',
-        agent_id: agentId,
-        agentUsername: currentUser ? currentUser.username : null,
-        agentName: currentUser ? currentUser.name : null,
-        routeId: routeId,
+        payment_type: 'Liquidacion_Mora',
+        concept: 'Liquidación por Mora / Lista Negra',
+        agent_id: agentId || agentUsername,
+        agentUsername: agentUsername || (currentUser ? currentUser.username : null),
+        agentName: agentName || (currentUser ? currentUser.name : null),
+        routeId: targetRouteId,
+        route_id: targetRouteId,
         supervisor_id: supId
       };
 
       const { error: payErr } = await supabase.from('payments').insert([paymentRecord]);
       if (payErr) console.error("Error al registrar pago en payments:", payErr);
 
+      // Eliminar de tabla lista_negra
+      try {
+        await supabase.from('lista_negra').delete().eq('cliente_id', cedStr);
+        await supabase.from('lista_negra').delete().eq('cedula', cedStr);
+      } catch (eLnDel) {
+        console.warn("Aviso al remover de lista_negra tras rehabilitación:", eLnDel?.message);
+      }
+
+      // Sincronización reactiva inmediata para supervisor y agentes
+      try {
+        window.dispatchEvent(new CustomEvent('bulapay-blacklist-updated', {
+          detail: { cedula: cedStr, routeId: targetRouteId, action: 'rehabilitated' }
+        }));
+      } catch(eEv) {}
+      try {
+        const bc = new BroadcastChannel('bulapay_sync');
+        bc.postMessage({ type: 'blacklist-updated', cedula: cedStr, routeId: targetRouteId, action: 'rehabilitated' });
+        bc.close();
+      } catch(eBc) {}
+      try {
+        localStorage.setItem('bulapay_blacklist_last_update', Date.now().toString());
+      } catch(eLs) {}
+
       await this.loadActiveCredits();
 
-      // PASO 3 (v153): Mensaje de éxito de rehabilitación indicando inyección voluntaria a caja
-      alert("¡Pago exitoso! Cliente rehabilitado. Lo invitamos a inyectar ese valor a la caja si lo desea.");
+      // PASO 3 (v153): Mensaje de éxito de rehabilitación indicando contabilización exitosa
+      alert("¡Pago exitoso! Cliente rehabilitado y liquidación por mora contabilizada en el recaudo diario.");
       return true;
     } catch (e) {
       console.error("Error al rehabilitar cliente de Lista Negra:", e);
@@ -7044,7 +7171,7 @@ return {
               );
          const isRealPayment = Number(p.amount) > 0 && p.status !== 'Pendiente' && p.status !== 'No Pago';
          const pCedula = String(p.clientCedula || p.client_cedula || p.cedula || '');
-         const isRehabPayment = p.payment_type === 'Rehabilitacion_Lista_Negra' || (p.id && String(p.id).startsWith('pay_rehab_'));
+         const isRehabPayment = p.payment_type === 'Rehabilitacion_Lista_Negra' || p.payment_type === 'Liquidacion_Mora' || (p.id && (String(p.id).startsWith('pay_rehab_') || String(p.id).startsWith('pay_liq_')));
          const isBlacklistedClient = blacklistedCedulas.has(pCedula);
 
          const pStatusUpper = String(p.status || '').toUpperCase();
@@ -9050,7 +9177,7 @@ return {
       const liquidCash = Math.max(0, inyeccionesTotales + entradasExtra + recaudoHoy - salidasTotales);
       const patrimonioReal = Math.round(liquidCash + carteraEnCalle + interesesActivos);
 
-      const listaNegra = supervisorClients.filter(c => this.isBlacklistedClient(c));
+      const listaNegra = await this.getBlacklistedClients();
 
       return {
         supervisorId: supId,

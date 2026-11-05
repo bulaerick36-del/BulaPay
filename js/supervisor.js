@@ -35,6 +35,25 @@ const supervisorModule = {
     const isCommerce = currentUser && (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente');
 
     this.bindEvents();
+
+    // Sincronización reactiva inmediata de Lista Negra (eventos y cross-tab)
+    window.addEventListener('bulapay-blacklist-updated', async () => {
+      await this.updateBlacklistKpi();
+    });
+    window.addEventListener('storage', async (e) => {
+      if (e.key === 'bulapay_blacklist_last_update') {
+        await this.updateBlacklistKpi();
+      }
+    });
+    try {
+      const bc = new BroadcastChannel('bulapay_sync');
+      bc.onmessage = async (ev) => {
+        if (ev.data && ev.data.type === 'blacklist-updated') {
+          await this.updateBlacklistKpi();
+        }
+      };
+    } catch (eBc) {}
+
     await this.renderDashboard();
     this.initOrientationDetector();
     
@@ -1271,9 +1290,8 @@ const supervisorModule = {
       }, 0);
 
     // 5. Pérdidas (Saldos de incobrables en Lista Negra / Mora grave)
-    const perdidas = selectedClients
-      .filter(c => window.BulaPayDB.isBlacklistedClient(c))
-      .reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
+    const blacklistedForCaja = await window.BulaPayDB.getBlacklistedClients(routeId);
+    const perdidas = (blacklistedForCaja || []).reduce((sum, c) => sum + (Number(c.outstanding) || 0), 0);
 
     if (baseEl) baseEl.textContent = `$${capitalBase.toLocaleString('es-CO')}`;
     if (calleEl) calleEl.textContent = `$${enCalle.toLocaleString('es-CO')}`;
@@ -1787,16 +1805,29 @@ const supervisorModule = {
   },
 
   // 4. POPULATE MODAL: LISTA NEGRA (MOROSOS)
+  async updateBlacklistKpi() {
+    try {
+      const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
+      const morosos = await window.BulaPayDB.getBlacklistedClients(this.activeRouteFilter || null);
+      if (kpiBlacklistEl) {
+        kpiBlacklistEl.textContent = (morosos || []).length;
+      }
+      const modal = document.getElementById('kpi-blacklist-modal');
+      if (modal && (modal.style.display === 'flex' || modal.style.display === 'block')) {
+        await this.populateKpiBlacklistModal();
+      }
+    } catch (e) {
+      console.warn("Aviso al actualizar KPI de Lista Negra:", e);
+    }
+  },
+
   async populateKpiBlacklistModal() {
     const container = document.getElementById('modal-blacklist-container');
     if (!container) return;
 
     container.innerHTML = '';
-    const allClients = await window.BulaPayDB.getClients();
+    const morosos = await window.BulaPayDB.getBlacklistedClients(this.activeRouteFilter || null);
     const routes = await window.BulaPayDB.getRoutes();
-
-    // Sincronización estricta: filtro idéntico para tarjeta y modal
-    const morosos = allClients.filter(c => window.BulaPayDB.isBlacklistedClient(c));
 
     const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
     if (kpiBlacklistEl) {
@@ -3075,11 +3106,7 @@ const supervisorModule = {
     if (this.kpiActiveAgents) this.kpiActiveAgents.textContent = totalAgentsCount;
     // Montos numéricos removidos del panel principal para tarjetas limpias como accesos directos estéticos
     
-    const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
-    if (kpiBlacklistEl) {
-      const blacklistedCount = (clients || []).filter(c => window.BulaPayDB.isBlacklistedClient(c)).length;
-      kpiBlacklistEl.textContent = blacklistedCount;
-    }
+    await this.updateBlacklistKpi();
     
     if (this.kpiRouteProgress) this.kpiRouteProgress.textContent = `${progressPercent}%`;
     const mainProgressBar = document.getElementById('kpi-route-progress-bar');

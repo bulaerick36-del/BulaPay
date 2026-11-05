@@ -1039,8 +1039,8 @@
                 <!-- Ícono de Usuario (Avatar SVG) -->
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); flex-shrink: 0;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                 <div>
-                  <h3 id="agent-welcome-name" style="margin: 0; font-size: 0.85rem; font-weight: 700;">Cargando Agente...</h3>
-                  <span id="agent-active-route" style="font-size: 0.65rem; color: var(--text-secondary); display: block;">Ruta no asignada</span>
+                  <h3 id="agent-welcome-name" style="margin: 0; font-size: 0.85rem; font-weight: 700;">Cobrador</h3>
+                  <span id="agent-active-route" style="font-size: 0.65rem; color: var(--text-secondary); display: block;">Conectando ruta...</span>
                 </div>
               </div>
               <button id="btn-agent-route-tracking" class="btn" style="padding: 0.3rem 0.45rem; font-size: 0.68rem; font-weight: bold; background-color: var(--color-rojo-bg); color: var(--color-rojo); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; display: none; align-items: center; gap: 0.2rem; cursor: pointer; transition: var(--transition-smooth); margin-left: auto; white-space: nowrap;">
@@ -1594,6 +1594,11 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
                   <span>➕ Entradas por Renovación Hoy:</span>
                   <strong id="cash-report-renov-in" style="font-size: 1rem;">+$0</strong>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--color-verde);">
+                  <span>➕ Liquidaciones por Mora:</span>
+                  <strong id="cash-report-liquidaciones-mora" style="font-size: 1rem;">+$0</strong>
                 </div>
 
                 <!-- TOTAL PRESTADO HOY (Desplegable) -->
