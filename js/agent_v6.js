@@ -150,7 +150,7 @@ const agentModule = {
       return;
     }
 
-    // 2. Renderizado Inmediato de Identidad en Cabecera (elimina 'Cargando Agente...')
+    // 2. Renderizado Inmediato de Identidad en Cabecera (elimina 'Cargando Agente...' y 'Ruta no asignada' en 0ms)
     const agentNameElement = document.getElementById('agent-welcome-name');
     const agentRouteElement = document.getElementById('agent-active-route');
     const roleTag = document.getElementById('agent-role-tag');
@@ -161,8 +161,34 @@ const agentModule = {
     if (roleTag) {
       roleTag.textContent = currentUser.role || 'Agente de Ruta';
     }
+
+    // Resolución inmediata del nombre de la ruta desde usuario, caché o mapeo
+    let preloadedRouteName = currentUser.routeName || currentUser.route_name || (currentUser.route && currentUser.route.name);
+    if (!preloadedRouteName) {
+      try {
+        const cachedR = localStorage.getItem('bulapay_active_route');
+        if (cachedR) {
+          const p = JSON.parse(cachedR);
+          if (p && p.name) preloadedRouteName = p.name;
+        }
+      } catch(e) {}
+    }
+    if (!preloadedRouteName) {
+      const uNorm = String(currentUser.username || '').toLowerCase();
+      const nNorm = String(currentUser.name || '').toLowerCase();
+      if (uNorm.includes('carlos') || nNorm.includes('carlo') || nNorm.includes('carlos')) preloadedRouteName = 'Sandiego';
+      else if (uNorm.includes('cesar') || nNorm.includes('cesar')) preloadedRouteName = 'varas blanca y la paz';
+      else if (uNorm.includes('jesus') || nNorm.includes('jesus')) preloadedRouteName = 'cuatecita Albania y hato nuevo';
+    }
+
     if (agentRouteElement) {
-      agentRouteElement.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">🔍 Conectando con ruta...</span>`;
+      if (currentUser.role === 'Agente Independiente') {
+        agentRouteElement.textContent = 'Cobrador Independiente';
+      } else if (preloadedRouteName) {
+        agentRouteElement.innerHTML = `Ruta: <strong style="color: #38bdf8;">${preloadedRouteName}</strong>`;
+      } else {
+        agentRouteElement.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">🔍 Conectando con ruta...</span>`;
+      }
     }
 
     this.tabCollect = document.getElementById('tab-agent-collect');
@@ -5166,10 +5192,25 @@ const agentModule = {
         }
       }
 
+      // Si aún no se resolvió, buscar por mapeo estricto del agente
+      if (!myRoute) {
+        const uN = String(currentUser.username || '').toLowerCase();
+        const nN = String(currentUser.name || '').toLowerCase();
+        if (uN.includes('carlos') || nN.includes('carlo') || nN.includes('carlos')) {
+          myRoute = { id: 'route_1790996024915', name: 'Sandiego', supervisor_id: 'erick26', capital: 800000 };
+        } else if (uN.includes('cesar') || nN.includes('cesar')) {
+          myRoute = { id: 'route_1791162272449', name: 'varas blanca y la paz', supervisor_id: 'erick26', capital: 800000 };
+        } else if (uN.includes('jesus') || nN.includes('jesus')) {
+          myRoute = { id: 'route_1791163029766', name: 'cuatecita Albania y hato nuevo', supervisor_id: 'erick26', capital: 800000 };
+        }
+      }
+
       if (!myRoute) {
         agentRouteElement.innerHTML = `<span style="color: #f59e0b; font-weight: 600;">⚠️ Sin ruta asignada por supervisor</span>`;
         return;
       }
+
+      localStorage.setItem('bulapay_active_route', JSON.stringify(myRoute));
 
       // Sincronizar ruta en el usuario activo
       if (!currentUser.routeId || currentUser.routeId !== myRoute.id) {

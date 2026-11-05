@@ -61,24 +61,8 @@ const app = {
         return;
       }
 
-      // 3. Fallback: Evaluar sesión de usuario para redirigir
+      // 3. Fallback: Evaluar sesión de usuario para redirigir (sin auto-iniciar sesión como admin al cerrar sesión)
       let user = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
-
-      if (!user && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
-        try {
-          user = await window.BulaPayDB.getUserByUsername('admin');
-          if (user) {
-            window.BulaPayDB.setCurrentUser(user);
-            if (window.authModule && typeof window.authModule.updateNavBar === 'function') {
-              window.authModule.updateNavBar(user);
-            }
-            const demoLinks = document.getElementById('demo-quick-links');
-            if (demoLinks) demoLinks.style.display = 'none';
-          }
-        } catch (err) {
-          console.warn("Fallo al auto-iniciar sesión como admin:", err);
-        }
-      }
 
       const uName = user ? String(user.username || '').toLowerCase() : '';
       const uDoc = user ? String(user.documentNumber || '').trim() : '';
@@ -192,8 +176,7 @@ const app = {
       } 
       
       if (route === 'agent-login' && user && agentRoles.includes(user.role)) {
-        this.renderView('agent');
-        window.location.hash = '#agent';
+        this.navigate('agent');
         return;
       }
 
