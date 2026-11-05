@@ -1804,43 +1804,70 @@ const supervisorModule = {
     }
   },
 
-  // 4. POPULATE MODAL: LISTA NEGRA (MOROSOS)
-  async updateBlacklistKpi() {
+  // 4. POPULATE MODAL: LISTA NEGRA (FILTRADO INDEPENDIENTE POR RUTA/SUPERVISOR)
+  async updateBlacklistKpi(routeId = null) {
     try {
       const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
-      const morosos = await window.BulaPayDB.getBlacklistedClients(this.activeRouteFilter || null);
+      const targetRoute = (routeId && routeId !== 'ALL') ? routeId : (this.activeBlacklistRouteFilter || null);
+      const morosos = await window.BulaPayDB.getBlacklistedClients(targetRoute);
       if (kpiBlacklistEl) {
         kpiBlacklistEl.textContent = (morosos || []).length;
       }
-      const modal = document.getElementById('kpi-blacklist-modal');
-      if (modal && (modal.style.display === 'flex' || modal.style.display === 'block')) {
-        await this.populateKpiBlacklistModal();
+      const modal = document.getElementById('modal-kpi-blacklist');
+      if (modal && modal.classList.contains('active')) {
+        await this.populateKpiBlacklistModal(targetRoute);
       }
     } catch (e) {
       console.warn("Aviso al actualizar KPI de Lista Negra:", e);
     }
   },
 
-  async populateKpiBlacklistModal() {
+  async populateKpiBlacklistModal(routeId = null) {
     const container = document.getElementById('modal-blacklist-container');
     if (!container) return;
 
     container.innerHTML = '';
-    const morosos = await window.BulaPayDB.getBlacklistedClients(this.activeRouteFilter || null);
+    const targetRoute = (routeId && routeId !== 'ALL') ? routeId : (this.activeBlacklistRouteFilter || null);
+    const morosos = await window.BulaPayDB.getBlacklistedClients(targetRoute);
     const routes = await window.BulaPayDB.getRoutes();
 
     const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
-    if (kpiBlacklistEl) {
+    if (kpiBlacklistEl && !targetRoute) {
       kpiBlacklistEl.textContent = morosos.length;
     }
 
+    // Configurar y poblar el selector de ruta dentro del modal de Lista Negra
+    const routeSelect = document.getElementById('modal-blacklist-route-select');
+    if (routeSelect) {
+      if (routeSelect.options.length <= 1) {
+        routeSelect.innerHTML = '<option value="ALL">Todas las rutas asignadas</option>';
+        (routes || []).forEach(r => {
+          if (!r || !r.id) return;
+          const opt = document.createElement('option');
+          opt.value = r.id;
+          opt.textContent = r.name ? r.name : `Ruta ${r.id}`;
+          routeSelect.appendChild(opt);
+        });
+        routeSelect.onchange = async () => {
+          this.activeBlacklistRouteFilter = (routeSelect.value === 'ALL') ? null : routeSelect.value;
+          await this.populateKpiBlacklistModal(this.activeBlacklistRouteFilter);
+        };
+      }
+      if (targetRoute) {
+        routeSelect.value = targetRoute;
+      } else if (!this.activeBlacklistRouteFilter) {
+        routeSelect.value = 'ALL';
+      }
+    }
+
     if (morosos.length === 0) {
-      container.innerHTML = `<div style="text-align: center; color: var(--text-secondary); font-size: 0.85rem; padding: 2rem;">✅ No hay clientes registrados en Lista Negra o Mora severa.</div>`;
+      container.innerHTML = `<div style="text-align: center; color: var(--text-secondary); font-size: 0.85rem; padding: 2rem;">✅ No hay clientes registrados en Lista Negra en sus rutas activas asignadas.</div>`;
       return;
     }
 
     morosos.forEach(client => {
-      const route = routes.find(r => r.id === client.routeId) || { name: 'Ruta no especificada' };
+      const cRouteId = String(client.routeId || client.route_id || '').toLowerCase();
+      const route = routes.find(r => String(r.id).toLowerCase() === cRouteId) || { name: 'Ruta Asignada' };
       const item = document.createElement('div');
       item.style.padding = '0.85rem 1rem';
       item.style.background = 'rgba(239, 68, 68, 0.06)';
@@ -1853,8 +1880,8 @@ const supervisorModule = {
 
       item.innerHTML = `
         <div style="flex: 1; min-width: 0;">
-          <strong style="color: #f87171; font-size: 0.95rem; display: block; word-break: break-word;">${client.name}</strong>
-          <div style="font-size: 0.75rem; color: var(--text-secondary);">C.C. ${client.cedula || 'N/A'} | Ruta: ${route.name}</div>
+          <strong style="color: #f87171; font-size: 0.95rem; display: block; word-break: break-word;">${client.name || 'Cliente'}</strong>
+          <div style="font-size: 0.75rem; color: var(--text-secondary);">C.C. ${client.cedula || 'N/A'} | Ruta: <strong style="color: #38bdf8;">${route.name}</strong></div>
         </div>
         <div style="display: flex; align-items: center; gap: 0.85rem; flex-shrink: 0;">
           <div style="text-align: right;">

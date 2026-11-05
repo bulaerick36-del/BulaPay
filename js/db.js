@@ -6534,6 +6534,15 @@ return {
         clientUpdatePayload.outstanding = 0;
         clientUpdatePayload.totalDebt = 0;
       } else if (isMora) {
+        const currentUser = this.getCurrentUser();
+        let targetRouteId = currentUser?.routeId || currentUser?.route_id || clientData?.routeId || clientData?.route_id || null;
+        let targetSupId = (currentUser && currentUser.username) ? currentUser.username : null;
+        const agentUsername = currentUser?.username || clientData?.agent_id || null;
+
+        if (targetRouteId) clientUpdatePayload.routeId = targetRouteId;
+        if (targetSupId) clientUpdatePayload.supervisor_id = targetSupId;
+        if (agentUsername) clientUpdatePayload.agent_id = agentUsername;
+
         const moraOutstanding = (outstanding !== undefined && outstanding !== 0) ? Math.round(Number(outstanding)) : Math.round(Number(clientData?.outstanding || 0));
         clientUpdatePayload.outstanding = moraOutstanding;
       } else if (outstanding !== undefined) {
@@ -6589,31 +6598,52 @@ return {
       const currentUser = this.getCurrentUser();
       const isSupervisor = currentUser && (currentUser.role === 'Supervisor' || currentUser.role === 'supervisor' || currentUser.role === 'Usuario Supervisor');
       const isMasterUser = currentUser && (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin');
-      const targetRouteId = (routeId && routeId !== 'ALL') ? routeId : (isSupervisor || isMasterUser ? null : (currentUser ? currentUser.routeId : null));
+      const isAgent = currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente');
 
-      let allowedRouteIds = new Set();
+      const targetRouteId = (routeId && routeId !== 'ALL' && routeId !== 'Todos') ? String(routeId).trim() : null;
+
+      // 1. Determinar el alcance estricto de rutas y agentes permitidos
+      const allowedRouteIds = new Set();
+      const allowedAgentUsernames = new Set();
+      const allowedSupervisorIds = new Set();
+
       if (targetRouteId) {
-        allowedRouteIds.add(String(targetRouteId).trim());
+        allowedRouteIds.add(targetRouteId.toLowerCase());
       } else if (isSupervisor && !isMasterUser) {
         const routes = await this.getRoutes();
         const supUser = String(currentUser.username || '').toLowerCase();
         const supId = String(currentUser.id || '').toLowerCase();
+        if (supUser) allowedSupervisorIds.add(supUser);
+        if (supId) allowedSupervisorIds.add(supId);
+
         (routes || []).forEach(r => {
+          if (!r || !r.id) return;
           const rSup = String(r.supervisor_id || r.supervisor || '').toLowerCase();
-          if (rSup === supUser || (supId && rSup === supId)) {
-            allowedRouteIds.add(String(r.id).trim());
+          if (!rSup || rSup === supUser || (supId && rSup === supId) || allowedSupervisorIds.has(rSup)) {
+            allowedRouteIds.add(String(r.id).trim().toLowerCase());
+            if (r.agentUsername) allowedAgentUsernames.add(String(r.agentUsername).trim().toLowerCase());
+            if (r.agent_id) allowedAgentUsernames.add(String(r.agent_id).trim().toLowerCase());
+            if (r.agentName) {
+              String(r.agentName).split(',').forEach(n => {
+                if (n.trim()) allowedAgentUsernames.add(n.trim().toLowerCase());
+              });
+            }
           }
         });
+      } else if (isAgent && !isMasterUser) {
+        const myRouteId = currentUser.routeId || currentUser.route_id;
+        if (myRouteId) allowedRouteIds.add(String(myRouteId).trim().toLowerCase());
+        if (currentUser.username) allowedAgentUsernames.add(String(currentUser.username).trim().toLowerCase());
       }
 
-      // 1. Obtener clientes de la tabla clients
+      // 2. Consultar clientes en la tabla 'clients'
       let qClients = supabase.from('clients').select('*');
       if (targetRouteId) {
         qClients = qClients.eq('routeId', targetRouteId);
       }
       const { data: clientsData } = await qClients;
 
-      // 2. Obtener cartones liquidados por mora/perdida
+      // 3. Consultar cartones liquidados por mora/pérdida
       let qCartones = supabase.from('cartones').select('*');
       if (targetRouteId) {
         qCartones = qCartones.eq('route_id', targetRouteId);
@@ -6623,15 +6653,50 @@ return {
         console.error("Error al obtener cartones para lista negra:", cartonesErr);
       }
 
-      // 3. Obtener registros directos de la tabla lista_negra
-      let qListaNegra = supabase.from('lista_negra').select('*');
-      if (targetRouteId) {
-        qListaNegra = qListaNegra.eq('route_id', targetRouteId);
-      }
-      const { data: lnData, error: lnErr } = await qListaNegra;
-      if (lnErr) {
-        console.warn("Aviso opcional consultando tabla lista_negra:", lnErr.message);
-      }
+      // 4. Consultar tabla 'lista_negra' (si existe en la base de datos)
+      let lnData = [];
+      try {
+        let qListaNegra = supabase.from('lista_negra').select('*');
+        if (targetRouteId) {
+          qListaNegra = qListaNegra.eq('route_id', targetRouteId);
+        }
+        const { data: lnRes, error: lnErr } = await qListaNegra;
+        if (!lnErr && lnRes) lnData = lnRes;
+      } catch (eLn) {}
+
+      // FILTRADO ESTRICTO DE PERTENENCIA:
+      // Excluye totalmente clientes globales sin ruta o pertenecientes a otros supervisores/independientes
+      const belongsToScope = (rec) => {
+        if (!rec) return false;
+        const recRoute = String(rec.route_id || rec.routeId || '').trim().toLowerCase();
+        const recAgent = String(rec.agent_id || rec.agentId || rec.agentUsername || rec.agente || '').trim().toLowerCase();
+        const recSup = String(rec.supervisor_id || rec.supervisorId || rec.supervisor || '').trim().toLowerCase();
+
+        if (targetRouteId) {
+          return recRoute && recRoute === targetRouteId.toLowerCase();
+        }
+
+        if (isMasterUser) {
+          return true;
+        }
+
+        if (isSupervisor) {
+          if (recRoute && allowedRouteIds.has(recRoute)) return true;
+          if (recAgent && allowedAgentUsernames.has(recAgent)) return true;
+          if (recSup && allowedSupervisorIds.has(recSup) && (recRoute ? allowedRouteIds.has(recRoute) : (recAgent && allowedAgentUsernames.has(recAgent)))) {
+            return true;
+          }
+          return false;
+        }
+
+        if (isAgent) {
+          if (recRoute && allowedRouteIds.has(recRoute)) return true;
+          if (recAgent && allowedAgentUsernames.has(recAgent)) return true;
+          return false;
+        }
+
+        return false;
+      };
 
       const allClientsByCedula = new Map();
       if (clientsData) {
@@ -6647,9 +6712,7 @@ return {
         clientsData.forEach(c => {
           const rawStatus = String(c.status || c.estado || '').toUpperCase();
           const isRed = c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA') || rawStatus.includes('PERDIDA');
-          if (isRed) {
-            const cRoute = String(c.routeId || c.route_id || '').trim();
-            if (allowedRouteIds.size > 0 && cRoute && !allowedRouteIds.has(cRoute)) return;
+          if (isRed && belongsToScope(c)) {
             const ced = String(c.cedula).trim();
             const realSaldo = Math.round(Number(c.outstanding ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
             blacklistedMap.set(ced, {
@@ -6670,9 +6733,8 @@ return {
       if (cartonesData) {
         cartonesData.forEach(carton => {
           const rawEstado = String(carton.estado || carton.status || '').toLowerCase();
-          if (rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora')) {
-            const cRoute = String(carton.route_id || carton.routeId || '').trim();
-            if (allowedRouteIds.size > 0 && cRoute && !allowedRouteIds.has(cRoute)) return;
+          const isLoss = rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora');
+          if (isLoss && belongsToScope(carton)) {
             const ced = String(carton.cliente_id || carton.client_cedula || carton.cedula || '').trim();
             if (ced) {
               const clientFromDb = allClientsByCedula.get(ced) || {};
@@ -6708,34 +6770,34 @@ return {
       }
 
       // Procesar tabla lista_negra
-      if (lnData) {
+      if (lnData && lnData.length > 0) {
         lnData.forEach(item => {
-          const cRoute = String(item.route_id || item.routeId || '').trim();
-          if (allowedRouteIds.size > 0 && cRoute && !allowedRouteIds.has(cRoute)) return;
-          const ced = String(item.cliente_id || item.cedula || '').trim();
-          if (ced) {
-            const clientFromDb = allClientsByCedula.get(ced) || {};
-            const existing = blacklistedMap.get(ced);
-            const realSaldo = Math.round(Number(item.outstanding ?? item.monto ?? (existing ? existing.outstanding : 0)));
-            blacklistedMap.set(ced, {
-              ...clientFromDb,
-              ...existing,
-              ...item,
-              cedula: ced,
-              name: item.nombre || (existing ? existing.name : (clientFromDb.name || 'Cliente')),
-              phone: clientFromDb.phone || (existing ? existing.phone : ''),
-              address: clientFromDb.address || (existing ? existing.address : ''),
-              routeId: item.route_id || (existing ? existing.routeId : clientFromDb.routeId),
-              status: 'Liquidado_Mora',
-              outstanding: realSaldo
-            });
+          if (belongsToScope(item)) {
+            const ced = String(item.cliente_id || item.cedula || '').trim();
+            if (ced) {
+              const clientFromDb = allClientsByCedula.get(ced) || {};
+              const existing = blacklistedMap.get(ced);
+              const realSaldo = Math.round(Number(item.outstanding ?? item.monto ?? (existing ? existing.outstanding : 0)));
+              blacklistedMap.set(ced, {
+                ...clientFromDb,
+                ...existing,
+                ...item,
+                cedula: ced,
+                name: item.nombre || (existing ? existing.name : (clientFromDb.name || 'Cliente')),
+                phone: clientFromDb.phone || (existing ? existing.phone : ''),
+                address: clientFromDb.address || (existing ? existing.address : ''),
+                routeId: item.route_id || item.routeId || (existing ? existing.routeId : clientFromDb.routeId),
+                status: 'Liquidado_Mora',
+                outstanding: realSaldo
+              });
+            }
           }
         });
       }
 
       return Array.from(blacklistedMap.values());
     } catch (e) {
-      console.error("Error al obtener lista negra:", e);
+      console.error("Error al obtener lista negra filtrada por supervisor:", e);
       return [];
     }
   },

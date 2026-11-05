@@ -2811,44 +2811,60 @@ const agentModule = {
 
       if (btn) btn.textContent = 'Procesando...';
 
-      // 3. REGISTRO EN BASE DE DATOS Y LISTA NEGRA CON EL SALDO PENDIENTE REAL
+      // 3. REGISTRO EN BASE DE DATOS Y LISTA NEGRA CON ASOCIACIÓN EXPLÍCITA DE RUTA Y SUPERVISOR
       const rawTargetCartonId = activeCarton?.id || cartonId;
       const targetCartonId = (rawTargetCartonId && isValidUuid(rawTargetCartonId)) ? rawTargetCartonId : null;
 
-      // Actualizar 'cartones' registrando el saldo pendiente real
+      // Obtener de forma infalible la ruta, supervisor y agente activo
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      let routeId = currentUser?.routeId || currentUser?.route_id || activeCarton?.route_id || client?.route_id || null;
+      if (!routeId && window.BulaPayDB.getActiveRouteIdForUser) {
+        routeId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
+      }
+      let targetSupervisorId = null;
+      if (window.BulaPayDB.getSupervisorIdForUser) {
+        targetSupervisorId = await window.BulaPayDB.getSupervisorIdForUser(currentUser);
+      }
+      if (!targetSupervisorId) {
+        targetSupervisorId = activeCarton?.supervisor_id || client?.supervisor_id || currentUser?.supervisor_id || null;
+      }
+      const agentUsername = currentUser?.username || activeCarton?.agent_id || client?.agent_id || null;
+
+      // Actualizar 'cartones' con el saldo pendiente real, estado 'liquidado_perdida' y vínculos obligatorios
+      const cartonUpdatePayload = {
+        estado: 'liquidado_perdida',
+        outstanding: saldoPendienteReal,
+        total_debt: totalDebt,
+        updated_at: new Date().toISOString(),
+        fecha_cierre: new Date().toISOString(),
+        liquidation_reason: 'Liquidado por Mora'
+      };
+      if (routeId) cartonUpdatePayload.route_id = routeId;
+      if (targetSupervisorId) cartonUpdatePayload.supervisor_id = targetSupervisorId;
+      if (agentUsername) cartonUpdatePayload.agent_id = agentUsername;
+
       if (targetCartonId) {
-        await supabase.from('cartones').update({
-          estado: 'liquidado_perdida',
-          outstanding: saldoPendienteReal
-        }).eq('id', targetCartonId);
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', targetCartonId);
       }
       if (cedulaStr) {
-        await supabase.from('cartones').update({
-          estado: 'liquidado_perdida',
-          outstanding: saldoPendienteReal
-        }).eq('cliente_id', cedulaStr).eq('estado', 'activo');
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
       }
 
-      // Actualizar 'clients' con riesgo Rojo y el saldo pendiente real (tabla clients no tiene columna status)
+      // Actualizar 'clients' con riesgo Rojo, saldo pendiente real y vínculo estricto de ruta/supervisor
       if (cedulaStr) {
-        await supabase.from('clients').update({
+        const clientUpdatePayload = {
           risk: 'Rojo',
           outstanding: saldoPendienteReal
-        }).eq('cedula', cedulaStr);
+        };
+        if (routeId) clientUpdatePayload.routeId = routeId;
+        if (targetSupervisorId) clientUpdatePayload.supervisor_id = targetSupervisorId;
+        if (agentUsername) clientUpdatePayload.agent_id = agentUsername;
+
+        await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedulaStr);
       }
 
       // Insertar en la tabla 'lista_negra' asegurando registrar los datos de la ruta y supervisor
-      let targetSupervisorId = null;
       try {
-        const currentUser = window.BulaPayDB.getCurrentUser();
-        const routeId = currentUser?.routeId || currentUser?.route_id || activeCarton?.route_id || client?.route_id || null;
-        if (window.BulaPayDB.getSupervisorIdForUser) {
-          targetSupervisorId = await window.BulaPayDB.getSupervisorIdForUser(currentUser);
-        }
-        if (!targetSupervisorId) {
-          targetSupervisorId = activeCarton?.supervisor_id || client?.supervisor_id || currentUser?.supervisor_id || null;
-        }
-
         const lnRecord = {
           cliente_id: cedulaStr,
           cedula: cedulaStr,
@@ -2860,8 +2876,18 @@ const agentModule = {
           motivo: 'Liquidado por Mora',
           created_at: new Date().toISOString()
         };
-        if (routeId) lnRecord.route_id = routeId;
-        if (targetSupervisorId) lnRecord.supervisor_id = targetSupervisorId;
+        if (routeId) {
+          lnRecord.route_id = routeId;
+          lnRecord.routeId = routeId;
+        }
+        if (targetSupervisorId) {
+          lnRecord.supervisor_id = targetSupervisorId;
+          lnRecord.supervisorId = targetSupervisorId;
+        }
+        if (agentUsername) {
+          lnRecord.agent_id = agentUsername;
+          lnRecord.agente = agentUsername;
+        }
         await supabase.from('lista_negra').insert([lnRecord]);
       } catch (eLn) {
         console.warn("Aviso opcional al insertar en 'lista_negra':", eLn?.message);
