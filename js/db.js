@@ -3060,10 +3060,10 @@ const db = {
 
     // =========================================================================
     // DESGLOSE EXACTO DEL TOTAL PRESTADO EN 4 LÍNEAS NOMINALES INDEPENDIENTES:
-    // 1. Capital Asignado por el Supervisor: Valor nominal completo de créditos nuevos financiados con fondo base
-    // 2. Salida de Capital Asignado por Renovación: Valor nominal destinado a renovaciones que usaron fondo base
-    // 3. Préstamos Nuevos / Recaudo Diario: Créditos nuevos colocados con recaudo fresco de cobranza
-    // 4. Desembolsos Netos por Renovación: Renovaciones estándar financiadas con recaudo libre
+    // 1. Capital Asignado por el Supervisor: Cualquier crédito nuevo cubierto con fondos del capital asignado
+    // 2. Salida de Capital Asignado por Renovación: Renovaciones cubiertas con fondos del capital asignado
+    // 3. Préstamos Nuevos / Recaudo Diario: Reservado ÚNICAMENTE para dinero que provenga de cobranzas de la calle
+    // 4. Desembolsos Netos por Renovación: Renovaciones cubiertas con recaudo fresco
     // =========================================================================
     let capUsadoRenovAudit = 0;
     let capUsadoNuevosAudit = 0;
@@ -3081,48 +3081,37 @@ const db = {
     let prestamosNuevosRecaudoFinal = 0;     // 3. Préstamos Nuevos / Recaudo Diario
     let desembolsosNetosRenovacionFinal = 0; // 4. Desembolsos Netos por Renovación
 
+    // Determinar la disponibilidad real de Capital Asignado de la ruta (Fondo Base del Supervisor)
+    const capitalBaseDisponible = Math.max(0, capitalBase > 0 ? capitalBase : Number(route?.capital || 0));
+
     if (capUsadoNuevosAudit > 0 || capUsadoRenovAudit > 0) {
-      // Valor nominal exacto registrado sin fraccionar
+      // Uso nominal registrado explícitamente en auditoría / movimientos
       prestadoCapitalFinal = Math.min(totalPrestado, capUsadoNuevosAudit);
       salidaCapitalRenovacionFinal = Math.min(desembolsosRenovacion, capUsadoRenovAudit);
       prestamosNuevosRecaudoFinal = Math.max(0, totalPrestado - prestadoCapitalFinal);
       desembolsosNetosRenovacionFinal = Math.max(0, desembolsosRenovacion - salidaCapitalRenovacionFinal);
     } else if (totalDesembolsado > 0) {
-      // Evaluación nominal sin mezcla fraccionada
-      if (recaudoCobranza >= totalDesembolsado) {
-        // Financiado 100% con recaudo libre del día
+      // REGLA ESTRICTA DE PRIORIDAD DE FONDO BASE DEL SUPERVISOR:
+      // Cualquier crédito nuevo otorgado por el cobrador teniendo Capital Asignado asignado por el supervisor
+      // se asigna DIRECTA y EXCLUSIVAMENTE a "Capital Asignado por el Supervisor",
+      // preservando la línea de "Recaudo Diario" ÚNICAMENTE si no había capital base o para el exceso.
+      if (capitalBaseDisponible > 0) {
+        // El Capital Asignado cubre en primer lugar los créditos nuevos en su valor nominal
+        prestadoCapitalFinal = Math.min(totalPrestado, capitalBaseDisponible);
+        const remanenteParaRenov = Math.max(0, capitalBaseDisponible - prestadoCapitalFinal);
+        salidaCapitalRenovacionFinal = Math.min(desembolsosRenovacion, remanenteParaRenov);
+
+        // Solo el excedente de créditos que sobrepase el Capital Asignado se toma de cobranzas de la calle
+        prestamosNuevosRecaudoFinal = Math.max(0, totalPrestado - prestadoCapitalFinal);
+        desembolsosNetosRenovacionFinal = Math.max(0, desembolsosRenovacion - salidaCapitalRenovacionFinal);
+      } else {
+        // Si la ruta no cuenta con Capital Asignado del supervisor ($0 base), se financió de la cobranza diaria
         prestadoCapitalFinal = 0;
         salidaCapitalRenovacionFinal = 0;
         prestamosNuevosRecaudoFinal = totalPrestado;
         desembolsosNetosRenovacionFinal = desembolsosRenovacion;
-      } else {
-        // El recaudo de cobranza fue insuficiente: se cubre con Capital Asignado en su VALOR NOMINAL COMPLETO
-        let saldoRecaudo = Math.max(0, recaudoCobranza);
-
-        if (totalPrestado > 0) {
-          if (saldoRecaudo >= totalPrestado) {
-            prestamosNuevosRecaudoFinal = totalPrestado;
-            saldoRecaudo -= totalPrestado;
-          } else {
-            // El crédito nuevo se cubrió con el fondo base del supervisor (valor nominal completo)
-            prestadoCapitalFinal = totalPrestado;
-            prestamosNuevosRecaudoFinal = 0;
-          }
-        }
-
-        if (desembolsosRenovacion > 0) {
-          if (saldoRecaudo >= desembolsosRenovacion) {
-            desembolsosNetosRenovacionFinal = desembolsosRenovacion;
-            saldoRecaudo -= desembolsosRenovacion;
-          } else {
-            // La renovación se cubrió con fondo base del supervisor
-            salidaCapitalRenovacionFinal = desembolsosRenovacion;
-            desembolsosNetosRenovacionFinal = 0;
-          }
-        }
       }
     }
-
     const capitalAsignadoUtilizadoFinal = Math.round(prestadoCapitalFinal + salidaCapitalRenovacionFinal);
 
     // Cuadre matemático estricto: la suma de las 4 líneas debe ser idéntica a totalDesembolsado

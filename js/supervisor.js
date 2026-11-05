@@ -1369,10 +1369,6 @@ const supervisorModule = {
 
     // Total a Entregar y desglose contable
     const entregarEl = document.getElementById('cierre-efectivo-entregar');
-    const dineroCalleEl = document.getElementById('cierre-dinero-calle');
-    const netoEntregarEl = document.getElementById('cierre-neto-entregar');
-    const flujoDiaEl = document.getElementById('cierre-flujo-dia');
-
     if (!routeSelect) return;
     const routeId = routeSelect.value || 'ALL';
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
@@ -1418,31 +1414,9 @@ const supervisorModule = {
 
     // Total a Entregar y Desglose Visual Contable
     if (entregarEl) entregarEl.textContent = `$${totalEntregar.toLocaleString('es-CO')}`;
-    if (dineroCalleEl) dineroCalleEl.textContent = `$${prestadoTotal.toLocaleString('es-CO')}`;
-    if (netoEntregarEl) netoEntregarEl.textContent = `$${totalEntregar.toLocaleString('es-CO')}`;
-    if (flujoDiaEl) {
-      flujoDiaEl.textContent = `${flujoNetoDia >= 0 ? '+' : ''}$${flujoNetoDia.toLocaleString('es-CO')}`;
-      flujoDiaEl.style.color = flujoNetoDia >= 0 ? '#10b981' : '#f87171';
-    }
+    
 
-    // Campana Roja de Auditoría: Se dispara y visualiza ÚNICAMENTE cuando el supervisor filtre o seleccione
-    // la ruta específica del agente que efectivamente utilizó el fondo de capital asignado (evitando mostrarla en rutas limpias o a nivel general si no aplica)
-    const isSpecificRoute = routeId && routeId !== 'ALL';
-    const bellBtn = document.getElementById('cierre-audit-bell-btn');
-    const rowCapUtilizado = document.getElementById('cierre-row-capital-utilizado');
-    const valCapUtilizado = document.getElementById('cierre-capital-utilizado-val');
-
-    if (isSpecificRoute && capitalUtilizado > 0) {
-      if (bellBtn) {
-        bellBtn.style.display = 'inline-flex';
-        bellBtn.onclick = () => this.mostrarAlertaAuditoriaCaja(data);
-      }
-      if (rowCapUtilizado) rowCapUtilizado.style.display = 'flex';
-      if (valCapUtilizado) valCapUtilizado.textContent = `$${capitalUtilizado.toLocaleString('es-CO')}`;
-    } else {
-      if (bellBtn) bellBtn.style.display = 'none';
-      if (rowCapUtilizado) rowCapUtilizado.style.display = 'none';
-    }
+    // Bloque inferior de auditoría eliminado según requerimiento
 
     await this.renderHistorialCierresSupervisor();
   },

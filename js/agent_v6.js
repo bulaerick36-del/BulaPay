@@ -5694,10 +5694,6 @@ const agentModule = {
       const renovOutEl = document.getElementById('cash-report-renov-out');
       const retainedEl = document.getElementById('cash-report-retained');
       const netEl = document.getElementById('cash-report-net');
-      const calleEl = document.getElementById('cash-report-calle');
-      const flujoDiaEl = document.getElementById('cash-report-flujo-dia');
-      const entregarSubEl = document.getElementById('cash-report-entregar-sub');
-
       // Resetear acordeón de Total Prestado Hoy en el Agente
       const desglosePrestado = document.getElementById('cash-report-desglose-prestado');
       const arrowPrestado = document.getElementById('cash-report-arrow-prestado');
@@ -5731,30 +5727,9 @@ const agentModule = {
       const recaudoTotal = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0)));
       const flujoNetoDia = recaudoTotal - totalDesembolsado;
 
-      if (calleEl) calleEl.textContent = `$${totalDesembolsado.toLocaleString('es-CO')}`;
-      if (entregarSubEl) entregarSubEl.textContent = `$${data.totalEntregar.toLocaleString('es-CO')}`;
-      if (flujoDiaEl) {
-        flujoDiaEl.textContent = `${flujoNetoDia >= 0 ? '+' : ''}$${flujoNetoDia.toLocaleString('es-CO')}`;
-        flujoDiaEl.style.color = flujoNetoDia >= 0 ? '#10b981' : '#f87171';
-      }
+      
 
-      // Alerta Visual (Campana Roja) de Auditoría de Caja por uso de Capital Asignado Remanente
-      const bellBtn = document.getElementById('agent-cash-report-bell-btn');
-      const rowCapUtilizado = document.getElementById('agent-cash-report-row-capital-utilizado');
-      const valCapUtilizado = document.getElementById('agent-cash-report-capital-utilizado-val');
-      const capUtilizadoReporte = Number(data.capitalAsignadoUtilizado || capitalUtilizado || 0);
-
-      if (capUtilizadoReporte > 0) {
-        if (bellBtn) {
-          bellBtn.style.display = 'inline-flex';
-          bellBtn.onclick = () => this.mostrarAlertaAuditoriaCaja(data);
-        }
-        if (rowCapUtilizado) rowCapUtilizado.style.display = 'flex';
-        if (valCapUtilizado) valCapUtilizado.textContent = `$${capitalUtilizado.toLocaleString('es-CO')}`;
-      } else {
-        if (bellBtn) bellBtn.style.display = 'none';
-        if (rowCapUtilizado) rowCapUtilizado.style.display = 'none';
-      }
+      // Bloque inferior de auditoría eliminado según requerimiento
 
       // Renderizar historial de cierres previos del agente
       await this.renderAgentCierreHistorial(activeRouteId, currentUser.username);
