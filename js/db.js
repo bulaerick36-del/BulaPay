@@ -3004,14 +3004,12 @@ const db = {
 
     // SISTEMA INTELIGENTE DE DOBLE FUENTE DE FONDOS Y AUDITORÍA DE CAJA:
     // 1. Recaudo Disponible: Fondos frescos de cobro aún no utilizados en préstamos de hoy
-    // 2. Capital Asignado Utilizado: Monto neto de capital asignado consumido para completar préstamos cuando el recaudo no alcanza
+    // 2. Capital Asignado Utilizado: Monto nominal total consumido para completar préstamos cuando el recaudo no alcanza
     // 3. Capital Asignado Remanente: Saldo disponible del fondo base de bolsillo del agente
     let recaudoDisponible = 0;
-    let capitalAsignadoUtilizado = 0;
 
     // Verificar si el agente detonó explícitamente el uso de Capital Asignado mediante el botón [Aceptar] en la jornada
     let todayAuditLogs = [];
-    let capitalAutorizadoAceptado = 0;
     try {
       const allAuditLogs = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
       todayAuditLogs = allAuditLogs.filter(log => {
@@ -3021,29 +3019,130 @@ const db = {
         }
         return false;
       });
-      capitalAutorizadoAceptado = todayAuditLogs.reduce((sum, l) => sum + Number(l.capitalAsignadoUtilizado || 0), 0);
     } catch (eA) {}
+
+    // Sincronización transparente con caja_movimientos de Supabase
+    try {
+      const supabase = await initSupabase();
+      if (supabase) {
+        let q = supabase.from('caja_movimientos')
+          .select('*')
+          .eq('type', 'egreso_capital_asignado')
+          .eq('date', todayStr);
+        if (targetRouteId && targetRouteId !== 'ALL') {
+          q = q.eq('route_id', targetRouteId);
+        }
+        const { data: dbMovs, error: errMovs } = await q;
+        if (!errMovs && dbMovs && dbMovs.length > 0) {
+          dbMovs.forEach(m => {
+            if (!todayAuditLogs.some(l => l.id === m.id)) {
+              todayAuditLogs.push({
+                id: m.id,
+                routeId: m.route_id,
+                agentUsername: m.agent_id,
+                shiftDateStr: m.date,
+                capitalAsignadoUtilizado: Number(m.amount || 0),
+                montoPrestamo: Number(m.amount || 0),
+                isRenewal: String(m.concept || '').toLowerCase().includes('renov'),
+                is_renewal: String(m.concept || '').toLowerCase().includes('renov')
+              });
+            }
+          });
+        }
+      }
+    } catch (eDbMov) {
+      console.warn("Aviso consultando caja_movimientos en getCierreCajaDataForRoute:", eDbMov);
+    }
 
     // Definición estricta de fondos frescos de cobranza del día (cuotas, pagos masivos, liquidaciones, entradas renovación):
     // EXCLUYE totalmente los descuentos de papelería/software (que son ingresos netos de caja a entregar, JAMÁS dinero para prestar)
     const recaudoCobranza = (cuotasNormales + pagosMasivos + entradasRenovacion + liquidacionesMora);
 
-    // El capital asignado cubre el valor nominal total / bruto cuando la cobranza de cuotas del día no alcanza
-    if (capitalAutorizadoAceptado > 0) {
-      capitalAsignadoUtilizado = Math.round(capitalAutorizadoAceptado);
-    } else if (totalDesembolsado > recaudoCobranza) {
-      capitalAsignadoUtilizado = Math.round(totalDesembolsado - recaudoCobranza);
-    }
-    const capitalAsignadoUtilizadoFinal = Math.round(capitalAsignadoUtilizado);
+    // =========================================================================
+    // DESGLOSE EXACTO DEL TOTAL PRESTADO EN 4 LÍNEAS NOMINALES INDEPENDIENTES:
+    // 1. Capital Asignado por el Supervisor: Valor nominal completo de créditos nuevos financiados con fondo base
+    // 2. Salida de Capital Asignado por Renovación: Valor nominal destinado a renovaciones que usaron fondo base
+    // 3. Préstamos Nuevos / Recaudo Diario: Créditos nuevos colocados con recaudo fresco de cobranza
+    // 4. Desembolsos Netos por Renovación: Renovaciones estándar financiadas con recaudo libre
+    // =========================================================================
+    let capUsadoRenovAudit = 0;
+    let capUsadoNuevosAudit = 0;
+    todayAuditLogs.forEach(l => {
+      const amt = Math.round(Number(l.capitalAsignadoUtilizado || l.montoPrestamo || 0));
+      if (l.isRenewal === true || l.is_renewal === true) {
+        capUsadoRenovAudit += amt;
+      } else {
+        capUsadoNuevosAudit += amt;
+      }
+    });
 
-    // Sincronización exacta del Capital Asignado Remanente (Efectivo en Bolsillo Real del Agente)
+    let prestadoCapitalFinal = 0;            // 1. Capital Asignado por el Supervisor (Créditos Nuevos)
+    let salidaCapitalRenovacionFinal = 0;    // 2. Salida de Capital Asignado por Renovación
+    let prestamosNuevosRecaudoFinal = 0;     // 3. Préstamos Nuevos / Recaudo Diario
+    let desembolsosNetosRenovacionFinal = 0; // 4. Desembolsos Netos por Renovación
+
+    if (capUsadoNuevosAudit > 0 || capUsadoRenovAudit > 0) {
+      // Valor nominal exacto registrado sin fraccionar
+      prestadoCapitalFinal = Math.min(totalPrestado, capUsadoNuevosAudit);
+      salidaCapitalRenovacionFinal = Math.min(desembolsosRenovacion, capUsadoRenovAudit);
+      prestamosNuevosRecaudoFinal = Math.max(0, totalPrestado - prestadoCapitalFinal);
+      desembolsosNetosRenovacionFinal = Math.max(0, desembolsosRenovacion - salidaCapitalRenovacionFinal);
+    } else if (totalDesembolsado > 0) {
+      // Evaluación nominal sin mezcla fraccionada
+      if (recaudoCobranza >= totalDesembolsado) {
+        // Financiado 100% con recaudo libre del día
+        prestadoCapitalFinal = 0;
+        salidaCapitalRenovacionFinal = 0;
+        prestamosNuevosRecaudoFinal = totalPrestado;
+        desembolsosNetosRenovacionFinal = desembolsosRenovacion;
+      } else {
+        // El recaudo de cobranza fue insuficiente: se cubre con Capital Asignado en su VALOR NOMINAL COMPLETO
+        let saldoRecaudo = Math.max(0, recaudoCobranza);
+
+        if (totalPrestado > 0) {
+          if (saldoRecaudo >= totalPrestado) {
+            prestamosNuevosRecaudoFinal = totalPrestado;
+            saldoRecaudo -= totalPrestado;
+          } else {
+            // El crédito nuevo se cubrió con el fondo base del supervisor (valor nominal completo)
+            prestadoCapitalFinal = totalPrestado;
+            prestamosNuevosRecaudoFinal = 0;
+          }
+        }
+
+        if (desembolsosRenovacion > 0) {
+          if (saldoRecaudo >= desembolsosRenovacion) {
+            desembolsosNetosRenovacionFinal = desembolsosRenovacion;
+            saldoRecaudo -= desembolsosRenovacion;
+          } else {
+            // La renovación se cubrió con fondo base del supervisor
+            salidaCapitalRenovacionFinal = desembolsosRenovacion;
+            desembolsosNetosRenovacionFinal = 0;
+          }
+        }
+      }
+    }
+
+    const capitalAsignadoUtilizadoFinal = Math.round(prestadoCapitalFinal + salidaCapitalRenovacionFinal);
+
+    // Cuadre matemático estricto: la suma de las 4 líneas debe ser idéntica a totalDesembolsado
+    const sumaLineas = prestadoCapitalFinal + salidaCapitalRenovacionFinal + prestamosNuevosRecaudoFinal + desembolsosNetosRenovacionFinal;
+    if (sumaLineas !== totalDesembolsado) {
+      const diff = totalDesembolsado - sumaLineas;
+      if (totalPrestado >= (prestadoCapitalFinal + diff) && (prestadoCapitalFinal + diff) >= 0) {
+        prestadoCapitalFinal += diff;
+      } else {
+        desembolsosNetosRenovacionFinal += diff;
+      }
+    }
+
+    // Sincronización del Capital Asignado Remanente (Efectivo en Bolsillo Real del Agente)
     const lastAuditLog = todayAuditLogs.length > 0 ? todayAuditLogs[todayAuditLogs.length - 1] : null;
     let capitalAsignadoRemanenteFinal = 0;
 
     if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
       capitalAsignadoRemanenteFinal = Math.round(Number(lastAuditLog.capitalRemanenteNuevo));
     } else if (route && route.capital !== undefined && route.capital !== null) {
-      // El saldo real remanente de bolsillo según el capital registrado en la ruta
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(route.capital)));
     } else if (targetRouteId === 'ALL') {
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
@@ -3051,81 +3150,26 @@ const db = {
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
     }
 
-    // Capital Asignado Inicial (fondo base asignado con el que arrancó el agente la jornada, ej. $558.000)
+    // Capital Asignado Inicial (fondo base asignado con el que arrancó el agente la jornada)
     let capitalAsignadoInicialFinal = Math.round(capitalAsignadoRemanenteFinal + capitalAsignadoUtilizadoFinal);
     if (capitalAsignadoInicialFinal <= 0 && capitalBase > 0) {
       capitalAsignadoInicialFinal = Math.round(capitalBase);
     }
 
-    // Efectivo en Bolsillo Inicial / Saldo real de bolsillo del agente:
-    // Muestra el saldo real de bolsillo (ej. los $558.000 iniciales menos el capital utilizado en créditos, ej. $408.000)
     efectivoInicial = capitalAsignadoRemanenteFinal;
 
-    // FÓRMULA BASE ESTRICTA DEL "TOTAL EFECTIVO A ENTREGAR / EFECTIVO NETO FÍSICO":
-    // Total Efectivo a Entregar = Recaudo Neto del Día + Descuentos Retenidos (papelería/software) - Préstamos hechos con recaudo del día
-    // 2. Préstamos hechos con recaudo del día (el total desembolsado menos lo cubierto por capital asignado utilizado):
-    const prestadoConRecaudo = Math.max(0, totalDesembolsado - capitalAsignadoUtilizadoFinal);
-    // 3. Recaudo neto operativo tras colocar créditos con recaudo fresco:
+    // =========================================================================
+    // 3. AISLAMIENTO DEL RECAUDO DIARIO Y EFECTIVO NETO A ENTREGAR
+    // Solo los préstamos financiados con recaudo del día restan del recaudo físico.
+    // El Capital Asignado del supervisor corre por cuerda contable separada (auditada por campana).
+    // Fórmula: (Recaudo Neto Cobranza - Préstamos con Recaudo) + Descuentos Retenidos
+    // =========================================================================
+    const prestadoConRecaudo = Math.max(0, prestamosNuevosRecaudoFinal + desembolsosNetosRenovacionFinal);
     const recaudoNetoOperativo = Math.max(0, recaudoCobranza - prestadoConRecaudo);
-
-    // 4. Inclusión obligatoria de los rubros de descuento (papelería, software, tramitología, etc.):
-    // Representan efectivo físico real que el cobrador recauda en la calle y debe entregar obligatoriamente al supervisor al cierre:
     const totalEntregar = Math.round(recaudoNetoOperativo + descuentosRetenidos);
-    // Recaudo disponible para prestar proviene exclusivamente de cobranza operativa libre (NO de descuentos):
     recaudoDisponible = recaudoNetoOperativo;
     const dineroEnCalleNuevos = totalDesembolsado;
-
-    // =========================================================================
-    // DESGLOSE Y REESTRUCTURACIÓN DEL "TOTAL PRESTADO HOY" POR FUENTE DE FONDOS
-    // 1. Capital Asignado por el Supervisor: Valor nominal total / bruto del crédito cubierto con Capital Asignado
-    // 2. Préstamos Nuevos / Recaudo Diario: Créditos colocados exclusivamente con recaudo fresco de cobranza (CERO mezcla con descuentos)
-    // 3. Desembolsos Netos por Renovación: Créditos por renovación
-    // =========================================================================
-    const prestadoCapitalFinal = Math.min(totalDesembolsado, Math.max(0, capitalAsignadoUtilizadoFinal));
-    const flujoCobranzaDisponible = Math.max(0, recaudoCobranza);
-
-    let capitalUsadoEnRenovacion = 0;
-    let capitalUsadoEnNuevos = 0;
-    todayAuditLogs.forEach(l => {
-      const amt = Number(l.capitalAsignadoUtilizado || 0);
-      if (l.isRenewal === true || l.is_renewal === true) {
-        capitalUsadoEnRenovacion += amt;
-      } else {
-        capitalUsadoEnNuevos += amt;
-      }
-    });
-
-    let prestamosNuevosRecaudoFinal = 0;
-    let desembolsosNetosRenovacionFinal = 0;
-
-    if (capitalUsadoEnRenovacion > 0 || capitalUsadoEnNuevos > 0) {
-      const capRenov = Math.min(desembolsosRenovacion, capitalUsadoEnRenovacion);
-      const capNuevos = Math.min(totalPrestado, Math.max(0, prestadoCapitalFinal - capRenov));
-      prestamosNuevosRecaudoFinal = Math.min(flujoCobranzaDisponible, Math.max(0, totalPrestado - capNuevos));
-      desembolsosNetosRenovacionFinal = Math.max(0, totalDesembolsado - prestadoCapitalFinal - prestamosNuevosRecaudoFinal);
-    } else {
-      const capNuevos = Math.min(totalPrestado, prestadoCapitalFinal);
-      const capRenov = Math.max(0, prestadoCapitalFinal - capNuevos);
-      prestamosNuevosRecaudoFinal = Math.min(flujoCobranzaDisponible, Math.max(0, totalPrestado - capNuevos));
-      desembolsosNetosRenovacionFinal = Math.max(0, desembolsosRenovacion - capRenov);
-    }
-
-    // Regla estricta: Si recaudoCobranza es 0, no puede haber créditos colocados con recaudo diario
-    if (flujoCobranzaDisponible <= 0) {
-      prestamosNuevosRecaudoFinal = 0;
-    }
-
-    // Cuadre matemático exacto: La suma de las 3 subcategorías debe cuadrar exactamente con totalDesembolsado
-    if ((prestadoCapitalFinal + prestamosNuevosRecaudoFinal + desembolsosNetosRenovacionFinal) !== totalDesembolsado) {
-      if (flujoCobranzaDisponible <= 0) {
-        prestamosNuevosRecaudoFinal = 0;
-        desembolsosNetosRenovacionFinal = Math.max(0, totalDesembolsado - prestadoCapitalFinal);
-      } else {
-        prestamosNuevosRecaudoFinal = Math.min(flujoCobranzaDisponible, Math.max(0, totalDesembolsado - prestadoCapitalFinal - desembolsosNetosRenovacionFinal));
-      }
-    }
-
-    return {
+return {
       routeId: targetRouteId || null,
       routeName,
       agentName,
@@ -3157,6 +3201,7 @@ const db = {
       desembolsosRenovacion: Math.round(desembolsosRenovacion),
       totalDesembolsado: Math.round(totalDesembolsado),
       prestadoCapitalAsignado: Math.round(prestadoCapitalFinal),
+      salidaCapitalAsignadoRenovacion: Math.round(salidaCapitalRenovacionFinal),
       prestamosNuevosRecaudo: Math.round(prestamosNuevosRecaudoFinal),
       desembolsosNetosRenovacion: Math.round(desembolsosNetosRenovacionFinal),
       dineroEnCalleNuevos: Math.round(dineroEnCalleNuevos),
@@ -3304,6 +3349,7 @@ const db = {
       descuentos_retenidos: Number(data.descuentosRetenidos || 0),
       total_prestado: totalPrestado,
       prestado_capital_asignado: Number(data.prestadoCapitalAsignado || 0),
+      salida_capital_asignado_renovacion: Number(data.salidaCapitalAsignadoRenovacion || 0),
       prestamos_nuevos_recaudo: Number(data.prestamosNuevosRecaudo || 0),
       desembolsos_netos_renovacion: Number(data.desembolsosNetosRenovacion || 0),
       efectivo_neto_entregar: efectivoEntregar,

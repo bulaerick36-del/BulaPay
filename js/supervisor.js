@@ -1363,6 +1363,7 @@ const supervisorModule = {
     // Total Prestado y su desglose detallado por Fuente de Fondos
     const totalPrestadoEl = document.getElementById('cierre-total-prestado');
     const prestadoCapitalEl = document.getElementById('cierre-prestado-capital');
+    const salidaCapitalRenovEl = document.getElementById('cierre-salida-capital-renovacion');
     const prestadoRecaudoEl = document.getElementById('cierre-prestado-recaudo') || document.getElementById('cierre-prestamos-hoy');
     const renovOutEl = document.getElementById('cierre-renov-out');
 
@@ -1404,12 +1405,14 @@ const supervisorModule = {
     // 1. Capital Asignado por el Supervisor: Valor nominal total / bruto cubierto con Capital Asignado
     // 2. Préstamos Nuevos / Recaudo Diario: Créditos colocados con recaudo fresco (CERO mezcla con descuentos de papelería)
     // 3. Desembolsos Netos por Renovación
-    const prestadoCapitalVal = Number(data.prestadoCapitalAsignado !== undefined ? data.prestadoCapitalAsignado : capitalUtilizado);
-    const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo !== undefined ? data.prestamosNuevosRecaudo : (recaudoCobranza <= 0 ? 0 : Math.min(recaudoCobranza, Math.max(0, (data.prestamosNuevos || data.totalPrestado || 0) - prestadoCapitalVal))));
-    const renovOutVal = Number(data.desembolsosNetosRenovacion !== undefined ? data.desembolsosNetosRenovacion : Math.max(0, prestadoTotal - prestadoCapitalVal - prestadoRecaudoVal));
+    const prestadoCapitalVal = Number(data.prestadoCapitalAsignado || 0);
+    const salidaCapitalRenovVal = Number(data.salidaCapitalAsignadoRenovacion || 0);
+    const prestadoRecaudoVal = Number(data.prestamosNuevosRecaudo || 0);
+    const renovOutVal = Number(data.desembolsosNetosRenovacion || 0);
 
     if (totalPrestadoEl) totalPrestadoEl.textContent = '-$' + prestadoTotal.toLocaleString('es-CO');
     if (prestadoCapitalEl) prestadoCapitalEl.textContent = '$' + prestadoCapitalVal.toLocaleString('es-CO');
+    if (salidaCapitalRenovEl) salidaCapitalRenovEl.textContent = '$' + salidaCapitalRenovVal.toLocaleString('es-CO');
     if (prestadoRecaudoEl) prestadoRecaudoEl.textContent = '$' + prestadoRecaudoVal.toLocaleString('es-CO');
     if (renovOutEl) renovOutEl.textContent = '$' + renovOutVal.toLocaleString('es-CO');
 
@@ -1565,12 +1568,20 @@ const supervisorModule = {
             <strong style="color:#f87171;">-$${Number(c.total_prestado || 0).toLocaleString('es-CO')}</strong>
           </div>
           <div style="display: flex; justify-content: space-between; padding-left: 0.8rem; font-size: 0.75rem;">
-            <span style="color:#64748b;">↳ Con Capital Asignado:</span>
-            <span>$${Number(det.prestado_capital_asignado || det.prestadoCapitalAsignado || 0).toLocaleString('es-CO')}</span>
+            <span style="color:#64748b;">↳ Capital Asignado por el Supervisor:</span>
+            <span>${Number(det.prestado_capital_asignado || det.prestadoCapitalAsignado || 0).toLocaleString('es-CO')}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding-left: 0.8rem; font-size: 0.75rem;">
-            <span style="color:#64748b;">↳ Con Recaudo Diario:</span>
-            <span>$${Number(det.prestamos_nuevos_recaudo || det.prestamosNuevosRecaudo || 0).toLocaleString('es-CO')}</span>
+            <span style="color:#64748b;">↳ Salida de Capital Asignado por Renovación:</span>
+            <span>${Number(det.salida_capital_asignado_renovacion || det.salidaCapitalAsignadoRenovacion || 0).toLocaleString('es-CO')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding-left: 0.8rem; font-size: 0.75rem;">
+            <span style="color:#64748b;">↳ Préstamos Nuevos / Recaudo Diario:</span>
+            <span>${Number(det.prestamos_nuevos_recaudo || det.prestamosNuevosRecaudo || 0).toLocaleString('es-CO')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding-left: 0.8rem; font-size: 0.75rem;">
+            <span style="color:#64748b;">↳ Desembolsos Netos por Renovación:</span>
+            <span>${Number(det.desembolsos_netos_renovacion || det.desembolsosNetosRenovacion || 0).toLocaleString('es-CO')}</span>
           </div>
           <div style="display: flex; justify-content: space-between;">
             <span style="color:#94a3b8;">➕ Descuentos Retenidos:</span>
@@ -1697,12 +1708,20 @@ const supervisorModule = {
             <!-- Contenedor Desplegable de Desglose de Préstamos y Descuentos -->
             <div id="cierre-card-detail-${c.id}" style="display: none; flex-direction: column; gap: 0.35rem; background: rgba(15,23,42,0.6); border: 1px solid rgba(148,163,184,0.15); border-radius: 6px; padding: 0.45rem 0.65rem; font-size: 0.73rem; margin-top: 0.25rem;">
               <div style="display: flex; justify-content: space-between;">
-                <span style="color: #94a3b8;">↳ Prestado con Capital Asignado:</span>
-                <strong style="color: #fca5a5;">$${prestadoCap.toLocaleString('es-CO')}</strong>
+                <span style="color: #94a3b8;">↳ Capital Asignado por el Supervisor:</span>
+                <strong style="color: #fca5a5;">${prestadoCap.toLocaleString('es-CO')}</strong>
               </div>
               <div style="display: flex; justify-content: space-between;">
-                <span style="color: #94a3b8;">↳ Prestado con Recaudo Diario:</span>
-                <strong style="color: #93c5fd;">$${prestadoRec.toLocaleString('es-CO')}</strong>
+                <span style="color: #94a3b8;">↳ Salida de Capital Asignado por Renovación:</span>
+                <strong style="color: #fca5a5;">${Number(det.salida_capital_asignado_renovacion || det.salidaCapitalAsignadoRenovacion || 0).toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: #94a3b8;">↳ Préstamos Nuevos / Recaudo Diario:</span>
+                <strong style="color: #93c5fd;">${prestadoRec.toLocaleString('es-CO')}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: #94a3b8;">↳ Desembolsos Netos por Renovación:</span>
+                <strong style="color: #cbd5e1;">${Number(det.desembolsos_netos_renovacion || det.desembolsosNetosRenovacion || 0).toLocaleString('es-CO')}</strong>
               </div>
               <div style="display: flex; justify-content: space-between;">
                 <span style="color: #94a3b8;">↳ Descuentos Retenidos (Software/Papelería):</span>
