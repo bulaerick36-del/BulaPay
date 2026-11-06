@@ -2175,26 +2175,6 @@ const db = {
           (cartonesData || []).map(c => String(c.cliente_id || '').trim()).filter(Boolean)
         );
 
-        // Pre-cargar cédulas en Lista Negra reutilizando los arrays ya obtenidos en memoria (0 consultas adicionales)
-        const blacklistedCedulas = new Set();
-        allRawClients.forEach(c => {
-          const st = String(c.status || c.estado || '').trim().toUpperCase();
-          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('LIQUIDADO_MORA') || st.includes('CASTIGADO'));
-          if (isLoss) {
-            const ced = String(c.cedula || '').trim();
-            if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
-          }
-        });
-        (allCartones || []).forEach(c => {
-          const st = String(c.status || c.estado || '').trim().toUpperCase();
-          const rawEst = String(c.estado || '').trim().toLowerCase();
-          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
-          if (isLoss && c.cliente_id) {
-            const ced = String(c.cliente_id).trim();
-            if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
-          }
-        });
-
         const activeCreditsList = [];
         const cartones = cartonesData || [];
         const isMasterUser = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
@@ -2210,18 +2190,40 @@ const db = {
           const cRoute = String(recRouteId || '').trim().toLowerCase();
 
           if (currentUser.role === 'Agente Independiente') {
-            return (cSup && cSup === uNameLower) ||
-                   (cAgent && cAgent === uNameLower) ||
+            return (cSup && (cSup === uNameLower || (uIdLower && cSup === uIdLower))) ||
+                   (cAgent && (cAgent === uNameLower || (uIdLower && cAgent === uIdLower))) ||
                    (!cSup && (!cAgent || cAgent === uNameLower));
           } else if (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent') {
             return (uRouteLower && cRoute && cRoute === uRouteLower) ||
                    (cAgent && (cAgent === uNameLower || (uIdLower && cAgent === uIdLower)));
           } else if (supIdLower) {
             return (cSup && cSup === supIdLower) ||
-                   (cAgent && cAgent === supIdLower);
+                   (cAgent && (cAgent === supIdLower || (uIdLower && cAgent === supIdLower)));
           }
           return true;
         };
+
+        // Pre-cargar cédulas en Lista Negra reutilizando los arrays ya obtenidos en memoria (AISLAMIENTO ESTRICTO POR RUTA/SUPERVISOR)
+        const blacklistedCedulas = new Set();
+        allRawClients.forEach(c => {
+          if (!matchesCurrentUserScope(c.supervisor_id, c.agent_id, c.routeId || c.route_id)) return;
+          const st = String(c.status || c.estado || '').trim().toUpperCase();
+          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || (st.includes('PERDIDA') || st.includes('NEGRA') || st.includes('LIQUIDADO_MORA') || st.includes('CASTIGADO'));
+          if (isLoss) {
+            const ced = String(c.cedula || '').trim();
+            if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
+          }
+        });
+        (allCartones || []).forEach(c => {
+          if (!matchesCurrentUserScope(c.supervisor_id, c.agent_id, c.route_id || c.routeId)) return;
+          const st = String(c.status || c.estado || '').trim().toUpperCase();
+          const rawEst = String(c.estado || '').trim().toLowerCase();
+          const isLoss = st === 'LIQUIDADO_PERDIDA' || st === 'LIQUIDADO_MORA' || st === 'LISTA NEGRA' || st === 'CASTIGADO' || st === 'PERDIDA' || rawEst === 'liquidado_perdida' || rawEst === 'liquidado_mora';
+          if (isLoss && c.cliente_id) {
+            const ced = String(c.cliente_id).trim();
+            if (ced && !activeCedulasInCartones.has(ced)) blacklistedCedulas.add(ced);
+          }
+        });
 
         const addedCedulasForScope = new Set();
 
@@ -2525,27 +2527,99 @@ const db = {
     }
   },
 
-  async isClientBlacklisted(cedula) {
+  async isClientBlacklisted(cedula, targetRouteId = null, targetSupervisorId = null) {
     if (!cedula) return false;
     const cedStr = String(cedula).trim();
     try {
       const supabase = await initSupabase();
-      const { data: cartonesData } = await supabase
+      const currentUser = this.getCurrentUser();
+      const isMasterUser = currentUser && (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin');
+
+      // Aislamiento estricto por supervisor y ruta
+      const effectiveRouteId = targetRouteId || (currentUser?.routeId || currentUser?.route_id || null);
+      const effectiveSupervisorId = targetSupervisorId || this.getSupervisorId();
+
+      let qCartones = supabase
         .from('cartones')
-        .select('id, estado, status')
+        .select('id, estado, status, route_id, supervisor_id, agent_id')
         .eq('cliente_id', cedStr);
+
+      if (!isMasterUser) {
+        if (effectiveRouteId && effectiveSupervisorId) {
+          qCartones = qCartones.or(`route_id.eq.${effectiveRouteId},supervisor_id.eq.${effectiveSupervisorId}`);
+        } else if (effectiveRouteId) {
+          qCartones = qCartones.eq('route_id', effectiveRouteId);
+        } else if (effectiveSupervisorId) {
+          qCartones = qCartones.eq('supervisor_id', effectiveSupervisorId);
+        }
+      }
+
+      const { data: cartonesData } = await qCartones;
 
       if (cartonesData && cartonesData.length > 0) {
         const hasLoss = cartonesData.some(c => {
           const st = String(c.estado || c.status || '').trim().toLowerCase();
-          return st === 'liquidado_perdida' || st === 'liquidado_mora' || st.includes('perdida') || st.includes('castigado');
+          const isLossStatus = st === 'liquidado_perdida' || st === 'liquidado_mora' || st.includes('perdida') || st.includes('castigado');
+          if (!isLossStatus) return false;
+          if (isMasterUser) return true;
+
+          const cRoute = String(c.route_id || '').trim().toLowerCase();
+          const cSup = String(c.supervisor_id || '').trim().toLowerCase();
+          const cAgent = String(c.agent_id || '').trim().toLowerCase();
+
+          const targetRouteLower = effectiveRouteId ? String(effectiveRouteId).trim().toLowerCase() : '';
+          const targetSupLower = effectiveSupervisorId ? String(effectiveSupervisorId).trim().toLowerCase() : '';
+          const currentUsernameLower = currentUser?.username ? String(currentUser.username).trim().toLowerCase() : '';
+
+          if (targetRouteLower && cRoute === targetRouteLower) return true;
+          if (targetSupLower && cSup === targetSupLower) return true;
+          if (currentUsernameLower && (cAgent === currentUsernameLower || cSup === currentUsernameLower)) return true;
+          return false;
         });
         if (hasLoss) return true;
       }
 
+      // Consultar tabla 'lista_negra' con filtro estricto de ruta/supervisor
+      try {
+        let qLn = supabase
+          .from('lista_negra')
+          .select('id, cliente_id, cedula, route_id, routeId, supervisor_id, supervisorId, agent_id')
+          .or(`cliente_id.eq.${cedStr},cedula.eq.${cedStr}`);
+
+        if (!isMasterUser) {
+          if (effectiveRouteId && effectiveSupervisorId) {
+            qLn = qLn.or(`route_id.eq.${effectiveRouteId},routeId.eq.${effectiveRouteId},supervisor_id.eq.${effectiveSupervisorId},supervisorId.eq.${effectiveSupervisorId}`);
+          } else if (effectiveRouteId) {
+            qLn = qLn.or(`route_id.eq.${effectiveRouteId},routeId.eq.${effectiveRouteId}`);
+          } else if (effectiveSupervisorId) {
+            qLn = qLn.or(`supervisor_id.eq.${effectiveSupervisorId},supervisorId.eq.${effectiveSupervisorId}`);
+          }
+        }
+
+        const { data: lnData } = await qLn;
+        if (lnData && lnData.length > 0) {
+          const hasLnMatch = lnData.some(item => {
+            if (isMasterUser) return true;
+            const itemRoute = String(item.route_id || item.routeId || '').trim().toLowerCase();
+            const itemSup = String(item.supervisor_id || item.supervisorId || '').trim().toLowerCase();
+            const itemAgent = String(item.agent_id || '').trim().toLowerCase();
+
+            const targetRouteLower = effectiveRouteId ? String(effectiveRouteId).trim().toLowerCase() : '';
+            const targetSupLower = effectiveSupervisorId ? String(effectiveSupervisorId).trim().toLowerCase() : '';
+            const currentUsernameLower = currentUser?.username ? String(currentUser.username).trim().toLowerCase() : '';
+
+            if (targetRouteLower && itemRoute === targetRouteLower) return true;
+            if (targetSupLower && itemSup === targetSupLower) return true;
+            if (currentUsernameLower && (itemAgent === currentUsernameLower || itemSup === currentUsernameLower)) return true;
+            return false;
+          });
+          if (hasLnMatch) return true;
+        }
+      } catch (eLn) {}
+
       return false;
     } catch (e) {
-      console.warn("Aviso al verificar Lista Negra global:", e.message);
+      console.warn("Aviso al verificar Lista Negra aislada por supervisor/ruta:", e.message);
       return false;
     }
   },
@@ -3921,8 +3995,10 @@ return {
     const newCreditId = 'cred_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
     const cedulaStr = String(client.cedula).trim();
 
-    // REGLA DE BLOQUEO GLOBAL (LISTA NEGRA)
-    if (await this.isClientBlacklisted(cedulaStr)) {
+    // REGLA DE BLOQUEO AISLADO POR SUPERVISOR / RUTA (LISTA NEGRA)
+    const effectiveRouteForCheck = client.routeId || client.route_id || null;
+    const effectiveSupForCheck = client.supervisor_id || supervisorId || null;
+    if (await this.isClientBlacklisted(cedulaStr, effectiveRouteForCheck, effectiveSupForCheck)) {
       const blockMsg = `❌ OPERACIÓN DENEGADA: El cliente con Cédula N° ${cedulaStr} se encuentra en LISTA NEGRA por morosidad (estado liquidado_perdida). El sistema prohíbe la creación de nuevos créditos. Debe comunicarse con el agente que generó el reporte para limpiar su historial.`;
       if (typeof Swal !== 'undefined') {
         Swal.fire({
@@ -6596,30 +6672,31 @@ return {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
-      const isSupervisor = currentUser && (currentUser.role === 'Supervisor' || currentUser.role === 'supervisor' || currentUser.role === 'Usuario Supervisor');
+      const isSupervisor = currentUser && (currentUser.role === 'Supervisor' || currentUser.role === 'supervisor' || currentUser.role === 'Usuario Supervisor' || currentUser.role === 'Administrador de Rutas');
       const isMasterUser = currentUser && (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin');
-      const isAgent = currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Agente Independiente');
+      const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
+      const isAgent = currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Cobrador');
 
       const targetRouteId = (routeId && routeId !== 'ALL' && routeId !== 'Todos') ? String(routeId).trim() : null;
 
-      // 1. Determinar el alcance estricto de rutas y agentes permitidos
+      // 1. Determinar el alcance estricto de rutas, supervisores y agentes permitidos
       const allowedRouteIds = new Set();
       const allowedAgentUsernames = new Set();
       const allowedSupervisorIds = new Set();
 
-      if (targetRouteId) {
-        allowedRouteIds.add(targetRouteId.toLowerCase());
-      } else if (isSupervisor && !isMasterUser) {
-        const routes = await this.getRoutes();
-        const supUser = String(currentUser.username || '').toLowerCase();
-        const supId = String(currentUser.id || '').toLowerCase();
+      const supUser = String(currentUser?.username || '').trim().toLowerCase();
+      const supId = String(currentUser?.id || '').trim().toLowerCase();
+
+      if (isSupervisor && !isMasterUser) {
         if (supUser) allowedSupervisorIds.add(supUser);
         if (supId) allowedSupervisorIds.add(supId);
 
+        const routes = await this.getRoutes();
         (routes || []).forEach(r => {
           if (!r || !r.id) return;
-          const rSup = String(r.supervisor_id || r.supervisor || '').toLowerCase();
-          if (!rSup || rSup === supUser || (supId && rSup === supId) || allowedSupervisorIds.has(rSup)) {
+          const rSup = String(r.supervisor_id || r.supervisor || '').trim().toLowerCase();
+          // AISLAMIENTO ESTRICTO: Solo rutas con supervisor asignado a este usuario
+          if (rSup && (rSup === supUser || (supId && rSup === supId) || allowedSupervisorIds.has(rSup))) {
             allowedRouteIds.add(String(r.id).trim().toLowerCase());
             if (r.agentUsername) allowedAgentUsernames.add(String(r.agentUsername).trim().toLowerCase());
             if (r.agent_id) allowedAgentUsernames.add(String(r.agent_id).trim().toLowerCase());
@@ -6630,62 +6707,133 @@ return {
             }
           }
         });
+      } else if (isIndependent && !isMasterUser) {
+        if (supUser) {
+          allowedSupervisorIds.add(supUser);
+          allowedAgentUsernames.add(supUser);
+        }
+        if (supId) {
+          allowedSupervisorIds.add(supId);
+          allowedAgentUsernames.add(supId);
+        }
+        const routes = await this.getRoutes();
+        (routes || []).forEach(r => {
+          if (!r || !r.id) return;
+          const rSup = String(r.supervisor_id || r.supervisor || '').trim().toLowerCase();
+          const rAgent = String(r.agentUsername || r.agent_id || '').trim().toLowerCase();
+          if ((rSup && (rSup === supUser || rSup === supId)) || (rAgent && (rAgent === supUser || rAgent === supId))) {
+            allowedRouteIds.add(String(r.id).trim().toLowerCase());
+          }
+        });
+        const myRouteId = currentUser.routeId || currentUser.route_id;
+        if (myRouteId) allowedRouteIds.add(String(myRouteId).trim().toLowerCase());
       } else if (isAgent && !isMasterUser) {
         const myRouteId = currentUser.routeId || currentUser.route_id;
         if (myRouteId) allowedRouteIds.add(String(myRouteId).trim().toLowerCase());
         if (currentUser.username) allowedAgentUsernames.add(String(currentUser.username).trim().toLowerCase());
+        const agentSup = String(currentUser.supervisor_id || currentUser.supervisor || '').trim().toLowerCase();
+        if (agentSup) allowedSupervisorIds.add(agentSup);
       }
 
-      // 2. Consultar clientes en la tabla 'clients'
+      if (targetRouteId) {
+        const cleanTargetRoute = targetRouteId.toLowerCase();
+        if (!isMasterUser && allowedRouteIds.size > 0 && !allowedRouteIds.has(cleanTargetRoute)) {
+          // Bloqueo inviolable si la ruta no pertenece al supervisor o agente
+          return [];
+        }
+        allowedRouteIds.clear();
+        allowedRouteIds.add(cleanTargetRoute);
+      }
+
+      // 2. Consultar clientes en la tabla 'clients' aplicando filtros estrictos en base de datos
       let qClients = supabase.from('clients').select('*');
       if (targetRouteId) {
-        qClients = qClients.eq('routeId', targetRouteId);
+        qClients = qClients.or(`routeId.eq.${targetRouteId},route_id.eq.${targetRouteId}`);
+      } else if (!isMasterUser) {
+        const routeArray = Array.from(allowedRouteIds);
+        const supArray = Array.from(allowedSupervisorIds);
+        if (routeArray.length > 0 && supArray.length > 0) {
+          qClients = qClients.or(`supervisor_id.in.(${supArray.join(',')}),routeId.in.(${routeArray.join(',')}),route_id.in.(${routeArray.join(',')})`);
+        } else if (routeArray.length > 0) {
+          qClients = qClients.or(`routeId.in.(${routeArray.join(',')}),route_id.in.(${routeArray.join(',')})`);
+        } else if (supArray.length > 0) {
+          qClients = qClients.in('supervisor_id', supArray);
+        } else {
+          return [];
+        }
       }
       const { data: clientsData } = await qClients;
 
-      // 3. Consultar cartones liquidados por mora/pérdida
+      // 3. Consultar cartones liquidados por mora/pérdida aplicando filtros estrictos en base de datos
       let qCartones = supabase.from('cartones').select('*');
       if (targetRouteId) {
         qCartones = qCartones.eq('route_id', targetRouteId);
+      } else if (!isMasterUser) {
+        const routeArray = Array.from(allowedRouteIds);
+        const supArray = Array.from(allowedSupervisorIds);
+        if (routeArray.length > 0 && supArray.length > 0) {
+          qCartones = qCartones.or(`supervisor_id.in.(${supArray.join(',')}),route_id.in.(${routeArray.join(',')})`);
+        } else if (routeArray.length > 0) {
+          qCartones = qCartones.in('route_id', routeArray);
+        } else if (supArray.length > 0) {
+          qCartones = qCartones.in('supervisor_id', supArray);
+        } else {
+          return [];
+        }
       }
       const { data: cartonesData, error: cartonesErr } = await qCartones;
       if (cartonesErr) {
         console.error("Error al obtener cartones para lista negra:", cartonesErr);
       }
 
-      // 4. Consultar tabla 'lista_negra' (si existe en la base de datos)
+      // 4. Consultar tabla 'lista_negra' aplicando filtros estrictos en base de datos
       let lnData = [];
       try {
         let qListaNegra = supabase.from('lista_negra').select('*');
         if (targetRouteId) {
-          qListaNegra = qListaNegra.eq('route_id', targetRouteId);
+          qListaNegra = qListaNegra.or(`route_id.eq.${targetRouteId},routeId.eq.${targetRouteId}`);
+        } else if (!isMasterUser) {
+          const routeArray = Array.from(allowedRouteIds);
+          const supArray = Array.from(allowedSupervisorIds);
+          if (routeArray.length > 0 && supArray.length > 0) {
+            qListaNegra = qListaNegra.or(`supervisor_id.in.(${supArray.join(',')}),supervisorId.in.(${supArray.join(',')}),route_id.in.(${routeArray.join(',')}),routeId.in.(${routeArray.join(',')})`);
+          } else if (routeArray.length > 0) {
+            qListaNegra = qListaNegra.or(`route_id.in.(${routeArray.join(',')}),routeId.in.(${routeArray.join(',')})`);
+          } else if (supArray.length > 0) {
+            qListaNegra = qListaNegra.or(`supervisor_id.in.(${supArray.join(',')}),supervisorId.in.(${supArray.join(',')})`);
+          }
         }
         const { data: lnRes, error: lnErr } = await qListaNegra;
         if (!lnErr && lnRes) lnData = lnRes;
       } catch (eLn) {}
 
-      // FILTRADO ESTRICTO DE PERTENENCIA:
-      // Excluye totalmente clientes globales sin ruta o pertenecientes a otros supervisores/independientes
+      // FILTRADO ESTRICTO E INVIOLABLE DE PERTENENCIA:
+      // Excluye totalmente clientes globales o pertenecientes a otros supervisores/rutas ajenas
       const belongsToScope = (rec) => {
         if (!rec) return false;
+        if (isMasterUser && !targetRouteId) return true;
+
         const recRoute = String(rec.route_id || rec.routeId || '').trim().toLowerCase();
         const recAgent = String(rec.agent_id || rec.agentId || rec.agentUsername || rec.agente || '').trim().toLowerCase();
         const recSup = String(rec.supervisor_id || rec.supervisorId || rec.supervisor || '').trim().toLowerCase();
 
         if (targetRouteId) {
-          return recRoute && recRoute === targetRouteId.toLowerCase();
-        }
-
-        if (isMasterUser) {
-          return true;
+          return recRoute === targetRouteId.toLowerCase();
         }
 
         if (isSupervisor) {
+          if (recSup && allowedSupervisorIds.has(recSup)) {
+            if (!recRoute || allowedRouteIds.has(recRoute)) return true;
+          }
           if (recRoute && allowedRouteIds.has(recRoute)) return true;
           if (recAgent && allowedAgentUsernames.has(recAgent)) return true;
-          if (recSup && allowedSupervisorIds.has(recSup) && (recRoute ? allowedRouteIds.has(recRoute) : (recAgent && allowedAgentUsernames.has(recAgent)))) {
-            return true;
-          }
+          return false;
+        }
+
+        if (isIndependent) {
+          if (recSup && (recSup === supUser || (supId && recSup === supId))) return true;
+          if (recRoute && allowedRouteIds.has(recRoute)) return true;
+          if (recAgent && (recAgent === supUser || (supId && recAgent === supId))) return true;
           return false;
         }
 

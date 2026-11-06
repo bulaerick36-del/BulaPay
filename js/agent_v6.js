@@ -1456,7 +1456,7 @@ const agentModule = {
         
         try {
           const currentUser = window.BulaPayDB.getCurrentUser();
-          const targetRouteId = currentUser ? currentUser.routeId : null;
+          const targetRouteId = currentUser ? (currentUser.routeId || currentUser.route_id) : null;
           const badClients = await window.BulaPayDB.getBlacklistedClients(targetRouteId);
           
           if (badClients.length === 0) {
@@ -2479,33 +2479,22 @@ const agentModule = {
       dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
     }
 
-    // Regla 1: Vencimiento superado por 2 meses (60 días tras la fecha de vencimiento)
+    // Regla Estricta: La alerta restrictiva de mora y sugerencia a Lista Negra se activa ÚNICAMENTE
+    // cuando el cartón alcanza los 60 días (2 meses) VENCIDO, respetando el margen de tolerancia del primer mes.
+    // Ciclo normal del cartón: 30 días. Tolerancia: 30 días. Total atraso exigido tras fecha de vencimiento: 60 días.
     if (dueDate && !isNaN(dueDate.getTime())) {
       const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
       const dueDatePlus2Months = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate());
       const diffDaysAfterDue = Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      if (todayZero >= dueDatePlus2Months || diffDaysAfterDue >= 60) {
-        return true;
-      }
+      return (todayZero >= dueDatePlus2Months || diffDaysAfterDue >= 60);
     }
 
-    // Regla 2: Fecha de apertura / creación tiene más de 60 días (2 meses) y el crédito está en mora/vencido
+    // Fallback: Si no hay fecha de vencimiento explícita, contar desde la fecha de apertura:
+    // Ciclo normal (~35 días calendario) + 60 días de atraso vencido = 95 días calendario desde el inicio
     if (startDate && !isNaN(startDate.getTime())) {
       const startDateZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      const startDatePlus2Months = new Date(startDateZero.getFullYear(), startDateZero.getMonth() + 2, startDateZero.getDate());
       const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      const isPastDue = dueDate ? (todayZero > dueDate) : (diffDaysSinceStart >= 35);
-      if ((todayZero >= startDatePlus2Months || diffDaysSinceStart >= 60) && isPastDue) {
-        return true;
-      }
-    }
-
-    // Regla 3: Si 30 cuotas o más están en mora (isOverdue)
-    const overdueDaysCount = (dailyStatusList && Array.isArray(dailyStatusList)) 
-      ? dailyStatusList.filter(s => s.isOverdue).length 
-      : 0;
-    if (overdueDaysCount >= 30) {
-      return true;
+      return diffDaysSinceStart >= 95;
     }
 
     return false;
@@ -2513,9 +2502,24 @@ const agentModule = {
 
   async checkGraveOverdueLoansOnLoad() {
     try {
+      const currentUser = window.BulaPayDB.getCurrentUser();
+      const currentRouteId = currentUser ? String(currentUser.routeId || currentUser.route_id || '').trim().toLowerCase() : '';
+      const currentAgentUser = currentUser ? String(currentUser.username || '').trim().toLowerCase() : '';
+
       const activeCredits = await window.BulaPayDB.loadActiveCredits();
       if (!Array.isArray(activeCredits) || activeCredits.length === 0) return;
-      const graveCredit = activeCredits.find(c => this.isCartonOverdueBy2Months(c));
+
+      // Filtrar créditos que pertenecen exclusivamente a la ruta y agente actual (aislamiento estricto)
+      const myActiveCredits = activeCredits.filter(c => {
+        if (!c) return false;
+        const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
+        const cAgent = String(c.agent_id || c.agentUsername || c.agente || '').trim().toLowerCase();
+        if (currentRouteId && cRoute && cRoute !== currentRouteId) return false;
+        if (currentAgentUser && cAgent && cAgent !== currentAgentUser && !currentRouteId) return false;
+        return true;
+      });
+
+      const graveCredit = myActiveCredits.find(c => this.isCartonOverdueBy2Months(c));
       if (graveCredit) {
         const cedClean = String(graveCredit.cedula || '').trim();
         if (cedClean && this.lastDismissed2MonthsCedula !== cedClean) {
@@ -4159,8 +4163,11 @@ const agentModule = {
 
       console.log('Paso 2: Datos recolectados del DOM:', { name, agentId, cedula, phone, department, cityVal, city, zone, debt, installments });
 
-      // REGLA DE BLOQUEO GLOBAL (LISTA NEGRA - REQUIREMENT 2)
-      const isBlacklisted = await window.BulaPayDB.isClientBlacklisted(cedula);
+      // REGLA DE BLOQUEO AISLADO POR RUTA / SUPERVISOR (LISTA NEGRA)
+      const agentUser = window.BulaPayDB.getCurrentUser();
+      const currentRoute = agentUser?.routeId || agentUser?.route_id || null;
+      const currentSup = window.BulaPayDB.getSupervisorId();
+      const isBlacklisted = await window.BulaPayDB.isClientBlacklisted(cedula, currentRoute, currentSup);
       if (isBlacklisted) {
         const blockMsg = `❌ OPERACIÓN DENEGADA: El cliente con Cédula N° ${cedula} se encuentra en LISTA NEGRA (estado liquidado_perdida) en el sistema.\n\nNo es posible crear nuevos créditos para esta cédula.\nDebe comunicarse con el agente que generó el reporte para limpiar su historial.`;
         if (typeof Swal !== 'undefined') {

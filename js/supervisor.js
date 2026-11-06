@@ -5004,14 +5004,9 @@ const supervisorModule = {
       const todayStr = shiftWindow.shiftDateStr;
       const allPayments = await window.BulaPayDB.getPayments();
       
-      const allClients = await window.BulaPayDB.getClients();
+      const blacklistedMorosos = await window.BulaPayDB.getBlacklistedClients();
       const blacklistedCedulas = new Set(
-        allClients
-          .filter(c => {
-            const rawStatus = String(c.status || c.estado || '').toUpperCase();
-            return c.risk === 'Rojo' || String(c.risk || '').trim().toLowerCase() === 'rojo' || rawStatus.includes('NEGRA') || rawStatus.includes('MORA');
-          })
-          .map(c => String(c.cedula))
+        (blacklistedMorosos || []).map(c => String(c.cedula || c.cliente_id || '').trim()).filter(Boolean)
       );
 
       // Filtrar cobros globales del día operativo actual (6:00 AM a 5:59 AM)
@@ -5192,14 +5187,9 @@ const supervisorModule = {
       const todayStr = shiftWindow.shiftDateStr;
       const allPayments = await window.BulaPayDB.getPayments();
       
-      const allClients = await window.BulaPayDB.getClients();
+      const blacklistedMorosos = await window.BulaPayDB.getBlacklistedClients();
       const blacklistedCedulas = new Set(
-        allClients
-          .filter(c => {
-            const rawStatus = String(c.status || c.estado || '').toUpperCase();
-            return c.risk === 'Rojo' || String(c.risk || '').trim().toLowerCase() === 'rojo' || rawStatus.includes('NEGRA') || rawStatus.includes('MORA');
-          })
-          .map(c => String(c.cedula))
+        (blacklistedMorosos || []).map(c => String(c.cedula || c.cliente_id || '').trim()).filter(Boolean)
       );
 
       // Pre-cargar cartones para verificar asignación estricta por cartón y agente
