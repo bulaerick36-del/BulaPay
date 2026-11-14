@@ -1335,40 +1335,19 @@ const db = {
       localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(currentStorageList));
     } catch (_) {}
 
-    // Persistir en Supabase
+    // Persistir en Supabase bulapay_notificaciones con categoría Liquidacion_Revisada
     try {
       const supabase = await initSupabase();
-      for (const id of cartonIds) {
-        const isValidUuid = typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-        const updatePayload = {
-          supervisor_atendido: true,
-          supervisor_reviewed_at: new Date().toISOString()
-        };
-        try {
-          if (isValidUuid) {
-            await supabase.from('cartones').update(updatePayload).eq('id', id);
-          } else if (!isNaN(Number(id))) {
-            await supabase.from('cartones').update(updatePayload).eq('numero_carton', Number(id));
-          } else {
-            await supabase.from('cartones').update(updatePayload).eq('id', id);
-          }
-        } catch (_) {}
-      }
-
-      // Sincronización en bulapay_notificaciones para redundancia en la nube
-      try {
-        const notifPayloads = cartonIds.map(id => ({
-          id: 'liq_rev_' + String(id).trim().toLowerCase(),
-          title: 'Liquidación Atendida',
-          category: 'Liquidacion_Revisada',
-          message: 'Liquidación atendida por supervisor (' + id + ')',
-          target_username: agentUsername || 'supervisor',
-          created_at: new Date().toISOString()
-        }));
-        await supabase.from('bulapay_notificaciones').upsert(notifPayloads).catch(() => {});
-      } catch (_) {}
+      const recordsToInsert = cartonIds.map(id => ({
+        titulo: 'Liquidacion Atendida',
+        mensaje: 'liq_atendida:' + String(id).trim().toLowerCase(),
+        categoria: 'Liquidacion_Revisada',
+        username: agentUsername || 'supervisor',
+        created_at: new Date().toISOString()
+      }));
+      await supabase.from('bulapay_notificaciones').insert(recordsToInsert);
     } catch (eCloud) {
-      console.warn("Aviso al guardar liquidaciones atendidas en la nube:", eCloud);
+      console.warn("Aviso al guardar en bulapay_notificaciones:", eCloud);
     }
 
     // Notificar reactivamente a toda la interfaz
@@ -1377,9 +1356,81 @@ const db = {
     }));
   },
 
+  async getAgentPendingLiquidations(agentUsername, routeId = null) {
+    try {
+      // Sincronizar en segundo plano con la nube
+      this.syncCloudLiquidacionesAtendidas().catch(() => {});
+
+      // 1. Liquidaciones de la jornada de hoy
+      const todayCards = await this.getAgentLiquidatedCartonesToday(agentUsername, routeId);
+
+      // 2. Liquidaciones históricas completas
+      const histCards = await this.getAgentLiquidatedCartonesHistorical(agentUsername, routeId);
+
+      const seenIds = new Set();
+      const result = [];
+
+      // Prioridad 1: Todas las alertas no leídas/no atendidas (hoy o pasadas como las de César Baleta)
+      [...todayCards, ...histCards].forEach(card => {
+        const cid = String(card.id || card.numeroCarton || '').toLowerCase();
+        if (!cid || seenIds.has(cid)) return;
+        if (!card.isAtendido) {
+          seenIds.add(cid);
+          result.push(card);
+        }
+      });
+
+      // Prioridad 2: Agregar las de hoy aunque ya hayan sido atendidas
+      todayCards.forEach(card => {
+        const cid = String(card.id || card.numeroCarton || '').toLowerCase();
+        if (!cid || seenIds.has(cid)) return;
+        seenIds.add(cid);
+        result.push(card);
+      });
+
+      result.sort((a, b) => {
+        if (!a.isAtendido && b.isAtendido) return -1;
+        if (a.isAtendido && !b.isAtendido) return 1;
+        return new Date(b.fechaLiquidacion || 0).getTime() - new Date(a.fechaLiquidacion || 0).getTime();
+      });
+
+      return result;
+    } catch (e) {
+      console.error("Error al obtener liquidaciones pendientes:", e);
+      return [];
+    }
+  },
+
+  async syncCloudLiquidacionesAtendidas() {
+    try {
+      const supabase = await initSupabase();
+      const { data } = await supabase.from('bulapay_notificaciones')
+        .select('mensaje')
+        .eq('categoria', 'Liquidacion_Revisada');
+      if (Array.isArray(data)) {
+        const set = this.getReviewedLiquidationsSetSync();
+        let currentStorageList = [];
+        try {
+          currentStorageList = JSON.parse(localStorage.getItem('bulapay_liquidaciones_atendidas') || '[]');
+        } catch (_) {}
+        data.forEach(item => {
+          const msg = String(item.mensaje || '');
+          if (msg.startsWith('liq_atendida:')) {
+            const cId = msg.replace('liq_atendida:', '').trim().toLowerCase();
+            if (cId) {
+              set.add(cId);
+              if (!currentStorageList.includes(cId)) currentStorageList.push(cId);
+            }
+          }
+        });
+        localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(currentStorageList));
+      }
+    } catch (_) {}
+  },
+
   async getAgentUnreadLiquidationsCount(agentUsername, routeId = null) {
     try {
-      const cards = await this.getAgentLiquidatedCartonesToday(agentUsername, routeId);
+      const cards = await this.getAgentPendingLiquidations(agentUsername, routeId);
       return (cards || []).filter(c => !c.isAtendido).length;
     } catch (e) {
       console.warn("Aviso al calcular conteo no leído de liquidaciones:", e);

@@ -2381,8 +2381,8 @@
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
               <span style="color: var(--text-secondary);">Liquidados Hoy:</span>
-              <div id="modal-agent-route-liquidated" style="cursor: pointer; display: inline-flex; align-items: center;" title="Ver cartones liquidados hoy">
-                <span id="modal-agent-liquidated-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); transition: transform 0.2s, box-shadow 0.2s; user-select: none;">0</span>
+              <div id="modal-agent-route-liquidated" onclick="supervisorModule.openLiquidatedCardsModal(supervisorModule.selectedAuditAgentUsername || 'cesar26')" data-open-liquidations="true" style="cursor: pointer; display: inline-flex; align-items: center;" title="Ver cartones liquidados hoy">
+                <span id="modal-agent-liquidated-badge" onclick="supervisorModule.openLiquidatedCardsModal(supervisorModule.selectedAuditAgentUsername || 'cesar26')" data-open-liquidations="true" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); transition: transform 0.2s, box-shadow 0.2s; user-select: none;">0</span>
               </div>
             </div>
           </div>
@@ -2642,7 +2642,7 @@
   </div>
 
   <!-- MODAL: CARTONES LIQUIDADOS HOY (LiquidatedCardsModal) -->
-  <div class="supervisor-modal-overlay" id="modal-liquidated-cards">
+  <div class="supervisor-modal-overlay" id="modal-liquidated-cards" style="z-index: 99999 !important;">
     <div class="supervisor-modal-card" style="max-width: 740px; width: 100%; max-height: 90vh; display: flex; flex-direction: column;">
       <button class="supervisor-modal-close" onclick="supervisorModule.closeLiquidatedCardsModal()">&times;</button>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.25rem;">
@@ -2650,7 +2650,7 @@
           <span>🔔</span> Alertas y Liquidaciones del Agente
         </h3>
         <button id="btn-mark-all-attended" type="button" onclick="supervisorModule.marcarTodasComoAtendidas()" style="display: inline-flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; border: none; padding: 0.45rem 0.9rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);" title="Marcar todas las liquidaciones pendientes como atendidas y desaparecer la campana">
-          ✓ Marcar Todas como Atendidas
+          ✓ Marcar como leído / Descartar
         </button>
       </div>
       <p id="liquidated-cards-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.85rem;">

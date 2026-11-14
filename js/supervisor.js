@@ -288,6 +288,30 @@ const supervisorModule = {
       await this.refreshLiquidatedModalAndBadges(this.selectedAuditAgentUsername || this.currentLiqAgentUsername, this.currentLiqRouteId);
     });
 
+    // --- LISTENER GLOBAL (capture phase) para campanas de alerta ---
+    // Garantiza que el modal se abra aunque el clic este dentro de otro overlay.
+    document.addEventListener('click', (capEvt) => {
+      const t = capEvt.target;
+      if (!t) return;
+      // Campana en la lista de agentes del modal KPI
+      const bellBadge = t.closest('.agent-bell-badge');
+      if (bellBadge) {
+        capEvt.stopPropagation();
+        const agentUsername = bellBadge.getAttribute('data-agent') || this.selectedAuditAgentUsername;
+        const agentRoute = bellBadge.getAttribute('data-route') || this.currentLiqRouteId;
+        if (agentUsername) this.openLiquidatedCardsModal(agentUsername, agentRoute || null);
+        return;
+      }
+      // Badge/container [data-open-liquidations] del detalle del agente
+      const liqEl = t.closest('[data-open-liquidations="true"]');
+      if (liqEl) {
+        capEvt.stopPropagation();
+        const u = this.selectedAuditAgentUsername || this.currentLiqAgentUsername;
+        if (u) this.openLiquidatedCardsModal(u, this.currentLiqRouteId || null);
+        return;
+      }
+    }, true); // capture:true intercepta antes que cualquier otro handler
+
     // Calculadora en tiempo real para el valor de cuota en el registro de venta del comercio
     const salePriceInput = document.getElementById('sale-product-price');
     const saleInstallmentsInput = document.getElementById('sale-installments');
@@ -569,18 +593,23 @@ const supervisorModule = {
     routeCapitalEl.textContent = `$${Number(capital).toLocaleString('es-CO')}`;
     routeCollectedEl.textContent = `$${Number(collectedReal).toLocaleString('es-CO')}`;
 
-    // Obtener cartones liquidados hoy por este agente
+    // Obtener cartones liquidados (hoy + historicos sin atender) por este agente
     const liquidatedContainer = document.getElementById('modal-agent-route-liquidated');
     const liquidatedBadge = document.getElementById('modal-agent-liquidated-badge');
     let liquidatedCards = [];
+    let liqCount = 0;
     try {
-      liquidatedCards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, agent.routeId);
+      // Usar getAgentPendingLiquidations para incluir historicos no atendidos
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingLiquidations === 'function') {
+        liquidatedCards = await window.BulaPayDB.getAgentPendingLiquidations(username, agent.routeId);
+        liqCount = (liquidatedCards || []).filter(c => !c.isAtendido).length;
+      } else {
+        liquidatedCards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, agent.routeId);
+        liqCount = (liquidatedCards || []).filter(c => !c.isAtendido).length;
+      }
     } catch (eLiq) {
-      console.warn('Aviso al obtener cartones liquidados hoy:', eLiq);
+      console.warn('Aviso al obtener cartones liquidados:', eLiq);
     }
-
-    const unreadLiqCards = (liquidatedCards || []).filter(c => !c.isAtendido);
-    const liqCount = unreadLiqCards.length;
     if (liquidatedBadge) {
       if (liqCount > 0) {
         liquidatedBadge.innerHTML = '🔔 ' + liqCount;
@@ -1990,13 +2019,26 @@ const supervisorModule = {
     const summaryPills = document.getElementById('liquidated-cards-summary-pills');
     const container = document.getElementById('liquidated-cards-container');
 
-    if (!overlay || !container) return;
+    if (!overlay || !container) {
+      console.error('[BulaPay] modal-liquidated-cards NO encontrado en el DOM');
+      return;
+    }
 
-    this.currentLiqAgentUsername = username;
-    this.currentLiqRouteId = routeId;
+    // Fallback: si no vino username, usar el último agente seleccionado
+    const targetUsername = username || this.selectedAuditAgentUsername || this.currentLiqAgentUsername;
+    const targetRouteId = routeId || this.currentLiqRouteId;
+
+    this.currentLiqAgentUsername = targetUsername;
+    this.currentLiqRouteId = targetRouteId;
     this.currentLiqTab = initialTab || 'active';
 
+    // Forzar visibilidad con estilos inline para superar cualquier conflicto de z-index
+    overlay.style.display = 'flex';
+    overlay.style.opacity = '1';
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.zIndex = '999999';
     overlay.classList.add('active');
+
     container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem; font-size: 0.85rem;">⏳ Cargando liquidaciones...</div>';
     if (summaryPills) summaryPills.innerHTML = '';
 
@@ -2072,8 +2114,14 @@ const supervisorModule = {
         subtitle.textContent = `Cartones liquidados hoy por ${agentName} (${shiftDateLabel})`;
       }
 
-      const cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, effectiveRouteId);
-      this.currentActiveCards = cards || [];
+      // Usar getAgentPendingLiquidations para incluir alertas historicas sin atender (ej. César Baleta)
+      let cards = [];
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingLiquidations === 'function') {
+        cards = await window.BulaPayDB.getAgentPendingLiquidations(username, effectiveRouteId) || [];
+      } else {
+        cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, effectiveRouteId) || [];
+      }
+      this.currentActiveCards = cards;
 
       const totalCount = cards.length;
       const blueCount = cards.filter(c => c.category === 'blue').length;
@@ -2684,7 +2732,12 @@ const supervisorModule = {
 
   closeLiquidatedCardsModal() {
     const overlay = document.getElementById('modal-liquidated-cards');
-    if (overlay) overlay.classList.remove('active');
+    if (overlay) {
+      overlay.classList.remove('active');
+      overlay.style.display = 'none';
+      overlay.style.opacity = '0';
+      overlay.style.pointerEvents = 'none';
+    }
   },
 
 

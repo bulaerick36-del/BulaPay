@@ -3129,3 +3129,14 @@ header span[id*="vigencia"] {
 
 
 
+
+/* Alta prioridad para modal de liquidaciones del supervisor */
+#modal-liquidated-cards {
+  z-index: 99999 !important;
+}
+#modal-liquidated-cards.active {
+  display: flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 99999 !important;
+}
