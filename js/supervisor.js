@@ -281,6 +281,12 @@ const supervisorModule = {
     };
     window.addEventListener('bulapay-payment-registered', this.handlePaymentRegistered);
     window.addEventListener('bulapay-client-updated', this.handlePaymentRegistered);
+    window.addEventListener('bulapay:liquidaciones_atendidas', async () => {
+      await this.refreshLiquidatedModalAndBadges(this.selectedAuditAgentUsername || this.currentLiqAgentUsername, this.currentLiqRouteId);
+    });
+    window.addEventListener('bulapay:carton_liquidated', async () => {
+      await this.refreshLiquidatedModalAndBadges(this.selectedAuditAgentUsername || this.currentLiqAgentUsername, this.currentLiqRouteId);
+    });
 
     // Calculadora en tiempo real para el valor de cuota en el registro de venta del comercio
     const salePriceInput = document.getElementById('sale-product-price');
@@ -461,9 +467,19 @@ const supervisorModule = {
       return;
     }
 
-    agents.forEach(agent => {
+    for (const agent of agents) {
       const r = routes.find(rt => rt.id === agent.routeId) || { name: 'Sin ruta asignada' };
-      
+      let unreadCount = 0;
+      try {
+        if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
+          unreadCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(agent.username, agent.routeId);
+        }
+      } catch (_) {}
+
+      const bellBadgeHtml = unreadCount > 0
+        ? '<span class="agent-bell-badge" data-agent="' + agent.username + '" data-route="' + (agent.routeId || '') + '" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff; border: 1px solid #f87171; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="' + unreadCount + ' liquidación(es) sin atender. Clic para ver detalles">🔔 ' + unreadCount + '</span>'
+        : '';
+
       const item = document.createElement('div');
       item.style.padding = '0.75rem 1rem';
       item.style.background = 'rgba(255,255,255,0.02)';
@@ -475,13 +491,16 @@ const supervisorModule = {
       item.style.alignItems = 'center';
       item.style.transition = 'var(--transition-smooth)';
       
-      item.innerHTML = `
-        <div>
-          <strong style="color: var(--text-primary); font-size: 0.9rem;">${agent.name}</strong>
-          <div style="font-size: 0.75rem; color: var(--text-secondary);">Ruta: ${r.name}</div>
-        </div>
-        <span style="font-size: 0.75rem; color: var(--accent); font-weight: bold;">Ver detalles ➔</span>
-      `;
+      item.innerHTML = '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+        '<div>' +
+          '<div style="display: flex; align-items: center;">' +
+            '<strong style="color: var(--text-primary); font-size: 0.9rem;">' + agent.name + '</strong>' +
+            bellBadgeHtml +
+          '</div>' +
+          '<div style="font-size: 0.75rem; color: var(--text-secondary);">Ruta: ' + r.name + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<span style="font-size: 0.75rem; color: var(--accent); font-weight: bold;">Ver detalles ➔</span>';
       
       item.addEventListener('mouseenter', () => {
         item.style.borderColor = 'var(--accent)';
@@ -492,9 +511,17 @@ const supervisorModule = {
         item.style.backgroundColor = 'rgba(255,255,255,0.02)';
       });
 
+      const bellEl = item.querySelector('.agent-bell-badge');
+      if (bellEl) {
+        bellEl.onclick = (e) => {
+          e.stopPropagation();
+          this.openLiquidatedCardsModal(agent.username, agent.routeId);
+        };
+      }
+
       item.addEventListener('click', () => this.showModalAgentDetail(agent.username));
       listContainer.appendChild(item);
-    });
+    }
   },
 
   selectedAuditAgentUsername: null,
@@ -549,32 +576,45 @@ const supervisorModule = {
     try {
       liquidatedCards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, agent.routeId);
     } catch (eLiq) {
-      console.warn("Aviso al obtener cartones liquidados hoy:", eLiq);
+      console.warn('Aviso al obtener cartones liquidados hoy:', eLiq);
     }
 
-    const liqCount = liquidatedCards.length;
+    const unreadLiqCards = (liquidatedCards || []).filter(c => !c.isAtendido);
+    const liqCount = unreadLiqCards.length;
     if (liquidatedBadge) {
       if (liqCount > 0) {
-        liquidatedBadge.innerHTML = `🔔 ${liqCount}`;
-        liquidatedBadge.title = `${liqCount} cartón(es) liquidado(s) hoy. Clic para ver detalles.`;
+        liquidatedBadge.innerHTML = '🔔 ' + liqCount;
+        liquidatedBadge.title = liqCount + ' cartón(es) pendiente(s) de revisión. Clic para ver detalles.';
         liquidatedBadge.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
         liquidatedBadge.style.color = '#ffffff';
         liquidatedBadge.style.border = '1px solid #f87171';
         liquidatedBadge.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.6)';
         liquidatedBadge.style.padding = '2px 8px';
+        liquidatedBadge.style.cursor = 'pointer';
+        liquidatedBadge.style.display = 'inline-flex';
       } else {
         liquidatedBadge.innerHTML = '0';
-        liquidatedBadge.title = '0 cartones liquidados hoy. Clic para ver detalles.';
+        liquidatedBadge.title = 'Todas las liquidaciones de hoy están atendidas. Clic para ver historial.';
         liquidatedBadge.style.background = 'rgba(148, 163, 184, 0.15)';
         liquidatedBadge.style.color = '#94a3b8';
         liquidatedBadge.style.border = '1px solid rgba(148, 163, 184, 0.25)';
         liquidatedBadge.style.boxShadow = 'none';
         liquidatedBadge.style.padding = '0 6px';
+        liquidatedBadge.style.cursor = 'pointer';
+        liquidatedBadge.style.display = 'inline-flex';
       }
+      liquidatedBadge.onclick = (e) => {
+        e.stopPropagation();
+        this.openLiquidatedCardsModal(username, agent.routeId);
+      };
     }
 
     if (liquidatedContainer) {
-      liquidatedContainer.onclick = () => this.openLiquidatedCardsModal(username, agent.routeId);
+      liquidatedContainer.style.cursor = 'pointer';
+      liquidatedContainer.onclick = (e) => {
+        e.stopPropagation();
+        this.openLiquidatedCardsModal(username, agent.routeId);
+      };
     }
 
     // Calcular proporciones de la cartera (Riesgo)
@@ -1938,7 +1978,13 @@ const supervisorModule = {
     }
   },
 
-  async openLiquidatedCardsModal(username, routeId = null) {
+    currentLiqAgentUsername: null,
+  currentLiqRouteId: null,
+  currentLiqTab: 'active',
+  currentActiveCards: [],
+  currentHistoricalCards: [],
+
+  async openLiquidatedCardsModal(username, routeId = null, initialTab = 'active') {
     const overlay = document.getElementById('modal-liquidated-cards');
     const subtitle = document.getElementById('liquidated-cards-modal-subtitle');
     const summaryPills = document.getElementById('liquidated-cards-summary-pills');
@@ -1946,16 +1992,72 @@ const supervisorModule = {
 
     if (!overlay || !container) return;
 
+    this.currentLiqAgentUsername = username;
+    this.currentLiqRouteId = routeId;
+    this.currentLiqTab = initialTab || 'active';
+
     overlay.classList.add('active');
-    container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem; font-size: 0.85rem;">⏳ Consultando cartones liquidados de hoy...</div>';
+    container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem; font-size: 0.85rem;">⏳ Cargando liquidaciones...</div>';
     if (summaryPills) summaryPills.innerHTML = '';
+
+    await this.switchLiquidatedTab(this.currentLiqTab);
+  },
+
+  async switchLiquidatedTab(tabName) {
+    this.currentLiqTab = tabName || 'active';
+    const tabActiveBtn = document.getElementById('tab-btn-active-liq');
+    const tabArchiveBtn = document.getElementById('tab-btn-archive-liq');
+    const filtersBar = document.getElementById('liquidated-archive-filters-bar');
+    const btnMarkAll = document.getElementById('btn-mark-all-attended');
+
+    if (tabName === 'active') {
+      if (tabActiveBtn) {
+        tabActiveBtn.style.background = 'var(--accent)';
+        tabActiveBtn.style.color = '#ffffff';
+        tabActiveBtn.style.border = 'none';
+      }
+      if (tabArchiveBtn) {
+        tabArchiveBtn.style.background = 'rgba(255,255,255,0.04)';
+        tabArchiveBtn.style.color = 'var(--text-secondary)';
+        tabArchiveBtn.style.border = '1px solid rgba(255,255,255,0.15)';
+      }
+      if (filtersBar) filtersBar.style.display = 'none';
+      if (btnMarkAll) btnMarkAll.style.display = 'inline-flex';
+      await this.loadLiquidatedActiveView();
+    } else {
+      if (tabArchiveBtn) {
+        tabArchiveBtn.style.background = 'var(--accent)';
+        tabArchiveBtn.style.color = '#ffffff';
+        tabArchiveBtn.style.border = 'none';
+      }
+      if (tabActiveBtn) {
+        tabActiveBtn.style.background = 'rgba(255,255,255,0.04)';
+        tabActiveBtn.style.color = 'var(--text-secondary)';
+        tabActiveBtn.style.border = '1px solid rgba(255,255,255,0.15)';
+      }
+      if (filtersBar) filtersBar.style.display = 'flex';
+      if (btnMarkAll) btnMarkAll.style.display = 'none';
+      await this.loadLiquidatedArchiveView();
+    }
+  },
+
+  async loadLiquidatedActiveView() {
+    const username = this.currentLiqAgentUsername;
+    const routeId = this.currentLiqRouteId;
+    const subtitle = document.getElementById('liquidated-cards-modal-subtitle');
+    const summaryPills = document.getElementById('liquidated-cards-summary-pills');
+    const container = document.getElementById('liquidated-cards-container');
+    const tabBadge = document.getElementById('tab-unread-badge');
+
+    if (!container) return;
+    container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem; font-size: 0.85rem;">⏳ Consultando cartones liquidados de hoy...</div>';
 
     try {
       const allUsers = await this.getCachedUsers();
       const agent = (allUsers || []).find(u => u.username === username || u.id === username);
       const agentName = agent ? agent.name : (username || 'Agente');
-
       const effectiveRouteId = routeId || agent?.routeId || agent?.route_id || null;
+
       let shiftDateLabel = this.getLocalDateString();
       if (window.BulaPayDB && typeof window.BulaPayDB.getRouteOperationalShiftWindow === 'function') {
         try {
@@ -1971,11 +2073,18 @@ const supervisorModule = {
       }
 
       const cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, effectiveRouteId);
+      this.currentActiveCards = cards || [];
 
       const totalCount = cards.length;
       const blueCount = cards.filter(c => c.category === 'blue').length;
       const greenCount = cards.filter(c => c.category === 'green').length;
       const redCount = cards.filter(c => c.category === 'red').length;
+      const unreadCount = cards.filter(c => !c.isAtendido).length;
+
+      if (tabBadge) {
+        tabBadge.textContent = unreadCount;
+        tabBadge.style.display = unreadCount > 0 ? 'inline-flex' : 'none';
+      }
 
       if (summaryPills) {
         summaryPills.innerHTML = `
@@ -1989,8 +2098,15 @@ const supervisorModule = {
             🟢 Exitosos: ${greenCount}
           </div>
           <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(239, 68, 68, 0.15); font-size: 0.75rem; font-weight: 700; color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">
-            🔴 En Mora / Lista Negra: ${redCount}
+            🔴 En Mora: ${redCount}
           </div>
+          ${unreadCount > 0 
+            ? `<div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(239, 68, 68, 0.25); font-size: 0.75rem; font-weight: 800; color: #fca5a5; border: 1px solid #ef4444; animation: pulse 2s infinite;">
+                 ⚠️ Pendientes: ${unreadCount}
+               </div>` 
+            : `<div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); font-size: 0.75rem; font-weight: 700; color: #34d399; border: 1px solid #10b981;">
+                 ✅ Todas Atendidas
+               </div>`}
         `;
       }
 
@@ -1999,260 +2115,578 @@ const supervisorModule = {
           <div style="text-align: center; color: var(--text-secondary); padding: 2.5rem 1rem; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color);">
             <div style="font-size: 2rem; margin-bottom: 0.5rem;">✅</div>
             <strong style="color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Sin cartones liquidados hoy</strong>
-            <span style="font-size: 0.8rem;">Este cobrador no tiene registros de cierre o liquidación en la fecha actual.</span>
+            <span style="font-size: 0.8rem;">Este cobrador no tiene registros de cierre o liquidación en la jornada actual. Puedes consultar el <strong>Archivo Histórico</strong> en la pestaña superior.</span>
           </div>
         `;
         return;
       }
 
-      // Cargar datos complementarios de cartones y pagos para desglosar renovaciones con total precisión
       let allCartones = [];
       let allPayments = [];
       try {
-        if (cards.some(c => c.category === 'blue')) {
-          const pCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
-            ? window.BulaPayDB.getCartones()
-            : [];
-          const pPayments = (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function')
-            ? window.BulaPayDB.getPayments()
-            : [];
-          [allCartones, allPayments] = await Promise.all([pCartones, pPayments]);
-        }
+        const pCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
+          ? window.BulaPayDB.getCartones()
+          : [];
+        const pPayments = (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function')
+          ? window.BulaPayDB.getPayments()
+          : [];
+        [allCartones, allPayments] = await Promise.all([pCartones, pPayments]);
       } catch (eComplement) {
-        console.warn("Aviso al consultar datos complementarios para modal de cartones liquidados:", eComplement);
+        console.warn("Aviso al consultar datos complementarios para liquidaciones:", eComplement);
       }
 
-      container.innerHTML = cards.map((c, index) => {
-        const timeStr = c.fechaLiquidacion ? new Date(c.fechaLiquidacion).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : 'Hoy';
-        const isRenewal = c.category === 'blue';
+      container.innerHTML = cards.map((c, index) => this.renderLiquidatedCardHtml(c, index, allCartones, allPayments, username)).join('');
+    } catch(err) {
+      console.error("Error al renderizar alertas activas:", err);
+      container.innerHTML = `<div style="text-align: center; color: #ef4444; padding: 2rem;">❌ Error: ${err.message}</div>`;
+    }
+  },
 
-        let financialDetailsHtml = '';
-        let newCartonNumberBadge = '';
-        const cIdLower = String(c.id || '').trim().toLowerCase();
-        const cedStr = String(c.cedula || c.cliente_id || '').trim();
+  async loadLiquidatedArchiveView() {
+    const username = this.currentLiqAgentUsername;
+    const routeId = this.currentLiqRouteId;
+    const subtitle = document.getElementById('liquidated-cards-modal-subtitle');
+    const container = document.getElementById('liquidated-cards-container');
 
-        if (isRenewal) {
-          // 1. Identificar pagos ordinarios vs pago de renovación para este cartón viejo
-          const isGenuineRenovPay = (p) => {
-            if (!p) return false;
-            const pId = String(p.id || '').trim();
-            const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
-            const pStatus = String(p.status || '').trim().toLowerCase();
-            const instNum = Number(p.installmentNumber || 0);
-            return pId.startsWith('pay_renov_') || instNum === 999 || pType === 'renovacion' || pStatus.includes('renovac');
-          };
+    if (!container) return;
+    container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem; font-size: 0.85rem;">⏳ Cargando archivo histórico de liquidaciones...</div>';
 
-          // Pago específico de liquidación por renovación (NUNCA una cuota u abono suelto como $8.000)
-          const renovPay = (allPayments || []).find(p => {
-            const pCartonId = String(p.carton_id || '').trim().toLowerCase();
-            return pCartonId && pCartonId === cIdLower && isGenuineRenovPay(p);
-          }) || (allPayments || []).find(p => {
-            const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
-            return pCed === cedStr && isGenuineRenovPay(p);
-          }) || null;
+    try {
+      const allUsers = await this.getCachedUsers();
+      const agent = (allUsers || []).find(u => u.username === username || u.id === username);
+      const agentName = agent ? agent.name : (username || 'Agente');
 
-          // Suma de pagos normales previos a la renovación en este cartón viejo
-          let normalPaymentsTotal = 0;
-          (allPayments || []).forEach(p => {
-            if (!p) return;
-            const pCartonId = String(p.carton_id || '').trim().toLowerCase();
-            if (pCartonId !== cIdLower) return;
-            if (isGenuineRenovPay(p)) return;
-            const pStatus = String(p.status || '').trim().toUpperCase();
-            if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return;
-            normalPaymentsTotal += Math.round(Number(p.amount || 0));
-          });
+      if (subtitle) {
+        subtitle.textContent = `Archivo Histórico de Liquidaciones: ${agentName}`;
+      }
 
-          // 2. Identificar el nuevo cartón resultante asociado a esta renovación
-          const clientCartons = (allCartones || []).filter(nc => {
-            if (!nc) return false;
-            const nCed = String(nc.cliente_id || nc.client_id || nc.cedula || '').trim();
-            return nCed === cedStr;
-          });
+      const historicalCards = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(username, routeId);
+      this.currentHistoricalCards = historicalCards || [];
+      await this.applyLiquidatedArchiveFilters();
+    } catch(err) {
+      console.error("Error al cargar archivo histórico:", err);
+      container.innerHTML = `<div style="text-align: center; color: #ef4444; padding: 2rem;">❌ Error al cargar archivo histórico: ${err.message}</div>`;
+    }
+  },
 
-          const candidateNewCartons = clientCartons.filter(nc => {
-            const nId = String(nc.id || '').trim().toLowerCase();
-            return !nId || nId !== cIdLower;
-          });
+  async applyLiquidatedArchiveFilters() {
+    if (this.currentLiqTab !== 'archive') return;
+    const searchVal = String(document.getElementById('liq-filter-search')?.value || '').trim().toLowerCase();
+    const typeVal = String(document.getElementById('liq-filter-type')?.value || 'all');
+    const dateVal = String(document.getElementById('liq-filter-date')?.value || '').trim();
+    const sortVal = String(document.getElementById('liq-filter-sort')?.value || 'date-desc');
 
-          const renovPayAmount = Math.round(Number(renovPay?.amount || 0));
+    const summaryPills = document.getElementById('liquidated-cards-summary-pills');
+    const container = document.getElementById('liquidated-cards-container');
+    if (!container) return;
 
-          // 1º: Coincidencia directa por old_carton_id o old_numero_carton
-          let newCarton = candidateNewCartons.find(nc => {
-            const nOldId = String(nc.old_carton_id || nc.old_carton || '').trim().toLowerCase();
-            return nOldId && nOldId === cIdLower;
-          }) || candidateNewCartons.find(nc => {
-            const nOldNum = String(nc.old_numero_carton || '').trim();
-            return nOldNum && nOldNum === String(c.numeroCarton).trim();
-          });
+    let filtered = [...(this.currentHistoricalCards || [])];
 
-          // 2º: Si no hay enlace explícito, buscar en la cadena cronológica del cliente: el cartón creado inmediatamente después de este
-          if (!newCarton && candidateNewCartons.length > 0) {
-            const cTime = new Date(c.fechaLiquidacion || c.fecha_cierre || c.created_at || c.fecha_apertura || c.updated_at || 0).getTime();
-            const futureCartons = candidateNewCartons
-              .filter(nc => {
-                const ncTime = new Date(nc.fecha_apertura || nc.created_at || nc.updated_at || 0).getTime();
-                return ncTime >= (cTime - 60000); // margen de 1 minuto
-              })
-              .sort((a, b) => {
-                const tA = new Date(a.fecha_apertura || a.created_at || a.updated_at || 0).getTime();
-                const tB = new Date(b.fecha_apertura || b.created_at || b.updated_at || 0).getTime();
-                return tA - tB;
-              });
+    // 1. Filtro por búsqueda (Cédula o Nombre)
+    if (searchVal) {
+      filtered = filtered.filter(c => {
+        const name = String(c.clientName || '').toLowerCase();
+        const ced = String(c.cedula || '').toLowerCase();
+        const num = String(c.numeroCarton || '').toLowerCase();
+        return name.includes(searchVal) || ced.includes(searchVal) || num.includes(searchVal);
+      });
+    }
 
-            if (futureCartons.length > 0) {
-              newCarton = futureCartons[0];
-            }
-          }
+    // 2. Filtro por tipo de liquidación
+    if (typeVal !== 'all') {
+      filtered = filtered.filter(c => c.category === typeVal);
+    }
 
-          // 3º: Fallback por saldo refinanciado o estado activo
-          if (!newCarton) {
-            newCarton = candidateNewCartons.find(nc => {
-              const nRollover = Math.round(Number(nc.saldo_anterior || nc.rollover_amount || 0));
-              return nRollover > 0 && renovPayAmount > 0 && nRollover === renovPayAmount;
-            }) || candidateNewCartons.find(nc => {
-              const nEst = String(nc.estado || nc.status || '').trim().toLowerCase();
-              return nEst === 'activo_por_renovacion' || nEst.includes('renov');
-            }) || candidateNewCartons[0] || null;
-          }
+    // 3. Filtro por fecha
+    if (dateVal) {
+      filtered = filtered.filter(c => {
+        const rawDate = String(c.fechaLiquidacion || '');
+        return rawDate.startsWith(dateVal);
+      });
+    }
 
-          const nuevoNumeroCartonStr = newCarton?.numero_carton || newCarton?.numeroCarton || 'S/N';
-          if (newCarton) {
-            newCartonNumberBadge = ` <span style="color: #60a5fa; font-weight: 700;">➔</span> <span style="color: #93c5fd; font-weight: 700;">Nuevo Cartón #${nuevoNumeroCartonStr}</span>`;
-          }
+    // 4. Ordenamiento avanzado (Fecha y Cédula)
+    filtered.sort((a, b) => {
+      if (sortVal === 'date-desc') {
+        return new Date(b.fechaLiquidacion || 0).getTime() - new Date(a.fechaLiquidacion || 0).getTime();
+      } else if (sortVal === 'date-asc') {
+        return new Date(a.fechaLiquidacion || 0).getTime() - new Date(b.fechaLiquidacion || 0).getTime();
+      } else if (sortVal === 'cedula-asc') {
+        return String(a.cedula || '').localeCompare(String(b.cedula || ''));
+      } else if (sortVal === 'cedula-desc') {
+        return String(b.cedula || '').localeCompare(String(a.cedula || ''));
+      }
+      return 0;
+    });
 
-          // 3. Cartón antes de la renovación: Saldo pendiente total real del crédito al momento del retanqueo (ej: los $80.000)
-          // REGLA CRÍTICA: NUNCA tomar valores residuales pequeños como $8.000 de una cuota suelta
-          const newCartonRollover = Math.round(Number(newCarton?.saldo_anterior || newCarton?.rollover_amount || newCarton?.old_outstanding || 0));
-          const cardRollover = Math.round(Number(c.old_outstanding || c.saldo_anterior || c.rollover_amount || 0));
-          const totDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (Number(c.montoPrestado || c.amount || 0) * 1.2)));
-          const saldoCalculadoPorPagos = totDeuda > 0 ? Math.max(0, totDeuda - normalPaymentsTotal) : 0;
+    // Píldoras de resumen del archivo filtrado
+    if (summaryPills) {
+      const totalCount = filtered.length;
+      const blueCount = filtered.filter(c => c.category === 'blue').length;
+      const greenCount = filtered.filter(c => c.category === 'green').length;
+      const redCount = filtered.filter(c => c.category === 'red').length;
 
-          let saldoRealRefinanciado = 0;
-          if (newCartonRollover > 0) {
-            saldoRealRefinanciado = newCartonRollover;
-          } else if (renovPayAmount > 0) {
-            saldoRealRefinanciado = renovPayAmount;
-          } else if (saldoCalculadoPorPagos > 0) {
-            saldoRealRefinanciado = saldoCalculadoPorPagos;
-          } else if (cardRollover > 0) {
-            saldoRealRefinanciado = cardRollover;
-          } else {
-            saldoRealRefinanciado = totDeuda;
-          }
+      summaryPills.innerHTML = `
+        <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(255,255,255,0.06); font-size: 0.75rem; font-weight: 700; color: #f8fafc; border: 1px solid rgba(255,255,255,0.1);">
+          Archivo: ${totalCount} registros
+        </div>
+        <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(59, 130, 246, 0.15); font-size: 0.75rem; font-weight: 700; color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+          🔵 Renovaciones: ${blueCount}
+        </div>
+        <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); font-size: 0.75rem; font-weight: 700; color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+          🟢 Exitosos: ${greenCount}
+        </div>
+        <div style="padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(239, 68, 68, 0.15); font-size: 0.75rem; font-weight: 700; color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">
+          🔴 En Mora: ${redCount}
+        </div>
+      `;
+    }
 
-          const cartonAntes = saldoRealRefinanciado;
-          const pagoRenovacion = renovPayAmount > 0 ? renovPayAmount : saldoRealRefinanciado;
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text-secondary); padding: 2.5rem 1rem; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color);">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
+          <strong style="color: var(--text-primary); display: block; margin-bottom: 0.25rem;">No se encontraron registros con los filtros seleccionados</strong>
+          <span style="font-size: 0.8rem;">Modifica los criterios de búsqueda o haz clic en "Limpiar".</span>
+        </div>
+      `;
+      return;
+    }
 
-          // 5. Saldo al cierre: Siempre $0
-          const saldoCierre = 0;
+    let allCartones = [];
+    let allPayments = [];
+    try {
+      const pCartones = (window.BulaPayDB && typeof window.BulaPayDB.getCartones === 'function')
+        ? window.BulaPayDB.getCartones()
+        : [];
+      const pPayments = (window.BulaPayDB && typeof window.BulaPayDB.getPayments === 'function')
+        ? window.BulaPayDB.getPayments()
+        : [];
+      [allCartones, allPayments] = await Promise.all([pCartones, pPayments]);
+    } catch (_) {}
 
-          // 6. Total entregado al cliente: El efectivo neto real de esa transacción
-          let totalEntregado = 0;
-          if (newCarton && newCarton.net_cash != null && !isNaN(Number(newCarton.net_cash)) && Number(newCarton.net_cash) >= 0) {
-            totalEntregado = Math.round(Number(newCarton.net_cash));
-          } else if (newCarton) {
-            const nMonto = Number(newCarton.monto_prestado || newCarton.amount || 0);
-            const nDesc = Number(newCarton.discount_amount || newCarton.descuento || 0);
-            totalEntregado = Math.max(0, Math.round(nMonto - nDesc - pagoRenovacion));
-          } else if (c.net_cash != null && !isNaN(Number(c.net_cash)) && Number(c.net_cash) >= 0) {
-            totalEntregado = Math.round(Number(c.net_cash));
-          } else {
-            totalEntregado = Math.max(0, Math.round(Number(c.montoPrestado || c.amount || 0) - pagoRenovacion));
-          }
+    container.innerHTML = filtered.map((c, index) => this.renderLiquidatedCardHtml(c, index, allCartones, allPayments, this.currentLiqAgentUsername)).join('');
+  },
 
-          // 7. Nuevo cartón generado: El valor total del nuevo crédito
-          let nuevoCartonGenerado = 0;
-          if (newCarton) {
-            nuevoCartonGenerado = Math.round(Number(newCarton.total_debt || newCarton.totalDebt || 0));
-            if (nuevoCartonGenerado <= 0 && newCarton.monto_prestado) {
-              nuevoCartonGenerado = Math.round(Number(newCarton.monto_prestado) * 1.2);
-            }
-          }
-          if (nuevoCartonGenerado <= 0) {
-            nuevoCartonGenerado = Math.round(Number(c.totalDeuda || c.total_debt || 0));
-          }
+  clearLiquidatedArchiveFilters() {
+    const sInput = document.getElementById('liq-filter-search');
+    const tSelect = document.getElementById('liq-filter-type');
+    const dInput = document.getElementById('liq-filter-date');
+    const sortSelect = document.getElementById('liq-filter-sort');
 
-          financialDetailsHtml = `
-            <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(59, 130, 246, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-                <span style="color: #cbd5e1; font-weight: 500;">Cartón antes de la renovación:</span>
-                <strong style="color: #ffffff; font-weight: 800; font-size: 0.9rem;">$${cartonAntes.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-                <span style="color: #cbd5e1; font-weight: 500;">Pago en renovación (Abono aplicado):</span>
-                <strong style="color: #60a5fa; font-weight: 800; font-size: 0.9rem;">$${pagoRenovacion.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-                <span style="color: #cbd5e1; font-weight: 500;">Saldo al cierre:</span>
-                <strong style="color: #34d399; font-weight: 800; font-size: 0.9rem;">$0</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-                <span style="color: #cbd5e1; font-weight: 500;">Total entregado al cliente:</span>
-                <strong style="color: #fbbf24; font-weight: 800; font-size: 0.9rem;">$${totalEntregado.toLocaleString('es-CO')}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
-                <span style="color: #cbd5e1; font-weight: 500;">Nuevo cartón generado:</span>
-                <strong style="color: #c084fc; font-weight: 800; font-size: 0.9rem;">#${nuevoNumeroCartonStr} &bull; $${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
-              </div>
-            </div>
-          `;
+    if (sInput) sInput.value = '';
+    if (tSelect) tSelect.value = 'all';
+    if (dInput) dInput.value = '';
+    if (sortSelect) sortSelect.value = 'date-desc';
+
+    this.applyLiquidatedArchiveFilters();
+  },
+
+  async marcarLiquidacionAtendida(cartonId, username = null) {
+    if (!cartonId) return;
+    const targetUser = username || this.currentLiqAgentUsername || this.selectedAuditAgentUsername;
+    try {
+      await window.BulaPayDB.marcarLiquidacionesAtendidas([cartonId], targetUser);
+      if (typeof window.showCrediToast === 'function') {
+        window.showCrediToast("✅ Liquidación marcada como atendida.", "success");
+      }
+      await this.refreshLiquidatedModalAndBadges(targetUser, this.currentLiqRouteId);
+    } catch(err) {
+      console.error("Error al marcar liquidación atendida:", err);
+    }
+  },
+
+  async marcarTodasComoAtendidas(username = null, routeId = null) {
+    const targetUser = username || this.currentLiqAgentUsername || this.selectedAuditAgentUsername;
+    const targetRoute = routeId || this.currentLiqRouteId;
+    if (!targetUser) return;
+
+    try {
+      const cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(targetUser, targetRoute);
+      const unreadCards = (cards || []).filter(c => !c.isAtendido);
+      if (unreadCards.length === 0) {
+        if (typeof window.showCrediToast === 'function') {
+          window.showCrediToast("Todas las alertas ya están atendidas", "info");
         } else {
-          financialDetailsHtml = `
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: rgba(15, 23, 42, 0.85); padding: 0.75rem 0.85rem; border-radius: 8px; font-size: 0.78rem; border: 1.5px solid rgba(255,255,255,0.1); box-sizing: border-box; flex-shrink: 0;">
-              <div>
-                <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Monto Prestado</span>
-                <strong style="color: #ffffff; font-size: 0.85rem;">$${Number(c.montoPrestado || 0).toLocaleString('es-CO')}</strong>
-              </div>
-              <div>
-                <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Deuda Total</span>
-                <strong style="color: #ffffff; font-size: 0.85rem;">$${Number(c.totalDeuda || 0).toLocaleString('es-CO')}</strong>
-              </div>
-              <div>
-                <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Saldo al Cierre</span>
-                <strong style="color: ${c.saldoPendiente > 0 ? '#f87171' : '#34d399'}; font-size: 0.85rem;">$${Number(c.saldoPendiente || 0).toLocaleString('es-CO')}</strong>
-              </div>
-            </div>
-          `;
+          alert("ℹ️ Todas las alertas de este agente ya están atendidas.");
         }
+        return;
+      }
 
-        const transIdClean = String(c.id || `trans_${c.numeroCarton}_${index}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cartonIds = unreadCards.map(c => c.id || c.numeroCarton).filter(Boolean);
+      await window.BulaPayDB.marcarLiquidacionesAtendidas(cartonIds, targetUser);
 
-        return `
-          <div id="card-liq-${transIdClean}" style="padding: 1.15rem; background: #0f172a; border: 1.5px solid ${c.categoryBorder}; border-radius: 14px; display: flex; flex-direction: column; gap: 0.85rem; width: 100%; box-sizing: border-box; flex-shrink: 0 !important; min-height: fit-content !important; overflow: visible !important; position: relative; box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
-              <div>
-                <strong style="color: #ffffff; font-size: 1.02rem; font-weight: 800; display: block; word-break: break-word;">${c.clientName}</strong>
-                <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-                  <span>C.C. ${c.cedula || 'N/A'}</span>
-                  <span>•</span>
-                  <span style="color: #cbd5e1; font-weight: 700;">Cartón #${c.numeroCarton}</span>${newCartonNumberBadge}
-                </div>
-              </div>
-              <span style="padding: 0.35rem 0.85rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap;">
-                ${c.categoryIcon} ${c.categoryLabel}
-              </span>
+      if (typeof window.showCrediToast === 'function') {
+        window.showCrediToast("✅ Todas las liquidaciones atendidas. Contador eliminado.", "success");
+      }
+
+      await this.refreshLiquidatedModalAndBadges(targetUser, targetRoute);
+    } catch(err) {
+      console.error("Error al marcar todas como atendidas:", err);
+    }
+  },
+
+  async refreshLiquidatedModalAndBadges(username, routeId = null) {
+    // 1. Refrescar vista del modal si está abierto
+    const overlay = document.getElementById('modal-liquidated-cards');
+    if (overlay && overlay.classList.contains('active')) {
+      if (this.currentLiqTab === 'active') {
+        await this.loadLiquidatedActiveView();
+      } else {
+        await this.loadLiquidatedArchiveView();
+      }
+    }
+
+    // 2. Actualizar badge en modal-agent-detail-section
+    if (username) {
+      let unreadCount = 0;
+      try {
+        if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
+          unreadCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(username, routeId);
+        }
+      } catch (_) {}
+
+      const liquidatedBadge = document.getElementById('modal-agent-liquidated-badge');
+      if (liquidatedBadge) {
+        if (unreadCount > 0) {
+          liquidatedBadge.innerHTML = `🔔 ${unreadCount}`;
+          liquidatedBadge.title = `${unreadCount} cartón(es) pendiente(s) de revisión. Clic para ver detalles.`;
+          liquidatedBadge.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+          liquidatedBadge.style.color = '#ffffff';
+          liquidatedBadge.style.border = '1px solid #f87171';
+          liquidatedBadge.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.6)';
+          liquidatedBadge.style.padding = '2px 8px';
+          liquidatedBadge.style.cursor = 'pointer';
+          liquidatedBadge.style.display = 'inline-flex';
+        } else {
+          liquidatedBadge.innerHTML = '0';
+          liquidatedBadge.title = 'Todas las liquidaciones están atendidas. Clic para ver historial.';
+          liquidatedBadge.style.background = 'rgba(148, 163, 184, 0.15)';
+          liquidatedBadge.style.color = '#94a3b8';
+          liquidatedBadge.style.border = '1px solid rgba(148, 163, 184, 0.25)';
+          liquidatedBadge.style.boxShadow = 'none';
+          liquidatedBadge.style.padding = '0 6px';
+          liquidatedBadge.style.cursor = 'pointer';
+          liquidatedBadge.style.display = 'inline-flex';
+        }
+      }
+    }
+
+    // 3. Actualizar badges en la lista de agentes y tabla de rutas
+    const activeKpiAgentsModal = document.getElementById('modal-kpi-agents');
+    if (activeKpiAgentsModal && activeKpiAgentsModal.classList.contains('active')) {
+      await this.filterModalAgents();
+    }
+    const routes = await window.BulaPayDB.getRoutes();
+    await this.renderRoutesTable(routes);
+  },
+
+  renderLiquidatedCardHtml(c, index, allCartones, allPayments, username) {
+    const timeStr = c.fechaLiquidacion 
+      ? new Date(c.fechaLiquidacion).toLocaleString('es-CO', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+      : 'Hoy';
+    const isRenewal = c.category === 'blue';
+    const isMora = c.category === 'red';
+    const isExitoso = c.category === 'green';
+
+    let financialDetailsHtml = '';
+    let newCartonNumberBadge = '';
+    const cIdLower = String(c.id || '').trim().toLowerCase();
+    const cedStr = String(c.cedula || c.cliente_id || '').trim();
+
+    if (isRenewal) {
+      // 1. Identificar pagos ordinarios vs pago de renovación para este cartón viejo
+      const isGenuineRenovPay = (p) => {
+        if (!p) return false;
+        const pId = String(p.id || '').trim();
+        const pType = String(p.payment_type || p.tipo_pago || '').trim().toLowerCase();
+        const pStatus = String(p.status || '').trim().toLowerCase();
+        const instNum = Number(p.installmentNumber || 0);
+        return pId.startsWith('pay_renov_') || instNum === 999 || pType === 'renovacion' || pStatus.includes('renovac');
+      };
+
+      const renovPay = (allPayments || []).find(p => {
+        const pCartonId = String(p.carton_id || '').trim().toLowerCase();
+        return pCartonId && pCartonId === cIdLower && isGenuineRenovPay(p);
+      }) || (allPayments || []).find(p => {
+        const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+        return pCed === cedStr && isGenuineRenovPay(p);
+      }) || null;
+
+      let normalPaymentsTotal = 0;
+      (allPayments || []).forEach(p => {
+        if (!p) return;
+        const pCartonId = String(p.carton_id || '').trim().toLowerCase();
+        if (pCartonId !== cIdLower) return;
+        if (isGenuineRenovPay(p)) return;
+        const pStatus = String(p.status || '').trim().toUpperCase();
+        if (pStatus === 'NO PAGO' || pStatus === 'PENDIENTE' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return;
+        normalPaymentsTotal += Math.round(Number(p.amount || 0));
+      });
+
+      const clientCartons = (allCartones || []).filter(nc => {
+        if (!nc) return false;
+        const nCed = String(nc.cliente_id || nc.client_id || nc.cedula || '').trim();
+        return nCed === cedStr;
+      });
+
+      const candidateNewCartons = clientCartons.filter(nc => {
+        const nId = String(nc.id || '').trim().toLowerCase();
+        return !nId || nId !== cIdLower;
+      });
+
+      const renovPayAmount = Math.round(Number(renovPay?.amount || 0));
+
+      let newCarton = candidateNewCartons.find(nc => {
+        const nOldId = String(nc.old_carton_id || nc.old_carton || '').trim().toLowerCase();
+        return nOldId && nOldId === cIdLower;
+      }) || candidateNewCartons.find(nc => {
+        const nOldNum = String(nc.old_numero_carton || '').trim();
+        return nOldNum && nOldNum === String(c.numeroCarton).trim();
+      });
+
+      if (!newCarton && candidateNewCartons.length > 0) {
+        const cTime = new Date(c.fechaLiquidacion || c.fecha_cierre || c.created_at || c.fecha_apertura || c.updated_at || 0).getTime();
+        const futureCartons = candidateNewCartons
+          .filter(nc => {
+            const ncTime = new Date(nc.fecha_apertura || nc.created_at || nc.updated_at || 0).getTime();
+            return ncTime >= (cTime - 60000);
+          })
+          .sort((a, b) => {
+            const tA = new Date(a.fecha_apertura || a.created_at || a.updated_at || 0).getTime();
+            const tB = new Date(b.fecha_apertura || b.created_at || b.updated_at || 0).getTime();
+            return tA - tB;
+          });
+
+        if (futureCartons.length > 0) {
+          newCarton = futureCartons[0];
+        }
+      }
+
+      if (!newCarton) {
+        newCarton = candidateNewCartons.find(nc => {
+          const nRollover = Math.round(Number(nc.saldo_anterior || nc.rollover_amount || 0));
+          return nRollover > 0 && renovPayAmount > 0 && nRollover === renovPayAmount;
+        }) || candidateNewCartons.find(nc => {
+          const nEst = String(nc.estado || nc.status || '').trim().toLowerCase();
+          return nEst === 'activo_por_renovacion' || nEst.includes('renov');
+        }) || candidateNewCartons[0] || null;
+      }
+
+      const nuevoNumeroCartonStr = newCarton?.numero_carton || newCarton?.numeroCarton || 'S/N';
+      if (newCarton) {
+        newCartonNumberBadge = ` <span style="color: #60a5fa; font-weight: 700;">➔</span> <span style="color: #93c5fd; font-weight: 700;">Nuevo Cartón #${nuevoNumeroCartonStr}</span>`;
+      }
+
+      const newCartonRollover = Math.round(Number(newCarton?.saldo_anterior || newCarton?.rollover_amount || newCarton?.old_outstanding || 0));
+      const cardRollover = Math.round(Number(c.old_outstanding || c.saldo_anterior || c.rollover_amount || 0));
+      const totDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (Number(c.montoPrestado || c.amount || 0) * 1.2)));
+      const saldoCalculadoPorPagos = totDeuda > 0 ? Math.max(0, totDeuda - normalPaymentsTotal) : 0;
+
+      let saldoRealRefinanciado = 0;
+      if (newCartonRollover > 0) {
+        saldoRealRefinanciado = newCartonRollover;
+      } else if (renovPayAmount > 0) {
+        saldoRealRefinanciado = renovPayAmount;
+      } else if (saldoCalculadoPorPagos > 0) {
+        saldoRealRefinanciado = saldoCalculadoPorPagos;
+      } else if (cardRollover > 0) {
+        saldoRealRefinanciado = cardRollover;
+      } else {
+        saldoRealRefinanciado = totDeuda;
+      }
+
+      const cartonAntes = saldoRealRefinanciado;
+      const pagoRenovacion = renovPayAmount > 0 ? renovPayAmount : saldoRealRefinanciado;
+
+      let totalEntregado = 0;
+      if (newCarton && newCarton.net_cash != null && !isNaN(Number(newCarton.net_cash)) && Number(newCarton.net_cash) >= 0) {
+        totalEntregado = Math.round(Number(newCarton.net_cash));
+      } else if (newCarton) {
+        const nMonto = Number(newCarton.monto_prestado || newCarton.amount || 0);
+        const nDesc = Number(newCarton.discount_amount || newCarton.descuento || 0);
+        totalEntregado = Math.max(0, Math.round(nMonto - nDesc - pagoRenovacion));
+      } else if (c.net_cash != null && !isNaN(Number(c.net_cash)) && Number(c.net_cash) >= 0) {
+        totalEntregado = Math.round(Number(c.net_cash));
+      } else {
+        totalEntregado = Math.max(0, Math.round(Number(c.montoPrestado || c.amount || 0) - pagoRenovacion));
+      }
+
+      let nuevoCartonGenerado = 0;
+      if (newCarton) {
+        nuevoCartonGenerado = Math.round(Number(newCarton.total_debt || newCarton.totalDebt || 0));
+        if (nuevoCartonGenerado <= 0 && newCarton.monto_prestado) {
+          nuevoCartonGenerado = Math.round(Number(newCarton.monto_prestado) * 1.2);
+        }
+      }
+      if (nuevoCartonGenerado <= 0) {
+        nuevoCartonGenerado = Math.round(Number(c.totalDeuda || c.total_debt || 0));
+      }
+
+      financialDetailsHtml = `
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(59, 130, 246, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
+            <span style="color: #cbd5e1; font-weight: 500;">Cartón antes de la renovación:</span>
+            <strong style="color: #ffffff; font-weight: 800; font-size: 0.9rem;">${cartonAntes.toLocaleString('es-CO')}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
+            <span style="color: #cbd5e1; font-weight: 500;">Pago en renovación (Abono aplicado):</span>
+            <strong style="color: #60a5fa; font-weight: 800; font-size: 0.9rem;">${pagoRenovacion.toLocaleString('es-CO')}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
+            <span style="color: #cbd5e1; font-weight: 500;">Saldo al cierre:</span>
+            <strong style="color: #34d399; font-weight: 800; font-size: 0.9rem;">$0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
+            <span style="color: #cbd5e1; font-weight: 500;">Total entregado al cliente:</span>
+            <strong style="color: #fbbf24; font-weight: 800; font-size: 0.9rem;">${totalEntregado.toLocaleString('es-CO')}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+            <span style="color: #cbd5e1; font-weight: 500;">Nuevo cartón generado:</span>
+            <strong style="color: #c084fc; font-weight: 800; font-size: 0.9rem;">#${nuevoNumeroCartonStr} &bull; ${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
+          </div>
+        </div>
+      `;
+    } else if (isMora) {
+      // Requisito 3: Detalle Transparente de Pérdidas, Abonos y Deuda (Mora / Abandono)
+      const clientPayments = (allPayments || []).filter(p => {
+        if (!p) return false;
+        const pCartonId = String(p.carton_id || '').trim().toLowerCase();
+        const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+        const belongsCarton = pCartonId && pCartonId === cIdLower;
+        const belongsClient = pCed && pCed === cedStr;
+        if (!belongsCarton && !belongsClient) return false;
+        const pStatus = String(p.status || '').trim().toUpperCase();
+        if (pStatus === 'NO PAGO' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return false;
+        const pId = String(p.id || '');
+        if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999) return false;
+        return Number(p.amount) > 0;
+      });
+
+      let totalAbonado = clientPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
+      let cuotasAbonadasCount = clientPayments.length;
+
+      const totalDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (Number(c.montoPrestado || c.amount || 0) * 1.2)));
+      const capitalPrestado = Math.round(Number(c.montoPrestado || c.amount || 0));
+      const totalCuotasEsperadas = Number(c.installmentsCount || c.cuotas || c.total_cuotas || 0) || 30;
+      const valorCuota = Number(c.installmentAmount || c.cuota || 0) || (totalCuotasEsperadas > 0 ? Math.round(totalDeuda / totalCuotasEsperadas) : (cuotasAbonadasCount > 0 ? Math.round(totalAbonado / cuotasAbonadasCount) : 0));
+
+      if (totalAbonado <= 0 && c.saldoPendiente !== undefined && c.saldoPendiente !== null) {
+        const outstanding = Math.round(Number(c.saldoPendiente || 0));
+        if (totalDeuda > outstanding && outstanding >= 0) {
+          totalAbonado = totalDeuda - outstanding;
+          if (valorCuota > 0) {
+            cuotasAbonadasCount = Math.round(totalAbonado / valorCuota);
+          }
+        }
+      }
+
+      const saldoRestante = (c.saldoPendiente !== undefined && c.saldoPendiente !== null) ? Math.round(Number(c.saldoPendiente)) : Math.max(0, totalDeuda - totalAbonado);
+      const cuotasColgadas = valorCuota > 0 ? Math.round(saldoRestante / valorCuota) : Math.max(0, totalCuotasEsperadas - cuotasAbonadasCount);
+
+      // Pérdida exacta de capital para la ruta (mantiene integridad contable)
+      const perdidaCapital = Math.max(0, capitalPrestado - totalAbonado);
+
+      financialDetailsHtml = `
+        <div style="background: rgba(15, 23, 42, 0.95); border: 1.5px solid rgba(239, 68, 68, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(239, 68, 68, 0.3); font-size: 0.8rem;">
+            <span style="color: #f87171; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Desglose de Pérdida y Deuda</span>
+            <span style="color: #cbd5e1; font-size: 0.75rem;">Capital Prestado: <strong>${capitalPrestado.toLocaleString('es-CO')}</strong></span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.8rem;">
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">Cuotas Abonadas</span>
+              <strong style="color: #34d399; font-size: 0.92rem; display: block;">${cuotasAbonadasCount} cuotas</strong>
+              <span style="color: #6ee7b7; font-size: 0.72rem;">${totalAbonado.toLocaleString('es-CO')} pagadas</span>
             </div>
-
-            ${financialDetailsHtml}
-
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.55rem; gap: 0.5rem; flex-wrap: wrap;">
-              <span style="color: ${c.categoryColor}; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">ℹ️ ${c.explanation}</span>
-              <span style="white-space: nowrap; color: #e2e8f0; font-weight: 600;">⏰ ${timeStr}</span>
+            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">Saldo Colgado</span>
+              <strong style="color: #f87171; font-size: 0.92rem; display: block;">${cuotasColgadas} cuotas</strong>
+              <span style="color: #fca5a5; font-size: 0.72rem;">${saldoRestante.toLocaleString('es-CO')} deuda</span>
+            </div>
+            <div style="background: rgba(220, 38, 38, 0.15); border: 1.5px solid rgba(239, 68, 68, 0.5); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #fca5a5; display: block; font-size: 0.68rem; font-weight: 700;">Pérdida de Capital</span>
+              <strong style="color: #ffffff; font-size: 0.95rem; display: block; font-weight: 800;">${perdidaCapital.toLocaleString('es-CO')}</strong>
+              <span style="color: #cbd5e1; font-size: 0.68rem;">Capital no recuperado</span>
             </div>
           </div>
-        `;
-      }).join('');
-    } catch(err) {
-      console.error("Error al renderizar modal de cartones liquidados:", err);
-      container.innerHTML = `<div style="text-align: center; color: #ef4444; padding: 2rem;">❌ Error al cargar los cartones liquidados: ${err.message}</div>`;
+          <div style="font-size: 0.72rem; color: #94a3b8; background: rgba(0,0,0,0.3); padding: 0.4rem 0.6rem; border-radius: 6px; border-left: 3px solid #f87171; display: flex; align-items: center; gap: 0.4rem;">
+            <span>🛡️</span>
+            <span><strong>Integridad Contable:</strong> Pérdida de cartera castigada. No altera el capital disponible ni el efectivo físico en caja de hoy.</span>
+          </div>
+        </div>
+      `;
+    } else {
+      // Liquidado Exitoso
+      const capitalPrestado = Math.round(Number(c.montoPrestado || c.amount || 0));
+      const totalDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (capitalPrestado * 1.2)));
+      const ganancia = Math.max(0, totalDeuda - capitalPrestado);
+
+      financialDetailsHtml = `
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.8rem;">
+            <div>
+              <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Monto Prestado</span>
+              <strong style="color: #ffffff; font-size: 0.88rem;">${capitalPrestado.toLocaleString('es-CO')}</strong>
+            </div>
+            <div>
+              <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Total Recaudado</span>
+              <strong style="color: #ffffff; font-size: 0.88rem;">${totalDeuda.toLocaleString('es-CO')}</strong>
+            </div>
+            <div>
+              <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Ganancia Neta</span>
+              <strong style="color: #34d399; font-size: 0.88rem;">+${ganancia.toLocaleString('es-CO')}</strong>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.4rem;">
+            <span style="color: #cbd5e1;">Saldo Final al Cierre:</span>
+            <strong style="color: #34d399; font-weight: 800;">$0 (Crédito Saldado al 100%)</strong>
+          </div>
+        </div>
+      `;
     }
+
+    const attendedStatusPill = c.isAtendido
+      ? `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; padding: 0.2rem 0.6rem; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">✅ Atendida</span>`
+      : `<span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 9999px; padding: 0.2rem 0.6rem; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">⚠️ Pendiente</span>
+         <button type="button" onclick="event.stopPropagation(); supervisorModule.marcarLiquidacionAtendida('${c.id || c.numeroCarton}', '${username}')" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #93c5fd; padding: 0.2rem 0.65rem; border-radius: 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: all 0.2s;" title="Marcar esta alerta como atendida">✓ Atender</button>`;
+
+    const transIdClean = String(c.id || `trans_${c.numeroCarton}_${index}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    return `
+      <div id="card-liq-${transIdClean}" style="padding: 1.15rem; background: #0f172a; border: 1.5px solid ${c.categoryBorder}; border-radius: 14px; display: flex; flex-direction: column; gap: 0.85rem; width: 100%; box-sizing: border-box; flex-shrink: 0 !important; min-height: fit-content !important; overflow: visible !important; position: relative; box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
+          <div>
+            <strong style="color: #ffffff; font-size: 1.02rem; font-weight: 800; display: block; word-break: break-word;">${c.clientName}</strong>
+            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+              <span>C.C. ${c.cedula || 'N/A'}</span>
+              <span>•</span>
+              <span style="color: #cbd5e1; font-weight: 700;">Cartón #${c.numeroCarton}</span>${newCartonNumberBadge}
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            ${attendedStatusPill}
+            <span style="padding: 0.35rem 0.85rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap;">
+              ${c.categoryIcon} ${c.categoryLabel}
+            </span>
+          </div>
+        </div>
+
+        ${financialDetailsHtml}
+
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.55rem; gap: 0.5rem; flex-wrap: wrap;">
+          <span style="color: ${c.categoryColor}; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">ℹ️ ${c.explanation}</span>
+          <span style="white-space: nowrap; color: #e2e8f0; font-weight: 600;">⏰ ${timeStr}</span>
+        </div>
+      </div>
+    `;
   },
 
   closeLiquidatedCardsModal() {
     const overlay = document.getElementById('modal-liquidated-cards');
     if (overlay) overlay.classList.remove('active');
   },
+
 
   // 3. POPULATE MODAL: RECAUDO HOY (RANKING)
   async populateKpiCollectedModal() {
@@ -3373,12 +3807,36 @@ const supervisorModule = {
         if (gRoute.status === 'Incidencia') statusClass = 'incidencia';
       }
 
-      const agentsList = Array.from(gRoute.agentNames).join(', ') || 'Sin Agente';
+      const allRouteUsers = await this.getCachedUsers();
+      const routeAgents = (allRouteUsers || []).filter(u => 
+        (u.routeId && gRoute.routeIds.includes(u.routeId)) ||
+        (u.route_id && gRoute.routeIds.includes(u.route_id)) ||
+        (u.name && gRoute.agentNames.has(u.name))
+      );
+
+      let agentsHtmlParts = [];
+      if (routeAgents.length > 0) {
+        for (const ag of routeAgents) {
+          let uCount = 0;
+          try {
+            if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
+              uCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(ag.username, ag.routeId);
+            }
+          } catch (_) {}
+          const bell = uCount > 0 
+            ? ' <span class="table-agent-bell-btn" onclick="event.stopPropagation(); supervisorModule.openLiquidatedCardsModal(\x27' + ag.username + '\x27, \x27' + ag.routeId + '\x27)" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: 1px solid #f87171; border-radius: 9999px; padding: 1px 7px; font-size: 0.72rem; font-weight: 700; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); display: inline-flex; align-items: center; gap: 3px;" title="' + uCount + ' liquidación(es) sin atender. Clic para ver">🔔 ' + uCount + '</span>'
+            : '';
+          agentsHtmlParts.push('<span>' + ag.name + '</span>' + bell);
+        }
+      } else {
+        agentsHtmlParts = Array.from(gRoute.agentNames).map(n => '<span>' + n + '</span>');
+      }
+      const agentsDisplayHtml = agentsHtmlParts.join(', ') || 'Sin Agente';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td style="font-weight: 600; color: white;">${gRoute.name}</td>
-        <td>👤 ${agentsList}</td>
+        <td>👤 ${agentsDisplayHtml}</td>
         <td>$${Number(gRoute.capital).toLocaleString('es-CO')}</td>
         <td style="color: var(--accent); font-weight: 600;">$${totalRouteDisplayCollected.toLocaleString('es-CO')}</td>
         <td>
@@ -5707,5 +6165,7 @@ const supervisorModule = {
 window.supervisorModule = supervisorModule;
 window.LiquidatedCardsModal = {
   open: (username, routeId) => supervisorModule.openLiquidatedCardsModal(username, routeId),
-  close: () => supervisorModule.closeLiquidatedCardsModal()
+  close: () => supervisorModule.closeLiquidatedCardsModal(),
+  marcarTodasComoAtendidas: () => supervisorModule.marcarTodasComoAtendidas(),
+  marcarLiquidacionAtendida: (id, u) => supervisorModule.marcarLiquidacionAtendida(id, u)
 };

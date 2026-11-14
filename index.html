@@ -2643,22 +2643,77 @@
 
   <!-- MODAL: CARTONES LIQUIDADOS HOY (LiquidatedCardsModal) -->
   <div class="supervisor-modal-overlay" id="modal-liquidated-cards">
-    <div class="supervisor-modal-card" style="max-width: 680px; width: 100%; max-height: 90vh; display: flex; flex-direction: column;">
+    <div class="supervisor-modal-card" style="max-width: 740px; width: 100%; max-height: 90vh; display: flex; flex-direction: column;">
       <button class="supervisor-modal-close" onclick="supervisorModule.closeLiquidatedCardsModal()">&times;</button>
-      <h3 class="title-gradient" style="margin-bottom: 0.3rem; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem;">
-        <span>📋</span> Cartones Liquidados Hoy
-      </h3>
-      <p id="liquidated-cards-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.25rem;">
+        <h3 class="title-gradient" style="margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🔔</span> Alertas y Liquidaciones del Agente
+        </h3>
+        <button id="btn-mark-all-attended" type="button" onclick="supervisorModule.marcarTodasComoAtendidas()" style="display: inline-flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; border: none; padding: 0.45rem 0.9rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);" title="Marcar todas las liquidaciones pendientes como atendidas y desaparecer la campana">
+          ✓ Marcar Todas como Atendidas
+        </button>
+      </div>
+      <p id="liquidated-cards-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.85rem;">
         Auditoría de cartones liquidados por el agente durante el día actual.
       </p>
 
+      <!-- Barra de Navegación: Alertas Activas vs Archivo Histórico -->
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.65rem;">
+        <button id="tab-btn-active-liq" type="button" onclick="supervisorModule.switchLiquidatedTab('active')" style="padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; border: none; background: var(--accent); color: #ffffff; display: flex; align-items: center; gap: 0.4rem;">
+          <span>🔔 Alertas de Hoy</span>
+          <span id="tab-unread-badge" style="background: #ef4444; color: #fff; border-radius: 9999px; padding: 1px 6px; font-size: 0.7rem; font-weight: 800; display: inline-flex;">0</span>
+        </button>
+        <button id="tab-btn-archive-liq" type="button" onclick="supervisorModule.switchLiquidatedTab('archive')" style="padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.04); color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem;">
+          <span>📁 Archivo Histórico</span>
+        </button>
+      </div>
+
+      <!-- Barra de Filtros Avanzados para el Archivo Histórico (inicialmente oculta) -->
+      <div id="liquidated-archive-filters-bar" style="display: none; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 0.75rem 0.85rem; margin-bottom: 0.85rem; flex-direction: column; gap: 0.5rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <div>
+            <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">Cédula o Nombre del Cliente:</label>
+            <input type="text" id="liq-filter-search" oninput="supervisorModule.applyLiquidatedArchiveFilters()" placeholder="Buscar cédula o nombre..." style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">Tipo de Liquidación:</label>
+            <select id="liq-filter-type" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+              <option value="all">Todos los tipos de liquidación</option>
+              <option value="blue">🔵 Liquidado por Renovación (Retanqueo)</option>
+              <option value="red">🔴 Liquidado por Mora / Lista Negra</option>
+              <option value="green">🟢 Liquidado Exitoso (Pagado 100%)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: flex-end;">
+          <div>
+            <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">Fecha de Liquidación:</label>
+            <input type="date" id="liq-filter-date" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">Ordenar por:</label>
+            <select id="liq-filter-sort" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+              <option value="date-desc">Fecha: Más recientes primero</option>
+              <option value="date-asc">Fecha: Más antiguos primero</option>
+              <option value="cedula-asc">Cédula: Ascendente (A-Z)</option>
+              <option value="cedula-desc">Cédula: Descendente (Z-A)</option>
+            </select>
+          </div>
+          <div>
+            <button id="btn-liq-clear-filters" type="button" onclick="supervisorModule.clearLiquidatedArchiveFilters()" style="padding: 0.4rem 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; font-size: 0.78rem; cursor: pointer; white-space: nowrap; height: 32px;">
+              Limpiar
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Resumen de Totales por Categoría -->
-      <div id="liquidated-cards-summary-pills" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+      <div id="liquidated-cards-summary-pills" style="display: flex; gap: 0.5rem; margin-bottom: 0.85rem; flex-wrap: wrap;">
         <!-- Inyectado dinámicamente con píldoras de colores -->
       </div>
 
       <!-- Contenedor del listado con código de colores -->
-      <div id="liquidated-cards-container" style="max-height: 65vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.15rem; padding: 0.5rem; box-sizing: border-box; width: 100%;">
+      <div id="liquidated-cards-container" style="max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.15rem; padding: 0.5rem; box-sizing: border-box; width: 100%;">
         <!-- Se inyecta dinámicamente -->
       </div>
     </div>

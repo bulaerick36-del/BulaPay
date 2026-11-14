@@ -1282,6 +1282,111 @@ const db = {
     }
   },
 
+    _reviewedLiquidationsSet: null,
+
+  getReviewedLiquidationsSetSync() {
+    if (this._reviewedLiquidationsSet) return this._reviewedLiquidationsSet;
+    this._reviewedLiquidationsSet = new Set();
+    try {
+      const raw = localStorage.getItem('bulapay_liquidaciones_atendidas');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          arr.forEach(id => {
+            if (id != null) this._reviewedLiquidationsSet.add(String(id).trim().toLowerCase());
+          });
+        }
+      }
+    } catch (_) {}
+    return this._reviewedLiquidationsSet;
+  },
+
+  isLiquidacionAtendida(cartonId, numeroCarton = null) {
+    const set = this.getReviewedLiquidationsSetSync();
+    if (cartonId) {
+      const idStr = String(cartonId).trim().toLowerCase();
+      if (set.has(idStr)) return true;
+    }
+    if (numeroCarton != null) {
+      const numStr = String(numeroCarton).trim().toLowerCase();
+      if (set.has(numStr) || set.has('carton_' + numStr)) return true;
+    }
+    return false;
+  },
+
+  async marcarLiquidacionesAtendidas(cartonIds = [], agentUsername = null) {
+    if (!Array.isArray(cartonIds) || cartonIds.length === 0) return;
+    const set = this.getReviewedLiquidationsSetSync();
+    let currentStorageList = [];
+    try {
+      currentStorageList = JSON.parse(localStorage.getItem('bulapay_liquidaciones_atendidas') || '[]');
+    } catch (_) {
+      currentStorageList = [];
+    }
+
+    cartonIds.forEach(id => {
+      if (!id) return;
+      const s = String(id).trim().toLowerCase();
+      set.add(s);
+      if (!currentStorageList.includes(s)) currentStorageList.push(s);
+    });
+
+    try {
+      localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(currentStorageList));
+    } catch (_) {}
+
+    // Persistir en Supabase
+    try {
+      const supabase = await initSupabase();
+      for (const id of cartonIds) {
+        const isValidUuid = typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        const updatePayload = {
+          supervisor_atendido: true,
+          supervisor_reviewed_at: new Date().toISOString()
+        };
+        try {
+          if (isValidUuid) {
+            await supabase.from('cartones').update(updatePayload).eq('id', id);
+          } else if (!isNaN(Number(id))) {
+            await supabase.from('cartones').update(updatePayload).eq('numero_carton', Number(id));
+          } else {
+            await supabase.from('cartones').update(updatePayload).eq('id', id);
+          }
+        } catch (_) {}
+      }
+
+      // Sincronización en bulapay_notificaciones para redundancia en la nube
+      try {
+        const notifPayloads = cartonIds.map(id => ({
+          id: 'liq_rev_' + String(id).trim().toLowerCase(),
+          title: 'Liquidación Atendida',
+          category: 'Liquidacion_Revisada',
+          message: 'Liquidación atendida por supervisor (' + id + ')',
+          target_username: agentUsername || 'supervisor',
+          created_at: new Date().toISOString()
+        }));
+        await supabase.from('bulapay_notificaciones').upsert(notifPayloads).catch(() => {});
+      } catch (_) {}
+    } catch (eCloud) {
+      console.warn("Aviso al guardar liquidaciones atendidas en la nube:", eCloud);
+    }
+
+    // Notificar reactivamente a toda la interfaz
+    window.dispatchEvent(new CustomEvent('bulapay:liquidaciones_atendidas', {
+      detail: { cartonIds, agentUsername }
+    }));
+  },
+
+  async getAgentUnreadLiquidationsCount(agentUsername, routeId = null) {
+    try {
+      const cards = await this.getAgentLiquidatedCartonesToday(agentUsername, routeId);
+      return (cards || []).filter(c => !c.isAtendido).length;
+    } catch (e) {
+      console.warn("Aviso al calcular conteo no leído de liquidaciones:", e);
+      return 0;
+    }
+  },
+
   async getAgentLiquidatedCartonesToday(agentUsername, routeId = null) {
     if (!agentUsername && !routeId) return [];
     try {
@@ -1708,6 +1813,10 @@ const db = {
         const cleanItem = { ...item };
         delete cleanItem._cIdLower;
         delete cleanItem._hasDirectRenovPayToday;
+        cleanItem.isAtendido = Boolean(
+          cleanItem.supervisor_atendido || 
+          self.isLiquidacionAtendida(cleanItem.id, cleanItem.numeroCarton)
+        );
         return cleanItem;
       });
 
@@ -1720,6 +1829,188 @@ const db = {
       return liquidatedList;
     } catch (e) {
       console.error("Error al obtener cartones liquidados hoy:", e);
+      return [];
+    }
+  },
+
+  async getAgentLiquidatedCartonesHistorical(agentUsername, routeId = null, filterOptions = {}) {
+    try {
+      const self = (this && typeof this.getCachedUsers === 'function') ? this : (window.BulaPayDB || db);
+      const supabase = await initSupabase();
+      let allUsers = [];
+      if (self && typeof self.getCachedUsers === 'function') {
+        allUsers = await self.getCachedUsers();
+      } else {
+        try {
+          allUsers = JSON.parse(localStorage.getItem('bulapay_users') || '[]');
+        } catch(e) {
+          allUsers = [];
+        }
+      }
+      const cleanUser = agentUsername ? String(agentUsername).trim().toLowerCase() : '';
+      const agentUser = (allUsers || []).find(u => 
+        String(u.username || '').toLowerCase() === cleanUser ||
+        String(u.id || '').toLowerCase() === cleanUser
+      );
+
+      const targetRouteId = routeId || agentUser?.routeId || agentUser?.route_id || null;
+      const targetAgentId = agentUser?.id || agentUsername;
+      const targetAgentUsername = agentUser?.username || agentUsername;
+      const targetRouteIdStr = targetRouteId ? String(targetRouteId).trim() : '';
+
+      // 1. Consultar cartones
+      let cartones = [];
+      try {
+        let q = supabase.from('cartones').select('*');
+        if (targetRouteIdStr && targetAgentUsername) {
+          q = q.or('route_id.eq.' + targetRouteIdStr + ',agent_id.eq.' + targetAgentUsername + ',agent_id.eq.' + targetAgentId);
+        } else if (targetRouteIdStr) {
+          q = q.eq('route_id', targetRouteIdStr);
+        } else if (targetAgentUsername) {
+          q = q.or('agent_id.eq.' + targetAgentUsername + ',agent_id.eq.' + targetAgentId);
+        }
+        const { data, error } = await q;
+        if (!error && data) cartones = data;
+        else {
+          const { data: allData } = await supabase.from('cartones').select('*');
+          if (allData) cartones = allData;
+        }
+      } catch (eQ) {
+        try {
+          cartones = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
+        } catch (_) {}
+      }
+
+      // 2. Clientes para nombres
+      let clients = [];
+      try {
+        const { data: cData } = await supabase.from('clients').select('*');
+        if (cData) clients = cData;
+      } catch(_) {
+        try {
+          clients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
+        } catch(_) {}
+      }
+      const clientMap = new Map();
+      (clients || []).forEach(cl => {
+        const ced = String(cl.cedula || cl.cliente_id || '').trim();
+        if (ced) clientMap.set(ced, cl);
+      });
+
+      const candidateList = [];
+      (cartones || []).forEach(c => {
+        if (!c) return;
+        const rawEstado = String(c.estado || c.status || '').trim().toLowerCase();
+        const rawReason = String(c.liquidation_reason || c.motivo || c.motivo_liquidacion || '').trim().toLowerCase();
+
+        // Excluir activos
+        if (!rawEstado || rawEstado === 'activo' || rawEstado === 'activo_por_renovacion' || rawEstado.startsWith('activo')) {
+          return;
+        }
+
+        const isMora = rawEstado === 'liquidado_perdida' ||
+                       rawEstado === 'liquidado_mora' ||
+                       rawEstado === 'castigado' ||
+                       rawEstado === 'lista negra' ||
+                       rawEstado.includes('perdida') ||
+                       rawEstado.includes('mora') ||
+                       rawEstado.includes('castig') ||
+                       rawEstado.includes('negra') ||
+                       rawReason.includes('mora') ||
+                       rawReason.includes('perdida') ||
+                       rawReason.includes('castigo') ||
+                       rawReason.includes('incobrable') ||
+                       rawReason.includes('negra');
+
+        const isRenovacion = !isMora && (
+          rawEstado === 'renovado' ||
+          rawEstado === 'liquidado_renovacion' ||
+          rawEstado === 'liquidado_por_renovacion' ||
+          rawEstado.includes('renov') ||
+          rawReason.includes('renov') ||
+          rawReason.includes('retanqueo')
+        ) && !rawReason.includes('exitoso');
+
+        const isExitoso = !isMora && !isRenovacion && (
+          rawEstado === 'liquidado' ||
+          rawEstado === 'liquidado_exitoso' ||
+          rawEstado === 'liquidado_pagado' ||
+          rawEstado === 'liquidado_retraso' ||
+          rawEstado === 'pagado' ||
+          rawEstado === 'cerrado' ||
+          rawReason.includes('exitoso') ||
+          rawReason.includes('pago')
+        );
+
+        if (!isMora && !isRenovacion && !isExitoso) return;
+
+        const currentOutstanding = Number(c.outstanding || 0);
+        if (!isMora && currentOutstanding > 0) return;
+
+        let category = 'green';
+        let categoryLabel = 'Exitoso';
+        let categoryColor = '#10b981';
+        let categoryBg = 'rgba(16, 185, 129, 0.12)';
+        let categoryBorder = '#10b981';
+        let categoryIcon = '🟢';
+        let explanation = 'El cliente pagó la totalidad del crédito de forma natural.';
+
+        if (isMora) {
+          category = 'red';
+          categoryLabel = 'En Mora / Lista Negra';
+          categoryColor = '#ef4444';
+          categoryBg = 'rgba(239, 68, 68, 0.12)';
+          categoryBorder = '#ef4444';
+          categoryIcon = '🔴';
+          explanation = 'El cartón fue liquidado por castigo, incobrable o enviado a lista negra.';
+        } else if (isRenovacion) {
+          category = 'blue';
+          categoryLabel = 'Renovación';
+          categoryColor = '#3b82f6';
+          categoryBg = 'rgba(59, 130, 246, 0.12)';
+          categoryBorder = '#3b82f6';
+          categoryIcon = '🔵';
+          explanation = 'El cliente canceló el saldo anterior usando un nuevo crédito (Retanqueo).';
+        }
+
+        const cedStr = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+        const clientObj = clientMap.get(cedStr) || {};
+        const clientName = clientObj.name || clientObj.nombre || c.client_name || c.cliente_nombre || (cedStr ? 'Cliente C.C. ' + cedStr : 'Cliente Sin Nombre');
+        const rawCloseDate = c.fecha_cierre || c.closed_at || c.fecha_liquidacion || c.updated_at || c.created_at || new Date().toISOString();
+
+        candidateList.push({
+          ...c,
+          clientName,
+          cedula: cedStr,
+          numeroCarton: c.numero_carton || c.numeroCarton || 'S/N',
+          montoPrestado: Number(c.monto_prestado || c.amount || clientObj.amount || 0),
+          totalDeuda: Number(c.total_debt || c.totalDebt || clientObj.totalDebt || 0),
+          saldoPendiente: Number(c.outstanding || 0),
+          category,
+          categoryLabel,
+          categoryColor,
+          categoryBg,
+          categoryBorder,
+          categoryIcon,
+          explanation,
+          fechaLiquidacion: rawCloseDate,
+          isAtendido: Boolean(
+            c.supervisor_atendido ||
+            self.isLiquidacionAtendida(c.id, c.numero_carton || c.numeroCarton)
+          )
+        });
+      });
+
+      // Orden cronológico descendente por defecto
+      candidateList.sort((a, b) => {
+        const tA = new Date(a.fechaLiquidacion || 0).getTime();
+        const tB = new Date(b.fechaLiquidacion || 0).getTime();
+        return tB - tA;
+      });
+
+      return candidateList;
+    } catch(err) {
+      console.error("Error al obtener histórico de liquidaciones:", err);
       return [];
     }
   },
@@ -6575,8 +6866,34 @@ return {
         outstanding: moraOutstanding,
         updated_at: new Date().toISOString(),
         fecha_cierre: new Date().toISOString(),
-        liquidation_reason: isMora ? 'Liquidado por Mora' : (isRenovacion ? 'Renovación' : 'Pago Exitoso')
+        liquidation_reason: isMora ? 'Liquidado por Mora' : (isRenovacion ? 'Renovación' : 'Pago Exitoso'),
+        supervisor_atendido: false
       };
+
+      // Limpiar del set de atendidas para que aparezca como nueva alerta inmediata al supervisor
+      try {
+        const cIdStr = String(cartonId || '').trim().toLowerCase();
+        const cNumStr = String(numeroCarton || '').trim().toLowerCase();
+        if (this._reviewedLiquidationsSet) {
+          if (cIdStr) this._reviewedLiquidationsSet.delete(cIdStr);
+          if (cNumStr) this._reviewedLiquidationsSet.delete(cNumStr);
+        }
+        const rawReviewed = localStorage.getItem('bulapay_liquidaciones_atendidas');
+        if (rawReviewed) {
+          let arrReviewed = JSON.parse(rawReviewed);
+          if (Array.isArray(arrReviewed)) {
+            arrReviewed = arrReviewed.filter(x => x !== cIdStr && x !== cNumStr);
+            localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(arrReviewed));
+          }
+        }
+      } catch (_) {}
+
+      // Emitir evento reactivo de liquidación
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('bulapay:carton_liquidated', {
+          detail: { cedula, cartonId, numeroCarton, status: cartonEstadoTarget, isMora, isRenovacion }
+        }));
+      }, 50);
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
       if (cartonId && isValidUuid(cartonId)) {
