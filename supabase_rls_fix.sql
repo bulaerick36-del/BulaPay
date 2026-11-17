@@ -628,6 +628,7 @@ BEGIN
             estado = 'RENOVADO',
             status = 'RENOVADO',
             outstanding = 0,
+            saldo_pendiente = 0,
             fecha_cierre = v_now,
             updated_at = v_now,
             liquidation_reason = 'Renovación'
@@ -640,6 +641,7 @@ BEGIN
         estado = 'RENOVADO',
         status = 'RENOVADO',
         outstanding = 0,
+        saldo_pendiente = 0,
         fecha_cierre = v_now,
         updated_at = v_now,
         liquidation_reason = 'Renovación'
@@ -714,6 +716,27 @@ BEGIN
         "installmentsCount" = p_installments_count,
         "installmentAmount" = p_installment_amount
     WHERE "cedula" = p_cliente_id;
+
+    -- Notificación en tiempo real para el supervisor
+    BEGIN
+        INSERT INTO bulapay_notificaciones (
+            id,
+            titulo,
+            mensaje,
+            categoria,
+            prioridad,
+            created_at
+        ) VALUES (
+            'notif_renov_' || floor(extract(epoch from v_now))::text || '_' || floor(random() * 1000)::text,
+            '🔄 Renovación / Retanqueo',
+            'Agente ' || v_agent_name || ' liquidó $' || to_char(v_saldo_liquidar, 'FM999,999,999') || ' del cliente ' || p_cliente_id || '. Nuevo Cartón #' || v_new_numero::text || '.',
+            'Liquidacion_Campo',
+            'Alta',
+            v_now
+        );
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
 
     RETURN jsonb_build_object(
         'success', true,

@@ -45,14 +45,58 @@ const supervisorModule = {
         await this.updateBlacklistKpi();
       }
     });
-    try {
+        try {
       const bc = new BroadcastChannel('bulapay_sync');
       bc.onmessage = async (ev) => {
-        if (ev.data && ev.data.type === 'blacklist-updated') {
+        if (!ev.data) return;
+        if (ev.data.type === 'blacklist-updated') {
           await this.updateBlacklistKpi();
+        } else if (ev.data.type === 'carton-liquidado-renovado') {
+          this.showSupervisorFieldAlert(ev.data);
+        } else if (ev.data.type === 'cierre-jornada-campo') {
+          this.showSupervisorCierreAlert(ev.data);
         }
       };
     } catch (eBc) {}
+
+    // Sincronización en tiempo real de liquidaciones y renovaciones de campo
+    window.addEventListener('bulapay:alerta_supervisor', (e) => {
+      if (e && e.detail) {
+        if (e.detail.isCierre) {
+          this.showSupervisorCierreAlert(e.detail);
+        } else {
+          this.showSupervisorFieldAlert(e.detail);
+        }
+      }
+    });
+
+    // Supabase Realtime para notificaciones en vivo de campo
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getSupabaseClient === 'function') {
+        window.BulaPayDB.getSupabaseClient().then(supabase => {
+          if (supabase && typeof supabase.channel === 'function') {
+            supabase.channel('supervisor_field_alerts_live')
+              .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bulapay_notificaciones' }, async (payload) => {
+                const row = payload.new;
+                if (row && (row.categoria === 'Liquidacion_Campo' || row.categoria === 'Cierre_Jornada')) {
+                  if (row.categoria === 'Cierre_Jornada') {
+                    supervisorModule.showSupervisorCierreAlert({
+                      titulo: row.titulo,
+                      mensaje: row.mensaje
+                    });
+                  } else {
+                    supervisorModule.showSupervisorFieldAlert({
+                      titulo: row.titulo,
+                      mensaje: row.mensaje
+                    });
+                  }
+                }
+              })
+              .subscribe();
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
 
     await this.renderDashboard();
     this.initOrientationDetector();
@@ -77,6 +121,117 @@ const supervisorModule = {
     // Actualizar tiempos de operación periódicamente (cada 30 segundos)
     if (this.operatingTimeInterval) clearInterval(this.operatingTimeInterval);
     this.operatingTimeInterval = setInterval(() => this.updateOperatingTimes(), 30 * 1000);
+  },
+
+  showSupervisorFieldAlert(data) {
+    try {
+      let alertContainer = document.getElementById('supervisor-realtime-alerts-container');
+      if (!alertContainer) {
+        alertContainer = document.createElement('div');
+        alertContainer.id = 'supervisor-realtime-alerts-container';
+        alertContainer.style.cssText = 'position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999999; display: flex; flex-direction: column; gap: 0.75rem; max-width: 420px; width: calc(100% - 3rem); pointer-events: none;';
+        document.body.appendChild(alertContainer);
+      }
+
+      const card = document.createElement('div');
+      card.style.cssText = 'pointer-events: auto; background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98)); border: 1.5px solid #3b82f6; border-left: 6px solid #60a5fa; border-radius: 12px; padding: 1rem 1.15rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(59, 130, 246, 0.4); color: #ffffff;';
+
+      const isRenov = data.isRenov || data.subType === 'Renovacion' || String(data.titulo || '').includes('Retanqueo') || String(data.titulo || '').includes('Renovación');
+      const icon = isRenov ? '🔄' : '✅';
+      const title = data.titulo || (isRenov ? 'Nuevo Retanqueo / Renovación' : 'Liquidación Exitosa de Cartón');
+      const agentName = data.agentName || 'Agente de Ruta';
+      const clientName = data.clientName || 'Cliente';
+      const amountStr = data.amountLiquidated ? ('$' + Number(data.amountLiquidated).toLocaleString('es-CO')) : '';
+      const newCartonBadge = data.newCartonNumber ? ('<span style="background: rgba(192, 132, 252, 0.2); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.4); padding: 2px 7px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">Nuevo Cartón #' + data.newCartonNumber + '</span>') : '';
+
+      card.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.45rem;">' +
+        '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+          '<span style="font-size: 1.3rem;">' + icon + '</span>' +
+          '<strong style="color: #60a5fa; font-size: 0.92rem; text-transform: uppercase; letter-spacing: 0.03em;">' + title + '</strong>' +
+        '</div>' +
+        '<button type="button" style="background: transparent; border: none; color: #94a3b8; font-size: 1.1rem; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>' +
+      '</div>' +
+      '<div style="font-size: 0.85rem; color: #e2e8f0; line-height: 1.4; margin-bottom: 0.5rem;">' +
+        (data.mensaje || ('Agente <strong>' + agentName + '</strong> liquidó <strong style="color: #34d399;">' + amountStr + '</strong> del cliente <strong>' + clientName + '</strong>.')) +
+      '</div>' +
+      '<div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; color: #94a3b8; border-top: 1px dashed rgba(255, 255, 255, 0.12); padding-top: 0.45rem;">' +
+        '<span>👤 ' + agentName + '</span>' +
+        newCartonBadge +
+      '</div>';
+
+      const btnClose = card.querySelector('button');
+      if (btnClose) btnClose.onclick = () => card.remove();
+      alertContainer.prepend(card);
+
+      setTimeout(() => {
+        if (card.parentNode) {
+          card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+          card.style.opacity = '0';
+          card.style.transform = 'translateY(-10px)';
+          setTimeout(() => card.remove(), 500);
+        }
+      }, 9000);
+
+      if (typeof window.showCrediToast === 'function') {
+        window.showCrediToast('🔔 ' + title + ': ' + agentName + ' liquidó ' + amountStr, 'success');
+      }
+
+      this.renderLiveFeed();
+      if (window.BulaPayDB && typeof window.BulaPayDB.getRoutes === 'function') {
+        window.BulaPayDB.getRoutes().then(routes => this.renderRoutesTable(routes)).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Aviso en showSupervisorFieldAlert:', err);
+    }
+  },
+
+  showSupervisorCierreAlert(data) {
+    try {
+      let alertContainer = document.getElementById('supervisor-realtime-alerts-container');
+      if (!alertContainer) {
+        alertContainer = document.createElement('div');
+        alertContainer.id = 'supervisor-realtime-alerts-container';
+        alertContainer.style.cssText = 'position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999999; display: flex; flex-direction: column; gap: 0.75rem; max-width: 420px; width: calc(100% - 3rem); pointer-events: none;';
+        document.body.appendChild(alertContainer);
+      }
+
+      const card = document.createElement('div');
+      card.style.cssText = 'pointer-events: auto; background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98)); border: 1.5px solid #10b981; border-left: 6px solid #34d399; border-radius: 12px; padding: 1rem 1.15rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(16, 185, 129, 0.4); color: #ffffff;';
+
+      const agentName = data.agentName || 'Agente';
+      const routeName = data.routeName || data.routeId || 'Ruta';
+      const recaudoStr = data.totalRecaudado ? ('$' + Number(data.totalRecaudado).toLocaleString('es-CO')) : '';
+
+      card.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.45rem;">' +
+        '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+          '<span style="font-size: 1.3rem;">🏁</span>' +
+          '<strong style="color: #34d399; font-size: 0.92rem; text-transform: uppercase;">Cierre de Jornada de Ruta</strong>' +
+        '</div>' +
+        '<button type="button" style="background: transparent; border: none; color: #94a3b8; font-size: 1.1rem; cursor: pointer; padding: 0 4px; line-height: 1;">&times;</button>' +
+      '</div>' +
+      '<div style="font-size: 0.85rem; color: #e2e8f0; line-height: 1.4; margin-bottom: 0.5rem;">' +
+        (data.mensaje || ('Agente <strong>' + agentName + '</strong> cerró jornada en <strong>' + routeName + '</strong>. Recaudo: <strong style="color: #34d399;">' + recaudoStr + '</strong>.')) +
+      '</div>';
+
+      const btnClose = card.querySelector('button');
+      if (btnClose) btnClose.onclick = () => card.remove();
+      alertContainer.prepend(card);
+
+      setTimeout(() => {
+        if (card.parentNode) {
+          card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+          card.style.opacity = '0';
+          setTimeout(() => card.remove(), 500);
+        }
+      }, 9000);
+
+      this.renderLiveFeed();
+      if (window.BulaPayDB && typeof window.BulaPayDB.getRoutes === 'function') {
+        window.BulaPayDB.getRoutes().then(routes => this.renderRoutesTable(routes)).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Aviso en showSupervisorCierreAlert:', err);
+    }
   },
 
   bindEvents() {
@@ -495,14 +650,17 @@ const supervisorModule = {
       const r = routes.find(rt => rt.id === agent.routeId) || { name: 'Sin ruta asignada' };
       let unreadCount = 0;
       try {
-        if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
+        if (window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingClientsCount === 'function') {
+          unreadCount = await window.BulaPayDB.getAgentPendingClientsCount(agent.username, agent.routeId);
+        } else if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
           unreadCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(agent.username, agent.routeId);
         }
       } catch (_) {}
 
+      // Conteo real: si es 0, refleja 0 de manera limpia
       const bellBadgeHtml = unreadCount > 0
-        ? '<span class="agent-bell-badge" data-agent="' + agent.username + '" data-route="' + (agent.routeId || '') + '" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff; border: 1px solid #f87171; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="' + unreadCount + ' liquidación(es) sin atender. Clic para ver detalles">🔔 ' + unreadCount + '</span>'
-        : '';
+        ? '<span class="agent-bell-badge" data-agent="' + agent.username + '" data-route="' + (agent.routeId || '') + '" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff; border: 1px solid #f87171; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="' + unreadCount + ' cliente(s) con saldo pendiente / mora. Clic para auditar">🔔 ' + unreadCount + '</span>'
+        : '<span class="agent-bell-badge agent-bell-badge-zero" data-agent="' + agent.username + '" data-route="' + (agent.routeId || '') + '" style="cursor: pointer; background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 600; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="0 clientes en mora o saldo pendiente">🔔 0</span>';
 
       const item = document.createElement('div');
       item.style.padding = '0.75rem 1rem';
@@ -593,22 +751,18 @@ const supervisorModule = {
     routeCapitalEl.textContent = `$${Number(capital).toLocaleString('es-CO')}`;
     routeCollectedEl.textContent = `$${Number(collectedReal).toLocaleString('es-CO')}`;
 
-    // Obtener cartones liquidados (hoy + historicos sin atender) por este agente
+    // Conteo en tiempo real de clientes con saldo pendiente o mora
     const liquidatedContainer = document.getElementById('modal-agent-route-liquidated');
     const liquidatedBadge = document.getElementById('modal-agent-liquidated-badge');
-    let liquidatedCards = [];
     let liqCount = 0;
     try {
-      // Usar getAgentPendingLiquidations para incluir historicos no atendidos
-      if (window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingLiquidations === 'function') {
-        liquidatedCards = await window.BulaPayDB.getAgentPendingLiquidations(username, agent.routeId);
-        liqCount = (liquidatedCards || []).filter(c => !c.isAtendido).length;
-      } else {
-        liquidatedCards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, agent.routeId);
-        liqCount = (liquidatedCards || []).filter(c => !c.isAtendido).length;
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingClientsCount === 'function') {
+        liqCount = await window.BulaPayDB.getAgentPendingClientsCount(username, agent.routeId);
+      } else if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
+        liqCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(username, agent.routeId);
       }
     } catch (eLiq) {
-      console.warn('Aviso al obtener cartones liquidados:', eLiq);
+      console.warn('Aviso al obtener clientes pendientes:', eLiq);
     }
     if (liquidatedBadge) {
       if (liqCount > 0) {
@@ -3408,11 +3562,19 @@ const supervisorModule = {
       const logEl = document.createElement('div');
       logEl.className = 'live-feed-log';
       
-      if (p.status === 'No Pago') {
-        logEl.textContent = `📍 Agente ${p.agentName} reportó NO PAGO del Cliente ${clientName} en la ruta ${routeName}.`;
+      if (p.payment_type === 'Renovacion' || String(p.status || '').toLowerCase().includes('renov')) {
+        logEl.textContent = '📍 🔄 Agente ' + p.agentName + ' completó RENOVACIÓN / RETANQUEO: Liquidó $' + Number(p.amount).toLocaleString('es-CO') + ' del Cliente ' + clientName + ' en la ruta ' + routeName + '.';
+        logEl.style.color = '#60a5fa';
+        logEl.style.fontWeight = '600';
+      } else if (p.payment_type === 'Liquidacion' || p.liquidado) {
+        logEl.textContent = '📍 ✅ Agente ' + p.agentName + ' completó LIQUIDACIÓN de crédito ($' + Number(p.amount).toLocaleString('es-CO') + ') para Cliente ' + clientName + ' en la ruta ' + routeName + '.';
+        logEl.style.color = '#34d399';
+        logEl.style.fontWeight = '600';
+      } else if (p.status === 'No Pago') {
+        logEl.textContent = '📍 Agente ' + p.agentName + ' reportó NO PAGO del Cliente ' + clientName + ' en la ruta ' + routeName + '.';
         logEl.style.color = 'var(--color-rojo)';
       } else {
-        logEl.textContent = `📍 Agente ${p.agentName} registró un recaudo de $${Number(p.amount).toLocaleString('es-CO')} para el Cliente ${clientName} en la ruta ${routeName}.`;
+        logEl.textContent = '📍 Agente ' + p.agentName + ' registró un recaudo de $' + Number(p.amount).toLocaleString('es-CO') + ' para el Cliente ' + clientName + ' en la ruta ' + routeName + '.';
         logEl.style.color = p.status === 'Abonado' ? 'var(--color-amarillo)' : 'var(--accent)';
       }
       
@@ -3872,17 +4034,19 @@ const supervisorModule = {
         for (const ag of routeAgents) {
           let uCount = 0;
           try {
-            if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
+            if (window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingClientsCount === 'function') {
+              uCount = await window.BulaPayDB.getAgentPendingClientsCount(ag.username, ag.routeId);
+            } else if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
               uCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(ag.username, ag.routeId);
             }
           } catch (_) {}
           const bell = uCount > 0 
-            ? ' <span class="table-agent-bell-btn" onclick="event.stopPropagation(); supervisorModule.openLiquidatedCardsModal(\x27' + ag.username + '\x27, \x27' + ag.routeId + '\x27)" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: 1px solid #f87171; border-radius: 9999px; padding: 1px 7px; font-size: 0.72rem; font-weight: 700; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); display: inline-flex; align-items: center; gap: 3px;" title="' + uCount + ' liquidación(es) sin atender. Clic para ver">🔔 ' + uCount + '</span>'
-            : '';
+            ? ' <span class="table-agent-bell-btn" onclick="event.stopPropagation(); supervisorModule.openLiquidatedCardsModal(\x27' + ag.username + '\x27, \x27' + ag.routeId + '\x27)" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: 1px solid #f87171; border-radius: 9999px; padding: 1px 7px; font-size: 0.72rem; font-weight: 700; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); display: inline-flex; align-items: center; gap: 3px;" title="' + uCount + ' cliente(s) con saldo pendiente / mora. Clic para auditar">🔔 ' + uCount + '</span>'
+            : ' <span class="table-agent-bell-btn table-agent-bell-zero" onclick="event.stopPropagation(); supervisorModule.openLiquidatedCardsModal(\x27' + ag.username + '\x27, \x27' + ag.routeId + '\x27)" style="cursor: pointer; background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 9999px; padding: 1px 7px; font-size: 0.72rem; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="0 clientes en mora o saldo pendiente">🔔 0</span>';
           agentsHtmlParts.push('<span>' + ag.name + '</span>' + bell);
         }
       } else {
-        agentsHtmlParts = Array.from(gRoute.agentNames).map(n => '<span>' + n + '</span>');
+        agentsHtmlParts = Array.from(gRoute.agentNames).map(n => '<span>' + n + '</span> <span class="table-agent-bell-btn table-agent-bell-zero" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 9999px; padding: 1px 7px; font-size: 0.72rem; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;">🔔 0</span>');
       }
       const agentsDisplayHtml = agentsHtmlParts.join(', ') || 'Sin Agente';
 

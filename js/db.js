@@ -1357,47 +1357,54 @@ const db = {
   },
 
   async getAgentPendingLiquidations(agentUsername, routeId = null) {
+    // SOLO devuelve cartones de la jornada de hoy (evita contadores fantasmas de dias anteriores)
     try {
-      // Sincronizar en segundo plano con la nube
-      this.syncCloudLiquidacionesAtendidas().catch(() => {});
-
-      // 1. Liquidaciones de la jornada de hoy
       const todayCards = await this.getAgentLiquidatedCartonesToday(agentUsername, routeId);
-
-      // 2. Liquidaciones históricas completas
-      const histCards = await this.getAgentLiquidatedCartonesHistorical(agentUsername, routeId);
-
-      const seenIds = new Set();
-      const result = [];
-
-      // Prioridad 1: Todas las alertas no leídas/no atendidas (hoy o pasadas como las de César Baleta)
-      [...todayCards, ...histCards].forEach(card => {
-        const cid = String(card.id || card.numeroCarton || '').toLowerCase();
-        if (!cid || seenIds.has(cid)) return;
-        if (!card.isAtendido) {
-          seenIds.add(cid);
-          result.push(card);
-        }
-      });
-
-      // Prioridad 2: Agregar las de hoy aunque ya hayan sido atendidas
-      todayCards.forEach(card => {
-        const cid = String(card.id || card.numeroCarton || '').toLowerCase();
-        if (!cid || seenIds.has(cid)) return;
-        seenIds.add(cid);
-        result.push(card);
-      });
-
-      result.sort((a, b) => {
-        if (!a.isAtendido && b.isAtendido) return -1;
-        if (a.isAtendido && !b.isAtendido) return 1;
-        return new Date(b.fechaLiquidacion || 0).getTime() - new Date(a.fechaLiquidacion || 0).getTime();
-      });
-
-      return result;
+      return todayCards || [];
     } catch (e) {
       console.error("Error al obtener liquidaciones pendientes:", e);
       return [];
+    }
+  },
+
+  // Purga toda campana fantasma: marca como atendidos todos los cartones historicos
+  // (anteriores al turno de hoy) para que el contador arranque en 0 limpio.
+  async purgeLegacyBellNotifications() {
+    try {
+      // Limpiar el Set en memoria y el localStorage de acumulaciones anteriores
+      this._reviewedLiquidationsSet = null; // forzar reconstruccion limpia
+      localStorage.removeItem('bulapay_liquidaciones_atendidas');
+
+      // Obtener todos los cartones cerrados/liquidados historicos
+      const supabase = await initSupabase();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
+
+      const { data: oldCartones } = await supabase
+        .from('cartones')
+        .select('id, numero_carton')
+        .in('estado', ['liquidado_exitoso', 'liquidado_perdida', 'liquidado_renovacion', 'cerrado'])
+        .lt('updated_at', todayStr + 'T00:00:00.000Z');
+
+      if (Array.isArray(oldCartones) && oldCartones.length > 0) {
+        const ids = oldCartones.map(c => c.id).filter(Boolean);
+        const nums = oldCartones.map(c => String(c.numero_carton || '')).filter(Boolean);
+        const allKeys = [...ids, ...nums].map(x => String(x).trim().toLowerCase()).filter(Boolean);
+
+        // Guardar en localStorage como "ya atendidos"
+        try {
+          localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(allKeys));
+        } catch (_) {}
+
+        // Reconstruir el Set en memoria
+        const set = this.getReviewedLiquidationsSetSync();
+        allKeys.forEach(k => set.add(k));
+
+        console.log('[BulaPay] Purga completada: ' + allKeys.length + ' notificaciones historicas limpiadas.');
+      }
+    } catch (err) {
+      console.warn('[BulaPay] Aviso en purgeLegacyBellNotifications:', err.message);
     }
   },
 
@@ -1428,13 +1435,207 @@ const db = {
     } catch (_) {}
   },
 
-  async getAgentUnreadLiquidationsCount(agentUsername, routeId = null) {
+  // Conteo en tiempo real y estricto desde la tabla 'clients' de Supabase
+  // para los agentes de ruta (Jesús Alberto, Carlo Mario, Cesar, etc.)
+  async getAgentPendingClientsCount(agentUsername, routeId = null) {
     try {
-      const cards = await this.getAgentPendingLiquidations(agentUsername, routeId);
-      return (cards || []).filter(c => !c.isAtendido).length;
-    } catch (e) {
-      console.warn("Aviso al calcular conteo no leído de liquidaciones:", e);
+      const supabase = await initSupabase();
+      if (!supabase) return 0;
+
+      const self = (this && typeof this.getCachedUsers === 'function') ? this : (window.BulaPayDB || db);
+      let users = [];
+      try {
+        if (self && typeof self.getCachedUsers === 'function') {
+          users = await self.getCachedUsers();
+        } else if (self && typeof self.getUsers === 'function') {
+          users = await self.getUsers();
+        }
+      } catch (_) {}
+
+      const cleanUser = String(agentUsername || '').trim().toLowerCase();
+      const matchedUser = (users || []).find(u => {
+        const uName = String(u.username || '').toLowerCase();
+        const full = String(u.name || '').toLowerCase();
+        return uName === cleanUser || full.includes(cleanUser) || (cleanUser && full && (
+          (cleanUser.includes('carlo') && full.includes('carlo')) ||
+          (cleanUser.includes('cesar') && full.includes('cesar')) ||
+          (cleanUser.includes('jesus') && full.includes('jesus'))
+        ));
+      });
+
+      let effectiveRouteId = routeId || matchedUser?.routeId || matchedUser?.route_id || null;
+      let effectiveUsername = matchedUser?.username || agentUsername;
+
+      if (!effectiveRouteId) {
+        if (cleanUser === 'carlos26' || cleanUser === 'carlos' || cleanUser.includes('carlo')) {
+          effectiveRouteId = 'route_1790996024915';
+          effectiveUsername = 'carlos26';
+        } else if (cleanUser === 'cesar26' || cleanUser === 'cesar' || cleanUser.includes('baleta')) {
+          effectiveRouteId = 'route_1791162272449';
+          effectiveUsername = 'cesar26';
+        } else if (cleanUser === 'jesus26' || cleanUser === 'jesus' || cleanUser.includes('jesus')) {
+          effectiveRouteId = 'route_1791163029766';
+          effectiveUsername = 'jesus26';
+        }
+      }
+
+      // Consulta estricta y directa a la tabla 'clients' en Supabase
+      let query = supabase
+        .from('clients')
+        .select('cedula, outstanding, totalDebt, risk, routeId, agent_id');
+
+      if (effectiveRouteId && effectiveUsername) {
+        query = query.or(`routeId.eq.${effectiveRouteId},agent_id.eq.${effectiveUsername}`);
+      } else if (effectiveRouteId) {
+        query = query.eq('routeId', effectiveRouteId);
+      } else if (effectiveUsername) {
+        query = query.eq('agent_id', effectiveUsername);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.warn("Aviso al consultar clientes en Supabase para campana:", error);
+        const allClients = await this.getClients();
+        const pending = (allClients || []).filter(c => {
+          const cRoute = c.routeId || c.route_id;
+          const cAgent = String(c.agent_id || c.agentId || '').trim().toLowerCase();
+          const matchesRoute = effectiveRouteId && String(cRoute) === String(effectiveRouteId);
+          const matchesAgent = effectiveUsername && cAgent === String(effectiveUsername).toLowerCase();
+          if (!matchesRoute && !matchesAgent) return false;
+          return Number(c.outstanding || 0) > 0 || String(c.risk || '').toLowerCase() === 'rojo';
+        });
+        return pending.length;
+      }
+
+      if (Array.isArray(data)) {
+        // Estrictamente: cantidad de clientes con saldo pendiente (outstanding > 0) o cuotas en mora (risk = 'Rojo')
+        const pendingCount = data.filter(c => {
+          const out = Number(c.outstanding || 0);
+          const isMora = String(c.risk || '').trim().toLowerCase() === 'rojo';
+          return out > 0 || isMora;
+        }).length;
+        return pendingCount;
+      }
+
       return 0;
+    } catch (e) {
+      console.warn("Aviso en getAgentPendingClientsCount:", e);
+      return 0;
+    }
+  },
+
+  async getAgentUnreadLiquidationsCount(agentUsername, routeId = null) {
+    // Consulta estrictamente en tiempo real la cantidad de clientes con saldo pendiente o mora
+    return await this.getAgentPendingClientsCount(agentUsername, routeId);
+  },
+
+  // Notificación de liquidación / retanqueo al supervisor en tiempo real
+  async notificarLiquidacionSupervisor({ agentId, agentName, routeId, routeName, clientName, clientId, amountLiquidated, newCartonNumber, type }) {
+    try {
+      const supabase = await initSupabase();
+      const now = new Date();
+      const stringId = 'notif_liq_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      const isRenov = type === 'Renovacion' || String(type).toLowerCase().includes('renov');
+      const titulo = isRenov ? '🔄 Nuevo Retanqueo / Renovación' : '✅ Liquidación de Cartón';
+      const mensaje = `Agente ${agentName || agentId} liquidó $${Number(amountLiquidated || 0).toLocaleString('es-CO')} del cliente ${clientName || clientId}${newCartonNumber ? ' (Nuevo Cartón #' + newCartonNumber + ')' : ''}.`;
+
+      // 1. Persistir en Supabase bulapay_notificaciones
+      if (supabase) {
+        await supabase.from('bulapay_notificaciones').insert([{
+          id: stringId,
+          titulo: titulo,
+          mensaje: mensaje,
+          categoria: 'Liquidacion_Campo',
+          prioridad: 'Alta',
+          created_at: now.toISOString()
+        }]).then(() => {}).catch(() => {});
+      }
+
+      // 2. BroadcastChannel para sincronización inmediata entre pestañas/dispositivos
+      try {
+        const bc = new BroadcastChannel('bulapay_sync');
+        bc.postMessage({
+          type: 'carton-liquidado-renovado',
+          agentId,
+          agentName: agentName || agentId,
+          routeId,
+          routeName,
+          clientName: clientName || clientId,
+          clientId,
+          amountLiquidated: Number(amountLiquidated || 0),
+          newCartonNumber: newCartonNumber || null,
+          subType: isRenov ? 'Renovacion' : 'Liquidacion',
+          timestamp: now.toISOString()
+        });
+      } catch (_) {}
+
+      // 3. Evento reactivo en la ventana actual
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bulapay:alerta_supervisor', {
+          detail: {
+            titulo,
+            mensaje,
+            agentName: agentName || agentId,
+            clientName: clientName || clientId,
+            amountLiquidated: Number(amountLiquidated || 0),
+            newCartonNumber: newCartonNumber || null,
+            isRenov
+          }
+        }));
+      }
+    } catch (eNotif) {
+      console.warn("Aviso en notificarLiquidacionSupervisor:", eNotif);
+    }
+  },
+
+  // Notificación de cierre de jornada al supervisor en tiempo real
+  async notificarCierreJornadaSupervisor({ routeId, routeName, agentId, agentName, totalRecaudado, totalEntregar }) {
+    try {
+      const supabase = await initSupabase();
+      const now = new Date();
+      const stringId = 'notif_cls_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      const titulo = '🏁 Cierre de Jornada de Ruta';
+      const mensaje = `Agente ${agentName || agentId} realizó el cierre de jornada en la ruta ${routeName || routeId}. Total Recaudado: $${Number(totalRecaudado || 0).toLocaleString('es-CO')}.`;
+
+      if (supabase) {
+        await supabase.from('bulapay_notificaciones').insert([{
+          id: stringId,
+          titulo: titulo,
+          mensaje: mensaje,
+          categoria: 'Cierre_Jornada',
+          prioridad: 'Alta',
+          created_at: now.toISOString()
+        }]).then(() => {}).catch(() => {});
+      }
+
+      try {
+        const bc = new BroadcastChannel('bulapay_sync');
+        bc.postMessage({
+          type: 'cierre-jornada-campo',
+          routeId,
+          routeName,
+          agentId,
+          agentName: agentName || agentId,
+          totalRecaudado: Number(totalRecaudado || 0),
+          totalEntregar: Number(totalEntregar || 0),
+          timestamp: now.toISOString()
+        });
+      } catch (_) {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bulapay:alerta_supervisor', {
+          detail: {
+            titulo,
+            mensaje,
+            agentName: agentName || agentId,
+            routeName,
+            totalRecaudado: Number(totalRecaudado || 0),
+            isCierre: true
+          }
+        }));
+      }
+    } catch (eNotif) {
+      console.warn("Aviso en notificarCierreJornadaSupervisor:", eNotif);
     }
   },
 
@@ -3947,6 +4148,16 @@ return {
           localStorage.setItem('bulapay_routes', JSON.stringify(localRoutes));
         }
       } catch (eLocR) {}
+
+      // Notificar al supervisor del cierre de jornada en tiempo real
+      this.notificarCierreJornadaSupervisor({
+        routeId: cleanRouteId,
+        routeName: (route && route.name) || cleanRouteId,
+        agentId: data.agentId,
+        agentName: data.agentName || 'Agente de Ruta',
+        totalRecaudado: recaudoTotal,
+        totalEntregar: efectivoEntregar
+      }).catch(() => {});
     }
 
     return payload;
@@ -4847,7 +5058,9 @@ return {
               .from('cartones')
               .update({
                 estado: 'RENOVADO',
+                status: 'RENOVADO',
                 outstanding: 0,
+                saldo_pendiente: 0,
                 fecha_cierre: nowIso,
                 updated_at: nowIso,
                 liquidation_reason: 'Renovación'
@@ -5099,6 +5312,20 @@ return {
         window.dispatchEvent(new CustomEvent('bulapay-payment-registered', { detail: { clientId, amount: rolloverVal, type: isRenov ? 'renovacion' : 'credito' } }));
         window.dispatchEvent(new CustomEvent('bulapay-client-updated', { detail: { clientId } }));
       } catch (eEvt) {}
+    }
+
+    // Notificar al supervisor de renovación / retanqueo exitoso
+    if (isRenov) {
+      this.notificarLiquidacionSupervisor({
+        agentId: agentId,
+        agentName: currentUser ? (currentUser.name || currentUser.username) : (agentId || 'Agente'),
+        routeId: routeId,
+        clientName: payload.name || clientId,
+        clientId: clientId,
+        amountLiquidated: rolloverVal,
+        newCartonNumber: newNumeroCarton,
+        type: 'Renovacion'
+      }).catch(() => {});
     }
     
     return { 
@@ -6915,6 +7142,7 @@ return {
         estado: cartonEstadoTarget, 
         status: cartonEstadoTarget,
         outstanding: moraOutstanding,
+        saldo_pendiente: moraOutstanding,
         updated_at: new Date().toISOString(),
         fecha_cierre: new Date().toISOString(),
         liquidation_reason: isMora ? 'Liquidado por Mora' : (isRenovacion ? 'Renovación' : 'Pago Exitoso'),
@@ -6945,6 +7173,18 @@ return {
           detail: { cedula, cartonId, numeroCarton, status: cartonEstadoTarget, isMora, isRenovacion }
         }));
       }, 50);
+
+      // Notificar al supervisor de la liquidación en tiempo real
+      this.notificarLiquidacionSupervisor({
+        agentId: currentUser?.username || clientData?.agent_id,
+        agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
+        routeId: clientData?.routeId || currentUser?.routeId,
+        clientName: clientData?.name || cedula,
+        clientId: cedula,
+        amountLiquidated: isPaid ? (clientData?.totalDebt || clientData?.outstanding || 0) : moraOutstanding,
+        newCartonNumber: numeroCarton || null,
+        type: isRenovacion ? 'Renovacion' : (isMora ? 'Mora' : 'Liquidacion_Exitosa')
+      }).catch(() => {});
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
       if (cartonId && isValidUuid(cartonId)) {
