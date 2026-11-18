@@ -1301,6 +1301,27 @@ const db = {
     return this._reviewedLiquidationsSet;
   },
 
+  removeLiquidacionAtendidaSync(key) {
+    if (!key) return;
+    const cleanKey = String(key).trim().toLowerCase();
+    const set = this.getReviewedLiquidationsSetSync();
+    set.delete(cleanKey);
+    set.delete('carton_' + cleanKey);
+    try {
+      const raw = localStorage.getItem('bulapay_liquidaciones_atendidas');
+      if (raw) {
+        let list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          list = list.filter(k => {
+            const s = String(k).trim().toLowerCase();
+            return s !== cleanKey && s !== ('carton_' + cleanKey);
+          });
+          localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(list));
+        }
+      }
+    } catch (_) {}
+  },
+
   isLiquidacionAtendida(cartonId, numeroCarton = null) {
     const set = this.getReviewedLiquidationsSetSync();
     if (cartonId) {
@@ -1371,37 +1392,35 @@ const db = {
   // (anteriores al turno de hoy) para que el contador arranque en 0 limpio.
   async purgeLegacyBellNotifications() {
     try {
-      // Limpiar el Set en memoria y el localStorage de acumulaciones anteriores
-      this._reviewedLiquidationsSet = null; // forzar reconstruccion limpia
-      localStorage.removeItem('bulapay_liquidaciones_atendidas');
-
-      // Obtener todos los cartones cerrados/liquidados historicos
       const supabase = await initSupabase();
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayStr = today.toISOString().split('T')[0];
 
-      const { data: oldCartones } = await supabase
-        .from('cartones')
-        .select('id, numero_carton')
-        .in('estado', ['liquidado_exitoso', 'liquidado_perdida', 'liquidado_renovacion', 'cerrado'])
-        .lt('updated_at', todayStr + 'T00:00:00.000Z');
+      if (supabase) {
+        const { data: oldCartones } = await supabase
+          .from('cartones')
+          .select('id, numero_carton')
+          .in('estado', ['liquidado', 'liquidado_exitoso', 'liquidado_perdida', 'liquidado_mora', 'liquidado_renovacion', 'renovado', 'RENOVADO', 'cerrado', 'pagado'])
+          .lt('updated_at', todayStr + 'T00:00:00.000Z');
 
-      if (Array.isArray(oldCartones) && oldCartones.length > 0) {
-        const ids = oldCartones.map(c => c.id).filter(Boolean);
-        const nums = oldCartones.map(c => String(c.numero_carton || '')).filter(Boolean);
-        const allKeys = [...ids, ...nums].map(x => String(x).trim().toLowerCase()).filter(Boolean);
+        if (Array.isArray(oldCartones) && oldCartones.length > 0) {
+          const ids = oldCartones.map(c => c.id).filter(Boolean);
+          const nums = oldCartones.map(c => String(c.numero_carton || '')).filter(Boolean);
+          const allKeys = [...ids, ...nums].map(x => String(x).trim().toLowerCase()).filter(Boolean);
 
-        // Guardar en localStorage como "ya atendidos"
-        try {
-          localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(allKeys));
-        } catch (_) {}
+          const set = this.getReviewedLiquidationsSetSync();
+          allKeys.forEach(k => set.add(k));
 
-        // Reconstruir el Set en memoria
-        const set = this.getReviewedLiquidationsSetSync();
-        allKeys.forEach(k => set.add(k));
+          try {
+            const raw = localStorage.getItem('bulapay_liquidaciones_atendidas');
+            const cur = raw ? JSON.parse(raw) : [];
+            const merged = Array.from(new Set([...cur, ...allKeys]));
+            localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(merged));
+          } catch (_) {}
 
-        console.log('[BulaPay] Purga completada: ' + allKeys.length + ' notificaciones historicas limpiadas.');
+          console.log('[BulaPay] Purga completada: ' + allKeys.length + ' notificaciones historicas limpiadas.');
+        }
       }
     } catch (err) {
       console.warn('[BulaPay] Aviso en purgeLegacyBellNotifications:', err.message);
@@ -1525,19 +1544,36 @@ const db = {
   },
 
   async getAgentUnreadLiquidationsCount(agentUsername, routeId = null) {
-    // Consulta estrictamente en tiempo real la cantidad de clientes con saldo pendiente o mora
-    return await this.getAgentPendingClientsCount(agentUsername, routeId);
+    try {
+      const cards = await this.getAgentPendingLiquidations(agentUsername, routeId);
+      return (cards || []).filter(c => !c.isAtendido).length;
+    } catch (e) {
+      console.warn("Aviso en getAgentUnreadLiquidationsCount:", e);
+      return 0;
+    }
   },
 
   // Notificación de liquidación / retanqueo al supervisor en tiempo real
-  async notificarLiquidacionSupervisor({ agentId, agentName, routeId, routeName, clientName, clientId, amountLiquidated, newCartonNumber, type }) {
+  async notificarLiquidacionSupervisor({ agentId, agentName, routeId, routeName, clientName, clientId, amountLiquidated, newCartonNumber, cartonId, type }) {
     try {
       const supabase = await initSupabase();
       const now = new Date();
       const stringId = 'notif_liq_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
       const isRenov = type === 'Renovacion' || String(type).toLowerCase().includes('renov');
-      const titulo = isRenov ? '🔄 Nuevo Retanqueo / Renovación' : '✅ Liquidación de Cartón';
-      const mensaje = `Agente ${agentName || agentId} liquidó $${Number(amountLiquidated || 0).toLocaleString('es-CO')} del cliente ${clientName || clientId}${newCartonNumber ? ' (Nuevo Cartón #' + newCartonNumber + ')' : ''}.`;
+      const isMora = type === 'Mora' || String(type).toLowerCase().includes('mora');
+      const isVencido = type === 'Vencimiento' || String(type).toLowerCase().includes('venc');
+
+      let titulo = '✅ Liquidación de Cartón';
+      if (isRenov) titulo = '🔄 Nuevo Retanqueo / Renovación';
+      else if (isMora) titulo = '🔴 Liquidación por Mora / Castigo';
+      else if (isVencido) titulo = '⏳ Liquidación por Vencimiento';
+
+      const motivoStr = isRenov ? 'Renovación' : (isMora ? 'Mora / Castigo' : (isVencido ? 'Vencimiento' : 'Pago Exitoso 100%'));
+      const mensaje = `Agente ${agentName || agentId} liquidó $${Number(amountLiquidated || 0).toLocaleString('es-CO')} del cliente ${clientName || clientId} (Motivo: ${motivoStr})${newCartonNumber ? ' [Nuevo Cartón #' + newCartonNumber + ']' : ''}.`;
+
+      // Activar campana: eliminar de las atendidas para que figure estrictamente como NO LEÍDA
+      if (cartonId) this.removeLiquidacionAtendidaSync(cartonId);
+      if (newCartonNumber) this.removeLiquidacionAtendidaSync(newCartonNumber);
 
       // 1. Persistir en Supabase bulapay_notificaciones
       if (supabase) {
@@ -1564,7 +1600,13 @@ const db = {
           clientId,
           amountLiquidated: Number(amountLiquidated || 0),
           newCartonNumber: newCartonNumber || null,
-          subType: isRenov ? 'Renovacion' : 'Liquidacion',
+          cartonId: cartonId || null,
+          liquidationType: type,
+          isRenov,
+          isMora,
+          isVencido,
+          titulo,
+          mensaje,
           timestamp: now.toISOString()
         });
       } catch (_) {}
@@ -1575,11 +1617,19 @@ const db = {
           detail: {
             titulo,
             mensaje,
+            agentId,
             agentName: agentName || agentId,
+            routeId,
+            routeName,
             clientName: clientName || clientId,
+            clientId,
             amountLiquidated: Number(amountLiquidated || 0),
             newCartonNumber: newCartonNumber || null,
-            isRenov
+            cartonId: cartonId || null,
+            liquidationType: type,
+            isRenov,
+            isMora,
+            isVencido
           }
         }));
       }
@@ -5063,16 +5113,24 @@ return {
                 saldo_pendiente: 0,
                 fecha_cierre: nowIso,
                 updated_at: nowIso,
-                liquidation_reason: 'Renovación'
+                liquidation_reason: 'Renovación',
+                supervisor_atendido: false
               })
               .in('id', idsArray);
 
             if (errClose) {
               await supabase
                 .from('cartones')
-                .update({ estado: 'RENOVADO', outstanding: 0 })
+                .update({ estado: 'RENOVADO', outstanding: 0, supervisor_atendido: false })
                 .in('id', idsArray);
             }
+
+            // Desmarcar de atendidas para que active la campana al supervisor
+            idsArray.forEach(oldId => {
+              if (this && typeof this.removeLiquidacionAtendidaSync === 'function') {
+                this.removeLiquidacionAtendidaSync(oldId);
+              }
+            });
           }
         } catch (eOld) {
           console.warn("Aviso al actualizar cartón viejo a RENOVADO:", eOld?.message);
@@ -5324,6 +5382,7 @@ return {
         clientId: clientId,
         amountLiquidated: rolloverVal,
         newCartonNumber: newNumeroCarton,
+        cartonId: payload.old_carton_id || (typeof targetOldIds !== 'undefined' ? Array.from(targetOldIds)[0] : null) || null,
         type: 'Renovacion'
       }).catch(() => {});
     }
@@ -7174,7 +7233,7 @@ return {
         }));
       }, 50);
 
-      // Notificar al supervisor de la liquidación en tiempo real
+      // Notificar al supervisor de la liquidación en tiempo real (Renovación, Mora, Vencimiento o Exitosa)
       this.notificarLiquidacionSupervisor({
         agentId: currentUser?.username || clientData?.agent_id,
         agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
@@ -7183,7 +7242,8 @@ return {
         clientId: cedula,
         amountLiquidated: isPaid ? (clientData?.totalDebt || clientData?.outstanding || 0) : moraOutstanding,
         newCartonNumber: numeroCarton || null,
-        type: isRenovacion ? 'Renovacion' : (isMora ? 'Mora' : 'Liquidacion_Exitosa')
+        cartonId: cartonId || null,
+        type: isRenovacion ? 'Renovacion' : (isMora ? 'Mora' : (status?.includes('venc') ? 'Vencimiento' : 'Liquidacion_Exitosa'))
       }).catch(() => {});
       const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
