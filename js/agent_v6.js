@@ -1591,6 +1591,9 @@ const agentModule = {
         // Limpiar Estado Registro
         if (this.formRegisterClient) this.formRegisterClient.reset();
 
+        // Conectar indicador de caja en tiempo real con el estado global de la caja
+        this.updateRegisterPanelCashIndicator();
+
         const btnGuardar = document.getElementById('btn-registrar-cliente-oficial');
         if (btnGuardar) {
           btnGuardar.onclick = async (e) => {
@@ -4339,9 +4342,8 @@ const agentModule = {
       const finalDiscount = discountAmount > 0 ? discountAmount : Math.round(segVal + papVal);
 
       // =========================================================================
-      // SISTEMA INTELIGENTE DE DOBLE FUENTE DE FONDOS Y AUDITORÍA DE CAJA
+      // SISTEMA DIRECTO Y REAL DE VALIDACIÓN DE FONDOS CON "MI NEGOCIO"
       // =========================================================================
-      // Sincronización exacta de ruta y cálculo de fondos (idéntico a updateAgentHeaderCapital)
       let activeRouteId = routeId || (currentUser ? (currentUser.routeId || currentUser.route_id) : null);
       if (!activeRouteId && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
         activeRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
@@ -4351,52 +4353,54 @@ const agentModule = {
       const myRoute = (routes || []).find(r => (activeRouteId && String(r.id) === String(activeRouteId)) || (r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username)));
       const effectiveRouteId = myRoute ? myRoute.id : activeRouteId;
 
-      // Monto bruto / nominal exacto del crédito a validar y descontar (sin restar papelería ni software)
+      // Monto bruto / nominal exacto del crédito a validar y desembolsar
       const montoValidar = montoPrestamo;
 
-      // Consultar la misma función y variable exacta que usa el sistema para Efectivo en Bolsillo / Capital Asignado
-      const fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(effectiveRouteId, currentUser);
-      const recaudoDisponibleHoy = Number(fondosInfo.recaudoDisponibleHoy || 0);
+      // Consulta directa, numérica y en tiempo real del saldo de caja (conecta 'Mi Negocio' e inyecciones)
+      const fondosDetallados = await this.getSaldoCajaRealAgente(effectiveRouteId, currentUser);
+      const saldoCajaReal = fondosDetallados.saldoCajaReal;
+      const recaudoDisponibleHoy = fondosDetallados.recaudoDisponibleHoy;
+      let capitalAsignadoRemanente = fondosDetallados.capitalAsignadoRemanente;
 
-      // Usar la misma variable exacta de capital asignado remanente que actualiza la interfaz y base de datos
-      const capitalAsignadoRemanente = Number(
-        fondosInfo.capitalAsignadoRemanente !== undefined && fondosInfo.capitalAsignadoRemanente !== null
-          ? fondosInfo.capitalAsignadoRemanente
-          : (myRoute ? (myRoute.capital || 0) : 0)
-      );
-      const fondosTotalesDisponibles = recaudoDisponibleHoy + capitalAsignadoRemanente;
+      let fondosInfo = {};
+      try {
+        if (window.BulaPayDB && typeof window.BulaPayDB.getDobleFuenteFondos === 'function') {
+          fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(effectiveRouteId, currentUser) || {};
+        }
+      } catch (_) {}
 
       let usoCapitalAutorizado = false;
       let capitalAsignadoAUsar = 0;
-      let nuevoRemanente = capitalAsignadoRemanente;
+      let nuevoRemanente = Math.max(0, (capitalAsignadoRemanente > 0 ? capitalAsignadoRemanente : saldoCajaReal) - montoValidar);
 
       // Si no se requiere desembolso físico de efectivo
       if (montoValidar <= 0) {
         console.log(`[BulaPay] Préstamo / Renovación sin requerimiento de desembolso físico en caja: $0`);
       }
       // Caso 1 (Fondos Suficientes con Recaudo del Día):
-      // Si el recaudo del día cubre el préstamo, se procesa normalmente reinvirtiendo el recaudo de forma natural.
       else if (recaudoDisponibleHoy >= montoValidar) {
         console.log(`[BulaPay] Préstamo cubierto 100% con Recaudo del Día: $${montoValidar.toLocaleString('es-CO')}`);
       }
-      // Caso 2 (Uso de Capital Asignado Remanente bajo Aceptación de Responsabilidad):
-      // Si el recaudo del día es insuficiente pero cuenta con suficiente Capital Asignado Remanente:
-      else if (fondosTotalesDisponibles >= montoValidar && capitalAsignadoRemanente > 0) {
-        nuevoRemanente = Math.max(0, capitalAsignadoRemanente - montoValidar);
+      // Caso 2 (Fondos Disponibles en Caja / Capital Inyectado en 'Mi Negocio' / Capital Asignado):
+      // Permite el registro de forma transparente siempre y cuando el capital en caja sea mayor a 0 o mayor/igual al préstamo
+      else if (saldoCajaReal >= montoValidar || saldoCajaReal > 0) {
+        usoCapitalAutorizado = true;
+        capitalAsignadoAUsar = montoValidar;
+        nuevoRemanente = Math.max(0, (saldoCajaReal >= capitalAsignadoRemanente ? saldoCajaReal : capitalAsignadoRemanente) - montoValidar);
+
         const montoTotalFmt = montoValidar.toLocaleString('es-CO');
         const saldoRestanteFmt = nuevoRemanente.toLocaleString('es-CO');
 
-        const modalText = `Estás otorgando un nuevo crédito por $ ${montoTotalFmt} utilizando tu fondo base. Al aceptar, se te descontarán de tu Capital Asignado y te quedará un remanente de $ ${saldoRestanteFmt}. (Recuerda que la custodia de este efectivo es bajo tu responsabilidad).`;
-        const fullPromptText = `💡 Uso de Capital Asignado: ${modalText}`;
+        const modalText = `Estás otorgando un nuevo crédito por $ ${montoTotalFmt} utilizando fondos disponibles en caja ($ ${saldoCajaReal.toLocaleString('es-CO')} disponible). Te quedará un saldo en caja de $ ${saldoRestanteFmt}.`;
 
         let isAccepted = false;
         if (typeof Swal !== 'undefined') {
           const resSwal = await Swal.fire({
-            title: '💡 Uso de Capital Asignado',
+            title: '💡 Desembolso de Crédito desde Caja',
             text: modalText,
             icon: 'info',
             showCancelButton: true,
-            confirmButtonText: 'Aceptar',
+            confirmButtonText: 'Aceptar y Desembolsar',
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#10b981',
             cancelButtonColor: '#ef4444',
@@ -4406,7 +4410,7 @@ const agentModule = {
           });
           isAccepted = resSwal.isConfirmed;
         } else {
-          isAccepted = window.confirm(fullPromptText);
+          isAccepted = window.confirm(`💡 Desembolso de Crédito: ${modalText}`);
         }
 
         if (!isAccepted) {
@@ -4418,26 +4422,11 @@ const agentModule = {
           return;
         }
 
-        // El agente autorizó el uso de Capital Asignado Remanente
-        usoCapitalAutorizado = true;
-        capitalAsignadoAUsar = montoValidar;
-
-        // Aviso breve de confirmación requerido
-        if (typeof Swal !== 'undefined') {
-          await Swal.fire({
-            icon: 'info',
-            title: 'Has utilizado fondos de tu Capital Asignado',
-            timer: 2000,
-            showConfirmButton: false,
-            background: '#0f172a',
-            color: '#fff'
-          });
-        }
-        console.log(`[BulaPay] Autorizado uso de Capital Asignado Remanente: $${capitalAsignadoAUsar.toLocaleString('es-CO')}`);
+        console.log(`[BulaPay] Desembolso autorizado desde caja: $${capitalAsignadoAUsar.toLocaleString('es-CO')}, remanente: $${nuevoRemanente.toLocaleString('es-CO')}`);
       }
-      // Caso 3 (Fondos Insuficientes en ambas fuentes - Bloqueo estricto):
+      // Caso 3 (Fondos Insuficientes Reales: saldo en caja es 0 y recaudo es 0):
       else {
-        const msgBloqueo = "No cuentas con saldo disponible en recaudo ni en tu capital asignado. Comunícate de inmediato con el supervisor para que te asigne y habilite nuevos fondos de emergencia.";
+        const msgBloqueo = `Tu saldo disponible en caja es de $0 y no cuentas con recaudo suficiente para desembolsar $${montoValidar.toLocaleString('es-CO')}. Por favor ingresa a 'Mi Negocio' para inyectar capital o comunícate con el supervisor.`;
 
         if (typeof Swal !== 'undefined') {
           await Swal.fire({
@@ -4510,16 +4499,20 @@ const agentModule = {
 
       // Registrar el uso de Capital Asignado Remanente si fue autorizado por el agente
       if (usoCapitalAutorizado && capitalAsignadoAUsar > 0) {
-        await window.BulaPayDB.registrarUsoCapitalAsignado({
-          routeId: effectiveRouteId,
-          agentUsername: currentUser.username,
-          shiftDateStr: fondosInfo.shiftDateStr,
-          montoPrestamo: montoValidar,
-          recaudoDisponible: recaudoDisponibleHoy,
-          capitalAsignadoUtilizado: capitalAsignadoAUsar,
-          capitalRemanenteNuevo: nuevoRemanente,
-          isRenewal: !!isRenov
-        });
+        try {
+          await window.BulaPayDB.registrarUsoCapitalAsignado({
+            routeId: effectiveRouteId,
+            agentUsername: currentUser.username,
+            shiftDateStr: fondosInfo.shiftDateStr || new Date().toISOString().split('T')[0],
+            montoPrestamo: montoValidar,
+            recaudoDisponible: recaudoDisponibleHoy,
+            capitalAsignadoUtilizado: capitalAsignadoAUsar,
+            capitalRemanenteNuevo: nuevoRemanente,
+            isRenewal: !!isRenov
+          });
+        } catch (eReg) {
+          console.warn("[BulaPay] Aviso no bloqueante al registrarUsoCapitalAsignado:", eReg);
+        }
         await this.updateAgentHeaderCapital();
       }
 
@@ -4540,6 +4533,9 @@ const agentModule = {
       }
       await this.updateCashViews();
       await this.renderFinancialDashboard();
+      if (typeof this.updateRegisterPanelCashIndicator === 'function') {
+        await this.updateRegisterPanelCashIndicator();
+      }
 
       // Envío de email de bienvenida (Resend placeholder)
       this.sendWelcomeEmail(payload);
@@ -5131,6 +5127,104 @@ const agentModule = {
     return await window.BulaPayDB.getLiquidCash(routeId);
   },
 
+  // Consulta directa, consolidada y en tiempo real del saldo de caja del agente
+  // (Conecta 'Mi Negocio', capital inyectado, efectivo en caja y capital asignado)
+  async getSaldoCajaRealAgente(effectiveRouteId = null, currentUser = null) {
+    const user = currentUser || (window.BulaPayDB && window.BulaPayDB.getCurrentUser ? window.BulaPayDB.getCurrentUser() : null);
+    let rId = effectiveRouteId || user?.routeId || user?.route_id || null;
+
+    let liquidCash = 0;
+    let onHand = 0;
+    let realBase = 0;
+    let recaudoHoy = 0;
+    let capRemanente = 0;
+    let domCapital = 0;
+    let routeCapital = 0;
+
+    // 1. getLiquidCash (refleja inyecciones de 'Mi Negocio' en capital_injections)
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getLiquidCash === 'function') {
+        liquidCash = Number(await window.BulaPayDB.getLiquidCash(rId, user)) || 0;
+        if (liquidCash <= 0 && user) {
+          liquidCash = Number(await window.BulaPayDB.getLiquidCash(null, user)) || 0;
+        }
+      }
+    } catch (_) {}
+
+    // 2. getEfectivoEnCajaDia (onHand en tiempo real)
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getEfectivoEnCajaDia === 'function') {
+        const cajaDia = await window.BulaPayDB.getEfectivoEnCajaDia(rId, user);
+        onHand = Number(cajaDia?.onHand) || 0;
+      }
+    } catch (_) {}
+
+    // 3. getRealBaseCapital (inyecciones netas acumuladas)
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getRealBaseCapital === 'function') {
+        realBase = Number(await window.BulaPayDB.getRealBaseCapital(rId)) || 0;
+      }
+    } catch (_) {}
+
+    // 4. getDobleFuenteFondos (recaudo del día y capital remanente)
+    try {
+      if (window.BulaPayDB && typeof window.BulaPayDB.getDobleFuenteFondos === 'function') {
+        const fondos = await window.BulaPayDB.getDobleFuenteFondos(rId, user) || {};
+        recaudoHoy = Number(fondos.recaudoDisponibleHoy || 0);
+        capRemanente = Number(fondos.capitalAsignadoRemanente || 0);
+      }
+    } catch (_) {}
+
+    // 5. Lectura directa del DOM de la vista "Mi Negocio" (actualizado inmediatamente tras inyección)
+    const domCapEl = document.getElementById('private-panel-capital');
+    if (domCapEl && domCapEl.textContent) {
+      const parsed = parseFloat(domCapEl.textContent.replace(/[^0-9.-]/g, ''));
+      if (!isNaN(parsed) && parsed > 0) domCapital = parsed;
+    }
+    const domOnHandEl = document.getElementById('private-cash-on-hand') || document.getElementById('cash-management-available');
+    if (domOnHandEl && domOnHandEl.textContent) {
+      const parsedH = parseFloat(domOnHandEl.textContent.replace(/[^0-9.-]/g, ''));
+      if (!isNaN(parsedH) && parsedH > 0 && parsedH > domCapital) domCapital = parsedH;
+    }
+
+    // 6. Capital asignado en la ruta
+    try {
+      if (rId && window.BulaPayDB && typeof window.BulaPayDB.getRoutes === 'function') {
+        const routes = await window.BulaPayDB.getRoutes();
+        const r = (routes || []).find(rt => String(rt.id) === String(rId));
+        if (r && r.capital) routeCapital = Number(r.capital || 0);
+      }
+    } catch (_) {}
+
+    const saldoMaximo = Math.max(
+      liquidCash,
+      onHand,
+      realBase,
+      recaudoHoy + capRemanente,
+      domCapital,
+      routeCapital
+    );
+
+    return {
+      saldoCajaReal: Math.max(0, Math.round(saldoMaximo)),
+      liquidCash: Math.max(0, Math.round(liquidCash)),
+      onHand: Math.max(0, Math.round(onHand)),
+      recaudoDisponibleHoy: Math.max(0, Math.round(recaudoHoy)),
+      capitalAsignadoRemanente: Math.max(0, Math.round(capRemanente || saldoMaximo))
+    };
+  },
+
+  // Sincronizar indicador de caja en el formulario de registro de cliente
+  async updateRegisterPanelCashIndicator() {
+    try {
+      const el = document.getElementById('register-client-available-cash');
+      if (!el) return;
+      const { saldoCajaReal } = await this.getSaldoCajaRealAgente();
+      el.textContent = '$' + Number(saldoCajaReal || 0).toLocaleString('es-CO');
+      el.style.color = (saldoCajaReal || 0) > 0 ? 'var(--color-verde, #10b981)' : '#ef4444';
+    } catch (_) {}
+  },
+
   async renderFinancialDashboard() {
     const capitalEl = document.getElementById('private-panel-capital');
     const carteraEl = document.getElementById('private-panel-cartera');
@@ -5218,6 +5312,9 @@ const agentModule = {
 
       if (typeof this.updateAgentHeaderCapital === 'function') {
         await this.updateAgentHeaderCapital();
+      }
+      if (typeof this.updateRegisterPanelCashIndicator === 'function') {
+        await this.updateRegisterPanelCashIndicator();
       }
     } catch (e) {
       console.error("Error al actualizar vistas de caja:", e);

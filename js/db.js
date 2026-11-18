@@ -3520,6 +3520,19 @@ const db = {
       capitalBase = (allRoutes || []).reduce((sum, r) => sum + Number(r.capital || r.monto_inicial || 0), 0);
     }
 
+    // Si capitalBase en rutas es 0, consultar inyecciones de capital o liquidez real de caja (Mi Negocio)
+    if (capitalBase <= 0) {
+      try {
+        const realBase = Number(await this.getRealBaseCapital(targetRouteId)) || 0;
+        if (realBase > 0) {
+          capitalBase = realBase;
+        } else {
+          const liquid = Number(await this.getLiquidCash(targetRouteId, agentUserObj)) || 0;
+          if (liquid > 0) capitalBase = liquid;
+        }
+      } catch (_) {}
+    }
+
     const activeRouteIds = new Set(
       targetRouteId === 'ALL'
         ? (allRoutes || []).map(r => String(r.id || '').trim().toLowerCase()).filter(Boolean)
@@ -3899,12 +3912,12 @@ const db = {
 
     if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
       capitalAsignadoRemanenteFinal = Math.round(Number(lastAuditLog.capitalRemanenteNuevo));
-    } else if (route && route.capital !== undefined && route.capital !== null) {
+    } else if (route && route.capital !== undefined && route.capital !== null && Number(route.capital) > 0) {
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(route.capital)));
-    } else if (targetRouteId === 'ALL') {
+    } else if (capitalBase > 0) {
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
     } else {
-      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
+      capitalAsignadoRemanenteFinal = 0;
     }
 
     // Capital Asignado Inicial (fondo base asignado con el que arrancó el agente la jornada)
@@ -6613,6 +6626,21 @@ return {
     if (error) {
       console.error("Error directo al insertar en capital_injections:", error);
       throw error;
+    }
+
+    // Sincronizar de inmediato el capital en routes para eliminar desincronizaciones de tabla
+    if (routeId) {
+      try {
+        const route = await this.getRouteById(routeId);
+        if (route) {
+          const curCap = Number(route.capital || route.capital_base || route.capital_asignado || 0);
+          const updatedCap = Math.max(0, curCap + cleanAmount);
+          if (supabase) {
+            await supabase.from('routes').update({ capital: updatedCap }).eq('id', routeId);
+          }
+          this.invalidateCache('routes_');
+        }
+      } catch (_) {}
     }
 
     // Insert secundario en caja_movimientos para trazabilidad auditable
