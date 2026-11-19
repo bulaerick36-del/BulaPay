@@ -4048,6 +4048,12 @@ return {
           if (cachedRoute) cachedRoute.capital = Math.round(Number(capitalRemanenteNuevo));
         }
         this.invalidateCache('routes_');
+        try {
+          window.dispatchEvent(new CustomEvent('bulapay-capital-updated', { detail: { routeId, newCapital: Math.round(Number(capitalRemanenteNuevo)) } }));
+          const bc = new BroadcastChannel('bulapay_sync');
+          bc.postMessage({ type: 'capital-updated', routeId, newCapital: Math.round(Number(capitalRemanenteNuevo)) });
+          bc.close();
+        } catch (_) {}
       }
 
       // 2. Dejar constancia auditable en la base de datos (caja_movimientos)
@@ -6639,6 +6645,12 @@ return {
             await supabase.from('routes').update({ capital: updatedCap }).eq('id', routeId);
           }
           this.invalidateCache('routes_');
+          try {
+            window.dispatchEvent(new CustomEvent('bulapay-capital-updated', { detail: { routeId, newCapital: updatedCap } }));
+            const bc = new BroadcastChannel('bulapay_sync');
+            bc.postMessage({ type: 'capital-updated', routeId, newCapital: updatedCap });
+            bc.close();
+          } catch (_) {}
         }
       } catch (_) {}
     }
@@ -10207,6 +10219,13 @@ return {
     const currentLocalInjections = JSON.parse(localStorage.getItem('bulapay_capital_injections') || '[]');
     currentLocalInjections.push(injectionRecord);
     localStorage.setItem('bulapay_capital_injections', JSON.stringify(currentLocalInjections));
+
+    try {
+      window.dispatchEvent(new CustomEvent('bulapay-capital-updated', { detail: { routeId, newCapital } }));
+      const bc = new BroadcastChannel('bulapay_sync');
+      bc.postMessage({ type: 'capital-updated', routeId, newCapital });
+      bc.close();
+    } catch (_) {}
 
     return { newCapital, injectionRecord };
   }

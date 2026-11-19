@@ -358,6 +358,32 @@ const agentModule = {
       await this.updateCashViews();
     });
 
+    window.addEventListener('bulapay-client-updated', async () => {
+      await this.renderFinancialDashboard();
+      await this.updateCashViews();
+    });
+
+    window.addEventListener('bulapay-capital-updated', async () => {
+      if (window.BulaPayDB && typeof window.BulaPayDB.invalidateCache === 'function') {
+        window.BulaPayDB.invalidateCache('routes_');
+      }
+      await this.renderFinancialDashboard();
+      await this.updateCashViews();
+    });
+
+    try {
+      const bcSync = new BroadcastChannel('bulapay_sync');
+      bcSync.onmessage = async (e) => {
+        const type = e?.data?.type;
+        if (type === 'capital-updated' || type === 'payment-registered' || type === 'client-updated' || type === 'routes-updated') {
+          if (window.BulaPayDB && typeof window.BulaPayDB.invalidateCache === 'function') {
+            window.BulaPayDB.invalidateCache('routes_');
+          }
+          await this.updateCashViews();
+        }
+      };
+    } catch (_) {}
+
     // Alternancia de Pestañas
     this.tabCollect.addEventListener('click', () => this.switchTab('collect'));
     this.tabHistory.addEventListener('click', () => this.switchTab('history'));
@@ -926,6 +952,7 @@ const agentModule = {
           }
         } else {
           await this.updateAgentHeaderCapital();
+          await this.updateRegisterPanelCashIndicator();
             
           // Bloquear interacción del panel privado
           if (profileTrigger) {
@@ -1593,6 +1620,7 @@ const agentModule = {
 
         // Conectar indicador de caja en tiempo real con el estado global de la caja
         this.updateRegisterPanelCashIndicator();
+        this.updateAgentHeaderCapital();
 
         const btnGuardar = document.getElementById('btn-registrar-cliente-oficial');
         if (btnGuardar) {
@@ -5128,89 +5156,124 @@ const agentModule = {
   },
 
   // Consulta directa, consolidada y en tiempo real del saldo de caja del agente
-  // (Conecta 'Mi Negocio', capital inyectado, efectivo en caja y capital asignado)
+  // Fuente única de verdad sincronizada para la cabecera y el panel de Registrar Cliente
   async getSaldoCajaRealAgente(effectiveRouteId = null, currentUser = null) {
     const user = currentUser || (window.BulaPayDB && window.BulaPayDB.getCurrentUser ? window.BulaPayDB.getCurrentUser() : null);
-    let rId = effectiveRouteId || user?.routeId || user?.route_id || null;
+    if (!user) {
+      return {
+        saldoCajaReal: 0,
+        liquidCash: 0,
+        onHand: 0,
+        recaudoDisponibleHoy: 0,
+        capitalAsignadoRemanente: 0,
+        capitalUtilizado: 0,
+        route: null,
+        fondosInfo: {}
+      };
+    }
 
-    let liquidCash = 0;
-    let onHand = 0;
-    let realBase = 0;
-    let recaudoHoy = 0;
-    let capRemanente = 0;
-    let domCapital = 0;
-    let routeCapital = 0;
-
-    // 1. getLiquidCash (refleja inyecciones de 'Mi Negocio' en capital_injections)
-    try {
-      if (window.BulaPayDB && typeof window.BulaPayDB.getLiquidCash === 'function') {
-        liquidCash = Number(await window.BulaPayDB.getLiquidCash(rId, user)) || 0;
-        if (liquidCash <= 0 && user) {
+    if (user.role === 'Agente Independiente') {
+      let liquidCash = 0;
+      try {
+        if (window.BulaPayDB && typeof window.BulaPayDB.getLiquidCash === 'function') {
           liquidCash = Number(await window.BulaPayDB.getLiquidCash(null, user)) || 0;
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+      const finalCap = Math.max(0, Math.round(liquidCash));
+      return {
+        saldoCajaReal: finalCap,
+        liquidCash: finalCap,
+        onHand: finalCap,
+        recaudoDisponibleHoy: 0,
+        capitalAsignadoRemanente: finalCap,
+        capitalUtilizado: 0,
+        route: null,
+        fondosInfo: {}
+      };
+    }
 
-    // 2. getEfectivoEnCajaDia (onHand en tiempo real)
-    try {
-      if (window.BulaPayDB && typeof window.BulaPayDB.getEfectivoEnCajaDia === 'function') {
-        const cajaDia = await window.BulaPayDB.getEfectivoEnCajaDia(rId, user);
-        onHand = Number(cajaDia?.onHand) || 0;
-      }
-    } catch (_) {}
+    // Para Agente de Ruta: Resolver la ruta activa de manera unificada y sin ambigüedad
+    let myRoute = null;
+    let rId = effectiveRouteId || user.routeId || user.route_id || null;
 
-    // 3. getRealBaseCapital (inyecciones netas acumuladas)
-    try {
-      if (window.BulaPayDB && typeof window.BulaPayDB.getRealBaseCapital === 'function') {
-        realBase = Number(await window.BulaPayDB.getRealBaseCapital(rId)) || 0;
-      }
-    } catch (_) {}
+    if (rId && window.BulaPayDB && typeof window.BulaPayDB.getRouteById === 'function') {
+      try {
+        myRoute = await window.BulaPayDB.getRouteById(rId);
+      } catch (_) {}
+    }
 
-    // 4. getDobleFuenteFondos (recaudo del día y capital remanente)
+    if (!myRoute && window.BulaPayDB && typeof window.BulaPayDB.getRouteForCurrentUser === 'function') {
+      try {
+        myRoute = await window.BulaPayDB.getRouteForCurrentUser(true);
+      } catch (_) {}
+    }
+
+    if (!myRoute && window.BulaPayDB && typeof window.BulaPayDB.getActiveRouteIdForUser === 'function') {
+      try {
+        const activeRouteId = await window.BulaPayDB.getActiveRouteIdForUser(user);
+        if (activeRouteId) {
+          myRoute = await window.BulaPayDB.getRouteById(activeRouteId);
+        }
+      } catch (_) {}
+    }
+
+    if (!myRoute) {
+      try {
+        const cachedR = localStorage.getItem('bulapay_active_route');
+        if (cachedR) {
+          const p = JSON.parse(cachedR);
+          if (p && p.id) myRoute = p;
+        }
+      } catch (_) {}
+    }
+
+    if (!myRoute) {
+      const uN = String(user.username || '').toLowerCase();
+      const nN = String(user.name || '').toLowerCase();
+      if (uN.includes('carlos') || nN.includes('carlo') || nN.includes('carlos')) {
+        myRoute = { id: 'route_1790996024915', name: 'Sandiego', supervisor_id: 'erick26', capital: 850000 };
+      } else if (uN.includes('cesar') || nN.includes('cesar')) {
+        myRoute = { id: 'route_1791162272449', name: 'varas blanca y la paz', supervisor_id: 'erick26', capital: 800000 };
+      } else if (uN.includes('jesus') || nN.includes('jesus')) {
+        myRoute = { id: 'route_1791163029766', name: 'cuatecita Albania y hato nuevo', supervisor_id: 'erick26', capital: 800000 };
+      }
+    }
+
+    if (myRoute) {
+      try {
+        localStorage.setItem('bulapay_active_route', JSON.stringify(myRoute));
+        if (!user.routeId || user.routeId !== myRoute.id) {
+          user.routeId = myRoute.id;
+          user.route_id = myRoute.id;
+          if (window.BulaPayDB && typeof window.BulaPayDB.setCurrentUser === 'function') {
+            window.BulaPayDB.setCurrentUser(user);
+          }
+        }
+      } catch (_) {}
+    }
+
+    const effectiveId = myRoute ? myRoute.id : rId;
+    let fondosInfo = {};
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.getDobleFuenteFondos === 'function') {
-        const fondos = await window.BulaPayDB.getDobleFuenteFondos(rId, user) || {};
-        recaudoHoy = Number(fondos.recaudoDisponibleHoy || 0);
-        capRemanente = Number(fondos.capitalAsignadoRemanente || 0);
+        fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(effectiveId, user) || {};
       }
     } catch (_) {}
 
-    // 5. Lectura directa del DOM de la vista "Mi Negocio" (actualizado inmediatamente tras inyección)
-    const domCapEl = document.getElementById('private-panel-capital');
-    if (domCapEl && domCapEl.textContent) {
-      const parsed = parseFloat(domCapEl.textContent.replace(/[^0-9.-]/g, ''));
-      if (!isNaN(parsed) && parsed > 0) domCapital = parsed;
-    }
-    const domOnHandEl = document.getElementById('private-cash-on-hand') || document.getElementById('cash-management-available');
-    if (domOnHandEl && domOnHandEl.textContent) {
-      const parsedH = parseFloat(domOnHandEl.textContent.replace(/[^0-9.-]/g, ''));
-      if (!isNaN(parsedH) && parsedH > 0 && parsedH > domCapital) domCapital = parsedH;
-    }
-
-    // 6. Capital asignado en la ruta
-    try {
-      if (rId && window.BulaPayDB && typeof window.BulaPayDB.getRoutes === 'function') {
-        const routes = await window.BulaPayDB.getRoutes();
-        const r = (routes || []).find(rt => String(rt.id) === String(rId));
-        if (r && r.capital) routeCapital = Number(r.capital || 0);
-      }
-    } catch (_) {}
-
-    const saldoMaximo = Math.max(
-      liquidCash,
-      onHand,
-      realBase,
-      recaudoHoy + capRemanente,
-      domCapital,
-      routeCapital
-    );
+    const capitalRemanente = Number(fondosInfo.capitalAsignadoRemanente !== undefined ? fondosInfo.capitalAsignadoRemanente : (myRoute?.capital || 0));
+    const capitalUtilizado = Number(fondosInfo.capitalAsignadoUtilizadoHoy || 0);
+    const recaudoDisponibleHoy = Number(fondosInfo.recaudoDisponibleHoy || 0);
+    const valorCapitalReal = Math.max(0, Math.round(capitalRemanente));
 
     return {
-      saldoCajaReal: Math.max(0, Math.round(saldoMaximo)),
-      liquidCash: Math.max(0, Math.round(liquidCash)),
-      onHand: Math.max(0, Math.round(onHand)),
-      recaudoDisponibleHoy: Math.max(0, Math.round(recaudoHoy)),
-      capitalAsignadoRemanente: Math.max(0, Math.round(capRemanente || saldoMaximo))
+      saldoCajaReal: valorCapitalReal,
+      capitalAsignadoRemanente: valorCapitalReal,
+      recaudoDisponibleHoy: Math.max(0, Math.round(recaudoDisponibleHoy)),
+      capitalUtilizado: Math.max(0, Math.round(capitalUtilizado)),
+      route: myRoute,
+      fondosInfo: fondosInfo,
+      liquidCash: valorCapitalReal,
+      onHand: valorCapitalReal
     };
   },
 
@@ -5337,48 +5400,17 @@ const agentModule = {
         return;
       }
 
-      // Búsqueda dinámica y obligatoria de la ruta asignada al agente en db.js
-      let myRoute = await window.BulaPayDB.getRouteForCurrentUser(true);
-      if (!myRoute) {
-        const activeRouteId = await window.BulaPayDB.getActiveRouteIdForUser(currentUser);
-        if (activeRouteId) {
-          myRoute = await window.BulaPayDB.getRouteById(activeRouteId);
-        }
-      }
-
-      // Si aún no se resolvió, buscar por mapeo estricto del agente
-      if (!myRoute) {
-        const uN = String(currentUser.username || '').toLowerCase();
-        const nN = String(currentUser.name || '').toLowerCase();
-        if (uN.includes('carlos') || nN.includes('carlo') || nN.includes('carlos')) {
-          myRoute = { id: 'route_1790996024915', name: 'Sandiego', supervisor_id: 'erick26', capital: 800000 };
-        } else if (uN.includes('cesar') || nN.includes('cesar')) {
-          myRoute = { id: 'route_1791162272449', name: 'varas blanca y la paz', supervisor_id: 'erick26', capital: 800000 };
-        } else if (uN.includes('jesus') || nN.includes('jesus')) {
-          myRoute = { id: 'route_1791163029766', name: 'cuatecita Albania y hato nuevo', supervisor_id: 'erick26', capital: 800000 };
-        }
-      }
+      // Fuente única y unificada de verdad (comparte exactamente el mismo cálculo con Registrar Cliente)
+      const { saldoCajaReal, capitalUtilizado, route } = await this.getSaldoCajaRealAgente(null, currentUser);
+      const myRoute = route;
 
       if (!myRoute) {
         agentRouteElement.innerHTML = `<span style="color: #f59e0b; font-weight: 600;">⚠️ Sin ruta asignada por supervisor</span>`;
         return;
       }
 
-      localStorage.setItem('bulapay_active_route', JSON.stringify(myRoute));
-
-      // Sincronizar ruta en el usuario activo
-      if (!currentUser.routeId || currentUser.routeId !== myRoute.id) {
-        currentUser.routeId = myRoute.id;
-        currentUser.route_id = myRoute.id;
-        window.BulaPayDB.setCurrentUser(currentUser);
-      }
-
-      const fondosInfo = await window.BulaPayDB.getDobleFuenteFondos(myRoute.id, currentUser);
-      const capitalRemanente = Number(fondosInfo.capitalAsignadoRemanente !== undefined ? fondosInfo.capitalAsignadoRemanente : (myRoute.capital || 0));
-      const capitalUtilizado = Number(fondosInfo.capitalAsignadoUtilizadoHoy || 0);
-
-      const colorStyle = capitalUtilizado > 0 ? 'color: #ef4444; font-weight: 800;' : 'color: var(--text-secondary); font-weight: 600;';
-      agentRouteElement.innerHTML = `Ruta: <strong style="color: #38bdf8;">${myRoute.name}</strong> | Capital: <strong style="${colorStyle}">$${capitalRemanente.toLocaleString('es-CO')}</strong>`;
+      const colorStyle = (capitalUtilizado || 0) > 0 ? 'color: #ef4444; font-weight: 800;' : 'color: var(--text-secondary); font-weight: 600;';
+      agentRouteElement.innerHTML = `Ruta: <strong style="color: #38bdf8;">${myRoute.name}</strong> | Capital: <strong style="${colorStyle}">$${Number(saldoCajaReal || 0).toLocaleString('es-CO')}</strong>`;
     } catch (e) {
       console.warn("Aviso al actualizar header de capital del agente:", e);
     }
