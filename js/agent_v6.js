@@ -2395,18 +2395,18 @@ const agentModule = {
     }
 
     const isOverdue = this.isCartonOverdue(client, dailyStatusList);
-    const isOverdue2Months = this.isCartonOverdueBy2Months(client, dailyStatusList);
+    const isOverdueLimit = this.isCartonOverdueBy2Months(client, dailyStatusList);
 
-    // Aviso EXCLUSIVAMENTE informativo: alerta visual para el cobrador sin bloquear jamás pagos, abonos, pagos masivos ni liquidación
+    // Alerta informativa y de liquidación para el cobrador sin bloquear cobros ni abonos
     if (isOverdue && Number(client.outstanding) > 0) {
       banner.style.display = 'block';
       const infoEl = document.getElementById('overdue-banner-info');
       if (infoEl) {
         const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
-        if (isOverdue2Months) {
-          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón está vencido por 2 meses (Saldo pendiente: <b>$${outstandingFmt}</b>). Según la regla, se sugiere enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
+        if (isOverdueLimit) {
+          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón ha alcanzado el límite máximo de vencimiento (2 meses y 10 días) con saldo pendiente de <b>$${outstandingFmt}</b>. Según la regla, se sugiere liquidar y enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
         } else {
-          infoEl.innerHTML = `⚠️ <b>Aviso Informativo:</b> El cartón ha superado su plazo proyectado (Saldo pendiente: <b>$${outstandingFmt}</b>). El cliente permanece accesible y 100% habilitado para pagos individuales, abonos, pagos masivos y liquidación de cartón.`;
+          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón se encuentra <b>VENCIDO</b> (Saldo pendiente: <b>$${outstandingFmt}</b>). Se sugiere liquidar el cartón o registrar el cobro correspondiente. El cliente permanece 100% habilitado.`;
         }
       }
     } else {
@@ -2450,14 +2450,30 @@ const agentModule = {
   },
 
   isCartonOverdue(client, dailyStatusList = null) {
-    if (!client || Number(client?.outstanding || 0) <= 0) return false;
+    if (!client || Number(client?.outstanding ?? client?.saldo_restante ?? 0) <= 0) return false;
 
-    const totalInstallmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
+    // 1. Verificación por estado operativo explícito
+    const rawEstado = String(client?.estado || client?.status || '').trim().toLowerCase();
+    if (rawEstado.includes('vencid') || rawEstado.includes('mora') || rawEstado.includes('atrasad') || rawEstado.includes('demorad')) {
+      return true;
+    }
+
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayStr = `${todayZero.getFullYear()}-${String(todayZero.getMonth() + 1).padStart(2, '0')}-${String(todayZero.getDate()).padStart(2, '0')}`;
 
-    // 1. Chequeo por dailyStatusList si existe
+    // 2. Verificación por fecha_vencimiento explícita (indispensable para pruebas con fechas alteradas)
+    if (client.fecha_vencimiento) {
+      const explicitDue = this.parseLocalDate(client.fecha_vencimiento);
+      if (!isNaN(explicitDue.getTime())) {
+        const explicitDueZero = new Date(explicitDue.getFullYear(), explicitDue.getMonth(), explicitDue.getDate());
+        if (todayZero > explicitDueZero) return true;
+      }
+    }
+
+    const totalInstallmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
+
+    // 3. Chequeo por dailyStatusList si existe
     if (dailyStatusList && dailyStatusList.length > 0) {
       const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
       if (lastInstallment && lastInstallment?.dateStr && lastInstallment?.dateStr < todayStr) {
@@ -2465,16 +2481,18 @@ const agentModule = {
       }
     }
 
-    // 2. Chequeo directo por fecha_apertura
+    // 4. Chequeo directo por fecha_apertura / fecha_inicio / created_at
     const cartonDateStr = client?.fecha_apertura || client?.fecha_inicio || client?.created_at;
-    if (!cartonDateStr) return false;
+    if (cartonDateStr) {
+      const startDate = this.parseLocalDate(cartonDateStr);
+      if (!isNaN(startDate.getTime())) {
+        const dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+        const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+        if (todayZero > dueDateZero) return true;
+      }
+    }
 
-    const startDate = this.parseLocalDate(cartonDateStr);
-    const dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
-
-    const dueDateStr = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}`;
-
-    return todayStr > dueDateStr;
+    return false;
   },
 
   isCartonOverdueBy2Months(client, dailyStatusList = null) {
@@ -2482,7 +2500,7 @@ const agentModule = {
     const outstanding = Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0);
     if (outstanding <= 0) return false;
 
-    // Solo aplica para cartones activos (no liquidados previamente por mora o cancelados)
+    // Solo aplica para cartones no liquidados previamente por pérdida o mora
     const rawEstado = String(client.estado || client.status || '').trim().toLowerCase();
     if (rawEstado.includes('liquidado_perdida') || rawEstado.includes('liquidado_mora') || rawEstado.includes('castigado')) {
       return false;
@@ -2510,22 +2528,27 @@ const agentModule = {
       dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
     }
 
-    // Regla Estricta: La alerta restrictiva de mora y sugerencia a Lista Negra se activa ÚNICAMENTE
-    // cuando el cartón alcanza los 60 días (2 meses) VENCIDO, respetando el margen de tolerancia del primer mes.
-    // Ciclo normal del cartón: 30 días. Tolerancia: 30 días. Total atraso exigido tras fecha de vencimiento: 60 días.
-    if (dueDate && !isNaN(dueDate.getTime())) {
-      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      const dueDatePlus2Months = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate());
-      const diffDaysAfterDue = Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      return (todayZero >= dueDatePlus2Months || diffDaysAfterDue >= 60);
-    }
+    // REGLA CRÍTICA: Límite máximo permitido de un cartón (regla de 2 meses y 10 días = 70 días tope).
+    // Funciona con precisión absoluta tanto en producción como en pruebas con fechas alteradas:
 
-    // Fallback: Si no hay fecha de vencimiento explícita, contar desde la fecha de apertura:
-    // Ciclo normal (~35 días calendario) + 60 días de atraso vencido = 95 días calendario desde el inicio
+    // A. Tope de 2 meses y 10 días (70 días calendario) medido desde la fecha de apertura/creación del cartón
     if (startDate && !isNaN(startDate.getTime())) {
       const startDateZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const startDatePlus2M10D = new Date(startDateZero.getFullYear(), startDateZero.getMonth() + 2, startDateZero.getDate() + 10);
       const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDaysSinceStart >= 95;
+      if (todayZero >= startDatePlus2M10D || diffDaysSinceStart >= 70) {
+        return true;
+      }
+    }
+
+    // B. O tope de 2 meses y 10 días (70 días) tras la fecha de vencimiento configurada o calculada
+    if (dueDate && !isNaN(dueDate.getTime())) {
+      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      const dueDatePlus2M10D = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate() + 10);
+      const diffDaysAfterDue = Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24));
+      if (todayZero >= dueDatePlus2M10D || diffDaysAfterDue >= 70) {
+        return true;
+      }
     }
 
     return false;
@@ -2597,11 +2620,11 @@ const agentModule = {
     } else if (startDate && !isNaN(startDate.getTime())) {
       const startDateZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
       const diffDays = Math.floor((todayZero.getTime() - startDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      diasVencimiento = Math.max(0, diffDays - 35);
+      diasVencimiento = Math.max(0, diffDays - 30);
     }
     const diasVencimientoStr = diasVencimiento > 0 
-      ? `${diasVencimiento} días (~${Math.floor(diasVencimiento / 30)} meses)` 
-      : 'Supera 60 días (2 meses)';
+      ? `${diasVencimiento} días (${Math.floor(diasVencimiento / 30)} meses y ${diasVencimiento % 30} días)` 
+      : 'Supera 2 meses y 10 días (70 días)';
 
     // Obtener la lista real de las 30 cuotas para auditoría visual
     let quotas = Array.isArray(dailyStatusList) ? dailyStatusList : null;
@@ -2644,7 +2667,7 @@ const agentModule = {
 
     const warningHtml = `
       <p style="font-size: 1.05rem; line-height: 1.5; margin: 0.5rem 0 0.85rem 0; color: #ffffff;">
-        Este cartón está vencido por 2 meses. Según la regla, le sugerimos enviar a Lista Negra.
+        Este cartón ha alcanzado el límite máximo permitido de vencimiento (2 meses y 10 días). Según la regla, se sugiere liquidar y enviar a Lista Negra.
       </p>
 
       <div style="margin: 0.75rem 0;">
@@ -2682,12 +2705,12 @@ const agentModule = {
 
     if (typeof Swal !== 'undefined') {
       const res = await Swal.fire({
-        title: '⚠️ Aviso',
+        title: '⚠️ Aviso de Vencimiento',
         html: warningHtml,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonText: 'Aceptar',
-        cancelButtonText: 'Cancelar',
+        confirmButtonText: '⛔ Liquidar a Lista Negra',
+        cancelButtonText: 'Continuar Cobro Manual',
         confirmButtonColor: '#ef4444',
         cancelButtonColor: '#475569',
         reverseButtons: false,
@@ -2717,7 +2740,7 @@ const agentModule = {
       return Boolean(res && res.isConfirmed);
     }
 
-    const confirmText = `⚠️ Aviso: Este cartón está vencido por 2 meses. Según la regla, le sugerimos enviar a Lista Negra.\n\n` +
+    const confirmText = `⚠️ Aviso: Este cartón ha alcanzado el límite máximo permitido de vencimiento (2 meses y 10 días). Según la regla, se sugiere liquidar y enviar a Lista Negra.\n\n` +
       `Datos del Cliente:\n` +
       `- Nombre: ${nombre}\n` +
       `- Cédula: ${cedula}\n` +
@@ -2726,7 +2749,7 @@ const agentModule = {
       `- Saldo Pendiente: ${saldoFmt}\n` +
       `- Días de Vencimiento: ${diasVencimientoStr}\n` +
       `- Cuotas: ${paidCount} pagadas / ${overdueCount} vencidas\n\n` +
-      `¿Desea enviar este cliente a Lista Negra?`;
+      `¿Desea liquidar este crédito y enviar al cliente a Lista Negra?`;
 
     return window.confirm(confirmText);
   },
@@ -2766,7 +2789,7 @@ const agentModule = {
       const { data: cartonesData } = await cartonQuery;
       const activeCarton = (cartonesData || []).find(c => {
         const st = String(c.estado || c.status || '').toLowerCase();
-        return st === 'activo' || st === 'activo_por_renovacion';
+        return st === 'activo' || st === 'activo_por_renovacion' || st.includes('vencid') || st.includes('mora');
       }) || (cartonesData || [])[0];
 
       let { data: clientData } = await supabase
@@ -2868,6 +2891,8 @@ const agentModule = {
       // Actualizar 'cartones' con el saldo pendiente real, estado 'liquidado_perdida' y vínculos obligatorios
       const cartonUpdatePayload = {
         estado: 'liquidado_perdida',
+        status: 'liquidado_perdida',
+        supervisor_atendido: false,
         outstanding: saldoPendienteReal,
         total_debt: totalDebt,
         updated_at: new Date().toISOString(),
@@ -2880,9 +2905,32 @@ const agentModule = {
 
       if (targetCartonId) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('id', targetCartonId);
+        if (window.BulaPayDB && window.BulaPayDB.removeLiquidacionAtendidaSync) {
+          window.BulaPayDB.removeLiquidacionAtendidaSync(targetCartonId);
+        }
       }
       if (cedulaStr) {
         await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
+      }
+
+      // Notificar al supervisor en tiempo real para generar campana de alerta
+      try {
+        if (window.BulaPayDB && window.BulaPayDB.notificarLiquidacionSupervisor) {
+          window.BulaPayDB.notificarLiquidacionSupervisor({
+            agentId: agentUsername || currentUser?.id,
+            agentName: currentUser?.nombre || currentUser?.username || 'Agente',
+            routeId: routeId,
+            routeName: currentUser?.ruta || 'Ruta',
+            clientName: name,
+            clientId: cedulaStr,
+            amountLiquidated: saldoPendienteReal,
+            newCartonNumber: numeroCarton || targetCartonId,
+            cartonId: targetCartonId,
+            type: 'Mora'
+          }).catch(() => {});
+        }
+      } catch (eNotif) {
+        console.warn("Aviso al notificar liquidación por mora:", eNotif?.message);
       }
 
       // Actualizar 'clients' con riesgo Rojo, saldo pendiente real y vínculo estricto de ruta/supervisor
@@ -3050,11 +3098,12 @@ const agentModule = {
 
     const canRenovar = this.canRenovarCarton(client, dailyStatusList) || isWithoutActiveDebt;
     const isOverdueCarton = this.isCartonOverdue(client, dailyStatusList);
+    const isOverdueLimit = this.isCartonOverdueBy2Months(client, dailyStatusList);
     const rawSt = String(client?.estado || client?.status || '').toLowerCase();
-    const isMoraOrPerdida = rawSt.includes('mora') || rawSt.includes('perdida') || String(client?.risk || '').toLowerCase() === 'rojo';
+    const isMoraOrPerdida = rawSt.includes('mora') || rawSt.includes('perdida') || rawSt.includes('vencid') || String(client?.risk || '').toLowerCase() === 'rojo';
 
-    // Habilitar botón de liquidar por mora ÚNICAMENTE si el cartón está vencido por fecha o en mora
-    const canLiquidarMora = (isOverdueCarton || isMoraOrPerdida) && !isWithoutActiveDebt;
+    // Habilitar botón de liquidar por mora si el cartón está vencido por fecha, supera el límite de 2 meses y 10 días, o está en mora
+    const canLiquidarMora = (isOverdueCarton || isOverdueLimit || isMoraOrPerdida) && !isWithoutActiveDebt;
 
     if (btnRenovar) {
       btnRenovar.style.removeProperty('display');
@@ -3282,8 +3331,15 @@ const agentModule = {
       } else {
         // Si no hay pagos registrados o son parciales, el saldo pendiente es la deuda real no pagada
         realOutstanding = Math.max(0, totalDebt - totalPagadoReal);
-        realStatus = 'Activo';
-        realEstado = 'activo';
+        // Preservar si ya venía marcado como 'vencido' o 'mora' en base de datos o por pruebas de fecha
+        const rawOrigState = String(activeCarton.estado || activeCarton.status || '').toLowerCase();
+        if (rawOrigState.includes('vencid') || rawOrigState.includes('mora')) {
+          realStatus = rawOrigState.includes('vencid') ? 'Vencido' : 'Mora';
+          realEstado = rawOrigState.includes('vencid') ? 'vencido' : 'mora';
+        } else {
+          realStatus = 'Activo';
+          realEstado = 'activo';
+        }
       }
 
       // El cliente existe Y posee un cartón activo en la ruta del agente activo

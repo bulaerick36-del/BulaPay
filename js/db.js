@@ -1356,19 +1356,30 @@ const db = {
       localStorage.setItem('bulapay_liquidaciones_atendidas', JSON.stringify(currentStorageList));
     } catch (_) {}
 
-    // Persistir en Supabase bulapay_notificaciones con categoría Liquidacion_Revisada
+    // Persistir en Supabase: bulapay_notificaciones y estado supervisor_atendido en cartones
     try {
       const supabase = await initSupabase();
-      const recordsToInsert = cartonIds.map(id => ({
-        titulo: 'Liquidacion Atendida',
-        mensaje: 'liq_atendida:' + String(id).trim().toLowerCase(),
-        categoria: 'Liquidacion_Revisada',
-        username: agentUsername || 'supervisor',
-        created_at: new Date().toISOString()
-      }));
-      await supabase.from('bulapay_notificaciones').insert(recordsToInsert);
+      if (supabase) {
+        const recordsToInsert = cartonIds.map(id => ({
+          titulo: 'Liquidacion Atendida',
+          mensaje: 'liq_atendida:' + String(id).trim().toLowerCase(),
+          categoria: 'Liquidacion_Revisada',
+          username: agentUsername || 'supervisor',
+          created_at: new Date().toISOString()
+        }));
+        await supabase.from('bulapay_notificaciones').insert(recordsToInsert).catch(() => {});
+
+        for (const id of cartonIds) {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+          if (isUuid) {
+            await supabase.from('cartones').update({ supervisor_atendido: true, updated_at: new Date().toISOString() }).eq('id', id).catch(() => {});
+          } else if (!isNaN(Number(id))) {
+            await supabase.from('cartones').update({ supervisor_atendido: true, updated_at: new Date().toISOString() }).eq('numero_carton', Number(id)).catch(() => {});
+          }
+        }
+      }
     } catch (eCloud) {
-      console.warn("Aviso al guardar en bulapay_notificaciones:", eCloud);
+      console.warn("Aviso al guardar liquidaciones atendidas en Supabase:", eCloud);
     }
 
     // Notificar reactivamente a toda la interfaz
@@ -2043,6 +2054,24 @@ const db = {
         const clientObj = clientMap.get(cedStr) || {};
         const clientName = clientObj.name || clientObj.nombre || c.client_name || c.cliente_nombre || (cedStr ? `Cliente C.C. ${cedStr}` : 'Cliente Sin Nombre');
 
+        const cartonStartStr = c.fecha_apertura || c.fecha_inicio || c.created_at;
+        let cartonDueDateStr = c.fecha_vencimiento || null;
+        if (!cartonDueDateStr && cartonStartStr) {
+          try {
+            const sDate = self.parseLocalCartonDate ? self.parseLocalCartonDate(cartonStartStr) : new Date(cartonStartStr);
+            if (!isNaN(sDate.getTime())) {
+              const totInst = Number(c.installments_count || c.installmentsCount || 30);
+              let dCount = 0;
+              let cur = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate());
+              while (dCount < totInst) {
+                cur.setDate(cur.getDate() + 1);
+                if (cur.getDay() !== 0) dCount++;
+              }
+              cartonDueDateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            }
+          } catch (_) {}
+        }
+
         seenCartonIds.add(cIdLower);
         candidateList.push({
           ...c,
@@ -2054,6 +2083,8 @@ const db = {
           montoPrestado: Number(c.monto_prestado || c.amount || clientObj.amount || 0),
           totalDeuda: Number(c.total_debt || c.totalDebt || clientObj.totalDebt || 0),
           saldoPendiente: Number(c.outstanding || 0),
+          fecha_vencimiento: cartonDueDateStr,
+          fechaVencimiento: cartonDueDateStr,
           category,
           categoryLabel,
           categoryColor,
@@ -2280,6 +2311,24 @@ const db = {
         const clientName = clientObj.name || clientObj.nombre || c.client_name || c.cliente_nombre || (cedStr ? 'Cliente C.C. ' + cedStr : 'Cliente Sin Nombre');
         const rawCloseDate = c.fecha_cierre || c.closed_at || c.fecha_liquidacion || c.updated_at || c.created_at || new Date().toISOString();
 
+        const cartonStartStr = c.fecha_apertura || c.fecha_inicio || c.created_at;
+        let cartonDueDateStr = c.fecha_vencimiento || null;
+        if (!cartonDueDateStr && cartonStartStr) {
+          try {
+            const sDate = self.parseLocalCartonDate ? self.parseLocalCartonDate(cartonStartStr) : new Date(cartonStartStr);
+            if (!isNaN(sDate.getTime())) {
+              const totInst = Number(c.installments_count || c.installmentsCount || 30);
+              let dCount = 0;
+              let cur = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate());
+              while (dCount < totInst) {
+                cur.setDate(cur.getDate() + 1);
+                if (cur.getDay() !== 0) dCount++;
+              }
+              cartonDueDateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            }
+          } catch (_) {}
+        }
+
         candidateList.push({
           ...c,
           clientName,
@@ -2288,6 +2337,8 @@ const db = {
           montoPrestado: Number(c.monto_prestado || c.amount || clientObj.amount || 0),
           totalDeuda: Number(c.total_debt || c.totalDebt || clientObj.totalDebt || 0),
           saldoPendiente: Number(c.outstanding || 0),
+          fecha_vencimiento: cartonDueDateStr,
+          fechaVencimiento: cartonDueDateStr,
           category,
           categoryLabel,
           categoryColor,
@@ -7080,6 +7131,7 @@ return {
 
   async liquidateCredit({ cedula, status, outstanding, totalDebt, cartonId, numeroCarton }) {
     const supabase = await initSupabase();
+    const currentUser = this.getCurrentUser();
     
     const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
     const isPaidRealCash = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO' || status === 'liquidado' || status === 'LIQUIDADO');
