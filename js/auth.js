@@ -453,7 +453,15 @@ const authModule = {
         window.app.router.navigate('agent');
         if (window.agentModule && typeof window.agentModule.init === 'function') {
           setTimeout(async () => {
-            try { await window.agentModule.init(); } catch(e) {}
+            try {
+              await window.agentModule.init();
+              // Disparo automático e infalible de revisión de vencimiento límite (2 meses y 10 días) al iniciar sesión
+              if (typeof window.agentModule.checkGraveOverdueLoansOnLoad === 'function') {
+                setTimeout(() => {
+                  window.agentModule.checkGraveOverdueLoansOnLoad({ force: true });
+                }, 300);
+              }
+            } catch(e) {}
           }, 30);
         }
       }

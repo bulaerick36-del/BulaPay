@@ -293,10 +293,10 @@ const agentModule = {
     this.startLocationMonitoring();
     this.startMidnightCheck();
 
-    // Verificación proactiva opcional de créditos con mora grave (> 2 meses) al cargar el panel
+    // Verificación proactiva automática de créditos con mora grave (2 meses y 10 días) al entrar al panel
     setTimeout(() => {
       this.checkGraveOverdueLoansOnLoad();
-    }, 1500);
+    }, 600);
 
     // Si el acceso está bloqueado, aplicar el bloqueo visual de inmediato
     if (window.gpsBlocked) {
@@ -2415,22 +2415,36 @@ const agentModule = {
   },
 
   parseLocalDate(dateStr) {
-    if (!dateStr) return new Date();
-    if (dateStr instanceof Date) return new Date(dateStr.getFullYear(), dateStr.getMonth(), dateStr.getDate());
-    const s = String(dateStr).trim();
-    if (s.includes('T')) {
-      const datePart = s.split('T')[0];
-      const parts = datePart.split('-');
-      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-    } else if (s.includes('-')) {
-      const parts = s.split('-');
-      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    if (!dateStr) return null;
+    if (dateStr instanceof Date) {
+      return isNaN(dateStr.getTime()) ? null : new Date(dateStr.getFullYear(), dateStr.getMonth(), dateStr.getDate());
     }
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? new Date() : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const raw = String(dateStr).trim();
+    if (!raw) return null;
+    // Formato estándar/ISO YYYY-MM-DD (independiente de si sigue 'T', espacio, hora o zona horaria)
+    const isoMatch = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      const year = parseInt(isoMatch[1], 10);
+      const month = parseInt(isoMatch[2], 10) - 1;
+      const day = parseInt(isoMatch[3], 10);
+      const d = new Date(year, month, day);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // Formato latino DD/MM/YYYY
+    const dmyMatch = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+      const day = parseInt(dmyMatch[1], 10);
+      const month = parseInt(dmyMatch[2], 10) - 1;
+      const year = parseInt(dmyMatch[3], 10);
+      const d = new Date(year, month, day);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const fallback = new Date(raw);
+    return isNaN(fallback.getTime()) ? null : new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
   },
 
   calculateCartonDueDate(startDateObj, totalInstallments) {
+    if (!startDateObj || isNaN(startDateObj.getTime())) return null;
     let validDaysCounter = 0;
     // Regla Gota a Gota: El conteo de días exigibles empieza a partir de fecha_creacion + 1 día
     let calendarDaysOffset = 1;
@@ -2450,45 +2464,62 @@ const agentModule = {
   },
 
   isCartonOverdue(client, dailyStatusList = null) {
-    if (!client || Number(client?.outstanding ?? client?.saldo_restante ?? 0) <= 0) return false;
+    if (!client) return false;
+    const outstanding = Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0);
+    if (outstanding <= 0) return false;
+
+    // Regla de campañas liquidadas o cerradas: nunca están vencidas
+    const rawEstado = String(client.estado || client.status || '').trim().toLowerCase();
+    if (
+      rawEstado.includes('liquidado') ||
+      rawEstado.includes('cancelad') ||
+      rawEstado.includes('pagad') ||
+      rawEstado.includes('paz_y_salvo') ||
+      rawEstado.includes('cerrad') ||
+      rawEstado.includes('castigado')
+    ) {
+      return false;
+    }
 
     // 1. Verificación por estado operativo explícito
-    const rawEstado = String(client?.estado || client?.status || '').trim().toLowerCase();
     if (rawEstado.includes('vencid') || rawEstado.includes('mora') || rawEstado.includes('atrasad') || rawEstado.includes('demorad')) {
       return true;
     }
 
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const todayStr = `${todayZero.getFullYear()}-${String(todayZero.getMonth() + 1).padStart(2, '0')}-${String(todayZero.getDate()).padStart(2, '0')}`;
 
-    // 2. Verificación por fecha_vencimiento explícita (indispensable para pruebas con fechas alteradas)
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    const startDate = cartonDateStr ? this.parseLocalDate(cartonDateStr) : null;
+
+    // 2. Verificación por fecha_vencimiento explícita (5 días de prórroga contractual)
     if (client.fecha_vencimiento) {
       const explicitDue = this.parseLocalDate(client.fecha_vencimiento);
-      if (!isNaN(explicitDue.getTime())) {
-        const explicitDueZero = new Date(explicitDue.getFullYear(), explicitDue.getMonth(), explicitDue.getDate());
-        if (todayZero > explicitDueZero) return true;
+      if (explicitDue) {
+        const dueWithProrroga = new Date(explicitDue.getFullYear(), explicitDue.getMonth(), explicitDue.getDate() + 5);
+        if (todayZero > dueWithProrroga) return true;
       }
     }
 
-    const totalInstallmentsCount = Number(client?.installmentsCount || client?.installments_count || 30);
-
-    // 3. Chequeo por dailyStatusList si existe
-    if (dailyStatusList && dailyStatusList.length > 0) {
-      const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
-      if (lastInstallment && lastInstallment?.dateStr && lastInstallment?.dateStr < todayStr) {
+    // 3. Regla general: 1 mes contractual + 5 días de prórroga desde fecha_inicio/apertura
+    if (startDate) {
+      const unMesMas5Dias = new Date(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate() + 5);
+      const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (todayZero > unMesMas5Dias && diffDaysSinceStart > 35) {
         return true;
       }
     }
 
-    // 4. Chequeo directo por fecha_apertura / fecha_inicio / created_at
-    const cartonDateStr = client?.fecha_apertura || client?.fecha_inicio || client?.created_at;
-    if (cartonDateStr) {
-      const startDate = this.parseLocalDate(cartonDateStr);
-      if (!isNaN(startDate.getTime())) {
-        const dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
-        const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-        if (todayZero > dueDateZero) return true;
+    // 4. Chequeo por dailyStatusList si existe
+    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    if (dailyStatusList && dailyStatusList.length > 0) {
+      const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
+      if (lastInstallment && lastInstallment.dateStr) {
+        const lastDate = this.parseLocalDate(lastInstallment.dateStr);
+        if (lastDate) {
+          const lastWithProrroga = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() + 5);
+          if (todayZero > lastWithProrroga) return true;
+        }
       }
     }
 
@@ -2500,9 +2531,16 @@ const agentModule = {
     const outstanding = Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0);
     if (outstanding <= 0) return false;
 
-    // Solo aplica para cartones no liquidados previamente por pérdida o mora
+    // REGLA CRÍTICA: Campañas liquidadas (por renovación, exitosas, pérdida, etc.) o canceladas NUNCA disparan la alerta
     const rawEstado = String(client.estado || client.status || '').trim().toLowerCase();
-    if (rawEstado.includes('liquidado_perdida') || rawEstado.includes('liquidado_mora') || rawEstado.includes('castigado')) {
+    if (
+      rawEstado.includes('liquidado') ||
+      rawEstado.includes('cancelad') ||
+      rawEstado.includes('pagad') ||
+      rawEstado.includes('paz_y_salvo') ||
+      rawEstado.includes('cerrad') ||
+      rawEstado.includes('castigado')
+    ) {
       return false;
     }
 
@@ -2511,38 +2549,40 @@ const agentModule = {
 
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
     const startDate = cartonDateStr ? this.parseLocalDate(cartonDateStr) : null;
-    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    const explicitDueDate = client.fecha_vencimiento ? this.parseLocalDate(client.fecha_vencimiento) : null;
 
-    let dueDate = null;
-    // 1. Si existe fecha_vencimiento explícita en cliente o cartón
-    if (client.fecha_vencimiento) {
-      dueDate = this.parseLocalDate(client.fecha_vencimiento);
-    } else if (dailyStatusList && dailyStatusList.length > 0) {
-      // 2. Si tenemos dailyStatusList, tomar la fecha proyectada de la última cuota del cartón
-      const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
-      if (lastInstallment && lastInstallment.dateStr) {
-        dueDate = this.parseLocalDate(lastInstallment.dateStr);
+    // CASO 1: Tenemos fecha de inicio / apertura del crédito (fecha contractual original)
+    if (startDate) {
+      // Regla de negocio: El límite máximo de vencimiento que dispara el aviso automático es a los 2 meses y 10 días
+      const limite2Meses10Dias = new Date(startDate.getFullYear(), startDate.getMonth() + 2, startDate.getDate() + 10);
+      const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Solo se dispara si hoy es mayor o igual a esa fecha y han transcurrido al menos 70 días calendario desde startDate.
+      // Esto blinda el sistema para que JAMÁS se dispare al mes (30-35 días) ni a los 2 meses sin los 10 días de prórroga.
+      if (todayZero >= limite2Meses10Dias && diffDaysSinceStart >= 70) {
+        return true;
       }
-    } else if (startDate) {
-      // 3. O calcular dueDate a partir de fecha_apertura/fecha_inicio/created_at + totalInstallmentsCount (saltando domingos)
-      dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
     }
 
-    // REGLA CRÍTICA: Límite de 2 meses vencido medido ESTRICTAMENTE tras la fecha de vencimiento (dueDate).
-    // Jamás medido desde startDate directamente, ya que la campaña dura ~30-35 días calendario
-    // antes de entrar en mora; medir 70 días desde startDate activaba la alerta de 2 meses cuando en realidad solo llevaba 1 mes vencido.
-    if (!dueDate && startDate && !isNaN(startDate.getTime())) {
-      dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
-    }
+    // CASO 2: Cartones con fecha_vencimiento explícita (p. ej. registros alterados en pruebas o sin startDate)
+    if (explicitDueDate) {
+      // Como el plazo ordinario con prórroga es de 1 mes + 5 días, el límite de 2 meses y 10 días se cumple
+      // cuando transcurre 1 mes y 5 días adicionales de mora tras dicha fecha de vencimiento:
+      const limiteDesdeVencimiento = new Date(explicitDueDate.getFullYear(), explicitDueDate.getMonth() + 1, explicitDueDate.getDate() + 5);
+      const diffDaysAfterDue = Math.floor((todayZero.getTime() - explicitDueDate.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (dueDate && !isNaN(dueDate.getTime())) {
-      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      // 2 meses exactos tras el vencimiento de la campaña
-      const dueDatePlus2Months = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate());
-      const diffDaysAfterDue = Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      
-      // La alerta de 2 meses vencidos solo se dispara cuando realmente hayan transcurrido 2 meses calendario (>= 60 días de mora efectiva)
-      if (todayZero >= dueDatePlus2Months && diffDaysAfterDue >= 60) {
+      if (todayZero >= limiteDesdeVencimiento && diffDaysAfterDue >= 35) {
+        if (startDate) {
+          const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDaysSinceStart >= 70) return true;
+        } else {
+          return true;
+        }
+      }
+
+      // Si la fecha de vencimiento en sí misma fue alterada con más de 2 meses y 10 días en el pasado:
+      const duePlus2M10D = new Date(explicitDueDate.getFullYear(), explicitDueDate.getMonth() + 2, explicitDueDate.getDate() + 10);
+      if (todayZero >= duePlus2M10D && diffDaysAfterDue >= 70) {
         return true;
       }
     }
@@ -2550,28 +2590,46 @@ const agentModule = {
     return false;
   },
 
-  async checkGraveOverdueLoansOnLoad() {
+  async checkGraveOverdueLoansOnLoad(options = {}) {
     try {
       const currentUser = window.BulaPayDB.getCurrentUser();
-      const currentRouteId = currentUser ? String(currentUser.routeId || currentUser.route_id || '').trim().toLowerCase() : '';
-      const currentAgentUser = currentUser ? String(currentUser.username || '').trim().toLowerCase() : '';
+      if (!currentUser) return;
 
-      const activeCredits = await window.BulaPayDB.loadActiveCredits();
+      const isAgent = currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Cobrador' || currentUser.role === 'Agente' || currentUser.role === 'Agente Independiente';
+      const isMaster = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
+
+      // Solo ejecutar automáticamente para agentes de ruta/independientes o si se solicita forzar
+      if (!isAgent && !isMaster && !options.force) return;
+
+      const currentRouteId = String(currentUser.routeId || currentUser.route_id || '').trim().toLowerCase();
+      const currentAgentUser = String(currentUser.username || '').trim().toLowerCase();
+      const currentUserId = String(currentUser.id || '').trim().toLowerCase();
+
+      // Cargar créditos activos forzando sincronización con DB
+      const activeCredits = await window.BulaPayDB.loadActiveCredits({ forceRefresh: true });
       if (!Array.isArray(activeCredits) || activeCredits.length === 0) return;
 
-      // Filtrar créditos que pertenecen exclusivamente a la ruta y agente actual (aislamiento estricto)
+      // Filtrar créditos vigentes con saldo que pertenecen a la ruta o gestión del agente
       const myActiveCredits = activeCredits.filter(c => {
         if (!c) return false;
+        const st = String(c.estado || c.status || '').toLowerCase();
+        if (st.includes('liquidado') || st.includes('cancelad') || st.includes('pagad') || st.includes('castigado')) return false;
+        const outstanding = Number(c.outstanding ?? c.saldo_restante ?? c.totalDebt ?? 0);
+        if (outstanding <= 0) return false;
+
+        if (isMaster) return true;
         const cRoute = String(c.routeId || c.route_id || '').trim().toLowerCase();
         const cAgent = String(c.agent_id || c.agentUsername || c.agente || '').trim().toLowerCase();
-        if (currentRouteId && cRoute && cRoute !== currentRouteId) return false;
-        if (currentAgentUser && cAgent && cAgent !== currentAgentUser && !currentRouteId) return false;
-        return true;
+
+        if (currentRouteId && cRoute && cRoute === currentRouteId) return true;
+        if (currentAgentUser && cAgent && (cAgent === currentAgentUser || cAgent === currentUserId)) return true;
+        if (!currentRouteId && !cRoute) return true;
+        return false;
       });
 
       const graveCredit = myActiveCredits.find(c => this.isCartonOverdueBy2Months(c));
       if (graveCredit) {
-        const cedClean = String(graveCredit.cedula || '').trim();
+        const cedClean = String(graveCredit.cedula || graveCredit.cliente_id || '').trim();
         if (cedClean && this.lastDismissed2MonthsCedula !== cedClean) {
           const confirmed = await this.promptOverdue2MonthsModal(graveCredit);
           if (confirmed) {
@@ -2582,7 +2640,7 @@ const agentModule = {
         }
       }
     } catch (e) {
-      console.warn("Verificación de mora grave al cargar panel:", e);
+      console.warn("Verificación de mora grave al iniciar sesión del agente:", e);
     }
   },
 
@@ -2596,7 +2654,7 @@ const agentModule = {
     const saldoVal = Math.round(Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0));
     const saldoFmt = `$${saldoVal.toLocaleString('es-CO')}`;
 
-    // Calcular días de vencimiento
+    // Calcular días de vencimiento y antigüedad exacta
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
     const startDate = cartonDateStr ? this.parseLocalDate(cartonDateStr) : null;
     const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
@@ -2607,22 +2665,26 @@ const agentModule = {
       dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
     }
 
-    let diasVencimiento = 0;
+    let diasMora = 0;
+    let diasTotalCredito = 0;
     const today = new Date();
     const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    if (dueDate && !isNaN(dueDate.getTime())) {
-      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      diasVencimiento = Math.max(0, Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24)));
-    } else if (startDate && !isNaN(startDate.getTime())) {
-      const calcDue = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
-      const calcDueZero = new Date(calcDue.getFullYear(), calcDue.getMonth(), calcDue.getDate());
-      diasVencimiento = Math.max(0, Math.floor((todayZero.getTime() - calcDueZero.getTime()) / (1000 * 60 * 60 * 24)));
+
+    if (startDate) {
+      diasTotalCredito = Math.max(0, Math.floor((todayZero.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
     }
-    const mesesMora = Math.floor(diasVencimiento / 30);
-    const diasRestantes = diasVencimiento % 30;
-    const diasVencimientoStr = diasVencimiento > 0 
-      ? `${diasVencimiento} días (${mesesMora} ${mesesMora === 1 ? 'mes' : 'meses'} y ${diasRestantes} días de mora)` 
-      : 'Supera 2 meses de mora';
+    if (dueDate) {
+      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      diasMora = Math.max(0, Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24)));
+    } else if (startDate) {
+      diasMora = Math.max(0, diasTotalCredito - 35);
+    }
+
+    const mesesMora = Math.floor(diasMora / 30);
+    const diasRestantesMora = diasMora % 30;
+    const diasVencimientoStr = diasMora > 0 
+      ? `${diasMora} días de mora (${mesesMora} ${mesesMora === 1 ? 'mes' : 'meses'} y ${diasRestantesMora} días) — Antigüedad: ${diasTotalCredito} días` 
+      : `Superó el límite de 2 meses y 10 días (${diasTotalCredito} días)`;
 
     // Obtener la lista real de las 30 cuotas para auditoría visual
     let quotas = Array.isArray(dailyStatusList) ? dailyStatusList : null;
@@ -2684,7 +2746,7 @@ const agentModule = {
           <div><span style="color: #94a3b8; font-weight: 600;">📍 Dirección:</span> <span style="color: #e2e8f0;">${direccion}</span></div>
           <div><span style="color: #94a3b8; font-weight: 600;">🏘️ Barrio:</span> <span style="color: #e2e8f0;">${barrio}</span></div>
           <div><span style="color: #94a3b8; font-weight: 600;">💰 Saldo Pendiente:</span> <b style="color: #ef4444; font-size: 0.95rem;">${saldoFmt}</b></div>
-          <div><span style="color: #94a3b8; font-weight: 600;">⏳ Días de Vencimiento:</span> <b style="color: #f59e0b;">${diasVencimientoStr}</b></div>
+          <div><span style="color: #94a3b8; font-weight: 600;">⏳ Tiempo Vencido:</span> <b style="color: #f59e0b;">${diasVencimientoStr}</b></div>
         </div>
 
         <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.6rem;">
@@ -2707,9 +2769,9 @@ const agentModule = {
         html: warningHtml,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonText: '⛔ Liquidar a Lista Negra',
+        confirmButtonText: '✅ Liquidar a Lista Negra',
         cancelButtonText: 'Continuar Cobro Manual',
-        confirmButtonColor: '#ef4444',
+        confirmButtonColor: '#10b981', // Botón verde esmeralda
         cancelButtonColor: '#475569',
         reverseButtons: false,
         allowOutsideClick: false,
@@ -2719,10 +2781,18 @@ const agentModule = {
         customClass: {
           popup: 'bulapay-swal-popup',
           title: 'bulapay-swal-title',
-          confirmButton: 'bulapay-swal-confirm',
+          confirmButton: 'bulapay-swal-confirm-green',
           cancelButton: 'bulapay-swal-cancel'
         },
         didOpen: (popup) => {
+          const confirmBtn = popup.querySelector('.swal2-confirm');
+          if (confirmBtn) {
+            confirmBtn.style.backgroundColor = '#10b981';
+            confirmBtn.style.color = '#ffffff';
+            confirmBtn.style.fontWeight = '800';
+            confirmBtn.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.4)';
+            confirmBtn.style.border = 'none';
+          }
           const btnView = popup.querySelector('#swal-btn-view-client-data');
           const dataBox = popup.querySelector('#swal-client-data-box');
           if (btnView && dataBox) {
@@ -2738,16 +2808,12 @@ const agentModule = {
       return Boolean(res && res.isConfirmed);
     }
 
-    const confirmText = `⚠️ Aviso: Este cartón ha alcanzado el límite de 2 meses vencido (${diasVencimientoStr}). Según la regla, se sugiere liquidar y enviar a Lista Negra.\n\n` +
-      `Datos del Cliente:\n` +
-      `- Nombre: ${nombre}\n` +
-      `- Cédula: ${cedula}\n` +
-      `- Dirección: ${direccion}\n` +
-      `- Barrio: ${barrio}\n` +
+    const confirmText = `⚠️ Aviso de Vencimiento: Este cartón ha alcanzado el límite máximo de vencimiento (2 meses y 10 días).\n` +
+      `¿Desea liquidar este crédito y enviar al cliente a Lista Negra?\n\n` +
+      `- Cliente: ${nombre} (C.C. ${cedula})\n` +
       `- Saldo Pendiente: ${saldoFmt}\n` +
-      `- Días de Vencimiento: ${diasVencimientoStr}\n` +
-      `- Cuotas: ${paidCount} pagadas / ${overdueCount} vencidas\n\n` +
-      `¿Desea liquidar este crédito y enviar al cliente a Lista Negra?`;
+      `- Días de Mora: ${diasVencimientoStr}\n` +
+      `- Cuotas: ${paidCount} pagadas / ${overdueCount} vencidas`;
 
     return window.confirm(confirmText);
   },
@@ -2869,7 +2935,7 @@ const agentModule = {
 
       // 3. REGISTRO EN BASE DE DATOS Y LISTA NEGRA CON ASOCIACIÓN EXPLÍCITA DE RUTA Y SUPERVISOR
       const rawTargetCartonId = activeCarton?.id || cartonId;
-      const targetCartonId = (rawTargetCartonId && isValidUuid(rawTargetCartonId)) ? rawTargetCartonId : null;
+      const numCartonVal = Number(activeCarton?.numero_carton || numeroCarton);
 
       // Obtener de forma infalible la ruta, supervisor y agente activo
       const currentUser = window.BulaPayDB.getCurrentUser();
@@ -2901,14 +2967,17 @@ const agentModule = {
       if (targetSupervisorId) cartonUpdatePayload.supervisor_id = targetSupervisorId;
       if (agentUsername) cartonUpdatePayload.agent_id = agentUsername;
 
-      if (targetCartonId) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', targetCartonId);
+      if (rawTargetCartonId) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', String(rawTargetCartonId)).catch(() => {});
         if (window.BulaPayDB && window.BulaPayDB.removeLiquidacionAtendidaSync) {
-          window.BulaPayDB.removeLiquidacionAtendidaSync(targetCartonId);
+          window.BulaPayDB.removeLiquidacionAtendidaSync(rawTargetCartonId);
         }
       }
+      if (!isNaN(numCartonVal) && numCartonVal > 0) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', numCartonVal).catch(() => {});
+      }
       if (cedulaStr) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr);
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr).catch(() => {});
       }
 
       // Notificar al supervisor en tiempo real para generar campana de alerta
@@ -2922,8 +2991,8 @@ const agentModule = {
             clientName: name,
             clientId: cedulaStr,
             amountLiquidated: saldoPendienteReal,
-            newCartonNumber: numeroCarton || targetCartonId,
-            cartonId: targetCartonId,
+            newCartonNumber: numeroCarton || rawTargetCartonId,
+            cartonId: rawTargetCartonId,
             type: 'Mora'
           }).catch(() => {});
         }
@@ -2941,7 +3010,7 @@ const agentModule = {
         if (targetSupervisorId) clientUpdatePayload.supervisor_id = targetSupervisorId;
         if (agentUsername) clientUpdatePayload.agent_id = agentUsername;
 
-        await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedulaStr);
+        await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedulaStr).catch(() => {});
       }
 
       // Insertar en la tabla 'lista_negra' asegurando registrar los datos de la ruta y supervisor
@@ -2953,8 +3022,8 @@ const agentModule = {
           monto: saldoPendienteReal,
           outstanding: saldoPendienteReal,
           total_debt: totalDebt,
-          carton_id: targetCartonId || null,
-          motivo: 'Liquidado por Mora',
+          carton_id: rawTargetCartonId ? String(rawTargetCartonId) : null,
+          motivo: 'Liquidado por Mora (Superó límite 2 meses y 10 días)',
           created_at: new Date().toISOString()
         };
         if (routeId) {
@@ -2992,8 +3061,26 @@ const agentModule = {
         console.warn("Aviso al sanear tabla payments:", eDel?.message);
       }
 
-      // Sincronizar en caché local
+      // Sincronizar en caché local (clients y cartones)
       try {
+        const rawLocalCartones = localStorage.getItem('bulapay_cartones');
+        if (rawLocalCartones) {
+          let arrCart = JSON.parse(rawLocalCartones);
+          if (Array.isArray(arrCart)) {
+            arrCart.forEach(ct => {
+              const matchesId = rawTargetCartonId && String(ct.id) === String(rawTargetCartonId);
+              const matchesNum = !isNaN(numCartonVal) && numCartonVal > 0 && Number(ct.numero_carton) === numCartonVal;
+              const matchesCed = cedulaStr && String(ct.cliente_id) === cedulaStr;
+              if (matchesId || matchesNum || matchesCed) {
+                ct.estado = 'liquidado_perdida';
+                ct.status = 'liquidado_perdida';
+                ct.outstanding = saldoPendienteReal;
+                ct.supervisor_atendido = false;
+              }
+            });
+            localStorage.setItem('bulapay_cartones', JSON.stringify(arrCart));
+          }
+        }
         const localClients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
         localClients.forEach(c => {
           if (String(c.cedula).trim() === cedulaStr) {
@@ -3005,12 +3092,14 @@ const agentModule = {
         localStorage.setItem('bulapay_clients', JSON.stringify(localClients));
       } catch (eCache) {}
 
-      // Reset de cliente activo y formulario de UI
-      this.currentClient = null;
+      // Invalidar caché en memoria de BulaPayDB
+      if (window.BulaPayDB && typeof window.BulaPayDB.invalidateCache === 'function') {
+        window.BulaPayDB.invalidateCache();
+      }
+
+      // Reset de cliente activo y formulario de UI para avanzar y cerrar el flujo limpiamente
+      this.closeClientConsultation();
       this.lastDismissed2MonthsCedula = null;
-      if (this.cobroActionContainer) this.cobroActionContainer.style.setProperty('display', 'none', 'important');
-      if (this.searchPlaceholder) this.searchPlaceholder.style.display = 'block';
-      if (this.inputSearchCedula) this.inputSearchCedula.value = '';
 
       // Sincronización reactiva inmediata para supervisor y otros módulos
       try {
@@ -3029,13 +3118,26 @@ const agentModule = {
 
       // Forzar recarga limpia del mapa de clientes en DB y de la UI
       console.log("🔄 [RECARGA INTERFAZ] Recargando cartones activos y métricas financieras...");
-      await window.BulaPayDB.loadActiveCredits();
+      await window.BulaPayDB.loadActiveCredits({ forceRefresh: true });
       await Promise.all([
         this.updateRouteTracking(),
         this.renderFinancialDashboard()
       ]);
 
-      alert(`⚠️ El cliente ${name} (C.C. ${cedulaStr}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Pendiente Real registrada: $${saldoPendienteReal.toLocaleString('es-CO')}.\nEl saldo del Capital en Caja se mantiene estable.`);
+      if (typeof Swal !== 'undefined') {
+        await Swal.fire({
+          icon: 'success',
+          title: '✅ Cartón Liquidado a Lista Negra',
+          html: `<p style="font-size: 0.95rem; color: #f8fafc;">El cartón de <b>${name}</b> (C.C. ${cedulaStr}) ha sido liquidado por mora y enviado a Lista Negra.</p>` +
+            `<p style="margin-top: 0.5rem; font-size: 0.85rem; color: #94a3b8;">Saldo pendiente registrado: <b style="color: #ef4444;">$${saldoPendienteReal.toLocaleString('es-CO')}</b>.<br>El capital en caja se mantiene intacto.</p>`,
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: '#10b981',
+          background: '#0b132b',
+          color: '#ffffff'
+        });
+      } else {
+        alert(`✅ El cliente ${name} (C.C. ${cedulaStr}) ha sido enviado a Lista Negra (Liquidado por Mora).\nDeuda Pendiente Real registrada: $${saldoPendienteReal.toLocaleString('es-CO')}.\nEl saldo del Capital en Caja se mantiene estable.`);
+      }
       return true;
     } catch (e) {
       console.error("Error al enviar a Lista Negra:", e);
