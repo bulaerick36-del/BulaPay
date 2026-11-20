@@ -2673,8 +2673,8 @@
         <h3 class="title-gradient" style="margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem;">
           <span>🔔</span> Alertas y Liquidaciones del Agente
         </h3>
-        <button id="btn-mark-all-attended" type="button" onclick="supervisorModule.marcarTodasComoAtendidas()" style="display: inline-flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; border: none; padding: 0.45rem 0.9rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);" title="Marcar todas las liquidaciones pendientes como atendidas y desaparecer la campana">
-          ✓ Marcar como leído / Descartar
+        <button id="btn-mark-all-attended" type="button" onclick="supervisorModule.confirmarYArchivarLiquidaciones()" style="display: inline-flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; border: none; padding: 0.45rem 0.9rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);" title="Archivar liquidaciones pendientes y retirar alerta activa">
+          📁 Cerrar y archivar todo
         </button>
       </div>
       <p id="liquidated-cards-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.85rem;">
@@ -2745,6 +2745,21 @@
       <!-- Contenedor del listado con código de colores -->
       <div id="liquidated-cards-container" style="max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.15rem; padding: 0.5rem; box-sizing: border-box; width: 100%;">
         <!-- Se inyecta dinámicamente -->
+      </div>
+
+      <!-- Footer de Acciones: Confirmar, Archivar y Enviar al Historial -->
+      <div id="liquidated-cards-modal-footer" style="margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <button type="button" onclick="supervisorModule.closeLiquidatedCardsModal()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 8px; padding: 0.55rem 1.1rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: background 0.2s;">
+          Cerrar sin archivar
+        </button>
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+          <button type="button" onclick="supervisorModule.switchLiquidatedTab('archive')" style="background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; color: #60a5fa; border-radius: 8px; padding: 0.55rem 1rem; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;">
+            📁 Ver Archivo Histórico
+          </button>
+          <button id="btn-modal-confirm-archive" type="button" onclick="supervisorModule.confirmarYArchivarLiquidaciones()" style="background: linear-gradient(135deg, #10b981, #059669); border: none; color: #ffffff; border-radius: 8px; padding: 0.55rem 1.3rem; font-size: 0.85rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);">
+            📁 Cerrar y archivar / Entendido
+          </button>
+        </div>
       </div>
     </div>
   </div>

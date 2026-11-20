@@ -469,25 +469,32 @@ const supervisorModule = {
     });
 
     // --- LISTENER GLOBAL (capture phase) para campanas de alerta ---
-    // Garantiza que el modal se abra aunque el clic este dentro de otro overlay.
+    // Garantiza que el modal se abra al hacer clic en cualquier campana de alerta sin limpiarla
     document.addEventListener('click', (capEvt) => {
       const t = capEvt.target;
       if (!t) return;
-      // Campana en la lista de agentes del modal KPI
-      const bellBadge = t.closest('.agent-bell-badge');
+      // Campana en la lista de agentes del modal KPI, tabla de rutas o badge de liquidados
+      const bellBadge = t.closest('.agent-bell-badge, .table-agent-bell-btn');
       if (bellBadge) {
         capEvt.stopPropagation();
-        const agentUsername = bellBadge.getAttribute('data-agent') || this.selectedAuditAgentUsername;
-        const agentRoute = bellBadge.getAttribute('data-route') || this.currentLiqRouteId;
+        capEvt.preventDefault();
+        const rawAgent = bellBadge.getAttribute('data-agent');
+        const rawRoute = bellBadge.getAttribute('data-route');
+        const agentUsername = (rawAgent && rawAgent !== 'undefined' && rawAgent !== 'null') ? rawAgent : (this.selectedAuditAgentUsername || this.currentLiqAgentUsername);
+        const agentRoute = (rawRoute && rawRoute !== 'undefined' && rawRoute !== 'null') ? rawRoute : (this.currentLiqRouteId || null);
         if (agentUsername) this.openLiquidatedCardsModal(agentUsername, agentRoute || null);
         return;
       }
-      // Badge/container [data-open-liquidations] del detalle del agente
-      const liqEl = t.closest('[data-open-liquidations="true"]');
+      // Badge/container [data-open-liquidations] del detalle del agente (Liquidados Hoy)
+      const liqEl = t.closest('[data-open-liquidations="true"], #modal-agent-route-liquidated, #modal-agent-liquidated-badge');
       if (liqEl) {
         capEvt.stopPropagation();
-        const u = this.selectedAuditAgentUsername || this.currentLiqAgentUsername;
-        if (u) this.openLiquidatedCardsModal(u, this.currentLiqRouteId || null);
+        capEvt.preventDefault();
+        const rawAgent = liqEl.getAttribute('data-agent');
+        const rawRoute = liqEl.getAttribute('data-route');
+        const u = (rawAgent && rawAgent !== 'undefined' && rawAgent !== 'null') ? rawAgent : (this.selectedAuditAgentUsername || this.currentLiqAgentUsername);
+        const r = (rawRoute && rawRoute !== 'undefined' && rawRoute !== 'null') ? rawRoute : (this.currentLiqRouteId || null);
+        if (u) this.openLiquidatedCardsModal(u, r || null);
         return;
       }
     }, true); // capture:true intercepta antes que cualquier otro handler
@@ -875,6 +882,8 @@ const supervisorModule = {
     }
 
     if (liquidatedBadge) {
+      liquidatedBadge.setAttribute('data-agent', agent.username);
+      liquidatedBadge.setAttribute('data-route', effectiveRouteId || '');
       if (liqCount > 0) {
         liquidatedBadge.innerHTML = '🔔 ' + liqCount;
         liquidatedBadge.title = liqCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar.';
@@ -903,6 +912,8 @@ const supervisorModule = {
     }
 
     if (liquidatedContainer) {
+      liquidatedContainer.setAttribute('data-agent', agent.username);
+      liquidatedContainer.setAttribute('data-route', effectiveRouteId || '');
       liquidatedContainer.style.cursor = 'pointer';
       liquidatedContainer.onclick = (e) => {
         e.stopPropagation();
@@ -2303,9 +2314,15 @@ const supervisorModule = {
       return;
     }
 
-    // Fallback: si no vino username, usar el último agente seleccionado
-    const targetUsername = username || this.selectedAuditAgentUsername || this.currentLiqAgentUsername;
-    const targetRouteId = routeId || this.currentLiqRouteId;
+    // Normalizar targetUsername y targetRouteId (evitar string "undefined" o "null")
+    let targetUsername = (username && username !== 'undefined' && username !== 'null') ? username : null;
+    if (!targetUsername) {
+      targetUsername = this.selectedAuditAgentUsername || this.currentLiqAgentUsername || null;
+    }
+    let targetRouteId = (routeId && routeId !== 'undefined' && routeId !== 'null') ? routeId : null;
+    if (!targetRouteId) {
+      targetRouteId = this.currentLiqRouteId || null;
+    }
 
     this.currentLiqAgentUsername = targetUsername;
     this.currentLiqRouteId = targetRouteId;
@@ -2410,6 +2427,15 @@ const supervisorModule = {
         cards = await window.BulaPayDB.getAgentPendingLiquidations(username, effectiveRouteId) || [];
       } else {
         cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, effectiveRouteId) || [];
+      }
+
+      // Respaldo de seguridad: si vino vacío y hay liquidaciones no atendidas en histórico, incluirlas
+      if (cards.length === 0 && window.BulaPayDB && typeof window.BulaPayDB.getAgentLiquidatedCartonesHistorical === 'function') {
+        const hist = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(username, effectiveRouteId);
+        const unreadHist = (hist || []).filter(c => !c.isAtendido);
+        if (unreadHist.length > 0) {
+          cards = unreadHist;
+        }
       }
       this.currentActiveCards = cards;
 
@@ -2543,7 +2569,14 @@ const supervisorModule = {
     if (dateVal) {
       filtered = filtered.filter(c => {
         const rawDate = String(c.fechaLiquidacion || c.fecha_cierre || c.updated_at || '');
-        return rawDate.startsWith(dateVal);
+        let localDateStr = '';
+        try {
+          const dObj = new Date(rawDate);
+          if (!isNaN(dObj.getTime())) {
+            localDateStr = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+          }
+        } catch (_) {}
+        return rawDate.startsWith(dateVal) || localDateStr === dateVal;
       });
     }
 
@@ -2665,48 +2698,65 @@ const supervisorModule = {
     this.applyLiquidatedArchiveFilters();
   },
 
-  async marcarLiquidacionAtendida(cartonId, username = null) {
+  async archivarLiquidacionIndividual(cartonId, username = null) {
     if (!cartonId) return;
     const targetUser = username || this.currentLiqAgentUsername || this.selectedAuditAgentUsername;
     try {
-      await window.BulaPayDB.marcarLiquidacionesAtendidas([cartonId], targetUser);
+      if (window.BulaPayDB && typeof window.BulaPayDB.marcarLiquidacionesAtendidas === 'function') {
+        await window.BulaPayDB.marcarLiquidacionesAtendidas([cartonId], targetUser);
+      }
+      if (this.currentActiveCards) {
+        const found = this.currentActiveCards.find(c => String(c.id || c.numeroCarton).toLowerCase() === String(cartonId).toLowerCase());
+        if (found) found.isAtendido = true;
+      }
       if (typeof window.showCrediToast === 'function') {
-        window.showCrediToast("✅ Liquidación marcada como atendida.", "success");
+        window.showCrediToast("✅ Liquidación archivada en el Historial.", "success");
       }
       await this.refreshLiquidatedModalAndBadges(targetUser, this.currentLiqRouteId);
     } catch(err) {
-      console.error("Error al marcar liquidación atendida:", err);
+      console.error("Error al archivar liquidación individual:", err);
     }
   },
 
-  async marcarTodasComoAtendidas(username = null, routeId = null) {
+  async confirmarYArchivarLiquidaciones(username = null, routeId = null) {
     const targetUser = username || this.currentLiqAgentUsername || this.selectedAuditAgentUsername;
     const targetRoute = routeId || this.currentLiqRouteId;
-    if (!targetUser) return;
+    if (!targetUser) {
+      this.closeLiquidatedCardsModal();
+      return;
+    }
 
     try {
-      const cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(targetUser, targetRoute);
-      const unreadCards = (cards || []).filter(c => !c.isAtendido);
-      if (unreadCards.length === 0) {
-        if (typeof window.showCrediToast === 'function') {
-          window.showCrediToast("Todas las alertas ya están atendidas", "info");
-        } else {
-          alert("ℹ️ Todas las alertas de este agente ya están atendidas.");
-        }
-        return;
+      let unreadCards = (this.currentActiveCards || []).filter(c => !c.isAtendido);
+      if (unreadCards.length === 0 && window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingLiquidations === 'function') {
+        const pending = await window.BulaPayDB.getAgentPendingLiquidations(targetUser, targetRoute);
+        unreadCards = (pending || []).filter(c => !c.isAtendido);
       }
 
-      const cartonIds = unreadCards.map(c => c.id || c.numeroCarton).filter(Boolean);
-      await window.BulaPayDB.marcarLiquidacionesAtendidas(cartonIds, targetUser);
+      const unreadIds = unreadCards.map(c => c.id || c.numeroCarton).filter(Boolean);
+      if (unreadIds.length > 0 && window.BulaPayDB && typeof window.BulaPayDB.marcarLiquidacionesAtendidas === 'function') {
+        await window.BulaPayDB.marcarLiquidacionesAtendidas(unreadIds, targetUser);
+        unreadCards.forEach(c => { c.isAtendido = true; });
+      }
 
       if (typeof window.showCrediToast === 'function') {
-        window.showCrediToast("✅ Todas las liquidaciones atendidas. Contador eliminado.", "success");
+        window.showCrediToast("✅ Liquidaciones archivadas exitosamente en el Historial.", "success");
       }
 
       await this.refreshLiquidatedModalAndBadges(targetUser, targetRoute);
+      this.closeLiquidatedCardsModal();
     } catch(err) {
-      console.error("Error al marcar todas como atendidas:", err);
+      console.error("Error al confirmar y archivar liquidaciones:", err);
+      this.closeLiquidatedCardsModal();
     }
+  },
+
+  async marcarLiquidacionAtendida(cartonId, username = null) {
+    await this.archivarLiquidacionIndividual(cartonId, username);
+  },
+
+  async marcarTodasComoAtendidas(username = null, routeId = null) {
+    await this.confirmarYArchivarLiquidaciones(username, routeId);
   },
 
   async refreshLiquidatedModalAndBadges(username, routeId = null) {
@@ -2770,20 +2820,54 @@ const supervisorModule = {
   renderLiquidatedCardHtml(c, index, allCartones, allPayments, username) {
     const fechaLiqObj = c.fechaLiquidacion ? new Date(c.fechaLiquidacion) : new Date();
     const horaLiqStr = !isNaN(fechaLiqObj.getTime())
-      ? fechaLiqObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })
+      ? fechaLiqObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
       : 'Hora no registrada';
     const fechaLiqStr = !isNaN(fechaLiqObj.getTime())
       ? fechaLiqObj.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : 'Hoy';
-    const timeStr = `${horaLiqStr} (${fechaLiqStr})`;
+    const timeExactStr = `${horaLiqStr} (${fechaLiqStr})`;
+
     const isRenewal = c.category === 'blue';
     const isMora = c.category === 'red';
     const isExitoso = c.category === 'green';
+
+    // Determinar Fecha de Vencimiento de forma confiable para todos los casos
+    let fechaVencObj = null;
+    if (window.BulaPayDB && typeof window.BulaPayDB.calculateCartonVencimiento === 'function') {
+      try {
+        const vInfo = window.BulaPayDB.calculateCartonVencimiento(c);
+        if (vInfo && vInfo.fechaFinPlazo) fechaVencObj = vInfo.fechaFinPlazo;
+      } catch (_) {}
+    }
+    if (!fechaVencObj) {
+      if (c.fecha_vencimiento || c.fechaVencimiento) {
+        fechaVencObj = new Date(c.fecha_vencimiento || c.fechaVencimiento);
+      } else if (c.fecha_apertura || c.fecha_inicio || c.created_at) {
+        try {
+          const sDate = new Date(c.fecha_apertura || c.fecha_inicio || c.created_at);
+          if (!isNaN(sDate.getTime())) {
+            let dCount = 0;
+            let cur = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate());
+            const totInst = Number(c.installments_count || c.installmentsCount || c.cuotas || c.total_cuotas || 30);
+            while (dCount < totInst) {
+              cur.setDate(cur.getDate() + 1);
+              if (cur.getDay() !== 0) dCount++;
+            }
+            fechaVencObj = cur;
+          }
+        } catch (_) {}
+      }
+    }
+    const fechaVencStr = (fechaVencObj && !isNaN(fechaVencObj.getTime()))
+      ? fechaVencObj.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : (c.fecha_vencimiento || c.fechaVencimiento || 'No registrada');
 
     let financialDetailsHtml = '';
     let newCartonNumberBadge = '';
     const cIdLower = String(c.id || '').trim().toLowerCase();
     const cedStr = String(c.cedula || c.cliente_id || '').trim();
+    const clientName = c.clientName || c.nombre_cliente || c.nombre || c.name || (cedStr ? `Cliente C.C. ${cedStr}` : 'Cliente Sin Nombre');
+    const numeroCarton = c.numeroCarton || c.numero_carton || 'S/N';
 
     if (isRenewal) {
       // 1. Identificar pagos ordinarios vs pago de renovación para este cartón viejo
@@ -2915,26 +2999,36 @@ const supervisorModule = {
       }
 
       financialDetailsHtml = `
-        <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(59, 130, 246, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
-          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-            <span style="color: #cbd5e1; font-weight: 500;">Cartón antes de la renovación:</span>
-            <strong style="color: #ffffff; font-weight: 800; font-size: 0.9rem;">${cartonAntes.toLocaleString('es-CO')}</strong>
+        <div style="background: rgba(15, 23, 42, 0.95); border: 1.5px solid rgba(59, 130, 246, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(59, 130, 246, 0.3); font-size: 0.8rem;">
+            <span style="color: #60a5fa; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">🔵 Tipo: Renovación</span>
+            <span style="color: #cbd5e1; font-size: 0.75rem;">Cliente: <strong>${clientName}</strong></span>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-            <span style="color: #cbd5e1; font-weight: 500;">Pago en renovación (Abono aplicado):</span>
-            <strong style="color: #60a5fa; font-weight: 800; font-size: 0.9rem;">${pagoRenovacion.toLocaleString('es-CO')}</strong>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.55rem; font-size: 0.8rem;">
+            <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">⏰ Hora de Liquidación</span>
+              <strong style="color: #ffffff; font-size: 0.9rem; display: block;">${horaLiqStr}</strong>
+              <span style="color: #cbd5e1; font-size: 0.72rem;">Fecha: ${fechaLiqStr}</span>
+            </div>
+            <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #fcd34d; display: block; font-size: 0.68rem; font-weight: 600;">⏳ Vencimiento del Cartón</span>
+              <strong style="color: #fbbf24; font-size: 0.9rem; display: block;">${fechaVencStr}</strong>
+              <span style="color: #94a3b8; font-size: 0.72rem;">Cartón anterior #${numeroCarton}</span>
+            </div>
+            <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #93c5fd; display: block; font-size: 0.68rem; font-weight: 600;">💵 Cartón antes de renovación</span>
+              <strong style="color: #ffffff; font-size: 0.92rem; display: block;">$${cartonAntes.toLocaleString('es-CO')}</strong>
+              <span style="color: #60a5fa; font-size: 0.72rem;">Abono aplicado: $${pagoRenovacion.toLocaleString('es-CO')}</span>
+            </div>
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #6ee7b7; display: block; font-size: 0.68rem; font-weight: 600;">🤝 Total entregado al cliente</span>
+              <strong style="color: #34d399; font-size: 0.92rem; display: block;">$${totalEntregado.toLocaleString('es-CO')}</strong>
+              <span style="color: #a7f3d0; font-size: 0.72rem;">Efectivo neto entregado</span>
+            </div>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-            <span style="color: #cbd5e1; font-weight: 500;">Saldo al cierre:</span>
-            <strong style="color: #34d399; font-weight: 800; font-size: 0.9rem;">$0</strong>
-          </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(255,255,255,0.12); font-size: 0.82rem;">
-            <span style="color: #cbd5e1; font-weight: 500;">Total entregado al cliente:</span>
-            <strong style="color: #fbbf24; font-weight: 800; font-size: 0.9rem;">${totalEntregado.toLocaleString('es-CO')}</strong>
-          </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
-            <span style="color: #cbd5e1; font-weight: 500;">Nuevo cartón generado:</span>
-            <strong style="color: #c084fc; font-weight: 800; font-size: 0.9rem;">#${nuevoNumeroCartonStr} &bull; ${nuevoCartonGenerado.toLocaleString('es-CO')}</strong>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; background: rgba(0,0,0,0.3); padding: 0.45rem 0.75rem; border-radius: 6px; border-left: 3px solid #60a5fa;">
+            <span style="color: #cbd5e1;">📋 <strong>Nuevo cartón generado:</strong></span>
+            <strong style="color: #c084fc; font-weight: 800;">#${nuevoNumeroCartonStr} &bull; $${nuevoCartonGenerado.toLocaleString('es-CO')} (Saldo anterior: $0)</strong>
           </div>
         </div>
       `;
@@ -2976,71 +3070,37 @@ const supervisorModule = {
       const cuotasColgadas = valorCuota > 0 ? Math.round(saldoRestante / valorCuota) : Math.max(0, totalCuotasEsperadas - cuotasAbonadasCount);
       const perdidaCapital = Math.max(0, capitalPrestado - totalAbonado);
 
-      // Calcular o formatear la Fecha de Vencimiento del cartón
-      let fechaVencObj = null;
-      let fechaLimiteGabelaObj = null;
-      if (window.BulaPayDB && typeof window.BulaPayDB.calculateCartonVencimiento === 'function') {
-        const vInfo = window.BulaPayDB.calculateCartonVencimiento(c);
-        if (vInfo && vInfo.fechaFinPlazo) {
-          fechaVencObj = vInfo.fechaFinPlazo;
-          fechaLimiteGabelaObj = vInfo.fechaLimiteGabela;
-        }
-      }
-      if (!fechaVencObj) {
-        if (c.fecha_apertura || c.fecha_inicio || c.created_at) {
-          try {
-            const sDate = new Date(c.fecha_apertura || c.fecha_inicio || c.created_at);
-            if (!isNaN(sDate.getTime())) {
-              let dCount = 0;
-              let cur = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate());
-              const totInst = Number(c.installments_count || c.installmentsCount || 30);
-              while (dCount < totInst) {
-                cur.setDate(cur.getDate() + 1);
-                if (cur.getDay() !== 0) dCount++;
-              }
-              fechaVencObj = cur;
-              fechaLimiteGabelaObj = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 5);
-            }
-          } catch (_) {}
-        } else if (c.fechaVencimiento || c.fecha_vencimiento) {
-          fechaVencObj = new Date(c.fechaVencimiento || c.fecha_vencimiento);
-        }
-      }
-      const fechaVencStr = (fechaVencObj && !isNaN(fechaVencObj.getTime()))
-        ? fechaVencObj.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        : 'No registrada';
-
       financialDetailsHtml = `
         <div style="background: rgba(15, 23, 42, 0.95); border: 1.5px solid rgba(239, 68, 68, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
           <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(239, 68, 68, 0.3); font-size: 0.8rem;">
-            <span style="color: #f87171; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">🔴 Liquidado por Pérdida / Lista Negra</span>
-            <span style="color: #cbd5e1; font-size: 0.75rem;">Capital Prestado: <strong>$${capitalPrestado.toLocaleString('es-CO')}</strong></span>
+            <span style="color: #f87171; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">🔴 Tipo: Liquidado por pérdida (Lista Negra)</span>
+            <span style="color: #cbd5e1; font-size: 0.75rem;">Capital Inicial: <strong>$${capitalPrestado.toLocaleString('es-CO')}</strong></span>
           </div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.55rem; font-size: 0.8rem;">
             <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 0.5rem 0.65rem;">
               <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">⏰ Hora de Liquidación</span>
-              <strong style="color: #ffffff; font-size: 0.92rem; display: block;">${horaLiqStr}</strong>
+              <strong style="color: #ffffff; font-size: 0.9rem; display: block;">${horaLiqStr}</strong>
               <span style="color: #cbd5e1; font-size: 0.72rem;">Fecha: ${fechaLiqStr}</span>
             </div>
             <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
-              <span style="color: #fcd34d; display: block; font-size: 0.68rem; font-weight: 600;">⏳ Fecha de Vencimiento</span>
-              <strong style="color: #fbbf24; font-size: 0.92rem; display: block;">${fechaVencStr}</strong>
-              <span style="color: #94a3b8; font-size: 0.72rem;">Límite / plazo de cartón</span>
+              <span style="color: #fcd34d; display: block; font-size: 0.68rem; font-weight: 600;">⏳ Vencimiento del Cartón</span>
+              <strong style="color: #fbbf24; font-size: 0.9rem; display: block;">${fechaVencStr}</strong>
+              <span style="color: #94a3b8; font-size: 0.72rem;">Fecha límite / plazo</span>
             </div>
             <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
-              <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">💳 Cuotas Pagadas</span>
-              <strong style="color: #34d399; font-size: 0.92rem; display: block;">${cuotasAbonadasCount} cuotas</strong>
-              <span style="color: #6ee7b7; font-size: 0.72rem;">$${totalAbonado.toLocaleString('es-CO')} pagadas</span>
+              <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">💳 Cuotas Alcanzadas a Pagar</span>
+              <strong style="color: #34d399; font-size: 0.95rem; display: block; font-weight: 800;">${cuotasAbonadasCount} cuotas pagadas</strong>
+              <span style="color: #6ee7b7; font-size: 0.72rem;">$${totalAbonado.toLocaleString('es-CO')} abonados de $${totalDeuda.toLocaleString('es-CO')}</span>
             </div>
             <div style="background: rgba(220, 38, 38, 0.15); border: 1.5px solid rgba(239, 68, 68, 0.5); border-radius: 8px; padding: 0.5rem 0.65rem;">
               <span style="color: #fca5a5; display: block; font-size: 0.68rem; font-weight: 700;">💸 Monto / Valor Perdido</span>
-              <strong style="color: #ffffff; font-size: 0.95rem; display: block; font-weight: 800;">$${saldoRestante.toLocaleString('es-CO')}</strong>
-              <span style="color: #cbd5e1; font-size: 0.68rem;">Deuda castigada (${cuotasColgadas} cuotas)</span>
+              <strong style="color: #ffffff; font-size: 1rem; display: block; font-weight: 800;">$${saldoRestante.toLocaleString('es-CO')}</strong>
+              <span style="color: #cbd5e1; font-size: 0.68rem;">Saldo restante castigado (${cuotasColgadas} cuotas en mora)</span>
             </div>
           </div>
           <div style="font-size: 0.72rem; color: #94a3b8; background: rgba(0,0,0,0.3); padding: 0.4rem 0.6rem; border-radius: 6px; border-left: 3px solid #f87171; display: flex; align-items: center; gap: 0.4rem;">
             <span>🛡️</span>
-            <span><strong>Registro en Lista Negra:</strong> Cartón liquidado por mora. El saldo de Capital en Caja permanece estable.</span>
+            <span><strong>Registro en Lista Negra:</strong> Cartón liquidado por pérdida/mora. El cliente queda bloqueado para nuevos créditos.</span>
           </div>
         </div>
       `;
@@ -3049,47 +3109,58 @@ const supervisorModule = {
       const capitalPrestado = Math.round(Number(c.montoPrestado || c.amount || 0));
       const totalDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (capitalPrestado * 1.2)));
       const ganancia = Math.max(0, totalDeuda - capitalPrestado);
+      const totalCuotasEsperadas = Number(c.installmentsCount || c.cuotas || c.total_cuotas || 0) || 30;
 
       financialDetailsHtml = `
-        <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
+        <div style="background: rgba(15, 23, 42, 0.95); border: 1.5px solid rgba(16, 185, 129, 0.45); border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; width: 100%; box-sizing: border-box; flex-shrink: 0;">
           <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.35rem; border-bottom: 1px dashed rgba(16, 185, 129, 0.3); font-size: 0.8rem;">
-            <span style="color: #34d399; font-weight: 700; text-transform: uppercase;">🟢 Liquidación Exitosa - Paz y Salvo</span>
-            <span style="color: #cbd5e1; font-size: 0.75rem;">⏰ ${horaLiqStr} (${fechaLiqStr})</span>
+            <span style="color: #34d399; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">🟢 Tipo: Liquidado exitoso</span>
+            <span style="color: #cbd5e1; font-size: 0.75rem;">Cliente: <strong>${clientName}</strong></span>
           </div>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.8rem;">
-            <div>
-              <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Monto Prestado</span>
-              <strong style="color: #ffffff; font-size: 0.88rem;">$${capitalPrestado.toLocaleString('es-CO')}</strong>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.55rem; font-size: 0.8rem;">
+            <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">⏰ Hora de Liquidación</span>
+              <strong style="color: #ffffff; font-size: 0.9rem; display: block;">${horaLiqStr}</strong>
+              <span style="color: #cbd5e1; font-size: 0.72rem;">Fecha: ${fechaLiqStr}</span>
             </div>
-            <div>
-              <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Total Recaudado</span>
-              <strong style="color: #ffffff; font-size: 0.88rem;">$${totalDeuda.toLocaleString('es-CO')}</strong>
+            <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #fcd34d; display: block; font-size: 0.68rem; font-weight: 600;">⏳ Vencimiento del Cartón</span>
+              <strong style="color: #fbbf24; font-size: 0.9rem; display: block;">${fechaVencStr}</strong>
+              <span style="color: #94a3b8; font-size: 0.72rem;">Cartón #${numeroCarton}</span>
             </div>
-            <div>
-              <span style="color: #94a3b8; display: block; font-size: 0.7rem; font-weight: 500;">Ganancia Neta</span>
-              <strong style="color: #34d399; font-size: 0.88rem;">+$${ganancia.toLocaleString('es-CO')}</strong>
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">💰 Capital Prestado</span>
+              <strong style="color: #ffffff; font-size: 0.92rem; display: block;">$${capitalPrestado.toLocaleString('es-CO')}</strong>
+              <span style="color: #34d399; font-size: 0.72rem;">Recaudado 100%: $${totalDeuda.toLocaleString('es-CO')}</span>
+            </div>
+            <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 0.5rem 0.65rem;">
+              <span style="color: #6ee7b7; display: block; font-size: 0.68rem; font-weight: 600;">📈 Ganancia Neta</span>
+              <strong style="color: #34d399; font-size: 0.95rem; display: block; font-weight: 800;">+$${ganancia.toLocaleString('es-CO')}</strong>
+              <span style="color: #a7f3d0; font-size: 0.72rem;">Crédito 100% cobrado</span>
             </div>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.4rem;">
-            <span style="color: #cbd5e1;">Saldo Final al Cierre:</span>
-            <strong style="color: #34d399; font-weight: 800;">$0 (Crédito Saldado al 100% - Cliente Paz y Salvo)</strong>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; background: rgba(0,0,0,0.3); padding: 0.45rem 0.75rem; border-radius: 6px; border-left: 3px solid #10b981;">
+            <span style="color: #cbd5e1;">✅ <strong>Estado al cierre:</strong></span>
+            <strong style="color: #34d399; font-weight: 800;">$0 Saldo Restante &bull; 100% Cuotas Pagadas (Paz y Salvo)</strong>
           </div>
         </div>
       `;
     }
 
-    const clientName = c.clientName || c.nombre_cliente || c.nombre || c.name || (cedStr ? `Cliente C.C. ${cedStr}` : 'Cliente Sin Nombre');
-    const numeroCarton = c.numeroCarton || c.numero_carton || 'S/N';
-    const catBorder = c.categoryBorder || (isMora ? '#ef4444' : (isRenewal ? '#3b82f6' : '#10b981'));
-    const catColor = c.categoryColor || catBorder;
-    const catIcon = c.categoryIcon || (isMora ? '🔴' : (isRenewal ? '🔵' : '🟢'));
-    const catLabel = c.categoryLabel || (isMora ? 'En Mora / Lista Negra' : (isRenewal ? 'Renovación' : 'Exitoso'));
-    const catExpl = c.explanation || (isMora ? 'Liquidado por mora y enviado a Lista Negra' : (isRenewal ? 'Cancelado por retanqueo' : 'Cancelado al 100% (Paz y Salvo)'));
+    const catBorder = isMora ? '#ef4444' : (isRenewal ? '#3b82f6' : '#10b981');
+    const catColor = catBorder;
+    const catIcon = isMora ? '🔴' : (isRenewal ? '🔵' : '🟢');
+    const catLabel = isMora ? 'Liquidado por pérdida' : (isRenewal ? 'Renovación' : 'Liquidado exitoso');
+    const catExpl = isMora
+      ? 'Liquidado por pérdida/mora y registrado en Lista Negra'
+      : (isRenewal ? 'Cancelado mediante retanqueo/renovación' : 'Cancelado al 100% (Paz y Salvo)');
 
     const attendedStatusPill = c.isAtendido
-      ? `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; padding: 0.2rem 0.6rem; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">✅ Atendida</span>`
-      : `<span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 9999px; padding: 0.2rem 0.6rem; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">⚠️ Pendiente</span>
-         <button type="button" onclick="event.stopPropagation(); supervisorModule.marcarLiquidacionAtendida('${c.id || c.numeroCarton}', '${username}')" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #93c5fd; padding: 0.2rem 0.65rem; border-radius: 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: all 0.2s;" title="Marcar esta alerta como atendida">✓ Atender</button>`;
+      ? `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">✅ Archivado en Historial</span>`
+      : `<span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 9999px; padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">⚠️ Alerta Activa</span>
+         <button type="button" onclick="event.stopPropagation(); supervisorModule.archivarLiquidacionIndividual('${c.id || c.numeroCarton}', '${username}')" style="background: linear-gradient(135deg, #10b981, #059669); border: none; color: #ffffff; padding: 0.3rem 0.85rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 0.3rem;" title="Cerrar y archivar esta liquidación">
+           📁 Cerrar y archivar
+         </button>`;
 
     const transIdClean = String(c.id || `trans_${c.numeroCarton}_${index}`).replace(/[^a-zA-Z0-9_-]/g, '_');
 
@@ -3097,9 +3168,9 @@ const supervisorModule = {
       <div id="card-liq-${transIdClean}" style="padding: 1.15rem; background: #0f172a; border: 1.5px solid ${catBorder}; border-radius: 14px; display: flex; flex-direction: column; gap: 0.85rem; width: 100%; box-sizing: border-box; flex-shrink: 0 !important; min-height: fit-content !important; overflow: visible !important; position: relative; box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
           <div>
-            <strong style="color: #ffffff; font-size: 1.02rem; font-weight: 800; display: block; word-break: break-word;">${clientName}</strong>
-            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-              <span>C.C. ${cedStr || 'N/A'}</span>
+            <strong style="color: #ffffff; font-size: 1.05rem; font-weight: 800; display: block; word-break: break-word;">${clientName}</strong>
+            <div style="font-size: 0.82rem; color: #94a3b8; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+              <span>🆔 C.C. ${cedStr || 'N/A'}</span>
               <span>•</span>
               <span style="color: #cbd5e1; font-weight: 700;">Cartón #${numeroCarton}</span>${newCartonNumberBadge}
             </div>
@@ -3116,43 +3187,19 @@ const supervisorModule = {
 
         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.55rem; gap: 0.5rem; flex-wrap: wrap;">
           <span style="color: ${catColor}; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">ℹ️ ${catExpl}</span>
-          <span style="white-space: nowrap; color: #e2e8f0; font-weight: 600;">⏰ ${timeStr}</span>
+          <span style="white-space: nowrap; color: #e2e8f0; font-weight: 600;">⏰ Liquidado: ${timeExactStr} &bull; ⏳ Vence: ${fechaVencStr}</span>
         </div>
       </div>
     `;
   },
 
-  async closeLiquidatedCardsModal() {
+  closeLiquidatedCardsModal() {
     const overlay = document.getElementById('modal-liquidated-cards');
     if (overlay) {
       overlay.classList.remove('active');
       overlay.style.display = 'none';
       overlay.style.opacity = '0';
       overlay.style.pointerEvents = 'none';
-    }
-
-    // Al cerrar el modal después de que el supervisor revisó la información:
-    // Marcar las alertas pendientes visualizadas como atendidas para que la campana decremente o desaparezca
-    const unreadCards = (this.currentActiveCards || []).filter(c => !c.isAtendido);
-    const targetUser = this.currentLiqAgentUsername || this.selectedAuditAgentUsername;
-    const targetRoute = this.currentLiqRouteId;
-
-    if (unreadCards.length > 0 && targetUser) {
-      const unreadIds = unreadCards.map(c => c.id || c.numeroCarton).filter(Boolean);
-      try {
-        if (window.BulaPayDB && typeof window.BulaPayDB.marcarLiquidacionesAtendidas === 'function') {
-          await window.BulaPayDB.marcarLiquidacionesAtendidas(unreadIds, targetUser);
-        }
-        unreadCards.forEach(c => { c.isAtendido = true; });
-      } catch (errAtend) {
-        console.warn("Aviso al atender liquidaciones vistas al cerrar modal:", errAtend);
-      }
-    }
-
-    if (targetUser) {
-      try {
-        await this.refreshLiquidatedModalAndBadges(targetUser, targetRoute);
-      } catch (_) {}
     }
   },
 
@@ -4294,14 +4341,16 @@ const supervisorModule = {
       let agentsHtmlParts = [];
       if (routeAgents.length > 0) {
         for (const ag of routeAgents) {
+          const effectiveUsername = ag.username || ag.id || ag.name || '';
+          const effectiveRouteId = ag.routeId || ag.route_id || (gRoute.routeIds && gRoute.routeIds[0]) || '';
           let uCount = 0;
           try {
             if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
-              uCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(ag.username, ag.routeId);
+              uCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(effectiveUsername, effectiveRouteId);
             }
           } catch (_) {}
           const bell = uCount > 0 
-            ? ' <span class="table-agent-bell-btn" data-agent="' + ag.username + '" onclick="event.stopPropagation(); supervisorModule.openLiquidatedCardsModal(\x27' + ag.username + '\x27, \x27' + ag.routeId + '\x27)" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: 1px solid #f87171; border-radius: 9999px; padding: 1px 7px; font-size: 0.72rem; font-weight: 700; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); display: inline-flex; align-items: center; gap: 3px;" title="' + uCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar">🔔 ' + uCount + '</span>'
+            ? ' <span class="table-agent-bell-btn agent-bell-badge" data-agent="' + effectiveUsername + '" data-route="' + effectiveRouteId + '" onclick="event.stopPropagation(); supervisorModule.openLiquidatedCardsModal(\x27' + effectiveUsername + '\x27, \x27' + effectiveRouteId + '\x27)" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: 1px solid #f87171; border-radius: 9999px; padding: 1px 7px; font-size: 0.72rem; font-weight: 700; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); display: inline-flex; align-items: center; gap: 3px;" title="' + uCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar">🔔 ' + uCount + '</span>'
             : '';
           agentsHtmlParts.push('<span>' + ag.name + '</span>' + bell);
         }
@@ -6644,6 +6693,8 @@ window.LiquidatedCardsModal = {
   open: (username, routeId) => supervisorModule.openLiquidatedCardsModal(username, routeId),
   openArchivo: (username, routeId) => supervisorModule.openArchivoLiquidacionModal(username, routeId),
   close: () => supervisorModule.closeLiquidatedCardsModal(),
-  marcarTodasComoAtendidas: () => supervisorModule.marcarTodasComoAtendidas(),
+  confirmarYArchivar: (u, r) => supervisorModule.confirmarYArchivarLiquidaciones(u, r),
+  archivarLiquidacionIndividual: (id, u) => supervisorModule.archivarLiquidacionIndividual(id, u),
+  marcarTodasComoAtendidas: (u, r) => supervisorModule.marcarTodasComoAtendidas(u, r),
   marcarLiquidacionAtendida: (id, u) => supervisorModule.marcarLiquidacionAtendida(id, u)
 };
