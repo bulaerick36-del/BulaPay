@@ -471,30 +471,42 @@ const supervisorModule = {
     // --- LISTENER GLOBAL (capture phase) para campanas de alerta ---
     // Garantiza que el modal se abra al hacer clic en cualquier campana de alerta sin limpiarla
     document.addEventListener('click', (capEvt) => {
-      const t = capEvt.target;
-      if (!t) return;
-      // Campana en la lista de agentes del modal KPI, tabla de rutas o badge de liquidados
+      const rawTarget = capEvt.target;
+      if (!rawTarget) return;
+      const t = rawTarget.nodeType === 3 ? rawTarget.parentElement : rawTarget;
+      if (!t || typeof t.closest !== 'function') return;
+
+      // 1. Campana en la lista de agentes del modal KPI, tabla de rutas o badge de liquidados
       const bellBadge = t.closest('.agent-bell-badge, .table-agent-bell-btn');
       if (bellBadge) {
         capEvt.stopPropagation();
         capEvt.preventDefault();
         const rawAgent = bellBadge.getAttribute('data-agent');
         const rawRoute = bellBadge.getAttribute('data-route');
-        const agentUsername = (rawAgent && rawAgent !== 'undefined' && rawAgent !== 'null') ? rawAgent : (this.selectedAuditAgentUsername || this.currentLiqAgentUsername);
-        const agentRoute = (rawRoute && rawRoute !== 'undefined' && rawRoute !== 'null') ? rawRoute : (this.currentLiqRouteId || null);
-        if (agentUsername) this.openLiquidatedCardsModal(agentUsername, agentRoute || null);
+        const agentUsername = (rawAgent && rawAgent !== 'undefined' && rawAgent !== 'null') 
+          ? rawAgent 
+          : (window.supervisorModule.selectedAuditAgentUsername || window.supervisorModule.currentLiqAgentUsername || 'carlos26');
+        const agentRoute = (rawRoute && rawRoute !== 'undefined' && rawRoute !== 'null') 
+          ? rawRoute 
+          : (window.supervisorModule.currentLiqRouteId || null);
+        window.supervisorModule.openLiquidatedCardsModal(agentUsername, agentRoute || null);
         return;
       }
-      // Badge/container [data-open-liquidations] del detalle del agente (Liquidados Hoy)
+
+      // 2. Badge/container [data-open-liquidations] del detalle del agente (Liquidados Hoy)
       const liqEl = t.closest('[data-open-liquidations="true"], #modal-agent-route-liquidated, #modal-agent-liquidated-badge');
       if (liqEl) {
         capEvt.stopPropagation();
         capEvt.preventDefault();
         const rawAgent = liqEl.getAttribute('data-agent');
         const rawRoute = liqEl.getAttribute('data-route');
-        const u = (rawAgent && rawAgent !== 'undefined' && rawAgent !== 'null') ? rawAgent : (this.selectedAuditAgentUsername || this.currentLiqAgentUsername);
-        const r = (rawRoute && rawRoute !== 'undefined' && rawRoute !== 'null') ? rawRoute : (this.currentLiqRouteId || null);
-        if (u) this.openLiquidatedCardsModal(u, r || null);
+        const u = (rawAgent && rawAgent !== 'undefined' && rawAgent !== 'null') 
+          ? rawAgent 
+          : (window.supervisorModule.selectedAuditAgentUsername || window.supervisorModule.currentLiqAgentUsername || 'carlos26');
+        const r = (rawRoute && rawRoute !== 'undefined' && rawRoute !== 'null') 
+          ? rawRoute 
+          : (window.supervisorModule.currentLiqRouteId || null);
+        window.supervisorModule.openLiquidatedCardsModal(u, r || null);
         return;
       }
     }, true); // capture:true intercepta antes que cualquier otro handler
@@ -695,7 +707,7 @@ const supervisorModule = {
       // Solo si hay liquidaciones pendientes por revisar se muestra la campana roja (🔔 1, 🔔 2...).
       // Si el conteo es 0, la campana DESAPARECE completamente.
       const bellBadgeHtml = unreadCount > 0
-        ? '<span class="agent-bell-badge" data-agent="' + agent.username + '" data-route="' + (effectiveRouteId || '') + '" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff; border: 1px solid #f87171; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="' + unreadCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar">🔔 ' + unreadCount + '</span>'
+        ? '<span class="agent-bell-badge" data-agent="' + agent.username + '" data-route="' + (effectiveRouteId || '') + '" onclick="event.stopPropagation(); window.supervisorModule.openLiquidatedCardsModal(\'' + agent.username + '\', \'' + (effectiveRouteId || '') + '\')" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff; border: 1px solid #f87171; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="' + unreadCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar">🔔 ' + unreadCount + '</span>'
         : '';
 
       const item = document.createElement('div');
@@ -743,9 +755,9 @@ const supervisorModule = {
       const bellEl = item.querySelector('.agent-bell-badge');
       if (bellEl) {
         bellEl.onclick = (e) => {
-          e.stopPropagation();
+          if (e) { e.preventDefault(); e.stopPropagation(); }
           this.selectedAuditAgentUsername = agent.username;
-          this.openLiquidatedCardsModal(agent.username, effectiveRouteId);
+          window.supervisorModule.openLiquidatedCardsModal(agent.username, effectiveRouteId);
         };
       }
 
@@ -906,8 +918,9 @@ const supervisorModule = {
         liquidatedBadge.style.display = 'inline-flex';
       }
       liquidatedBadge.onclick = (e) => {
-        e.stopPropagation();
-        this.openLiquidatedCardsModal(agent.username, effectiveRouteId);
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        this.selectedAuditAgentUsername = agent.username;
+        window.supervisorModule.openLiquidatedCardsModal(agent.username, effectiveRouteId);
       };
     }
 
@@ -916,8 +929,9 @@ const supervisorModule = {
       liquidatedContainer.setAttribute('data-route', effectiveRouteId || '');
       liquidatedContainer.style.cursor = 'pointer';
       liquidatedContainer.onclick = (e) => {
-        e.stopPropagation();
-        this.openLiquidatedCardsModal(agent.username, effectiveRouteId);
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        this.selectedAuditAgentUsername = agent.username;
+        window.supervisorModule.openLiquidatedCardsModal(agent.username, effectiveRouteId);
       };
     }
 
@@ -2328,11 +2342,16 @@ const supervisorModule = {
     this.currentLiqRouteId = targetRouteId;
     this.currentLiqTab = initialTab || 'active';
 
+    // Asegurar que el overlay esté al final del body para máxima prioridad en la pila de renderizado
+    if (overlay.parentElement !== document.body) {
+      document.body.appendChild(overlay);
+    }
+
     // Forzar visibilidad con estilos inline para superar cualquier conflicto de z-index
     overlay.style.display = 'flex';
     overlay.style.opacity = '1';
     overlay.style.pointerEvents = 'auto';
-    overlay.style.zIndex = '999999';
+    overlay.style.zIndex = '9999999';
     overlay.classList.add('active');
 
     container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem; font-size: 0.85rem;">⏳ Cargando liquidaciones...</div>';
@@ -2425,17 +2444,24 @@ const supervisorModule = {
       let cards = [];
       if (window.BulaPayDB && typeof window.BulaPayDB.getAgentPendingLiquidations === 'function') {
         cards = await window.BulaPayDB.getAgentPendingLiquidations(username, effectiveRouteId) || [];
-      } else {
+      } else if (window.BulaPayDB && typeof window.BulaPayDB.getAgentLiquidatedCartonesToday === 'function') {
         cards = await window.BulaPayDB.getAgentLiquidatedCartonesToday(username, effectiveRouteId) || [];
       }
 
-      // Respaldo de seguridad: si vino vacío y hay liquidaciones no atendidas en histórico, incluirlas
-      if (cards.length === 0 && window.BulaPayDB && typeof window.BulaPayDB.getAgentLiquidatedCartonesHistorical === 'function') {
-        const hist = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(username, effectiveRouteId);
-        const unreadHist = (hist || []).filter(c => !c.isAtendido);
-        if (unreadHist.length > 0) {
-          cards = unreadHist;
-        }
+      // SIEMPRE asegurar incluir cualquier liquidación pendiente no atendida del histórico
+      if (window.BulaPayDB && typeof window.BulaPayDB.getAgentLiquidatedCartonesHistorical === 'function') {
+        try {
+          const hist = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(username, effectiveRouteId);
+          const unreadHist = (hist || []).filter(c => !c.isAtendido);
+          const existingIds = new Set(cards.map(c => String(c.id || c.numeroCarton || '').toLowerCase()));
+          for (const uh of unreadHist) {
+            const uId = String(uh.id || uh.numeroCarton || '').toLowerCase();
+            if (uId && !existingIds.has(uId)) {
+              cards.push(uh);
+              existingIds.add(uId);
+            }
+          }
+        } catch (_) {}
       }
       this.currentActiveCards = cards;
 
