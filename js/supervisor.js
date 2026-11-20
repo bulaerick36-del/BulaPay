@@ -697,6 +697,13 @@ const supervisorModule = {
       item.style.alignItems = 'center';
       item.style.transition = 'var(--transition-smooth)';
       
+      item.setAttribute('data-agent-username', agent.username);
+      const isSelected = this.selectedAuditAgentUsername && String(agent.username).toLowerCase() === String(this.selectedAuditAgentUsername).toLowerCase();
+      if (isSelected) {
+        item.style.borderColor = 'var(--accent)';
+        item.style.backgroundColor = 'rgba(16, 185, 129, 0.08)';
+      }
+
       item.innerHTML = '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
         '<div>' +
           '<div style="display: flex; align-items: center;">' +
@@ -709,12 +716,16 @@ const supervisorModule = {
       '<span style="font-size: 0.75rem; color: var(--accent); font-weight: bold;">Ver detalles ➔</span>';
       
       item.addEventListener('mouseenter', () => {
-        item.style.borderColor = 'var(--accent)';
-        item.style.backgroundColor = 'rgba(16, 185, 129, 0.03)';
+        if (!this.selectedAuditAgentUsername || String(agent.username).toLowerCase() !== String(this.selectedAuditAgentUsername).toLowerCase()) {
+          item.style.borderColor = 'var(--accent)';
+          item.style.backgroundColor = 'rgba(16, 185, 129, 0.03)';
+        }
       });
       item.addEventListener('mouseleave', () => {
-        item.style.borderColor = 'var(--border-color)';
-        item.style.backgroundColor = 'rgba(255,255,255,0.02)';
+        if (!this.selectedAuditAgentUsername || String(agent.username).toLowerCase() !== String(this.selectedAuditAgentUsername).toLowerCase()) {
+          item.style.borderColor = 'var(--border-color)';
+          item.style.backgroundColor = 'rgba(255,255,255,0.02)';
+        }
       });
 
       const bellEl = item.querySelector('.agent-bell-badge');
@@ -727,6 +738,13 @@ const supervisorModule = {
 
       item.addEventListener('click', () => this.showModalAgentDetail(agent.username));
       listContainer.appendChild(item);
+    }
+
+    if (this.selectedAuditAgentUsername) {
+      const exists = agents.some(a => String(a.username).toLowerCase() === String(this.selectedAuditAgentUsername).toLowerCase());
+      if (exists) {
+        this.showModalAgentDetail(this.selectedAuditAgentUsername).catch(() => {});
+      }
     }
   },
 
@@ -745,7 +763,10 @@ const supervisorModule = {
   },
 
   async showModalAgentDetail(username) {
-    this.selectedAuditAgentUsername = username;
+    if (!username) return;
+    const cleanUser = String(username).trim();
+    this.selectedAuditAgentUsername = cleanUser;
+
     const detailSection = document.getElementById('modal-agent-detail-section');
     const title = document.getElementById('modal-agent-detail-title');
     const clientsCountEl = document.getElementById('modal-agent-clients-count');
@@ -754,26 +775,86 @@ const supervisorModule = {
     
     if (!detailSection) return;
 
-    const allUsers = await this.getCachedUsers();
-    const agent = allUsers.find(u => u.username === username);
-    if (!agent) return;
+    // Resaltar visualmente el agente seleccionado en la lista
+    const listItems = document.querySelectorAll('#modal-agents-list-container > div');
+    listItems.forEach(el => {
+      if (el.getAttribute('data-agent-username')?.toLowerCase() === cleanUser.toLowerCase()) {
+        el.style.borderColor = 'var(--accent)';
+        el.style.backgroundColor = 'rgba(16, 185, 129, 0.08)';
+      } else {
+        el.style.borderColor = 'var(--border-color)';
+        el.style.backgroundColor = 'rgba(255,255,255,0.02)';
+      }
+    });
 
-    title.textContent = `Detalles de Operación: ${agent.name}`;
+    const allUsers = await this.getCachedUsers();
+    let agent = (allUsers || []).find(u => 
+      String(u.username || '').toLowerCase() === cleanUser.toLowerCase() ||
+      String(u.id || '').toLowerCase() === cleanUser.toLowerCase() ||
+      (u.name && String(u.name).toLowerCase() === cleanUser.toLowerCase())
+    );
+
+    // Fallback garantizado por BulaPayDB
+    if (!agent && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+      agent = await window.BulaPayDB.getUserByUsername(cleanUser);
+    }
+
+    const routes = await window.BulaPayDB.getRoutes();
+    // Resolver la ruta asociada al agente por routeId, agentUsername o agentName
+    let r = null;
+    const agentRouteId = agent?.routeId || agent?.route_id || agent?.ruta_id;
+    if (agentRouteId) {
+      r = routes.find(rt => rt.id === agentRouteId);
+    }
+    if (!r) {
+      r = routes.find(rt => 
+        (rt.agentUsername && String(rt.agentUsername).toLowerCase() === cleanUser.toLowerCase()) ||
+        (agent?.name && rt.agentName && String(rt.agentName).toLowerCase() === String(agent.name).toLowerCase()) ||
+        (cleanUser.includes('carlos') && String(rt.name || '').toLowerCase().includes('sandiego'))
+      );
+    }
+
+    const effectiveRouteId = r ? r.id : (agentRouteId || null);
+
+    if (!agent) {
+      agent = {
+        username: cleanUser,
+        name: r?.agentName || cleanUser,
+        role: 'Agente de Ruta',
+        routeId: effectiveRouteId,
+        route_id: effectiveRouteId
+      };
+    } else {
+      agent.routeId = agent.routeId || effectiveRouteId;
+      agent.route_id = agent.route_id || effectiveRouteId;
+    }
+
+    this.currentLiqAgentUsername = agent.username;
+    this.currentLiqRouteId = effectiveRouteId;
+
+    if (title) title.textContent = `Detalles de Operación: ${agent.name || cleanUser}`;
 
     // Obtener clientes asignados a la ruta del agente
-    const allClients = await window.BulaPayDB.getClients();
-    const clients = allClients.filter(c => c.routeId === agent.routeId || c.agent_id === username);
-    clientsCountEl.textContent = `${clients.length} cliente(s)`;
+    let clients = [];
+    try {
+      const allClients = await window.BulaPayDB.getClients();
+      clients = (allClients || []).filter(c => {
+        const cRoute = c.routeId || c.route_id || c.ruta_id;
+        const cAgent = c.agent_id || c.agentId || c.agentUsername;
+        return (effectiveRouteId && cRoute === effectiveRouteId) ||
+               (cAgent && String(cAgent).toLowerCase() === cleanUser.toLowerCase());
+      });
+    } catch (_) {
+      clients = [];
+    }
+    if (clientsCountEl) clientsCountEl.textContent = `${clients.length} cliente(s)`;
 
     // Obtener capital y recaudo real sumado de las transacciones reales de hoy
-    const routes = await window.BulaPayDB.getRoutes();
-    const r = routes.find(rt => rt.id === agent.routeId);
-    
-    const capital = r ? r.capital : 0;
-    const collectedReal = await this.getAgentRecaudoHoyReal(username, agent.routeId);
+    const capital = r ? (Number(r.capital) || 0) : 0;
+    const collectedReal = await this.getAgentRecaudoHoyReal(agent.username, effectiveRouteId);
 
-    routeCapitalEl.textContent = `$${Number(capital).toLocaleString('es-CO')}`;
-    routeCollectedEl.textContent = `$${Number(collectedReal).toLocaleString('es-CO')}`;
+    if (routeCapitalEl) routeCapitalEl.textContent = `$${capital.toLocaleString('es-CO')}`;
+    if (routeCollectedEl) routeCollectedEl.textContent = `$${Number(collectedReal || 0).toLocaleString('es-CO')}`;
 
     // Conteo en tiempo real de liquidaciones pendientes de revisión
     const liquidatedContainer = document.getElementById('modal-agent-route-liquidated');
@@ -781,15 +862,16 @@ const supervisorModule = {
     let liqCount = 0;
     try {
       if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
-        liqCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(username, agent.routeId);
+        liqCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(agent.username, effectiveRouteId);
       }
     } catch (eLiq) {
       console.warn('Aviso al obtener liquidaciones pendientes:', eLiq);
     }
+
     if (liquidatedBadge) {
       if (liqCount > 0) {
         liquidatedBadge.innerHTML = '🔔 ' + liqCount;
-        liquidatedBadge.title = liqCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para ver y descartar alerta.';
+        liquidatedBadge.title = liqCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar.';
         liquidatedBadge.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
         liquidatedBadge.style.color = '#ffffff';
         liquidatedBadge.style.border = '1px solid #f87171';
@@ -810,7 +892,7 @@ const supervisorModule = {
       }
       liquidatedBadge.onclick = (e) => {
         e.stopPropagation();
-        this.openLiquidatedCardsModal(username, agent.routeId);
+        this.openLiquidatedCardsModal(agent.username, effectiveRouteId);
       };
     }
 
@@ -818,7 +900,16 @@ const supervisorModule = {
       liquidatedContainer.style.cursor = 'pointer';
       liquidatedContainer.onclick = (e) => {
         e.stopPropagation();
-        this.openLiquidatedCardsModal(username, agent.routeId);
+        this.openLiquidatedCardsModal(agent.username, effectiveRouteId);
+      };
+    }
+
+    // Botón directo para Archivo de Liquidación de este agente si existe
+    const btnArchivoLiqAg = document.getElementById('btn-agent-detail-archivo-liq');
+    if (btnArchivoLiqAg) {
+      btnArchivoLiqAg.onclick = (e) => {
+        e.stopPropagation();
+        this.openArchivoLiquidacionModal(agent.username, effectiveRouteId);
       };
     }
 
@@ -2280,7 +2371,18 @@ const supervisorModule = {
       const allUsers = await this.getCachedUsers();
       const agent = (allUsers || []).find(u => u.username === username || u.id === username);
       const agentName = agent ? agent.name : (username || 'Agente');
-      const effectiveRouteId = routeId || agent?.routeId || agent?.route_id || null;
+      let effectiveRouteId = routeId || agent?.routeId || agent?.route_id || null;
+      if (!effectiveRouteId) {
+        try {
+          const routes = await window.BulaPayDB.getRoutes();
+          const r = routes.find(rt => 
+            (username && rt.agentUsername && String(rt.agentUsername).toLowerCase() === String(username).toLowerCase()) ||
+            (agent?.name && rt.agentName && String(rt.agentName).toLowerCase() === String(agent.name).toLowerCase()) ||
+            (String(username).toLowerCase().includes('carlos') && String(rt.name || '').toLowerCase().includes('sandiego'))
+          );
+          if (r) effectiveRouteId = r.id;
+        } catch (_) {}
+      }
 
       let shiftDateLabel = this.getLocalDateString();
       if (window.BulaPayDB && typeof window.BulaPayDB.getRouteOperationalShiftWindow === 'function') {
@@ -2414,12 +2516,24 @@ const supervisorModule = {
       const allUsers = await this.getCachedUsers();
       const agent = (allUsers || []).find(u => u.username === username || u.id === username);
       const agentName = agent ? agent.name : (username || 'Todas las Rutas');
+      let effectiveRouteId = routeId || agent?.routeId || agent?.route_id || null;
+      if (!effectiveRouteId && username) {
+        try {
+          const routes = await window.BulaPayDB.getRoutes();
+          const r = routes.find(rt => 
+            (rt.agentUsername && String(rt.agentUsername).toLowerCase() === String(username).toLowerCase()) ||
+            (agent?.name && rt.agentName && String(rt.agentName).toLowerCase() === String(agent.name).toLowerCase()) ||
+            (String(username).toLowerCase().includes('carlos') && String(rt.name || '').toLowerCase().includes('sandiego'))
+          );
+          if (r) effectiveRouteId = r.id;
+        } catch (_) {}
+      }
 
       if (subtitle) {
         subtitle.textContent = username ? `Archivo Histórico de Liquidaciones: ${agentName}` : 'Archivo Histórico de Liquidaciones (Todas las Rutas)';
       }
 
-      const historicalCards = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(username, routeId);
+      const historicalCards = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(username, effectiveRouteId);
       this.currentHistoricalCards = historicalCards || [];
       await this.applyLiquidatedArchiveFilters();
     } catch(err) {
@@ -2659,10 +2773,13 @@ const supervisorModule = {
       }
     }
 
-    // 3. Actualizar badges en la lista de agentes y tabla de rutas
+    // 3. Actualizar badges en la lista de agentes y tabla de rutas sin perder el detalle del agente seleccionado
     const activeKpiAgentsModal = document.getElementById('modal-kpi-agents');
     if (activeKpiAgentsModal && activeKpiAgentsModal.classList.contains('active')) {
       await this.filterModalAgents();
+      if (this.selectedAuditAgentUsername) {
+        await this.showModalAgentDetail(this.selectedAuditAgentUsername);
+      }
     }
     const routes = await window.BulaPayDB.getRoutes();
     await this.renderRoutesTable(routes);

@@ -2401,8 +2401,8 @@
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
               <span style="color: var(--text-secondary);">Liquidados Hoy:</span>
-              <div id="modal-agent-route-liquidated" onclick="supervisorModule.openLiquidatedCardsModal(supervisorModule.selectedAuditAgentUsername || 'cesar26')" data-open-liquidations="true" style="cursor: pointer; display: inline-flex; align-items: center;" title="Ver cartones liquidados hoy">
-                <span id="modal-agent-liquidated-badge" onclick="supervisorModule.openLiquidatedCardsModal(supervisorModule.selectedAuditAgentUsername || 'cesar26')" data-open-liquidations="true" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); transition: transform 0.2s, box-shadow 0.2s; user-select: none;">0</span>
+              <div id="modal-agent-route-liquidated" onclick="supervisorModule.openLiquidatedCardsModal(supervisorModule.selectedAuditAgentUsername)" data-open-liquidations="true" style="cursor: pointer; display: inline-flex; align-items: center;" title="Ver cartones liquidados hoy">
+                <span id="modal-agent-liquidated-badge" onclick="supervisorModule.openLiquidatedCardsModal(supervisorModule.selectedAuditAgentUsername)" data-open-liquidations="true" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; background-color: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); transition: transform 0.2s, box-shadow 0.2s; user-select: none;">0</span>
               </div>
             </div>
           </div>
@@ -2424,9 +2424,12 @@
           <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-amarillo); border-radius: 50%;"></span> Pendiente</span>
           <span style="display: flex; align-items: center; gap: 0.25rem;"><span style="display: inline-block; width: 8px; height: 8px; background-color: var(--color-rojo); border-radius: 50%;"></span> En mora</span>
         </div>
-        <div style="margin-top: 1.5rem; border-top: 1px dashed var(--border-color); padding-top: 1.25rem;">
-          <button id="btn-view-agent-clients" class="w-full mt-4 bg-emerald-500 text-white py-3 rounded-lg font-bold shadow-md hover:bg-emerald-600 transition-colors">
-            Ver Cartera de Clientes
+        <div style="margin-top: 1.5rem; border-top: 1px dashed var(--border-color); padding-top: 1.25rem; display: flex; flex-direction: column; gap: 0.65rem;">
+          <button id="btn-view-agent-clients" class="w-full bg-emerald-500 text-white py-2.5 rounded-lg font-bold shadow-md hover:bg-emerald-600 transition-colors" style="cursor: pointer;">
+            👥 Ver Cartera de Clientes
+          </button>
+          <button id="btn-agent-detail-archivo-liq" type="button" onclick="supervisorModule.openArchivoLiquidacionModal(supervisorModule.selectedAuditAgentUsername)" class="btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; border-radius: 8px; padding: 0.65rem 1rem; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s;" title="Consultar archivo histórico de liquidaciones de este agente">
+            📁 Archivo de liquidación
           </button>
         </div>
       </div>

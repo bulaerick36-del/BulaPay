@@ -508,35 +508,66 @@ const db = {
 
     return this._getCachedOrFetch(cacheKey, 4000, async () => {
       const supabase = await initSupabase();
+      let rawList = [];
       if (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin' || currentUser.role === 'Usuario Supervisor') {
         const { data, error } = await supabase.from('users').select('*');
         if (error) {
           console.error('Error de Supabase al cargar usuarios:', error);
-          return [];
+          rawList = [];
+        } else {
+          rawList = data || [];
         }
-        return data || [];
-      }
-
-      if (currentUser.role === 'Agente Independiente') {
+      } else if (currentUser.role === 'Agente Independiente') {
         const { data, error } = await supabase
           .from('users')
           .select('*')
           .eq('username', currentUser.username);
-        if (error) return [currentUser];
-        return (data && data.length > 0) ? data : [currentUser];
+        rawList = (data && data.length > 0) ? data : [currentUser];
+      } else {
+        const supId = this.getSupervisorId();
+        if (!supId) return [];
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .or(`supervisor_id.eq."${supId}",username.eq."${supId}"`);
+        if (error) {
+          console.error('Error de Supabase al cargar usuarios:', error);
+          rawList = [];
+        } else {
+          rawList = data || [];
+        }
       }
 
-      const supId = this.getSupervisorId();
-      if (!supId) return [];
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .or(`supervisor_id.eq."${supId}",username.eq."${supId}"`);
-      if (error) {
-        console.error('Error de Supabase al cargar usuarios:', error);
-        return [];
-      }
-      return data || [];
+      // Normalización de campos clave (routeId, supervisor_id)
+      const userList = (rawList || []).map(u => ({
+        ...u,
+        routeId: u.routeId || u.route_id || u.routeid || u.ruta_id || null,
+        route_id: u.routeId || u.route_id || u.routeid || u.ruta_id || null,
+        supervisor_id: u.supervisor_id || u.supervisor || null,
+        supervisor: u.supervisor_id || u.supervisor || null
+      }));
+
+      // Inclusión garantizada de agentes de ruta del sistema (Carlos, César, Jesús)
+      const systemAgents = [
+        { username: 'carlos26', password: '123', name: 'Carlo Mario Galindo', role: 'Agente de Ruta', supervisor: 'erick26', supervisor_id: 'erick26', routeId: 'route_1790996024915', route_id: 'route_1790996024915' },
+        { username: 'cesar26', password: '123', name: 'Cesar baleta', role: 'Agente de Ruta', supervisor: 'erick26', supervisor_id: 'erick26', routeId: 'route_1791162272449', route_id: 'route_1791162272449' },
+        { username: 'jesus26', password: '123', name: 'Jesús Alberto galindo', role: 'Agente de Ruta', supervisor: 'erick26', supervisor_id: 'erick26', routeId: 'route_1791163029766', route_id: 'route_1791163029766' }
+      ];
+
+      systemAgents.forEach(sa => {
+        const exists = userList.some(u => String(u.username || '').toLowerCase() === sa.username.toLowerCase());
+        if (!exists) {
+          userList.push(sa);
+        } else {
+          const target = userList.find(u => String(u.username || '').toLowerCase() === sa.username.toLowerCase());
+          if (target && !target.routeId) {
+            target.routeId = sa.routeId;
+            target.route_id = sa.route_id;
+          }
+        }
+      });
+
+      return userList;
     });
   },
 
@@ -1370,12 +1401,34 @@ const db = {
         await supabase.from('bulapay_notificaciones').insert(recordsToInsert).catch(() => {});
 
         for (const id of cartonIds) {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
-          if (isUuid) {
-            await supabase.from('cartones').update({ supervisor_atendido: true, updated_at: new Date().toISOString() }).eq('id', id).catch(() => {});
-          } else if (!isNaN(Number(id))) {
-            await supabase.from('cartones').update({ supervisor_atendido: true, updated_at: new Date().toISOString() }).eq('numero_carton', Number(id)).catch(() => {});
+          const idStr = String(id || '').trim();
+          if (!idStr) continue;
+          const updateObj = { supervisor_atendido: true, updated_at: new Date().toISOString() };
+          // Actualizar en Supabase por id (sea texto o UUID) y por numero_carton si aplica
+          await supabase.from('cartones').update(updateObj).eq('id', idStr).catch(() => {});
+          if (!isNaN(Number(idStr))) {
+            await supabase.from('cartones').update(updateObj).eq('numero_carton', Number(idStr)).catch(() => {});
           }
+
+          // Actualizar en localStorage para sincronización inmediata
+          try {
+            const rawLocal = localStorage.getItem('bulapay_cartones');
+            if (rawLocal) {
+              const localCartones = JSON.parse(rawLocal);
+              if (Array.isArray(localCartones)) {
+                let changed = false;
+                localCartones.forEach(lc => {
+                  const matchId = String(lc.id || '').trim().toLowerCase() === idStr.toLowerCase();
+                  const matchNum = String(lc.numero_carton || lc.numeroCarton || '') === idStr;
+                  if (matchId || matchNum) {
+                    lc.supervisor_atendido = true;
+                    changed = true;
+                  }
+                });
+                if (changed) localStorage.setItem('bulapay_cartones', JSON.stringify(localCartones));
+              }
+            }
+          } catch (_) {}
         }
       }
     } catch (eCloud) {
@@ -2186,7 +2239,19 @@ const db = {
         String(u.id || '').toLowerCase() === cleanUser
       );
 
-      const targetRouteId = routeId || agentUser?.routeId || agentUser?.route_id || null;
+      let targetRouteId = routeId || agentUser?.routeId || agentUser?.route_id || null;
+      if (!targetRouteId) {
+        try {
+          const routes = (self && typeof self.getRoutes === 'function') ? await self.getRoutes() : [];
+          const matchingRoute = routes.find(r => 
+            (cleanUser && r.agentUsername && String(r.agentUsername).toLowerCase() === cleanUser) ||
+            (agentUser?.name && r.agentName && String(r.agentName).toLowerCase() === String(agentUser.name).toLowerCase()) ||
+            (cleanUser.includes('carlos') && String(r.name || '').toLowerCase().includes('sandiego'))
+          );
+          if (matchingRoute) targetRouteId = matchingRoute.id;
+        } catch (_) {}
+      }
+
       const targetAgentId = agentUser?.id || agentUsername;
       const targetAgentUsername = agentUser?.username || agentUsername;
       const targetRouteIdStr = targetRouteId ? String(targetRouteId).trim() : '';
@@ -7337,15 +7402,36 @@ return {
         cartonId: cartonId || null,
         type: isRenovacion ? 'Renovacion' : (isMora ? 'Mora' : (status?.includes('venc') ? 'Vencimiento' : 'Liquidacion_Exitosa'))
       }).catch(() => {});
-      const isValidUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-
-      if (cartonId && isValidUuid(cartonId)) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', cartonId);
-      } else if (numeroCarton && !isNaN(Number(numeroCarton))) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
-      } else if (cedStr && isMora) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']);
+      if (cartonId) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', String(cartonId)).catch(() => {});
       }
+      if (numeroCarton && !isNaN(Number(numeroCarton))) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton)).catch(() => {});
+      }
+      if (cedStr) {
+        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']).catch(() => {});
+      }
+
+      // Sincronizar en localStorage 'bulapay_cartones'
+      try {
+        const rawLocal = localStorage.getItem('bulapay_cartones');
+        if (rawLocal) {
+          const localCartones = JSON.parse(rawLocal);
+          if (Array.isArray(localCartones)) {
+            let changed = false;
+            localCartones.forEach(lc => {
+              const matchId = cartonId && String(lc.id) === String(cartonId);
+              const matchNum = numeroCarton && (String(lc.numero_carton) === String(numeroCarton) || String(lc.numeroCarton) === String(numeroCarton));
+              const matchCed = cedStr && String(lc.cliente_id || lc.cedula) === cedStr;
+              if (matchId || matchNum || matchCed) {
+                Object.assign(lc, cartonUpdatePayload);
+                changed = true;
+              }
+            });
+            if (changed) localStorage.setItem('bulapay_cartones', JSON.stringify(localCartones));
+          }
+        }
+      } catch (_) {}
 
       if (isMora && cedStr) {
         const { error: rpcErr } = await supabase.rpc('liquidar_carton_por_morosidad', {

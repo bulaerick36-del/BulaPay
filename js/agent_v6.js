@@ -2404,7 +2404,7 @@ const agentModule = {
       if (infoEl) {
         const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
         if (isOverdueLimit) {
-          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón ha alcanzado el límite máximo de vencimiento (2 meses y 10 días) con saldo pendiente de <b>$${outstandingFmt}</b>. Según la regla, se sugiere liquidar y enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
+          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón ha alcanzado el límite de 2 meses vencido con saldo pendiente de <b>$${outstandingFmt}</b>. Según la regla, se sugiere liquidar y enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
         } else {
           infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón se encuentra <b>VENCIDO</b> (Saldo pendiente: <b>$${outstandingFmt}</b>). Se sugiere liquidar el cartón o registrar el cobro correspondiente. El cliente permanece 100% habilitado.`;
         }
@@ -2528,25 +2528,21 @@ const agentModule = {
       dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
     }
 
-    // REGLA CRÍTICA: Límite máximo permitido de un cartón (regla de 2 meses y 10 días = 70 días tope).
-    // Funciona con precisión absoluta tanto en producción como en pruebas con fechas alteradas:
-
-    // A. Tope de 2 meses y 10 días (70 días calendario) medido desde la fecha de apertura/creación del cartón
-    if (startDate && !isNaN(startDate.getTime())) {
-      const startDateZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      const startDatePlus2M10D = new Date(startDateZero.getFullYear(), startDateZero.getMonth() + 2, startDateZero.getDate() + 10);
-      const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      if (todayZero >= startDatePlus2M10D || diffDaysSinceStart >= 70) {
-        return true;
-      }
+    // REGLA CRÍTICA: Límite de 2 meses vencido medido ESTRICTAMENTE tras la fecha de vencimiento (dueDate).
+    // Jamás medido desde startDate directamente, ya que la campaña dura ~30-35 días calendario
+    // antes de entrar en mora; medir 70 días desde startDate activaba la alerta de 2 meses cuando en realidad solo llevaba 1 mes vencido.
+    if (!dueDate && startDate && !isNaN(startDate.getTime())) {
+      dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
     }
 
-    // B. O tope de 2 meses y 10 días (70 días) tras la fecha de vencimiento configurada o calculada
     if (dueDate && !isNaN(dueDate.getTime())) {
       const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      const dueDatePlus2M10D = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate() + 10);
+      // 2 meses exactos tras el vencimiento de la campaña
+      const dueDatePlus2Months = new Date(dueDateZero.getFullYear(), dueDateZero.getMonth() + 2, dueDateZero.getDate());
       const diffDaysAfterDue = Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      if (todayZero >= dueDatePlus2M10D || diffDaysAfterDue >= 70) {
+      
+      // La alerta de 2 meses vencidos solo se dispara cuando realmente hayan transcurrido 2 meses calendario (>= 60 días de mora efectiva)
+      if (todayZero >= dueDatePlus2Months && diffDaysAfterDue >= 60) {
         return true;
       }
     }
@@ -2618,13 +2614,15 @@ const agentModule = {
       const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
       diasVencimiento = Math.max(0, Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24)));
     } else if (startDate && !isNaN(startDate.getTime())) {
-      const startDateZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      const diffDays = Math.floor((todayZero.getTime() - startDateZero.getTime()) / (1000 * 60 * 60 * 24));
-      diasVencimiento = Math.max(0, diffDays - 30);
+      const calcDue = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+      const calcDueZero = new Date(calcDue.getFullYear(), calcDue.getMonth(), calcDue.getDate());
+      diasVencimiento = Math.max(0, Math.floor((todayZero.getTime() - calcDueZero.getTime()) / (1000 * 60 * 60 * 24)));
     }
+    const mesesMora = Math.floor(diasVencimiento / 30);
+    const diasRestantes = diasVencimiento % 30;
     const diasVencimientoStr = diasVencimiento > 0 
-      ? `${diasVencimiento} días (${Math.floor(diasVencimiento / 30)} meses y ${diasVencimiento % 30} días)` 
-      : 'Supera 2 meses y 10 días (70 días)';
+      ? `${diasVencimiento} días (${mesesMora} ${mesesMora === 1 ? 'mes' : 'meses'} y ${diasRestantes} días de mora)` 
+      : 'Supera 2 meses de mora';
 
     // Obtener la lista real de las 30 cuotas para auditoría visual
     let quotas = Array.isArray(dailyStatusList) ? dailyStatusList : null;
@@ -2740,7 +2738,7 @@ const agentModule = {
       return Boolean(res && res.isConfirmed);
     }
 
-    const confirmText = `⚠️ Aviso: Este cartón ha alcanzado el límite máximo permitido de vencimiento (2 meses y 10 días). Según la regla, se sugiere liquidar y enviar a Lista Negra.\n\n` +
+    const confirmText = `⚠️ Aviso: Este cartón ha alcanzado el límite de 2 meses vencido (${diasVencimientoStr}). Según la regla, se sugiere liquidar y enviar a Lista Negra.\n\n` +
       `Datos del Cliente:\n` +
       `- Nombre: ${nombre}\n` +
       `- Cédula: ${cedula}\n` +
