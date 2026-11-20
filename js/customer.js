@@ -216,7 +216,7 @@ const customerModule = {
     const totalPaid = payments.reduce((acc, curr) => acc + Number(curr.amount), 0);
 
     // Ajustar fecha de creación del crédito para estimar los atrasos
-    let creditDate = new Date(client.created_at || Date.now());
+    let creditDate = new Date(client.fecha_apertura || client.fecha_inicio || client.created_at || Date.now());
     if (payments.length > 0) {
       const earliestPayDate = new Date(Math.min(...payments.map(p => new Date(p.date))));
       if (earliestPayDate < creditDate) {

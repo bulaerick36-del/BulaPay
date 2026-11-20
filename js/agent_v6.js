@@ -1803,7 +1803,7 @@ const agentModule = {
     const client = this.currentClient;
     if (!client) return;
 
-    const totalInstallments = Number(client?.installmentsCount || client?.installments_count || 20);
+    const totalInstallments = Number(client?.installmentsCount || client?.installments_count || 30);
     const installmentAmount = Number(client?.installmentAmount || client?.installment_amount || 8000);
     const cedula = client?.cedula;
     if (!cedula) return;
@@ -2403,10 +2403,12 @@ const agentModule = {
       const infoEl = document.getElementById('overdue-banner-info');
       if (infoEl) {
         const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
+        const vInfo = this.calculateCartonVencimiento(client, dailyStatusList);
+        const moraInfoStr = vInfo.diasMora > 0 ? ` (${vInfo.diasMora} días de mora tras 5 días de gabela - Antigüedad: ${vInfo.antiguedadDias} días)` : '';
         if (isOverdueLimit) {
-          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón ha alcanzado el límite de 2 meses vencido con saldo pendiente de <b>$${outstandingFmt}</b>. Según la regla, se sugiere liquidar y enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
+          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón ha alcanzado el límite de 2 meses vencido con saldo pendiente de <b>$${outstandingFmt}</b>${moraInfoStr}. Según la regla, se sugiere liquidar y enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
         } else {
-          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón se encuentra <b>VENCIDO</b> (Saldo pendiente: <b>$${outstandingFmt}</b>). Se sugiere liquidar el cartón o registrar el cobro correspondiente. El cliente permanece 100% habilitado.`;
+          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón se encuentra <b>VENCIDO</b> con saldo pendiente de <b>$${outstandingFmt}</b>${moraInfoStr}. Se sugiere liquidar el cartón o registrar el cobro correspondiente. El cliente permanece 100% habilitado.`;
         }
       }
     } else {
@@ -2443,14 +2445,15 @@ const agentModule = {
     return isNaN(fallback.getTime()) ? null : new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
   },
 
-  calculateCartonDueDate(startDateObj, totalInstallments) {
+  calculateCartonDueDate(startDateObj, totalInstallments = 30) {
     if (!startDateObj || isNaN(startDateObj.getTime())) return null;
+    const totInst = Math.max(1, Number(totalInstallments) || 30);
     let validDaysCounter = 0;
     // Regla Gota a Gota: El conteo de días exigibles empieza a partir de fecha_creacion + 1 día
     let calendarDaysOffset = 1;
     let lastDate = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
     
-    while (validDaysCounter < totalInstallments) {
+    while (validDaysCounter < totInst) {
       const currentDayDate = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
       currentDayDate.setDate(currentDayDate.getDate() + calendarDaysOffset);
       calendarDaysOffset++;
@@ -2463,27 +2466,19 @@ const agentModule = {
     return lastDate;
   },
 
-  isCartonOverdue(client, dailyStatusList = null) {
-    if (!client) return false;
-    const outstanding = Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0);
-    if (outstanding <= 0) return false;
-
-    // Regla de campañas liquidadas o cerradas: nunca están vencidas
-    const rawEstado = String(client.estado || client.status || '').trim().toLowerCase();
-    if (
-      rawEstado.includes('liquidado') ||
-      rawEstado.includes('cancelad') ||
-      rawEstado.includes('pagad') ||
-      rawEstado.includes('paz_y_salvo') ||
-      rawEstado.includes('cerrad') ||
-      rawEstado.includes('castigado')
-    ) {
-      return false;
-    }
-
-    // 1. Verificación por estado operativo explícito
-    if (rawEstado.includes('vencid') || rawEstado.includes('mora') || rawEstado.includes('atrasad') || rawEstado.includes('demorad')) {
-      return true;
+  calculateCartonVencimiento(client, dailyStatusList = null) {
+    if (!client) {
+      return {
+        isOverdue: false,
+        diasMora: 0,
+        antiguedadDias: 0,
+        fechaApertura: null,
+        fechaFinPlazo: null,
+        fechaLimiteGabela: null,
+        fechaFinPlazoStr: '',
+        fechaLimiteGabelaStr: '',
+        gabelaDias: 5
+      };
     }
 
     const today = new Date();
@@ -2491,39 +2486,84 @@ const agentModule = {
 
     const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
     const startDate = cartonDateStr ? this.parseLocalDate(cartonDateStr) : null;
+    const totalInstallmentsCount = Math.max(1, Number(client.installmentsCount || client.installments_count || 30));
+    const gabelaDias = 5;
 
-    // 2. Verificación por fecha_vencimiento explícita (5 días de prórroga contractual)
-    if (client.fecha_vencimiento) {
-      const explicitDue = this.parseLocalDate(client.fecha_vencimiento);
-      if (explicitDue) {
-        const dueWithProrroga = new Date(explicitDue.getFullYear(), explicitDue.getMonth(), explicitDue.getDate() + 5);
-        if (todayZero > dueWithProrroga) return true;
-      }
-    }
+    let fechaFinPlazo = null;
 
-    // 3. Regla general: 1 mes contractual + 5 días de prórroga desde fecha_inicio/apertura
-    if (startDate) {
-      const unMesMas5Dias = new Date(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate() + 5);
-      const diffDaysSinceStart = Math.floor((todayZero.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (todayZero > unMesMas5Dias && diffDaysSinceStart > 35) {
-        return true;
-      }
-    }
-
-    // 4. Chequeo por dailyStatusList si existe
-    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
+    // 1. Si viene dailyStatusList generado, la fecha fin de cuotas es la fecha de la última cuota (cuota 30)
     if (dailyStatusList && dailyStatusList.length > 0) {
       const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
       if (lastInstallment && lastInstallment.dateStr) {
-        const lastDate = this.parseLocalDate(lastInstallment.dateStr);
-        if (lastDate) {
-          const lastWithProrroga = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() + 5);
-          if (todayZero > lastWithProrroga) return true;
-        }
+        fechaFinPlazo = this.parseLocalDate(lastInstallment.dateStr);
       }
     }
 
-    return false;
+    // 2. Si no hay dailyStatusList pero sí tenemos startDate (fecha_apertura), calculamos exactamente el plazo de las 30 cuotas (saltando domingos)
+    if (!fechaFinPlazo && startDate) {
+      fechaFinPlazo = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+    }
+
+    // 3. Fallback: Si no hay startDate pero existe fecha_vencimiento previa
+    if (!fechaFinPlazo && client.fecha_vencimiento) {
+      fechaFinPlazo = this.parseLocalDate(client.fecha_vencimiento);
+    }
+
+    // Si aún no hay fecha fin, usar startDate o today
+    if (!fechaFinPlazo) {
+      fechaFinPlazo = startDate ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()) : todayZero;
+    }
+
+    // REGLA DE NEGOCIO: PLAZO DE 30 CUOTAS + 5 DÍAS DE GABELA
+    // Fecha límite de vencimiento considerando exactamente el plazo del cartón + 5 días de gabela
+    const fechaLimiteGabela = new Date(fechaFinPlazo.getFullYear(), fechaFinPlazo.getMonth(), fechaFinPlazo.getDate() + gabelaDias);
+
+    // Antigüedad dinámica en días desde la fecha_apertura real
+    const refStart = startDate || fechaFinPlazo;
+    const antiguedadDias = Math.max(0, Math.floor((todayZero.getTime() - refStart.getTime()) / (1000 * 60 * 60 * 24)));
+
+    // Chequeo de deuda pendiente real
+    const outstanding = Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0);
+
+    // Campañas liquidadas / canceladas / paz y salvo nunca están en mora
+    const rawEstado = String(client.estado || client.status || '').trim().toLowerCase();
+    const isClosedOrLiquidated = (
+      outstanding <= 0 ||
+      rawEstado.includes('liquidado') ||
+      rawEstado.includes('cancelad') ||
+      rawEstado.includes('pagad') ||
+      rawEstado.includes('paz_y_salvo') ||
+      rawEstado.includes('cerrad') ||
+      rawEstado.includes('castigado')
+    );
+
+    // Vencido por mora: Superó el plazo del cartón más los 5 días de gabela con saldo pendiente
+    const isOverdue = !isClosedOrLiquidated && (todayZero > fechaLimiteGabela);
+
+    // Días de mora: días transcurridos después del vencimiento con gabela
+    const diasMora = isOverdue 
+      ? Math.max(1, Math.floor((todayZero.getTime() - fechaLimiteGabela.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+    const toIsoDate = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
+
+    return {
+      isOverdue,
+      diasMora,
+      antiguedadDias,
+      fechaApertura: startDate,
+      fechaFinPlazo,
+      fechaLimiteGabela,
+      fechaFinPlazoStr: toIsoDate(fechaFinPlazo),
+      fechaLimiteGabelaStr: toIsoDate(fechaLimiteGabela),
+      gabelaDias
+    };
+  },
+
+  isCartonOverdue(client, dailyStatusList = null) {
+    if (!client) return false;
+    const vInfo = this.calculateCartonVencimiento(client, dailyStatusList);
+    return vInfo.isOverdue;
   },
 
   isCartonOverdueBy2Months(client, dailyStatusList = null) {
@@ -2654,36 +2694,15 @@ const agentModule = {
     const saldoVal = Math.round(Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0));
     const saldoFmt = `$${saldoVal.toLocaleString('es-CO')}`;
 
-    // Calcular días de vencimiento y antigüedad exacta
-    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
-    const startDate = cartonDateStr ? this.parseLocalDate(cartonDateStr) : null;
-    const totalInstallmentsCount = Number(client.installmentsCount || client.installments_count || 30);
-    let dueDate = null;
-    if (client.fecha_vencimiento) {
-      dueDate = this.parseLocalDate(client.fecha_vencimiento);
-    } else if (startDate) {
-      dueDate = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
-    }
-
-    let diasMora = 0;
-    let diasTotalCredito = 0;
-    const today = new Date();
-    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    if (startDate) {
-      diasTotalCredito = Math.max(0, Math.floor((todayZero.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-    }
-    if (dueDate) {
-      const dueDateZero = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      diasMora = Math.max(0, Math.floor((todayZero.getTime() - dueDateZero.getTime()) / (1000 * 60 * 60 * 24)));
-    } else if (startDate) {
-      diasMora = Math.max(0, diasTotalCredito - 35);
-    }
+    // Calcular días de vencimiento y antigüedad exacta con regla 30 cuotas + 5 días de gabela
+    const vInfo = this.calculateCartonVencimiento(client, dailyStatusList);
+    const diasMora = vInfo.diasMora;
+    const diasTotalCredito = vInfo.antiguedadDias;
 
     const mesesMora = Math.floor(diasMora / 30);
     const diasRestantesMora = diasMora % 30;
     const diasVencimientoStr = diasMora > 0 
-      ? `${diasMora} días de mora (${mesesMora} ${mesesMora === 1 ? 'mes' : 'meses'} y ${diasRestantesMora} días) — Antigüedad: ${diasTotalCredito} días` 
+      ? `${diasMora} días de mora (${mesesMora} ${mesesMora === 1 ? 'mes' : 'meses'} y ${diasRestantesMora} días tras 5 días de gabela) — Antigüedad: ${diasTotalCredito} días` 
       : `Superó el límite de 2 meses y 10 días (${diasTotalCredito} días)`;
 
     // Obtener la lista real de las 30 cuotas para auditoría visual
@@ -3226,9 +3245,9 @@ const agentModule = {
     const isOverdueCarton = this.isCartonOverdue(client, dailyStatusList);
     const isOverdueLimit = this.isCartonOverdueBy2Months(client, dailyStatusList);
     const rawSt = String(client?.estado || client?.status || '').toLowerCase();
-    const isMoraOrPerdida = rawSt.includes('mora') || rawSt.includes('perdida') || rawSt.includes('vencid') || String(client?.risk || '').toLowerCase() === 'rojo';
+    const isMoraOrPerdida = isOverdueCarton || isOverdueLimit || rawSt.includes('perdida') || rawSt === 'liquidado_mora' || String(client?.risk || '').toLowerCase() === 'rojo';
 
-    // Habilitar botón de liquidar por mora si el cartón está vencido por fecha, supera el límite de 2 meses y 10 días, o está en mora
+    // Habilitar botón de liquidar por mora si el cartón está vencido dinámicamente por fecha (30 cuotas + 5 días de gabela), supera el límite de 2 meses y 10 días, o está en lista negra
     const canLiquidarMora = (isOverdueCarton || isOverdueLimit || isMoraOrPerdida) && !isWithoutActiveDebt;
 
     if (btnRenovar) {
@@ -3399,7 +3418,7 @@ const agentModule = {
       const activeCreditLocal = activeCredits.find(c => String(c.cedula).trim() === cedulaClean);
 
       // Priorizar el cartón asignado al agente, o permitir el cartón disponible para cobro y gestión de mora
-      const activeCarton = myActiveCarton || activeCreditLocal || (allActiveGlobalCartones.length > 0 ? allActiveGlobalCartones[0] : null);
+      const activeCarton = myActiveCarton || (allActiveGlobalCartones.length > 0 ? allActiveGlobalCartones[0] : null) || activeCreditLocal;
 
       if (!activeCarton) {
         const errorMsg = 'No se encontró un crédito o cartón disponible para este cliente.';
@@ -3450,6 +3469,8 @@ const agentModule = {
       let realStatus = 'Activo';
       let realEstado = 'activo';
 
+      const effectiveFechaApertura = activeCarton.fecha_apertura || dbClientGlobal?.fecha_apertura || activeCarton.fecha_inicio || dbClientGlobal?.fecha_inicio || activeCarton.created_at || dbClientGlobal?.created_at;
+
       if (isFullyPaidByRecords) {
         realOutstanding = 0;
         realStatus = 'Liquidado_Pagado';
@@ -3457,11 +3478,19 @@ const agentModule = {
       } else {
         // Si no hay pagos registrados o son parciales, el saldo pendiente es la deuda real no pagada
         realOutstanding = Math.max(0, totalDebt - totalPagadoReal);
-        // Preservar si ya venía marcado como 'vencido' o 'mora' en base de datos o por pruebas de fecha
-        const rawOrigState = String(activeCarton.estado || activeCarton.status || '').toLowerCase();
-        if (rawOrigState.includes('vencid') || rawOrigState.includes('mora')) {
-          realStatus = rawOrigState.includes('vencid') ? 'Vencido' : 'Mora';
-          realEstado = rawOrigState.includes('vencid') ? 'vencido' : 'mora';
+        
+        // Recálculo dinámico en tiempo real según fecha_apertura y regla de 30 cuotas + 5 días de gabela
+        const tempCartonForCheck = {
+          ...activeCarton,
+          outstanding: realOutstanding,
+          totalDebt: totalDebt,
+          installmentsCount: installmentsCount,
+          fecha_apertura: effectiveFechaApertura
+        };
+        const initialVenc = this.calculateCartonVencimiento(tempCartonForCheck);
+        if (initialVenc.isOverdue) {
+          realStatus = 'Vencido';
+          realEstado = 'vencido';
         } else {
           realStatus = 'Activo';
           realEstado = 'activo';
@@ -3484,7 +3513,8 @@ const agentModule = {
         estado: realEstado,
         totalPagado: totalPagadoReal,
         totalPagadoReal: totalPagadoReal,
-        isFullyPaid: isFullyPaidByRecords
+        isFullyPaid: isFullyPaidByRecords,
+        fecha_apertura: effectiveFechaApertura
       };
 
       if (this.searchError) this.searchError.style.display = 'none';
@@ -3527,6 +3557,19 @@ const agentModule = {
 
       // Preparar el Cartón Interactivo (Flujo B) con pagos reales verificados
       const dailyStatusList = window.BulaPayDB.getDailyPaymentStatus(client, paymentsList);
+      
+      // RECÁLCULO DINÁMICO EXACTO: Regla 30 cuotas + 5 días de gabela con dailyStatusList
+      const dynamicVencInfo = this.calculateCartonVencimiento(client, dailyStatusList);
+      if (!isFullyPaidByRecords) {
+        client.status = dynamicVencInfo.isOverdue ? 'Vencido' : 'Activo';
+        client.estado = dynamicVencInfo.isOverdue ? 'vencido' : 'activo';
+      }
+      client.fecha_vencimiento = dynamicVencInfo.fechaFinPlazoStr;
+      client.fecha_limite_gabela = dynamicVencInfo.fechaLimiteGabelaStr;
+      client.diasMora = dynamicVencInfo.diasMora;
+      client.antiguedadDias = dynamicVencInfo.antiguedadDias;
+      client.gabelaDias = dynamicVencInfo.gabelaDias;
+
       const todayStr = this.getLocalDateString();
       this.hasPaidRecordToday = paymentsList.some(p => {
         const pId = String(p.id || '').trim();

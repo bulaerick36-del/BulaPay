@@ -2978,22 +2978,33 @@ const supervisorModule = {
 
       // Calcular o formatear la Fecha de Vencimiento del cartón
       let fechaVencObj = null;
-      if (c.fechaVencimiento || c.fecha_vencimiento) {
-        fechaVencObj = new Date(c.fechaVencimiento || c.fecha_vencimiento);
-      } else if (c.fecha_apertura || c.fecha_inicio || c.created_at) {
-        try {
-          const sDate = new Date(c.fecha_apertura || c.fecha_inicio || c.created_at);
-          if (!isNaN(sDate.getTime())) {
-            let dCount = 0;
-            let cur = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate());
-            const totInst = Number(c.installments_count || c.installmentsCount || 30);
-            while (dCount < totInst) {
-              cur.setDate(cur.getDate() + 1);
-              if (cur.getDay() !== 0) dCount++;
+      let fechaLimiteGabelaObj = null;
+      if (window.BulaPayDB && typeof window.BulaPayDB.calculateCartonVencimiento === 'function') {
+        const vInfo = window.BulaPayDB.calculateCartonVencimiento(c);
+        if (vInfo && vInfo.fechaFinPlazo) {
+          fechaVencObj = vInfo.fechaFinPlazo;
+          fechaLimiteGabelaObj = vInfo.fechaLimiteGabela;
+        }
+      }
+      if (!fechaVencObj) {
+        if (c.fecha_apertura || c.fecha_inicio || c.created_at) {
+          try {
+            const sDate = new Date(c.fecha_apertura || c.fecha_inicio || c.created_at);
+            if (!isNaN(sDate.getTime())) {
+              let dCount = 0;
+              let cur = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate());
+              const totInst = Number(c.installments_count || c.installmentsCount || 30);
+              while (dCount < totInst) {
+                cur.setDate(cur.getDate() + 1);
+                if (cur.getDay() !== 0) dCount++;
+              }
+              fechaVencObj = cur;
+              fechaLimiteGabelaObj = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 5);
             }
-            fechaVencObj = cur;
-          }
-        } catch (_) {}
+          } catch (_) {}
+        } else if (c.fechaVencimiento || c.fecha_vencimiento) {
+          fechaVencObj = new Date(c.fechaVencimiento || c.fecha_vencimiento);
+        }
       }
       const fechaVencStr = (fechaVencObj && !isNaN(fechaVencObj.getTime()))
         ? fechaVencObj.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })

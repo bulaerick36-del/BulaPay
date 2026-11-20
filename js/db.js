@@ -6520,6 +6520,119 @@ return {
     return expectedCount;
   },
 
+  calculateCartonDueDate(startDateObj, totalInstallments = 30) {
+    if (!startDateObj || isNaN(startDateObj.getTime())) return null;
+    const totInst = Math.max(1, Number(totalInstallments) || 30);
+    let validDaysCounter = 0;
+    let calendarDaysOffset = 1;
+    let lastDate = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+    
+    while (validDaysCounter < totInst) {
+      const currentDayDate = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+      currentDayDate.setDate(currentDayDate.getDate() + calendarDaysOffset);
+      calendarDaysOffset++;
+      
+      if (currentDayDate.getDay() === 0) continue; // Saltar domingos
+      
+      validDaysCounter++;
+      lastDate = currentDayDate;
+    }
+    return lastDate;
+  },
+
+  calculateCartonVencimiento(client, dailyStatusList = null) {
+    if (!client) {
+      return {
+        isOverdue: false,
+        diasMora: 0,
+        antiguedadDias: 0,
+        fechaApertura: null,
+        fechaFinPlazo: null,
+        fechaLimiteGabela: null,
+        fechaFinPlazoStr: '',
+        fechaLimiteGabelaStr: '',
+        gabelaDias: 5
+      };
+    }
+
+    const today = new Date();
+    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const cartonDateStr = client.fecha_apertura || client.fecha_inicio || client.created_at;
+    const startDate = cartonDateStr ? this.parseLocalCartonDate(cartonDateStr) : null;
+    const totalInstallmentsCount = Math.max(1, Number(client.installmentsCount || client.installments_count || 30));
+    const gabelaDias = 5;
+
+    let fechaFinPlazo = null;
+
+    // 1. Si viene dailyStatusList generado, la fecha fin de cuotas es la fecha de la última cuota (cuota 30)
+    if (dailyStatusList && dailyStatusList.length > 0) {
+      const lastInstallment = dailyStatusList.find(s => s?.dayNumber === totalInstallmentsCount) || dailyStatusList[dailyStatusList.length - 1];
+      if (lastInstallment && lastInstallment.dateStr) {
+        fechaFinPlazo = this.parseLocalCartonDate(lastInstallment.dateStr);
+      }
+    }
+
+    // 2. Si no hay dailyStatusList pero sí tenemos startDate (fecha_apertura), calculamos exactamente el plazo de las 30 cuotas (saltando domingos)
+    if (!fechaFinPlazo && startDate) {
+      fechaFinPlazo = this.calculateCartonDueDate(startDate, totalInstallmentsCount);
+    }
+
+    // 3. Fallback: Si no hay startDate pero existe fecha_vencimiento previa
+    if (!fechaFinPlazo && client.fecha_vencimiento) {
+      fechaFinPlazo = this.parseLocalCartonDate(client.fecha_vencimiento);
+    }
+
+    // Si aún no hay fecha fin, usar startDate o today
+    if (!fechaFinPlazo) {
+      fechaFinPlazo = startDate ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()) : todayZero;
+    }
+
+    // Fecha límite de vencimiento considerando exactamente el plazo del cartón + 5 días de gabela
+    const fechaLimiteGabela = new Date(fechaFinPlazo.getFullYear(), fechaFinPlazo.getMonth(), fechaFinPlazo.getDate() + gabelaDias);
+
+    // Antigüedad dinámica en días desde la fecha_apertura real
+    const refStart = startDate || fechaFinPlazo;
+    const antiguedadDias = Math.max(0, Math.floor((todayZero.getTime() - refStart.getTime()) / (1000 * 60 * 60 * 24)));
+
+    // Chequeo de deuda pendiente real
+    const outstanding = Number(client.outstanding ?? client.saldo_restante ?? client.totalDebt ?? client.total_debt ?? 0);
+
+    // Campañas liquidadas / canceladas / paz y salvo nunca están en mora
+    const rawEstado = String(client.estado || client.status || '').trim().toLowerCase();
+    const isClosedOrLiquidated = (
+      outstanding <= 0 ||
+      rawEstado.includes('liquidado') ||
+      rawEstado.includes('cancelad') ||
+      rawEstado.includes('pagad') ||
+      rawEstado.includes('paz_y_salvo') ||
+      rawEstado.includes('cerrad') ||
+      rawEstado.includes('castigado')
+    );
+
+    // Vencido por mora: Superó el plazo del cartón más los 5 días de gabela con saldo pendiente
+    const isOverdue = !isClosedOrLiquidated && (todayZero > fechaLimiteGabela);
+
+    // Días de mora: días transcurridos después del vencimiento con gabela
+    const diasMora = isOverdue 
+      ? Math.max(1, Math.floor((todayZero.getTime() - fechaLimiteGabela.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+    const toIsoDate = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
+
+    return {
+      isOverdue,
+      diasMora,
+      antiguedadDias,
+      fechaApertura: startDate,
+      fechaFinPlazo,
+      fechaLimiteGabela,
+      fechaFinPlazoStr: toIsoDate(fechaFinPlazo),
+      fechaLimiteGabelaStr: toIsoDate(fechaLimiteGabela),
+      gabelaDias
+    };
+  },
+
   getDailyPaymentStatus(client, payments) {
     if (!client) return [];
     
