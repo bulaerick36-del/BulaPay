@@ -1398,7 +1398,12 @@ const db = {
           username: agentUsername || 'supervisor',
           created_at: new Date().toISOString()
         }));
-        await supabase.from('bulapay_notificaciones').insert(recordsToInsert).catch(() => {});
+        try {
+          const { error: insErr } = await supabase.from('bulapay_notificaciones').insert(recordsToInsert);
+          if (insErr) console.warn("Aviso al insertar liquidaciones atendidas:", insErr.message);
+        } catch (eIns) {
+          console.warn("Excepción al insertar liquidaciones atendidas:", eIns);
+        }
 
         for (const id of cartonIds) {
           const idStr = String(id || '').trim();
@@ -1446,10 +1451,15 @@ const db = {
   },
 
   async getAgentPendingLiquidations(agentUsername, routeId = null) {
-    // SOLO devuelve cartones de la jornada de hoy (evita contadores fantasmas de dias anteriores)
     try {
       const todayCards = await this.getAgentLiquidatedCartonesToday(agentUsername, routeId);
-      return todayCards || [];
+      if (Array.isArray(todayCards) && todayCards.length > 0) {
+        return todayCards;
+      }
+      // Respaldo de seguridad: si por corte de turno/horario no cayó en todayCards pero hay liquidaciones no atendidas
+      const historical = await this.getAgentLiquidatedCartonesHistorical(agentUsername, routeId);
+      const pendingHistorical = (historical || []).filter(c => !c.isAtendido && !c.supervisor_atendido && !this.isLiquidacionAtendida(c.id, c.numeroCarton));
+      return pendingHistorical;
     } catch (e) {
       console.error("Error al obtener liquidaciones pendientes:", e);
       return [];
@@ -1645,14 +1655,19 @@ const db = {
 
       // 1. Persistir en Supabase bulapay_notificaciones
       if (supabase) {
-        await supabase.from('bulapay_notificaciones').insert([{
-          id: stringId,
-          titulo: titulo,
-          mensaje: mensaje,
-          categoria: 'Liquidacion_Campo',
-          prioridad: 'Alta',
-          created_at: now.toISOString()
-        }]).then(() => {}).catch(() => {});
+        try {
+          const { error: insErr } = await supabase.from('bulapay_notificaciones').insert([{
+            id: stringId,
+            titulo: titulo,
+            mensaje: mensaje,
+            categoria: 'Liquidacion_Campo',
+            prioridad: 'Alta',
+            created_at: now.toISOString()
+          }]);
+          if (insErr) console.warn("Aviso al insertar notificación de liquidación en Supabase:", insErr.message);
+        } catch (eIns) {
+          console.warn("Excepción al insertar notificación de liquidación:", eIns);
+        }
       }
 
       // 2. BroadcastChannel para sincronización inmediata entre pestañas/dispositivos
@@ -1716,14 +1731,19 @@ const db = {
       const mensaje = `Agente ${agentName || agentId} realizó el cierre de jornada en la ruta ${routeName || routeId}. Total Recaudado: $${Number(totalRecaudado || 0).toLocaleString('es-CO')}.`;
 
       if (supabase) {
-        await supabase.from('bulapay_notificaciones').insert([{
-          id: stringId,
-          titulo: titulo,
-          mensaje: mensaje,
-          categoria: 'Cierre_Jornada',
-          prioridad: 'Alta',
-          created_at: now.toISOString()
-        }]).then(() => {}).catch(() => {});
+        try {
+          const { error: insErr } = await supabase.from('bulapay_notificaciones').insert([{
+            id: stringId,
+            titulo: titulo,
+            mensaje: mensaje,
+            categoria: 'Cierre_Jornada',
+            prioridad: 'Alta',
+            created_at: now.toISOString()
+          }]);
+          if (insErr) console.warn("Aviso al insertar notificación de cierre en Supabase:", insErr.message);
+        } catch (eIns) {
+          console.warn("Excepción al insertar notificación de cierre:", eIns);
+        }
       }
 
       try {
@@ -4339,14 +4359,18 @@ return {
       } catch (eLocR) {}
 
       // Notificar al supervisor del cierre de jornada en tiempo real
-      this.notificarCierreJornadaSupervisor({
-        routeId: cleanRouteId,
-        routeName: (route && route.name) || cleanRouteId,
-        agentId: data.agentId,
-        agentName: data.agentName || 'Agente de Ruta',
-        totalRecaudado: recaudoTotal,
-        totalEntregar: efectivoEntregar
-      }).catch(() => {});
+      try {
+        await this.notificarCierreJornadaSupervisor({
+          routeId: cleanRouteId,
+          routeName: (route && route.name) || cleanRouteId,
+          agentId: data.agentId,
+          agentName: data.agentName || 'Agente de Ruta',
+          totalRecaudado: recaudoTotal,
+          totalEntregar: efectivoEntregar
+        });
+      } catch (eNotifCls) {
+        console.warn("Aviso al notificar cierre al supervisor:", eNotifCls);
+      }
     }
 
     return payload;
@@ -5513,17 +5537,21 @@ return {
 
     // Notificar al supervisor de renovación / retanqueo exitoso
     if (isRenov) {
-      this.notificarLiquidacionSupervisor({
-        agentId: agentId,
-        agentName: currentUser ? (currentUser.name || currentUser.username) : (agentId || 'Agente'),
-        routeId: routeId,
-        clientName: payload.name || clientId,
-        clientId: clientId,
-        amountLiquidated: rolloverVal,
-        newCartonNumber: newNumeroCarton,
-        cartonId: payload.old_carton_id || (typeof targetOldIds !== 'undefined' ? Array.from(targetOldIds)[0] : null) || null,
-        type: 'Renovacion'
-      }).catch(() => {});
+      try {
+        await this.notificarLiquidacionSupervisor({
+          agentId: agentId,
+          agentName: currentUser ? (currentUser.name || currentUser.username) : (agentId || 'Agente'),
+          routeId: routeId,
+          clientName: payload.name || clientId,
+          clientId: clientId,
+          amountLiquidated: rolloverVal,
+          newCartonNumber: newNumeroCarton,
+          cartonId: payload.old_carton_id || (typeof targetOldIds !== 'undefined' ? Array.from(targetOldIds)[0] : null) || null,
+          type: 'Renovacion'
+        });
+      } catch (eNotifSup) {
+        console.warn("Aviso al notificar renovación al supervisor:", eNotifSup);
+      }
     }
     
     return { 
@@ -7395,17 +7423,21 @@ return {
       }, 50);
 
       // Notificar al supervisor de la liquidación en tiempo real (Renovación, Mora, Vencimiento o Exitosa)
-      this.notificarLiquidacionSupervisor({
-        agentId: currentUser?.username || clientData?.agent_id,
-        agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
-        routeId: clientData?.routeId || currentUser?.routeId,
-        clientName: clientData?.name || cedula,
-        clientId: cedula,
-        amountLiquidated: isPaid ? (clientData?.totalDebt || clientData?.outstanding || 0) : moraOutstanding,
-        newCartonNumber: numeroCarton || null,
-        cartonId: cartonId || null,
-        type: isRenovacion ? 'Renovacion' : (isMora ? 'Mora' : (status?.includes('venc') ? 'Vencimiento' : 'Liquidacion_Exitosa'))
-      }).catch(() => {});
+      try {
+        await this.notificarLiquidacionSupervisor({
+          agentId: currentUser?.username || clientData?.agent_id,
+          agentName: currentUser ? (currentUser.name || currentUser.username) : 'Sistema',
+          routeId: clientData?.routeId || currentUser?.routeId,
+          clientName: clientData?.name || cedula,
+          clientId: cedula,
+          amountLiquidated: isPaid ? (clientData?.totalDebt || clientData?.outstanding || 0) : moraOutstanding,
+          newCartonNumber: numeroCarton || null,
+          cartonId: cartonId || null,
+          type: isRenovacion ? 'Renovacion' : (isMora ? 'Mora' : (status?.includes('venc') ? 'Vencimiento' : 'Liquidacion_Exitosa'))
+        });
+      } catch (eNotifSup) {
+        console.warn("Aviso al notificar liquidación:", eNotifSup);
+      }
       try {
         if (cartonId) {
           const { data: cDataId, error: errCId } = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', String(cartonId));
@@ -9425,7 +9457,8 @@ return {
           // Limpieza automática en segundo plano de comunicados con más de 48 horas en Supabase
           try {
             const cutoffIso = new Date(nowMs - FortyEightHoursMs).toISOString();
-            supabase.from('bulapay_notificaciones').delete().lt('created_at', cutoffIso).then(() => {}).catch(() => {});
+            const { error: delErr } = await supabase.from('bulapay_notificaciones').delete().lt('created_at', cutoffIso);
+            if (delErr) console.warn("Aviso al limpiar comunicados con más de 48h:", delErr.message);
           } catch(eClean) {}
 
           let { data, error } = await supabase

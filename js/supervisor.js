@@ -672,18 +672,23 @@ const supervisorModule = {
     }
 
     for (const agent of agents) {
-      const r = routes.find(rt => rt.id === agent.routeId) || { name: 'Sin ruta asignada' };
+      const r = routes.find(rt => 
+        (agent.routeId && rt.id === agent.routeId) || 
+        (agent.username && rt.agentUsername && String(rt.agentUsername).toLowerCase() === String(agent.username).toLowerCase()) ||
+        (agent.name && rt.agentName && String(rt.agentName).toLowerCase() === String(agent.name).toLowerCase())
+      ) || { name: 'Sin ruta asignada' };
+      const effectiveRouteId = agent.routeId || r.id || null;
       let unreadCount = 0;
       try {
         if (window.BulaPayDB && typeof window.BulaPayDB.getAgentUnreadLiquidationsCount === 'function') {
-          unreadCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(agent.username, agent.routeId);
+          unreadCount = await window.BulaPayDB.getAgentUnreadLiquidationsCount(agent.username, effectiveRouteId);
         }
       } catch (_) {}
 
       // Solo si hay liquidaciones pendientes por revisar se muestra la campana roja (🔔 1, 🔔 2...).
       // Si el conteo es 0, la campana DESAPARECE completamente.
       const bellBadgeHtml = unreadCount > 0
-        ? '<span class="agent-bell-badge" data-agent="' + agent.username + '" data-route="' + (agent.routeId || '') + '" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff; border: 1px solid #f87171; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="' + unreadCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar">🔔 ' + unreadCount + '</span>'
+        ? '<span class="agent-bell-badge" data-agent="' + agent.username + '" data-route="' + (effectiveRouteId || '') + '" style="cursor: pointer; background: linear-gradient(135deg, #ef4444, #dc2626); color: #ffffff; border: 1px solid #f87171; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 4px;" title="' + unreadCount + ' cartón(es) liquidado(s) pendiente(s) de revisión. Clic para auditar">🔔 ' + unreadCount + '</span>'
         : '';
 
       const item = document.createElement('div');
@@ -732,7 +737,8 @@ const supervisorModule = {
       if (bellEl) {
         bellEl.onclick = (e) => {
           e.stopPropagation();
-          this.openLiquidatedCardsModal(agent.username, agent.routeId);
+          this.selectedAuditAgentUsername = agent.username;
+          this.openLiquidatedCardsModal(agent.username, effectiveRouteId);
         };
       }
 
@@ -2407,40 +2413,13 @@ const supervisorModule = {
       }
       this.currentActiveCards = cards;
 
-      // REGLA CLAVE: Al abrir y visualizar las liquidaciones del agente,
-      // todas las alertas pendientes se marcan como revisadas/atendidas para que la campana DESAPAREZCA
-      const unreadCards = (cards || []).filter(c => !c.isAtendido);
-      if (unreadCards.length > 0) {
-        const unreadIds = unreadCards.map(c => c.id || c.numeroCarton).filter(Boolean);
-        try {
-          if (window.BulaPayDB && typeof window.BulaPayDB.marcarLiquidacionesAtendidas === 'function') {
-            await window.BulaPayDB.marcarLiquidacionesAtendidas(unreadIds, username);
-          }
-          unreadCards.forEach(c => { c.isAtendido = true; });
-        } catch (eAtend) {
-          console.warn("Aviso al auto-atender liquidaciones vistas:", eAtend);
-        }
-      }
-
-      // Desvanecer / eliminar inmediatamente las campanas del agente en el DOM
-      if (username) {
-        const modalBadge = document.getElementById('modal-agent-liquidated-badge');
-        if (modalBadge) {
-          modalBadge.innerHTML = '0';
-          modalBadge.title = 'No hay liquidaciones pendientes de revisión. Clic para ver historial.';
-          modalBadge.style.background = 'rgba(148, 163, 184, 0.15)';
-          modalBadge.style.color = '#94a3b8';
-          modalBadge.style.boxShadow = 'none';
-        }
-        document.querySelectorAll('.agent-bell-badge[data-agent="' + username + '"]').forEach(el => el.remove());
-        document.querySelectorAll('.table-agent-bell-btn[data-agent="' + username + '"]').forEach(el => el.remove());
-      }
-
+      // REGLA CLAVE: Al abrir la vista de alertas, NO se eliminan ni se marcan automáticamente como atendidas
+      // antes de que el supervisor las visualice. Las alertas permanecen visibles para su revisión clara.
       const totalCount = cards.length;
       const blueCount = cards.filter(c => c.category === 'blue').length;
       const greenCount = cards.filter(c => c.category === 'green').length;
       const redCount = cards.filter(c => c.category === 'red').length;
-      const unreadCount = 0;
+      const unreadCount = cards.filter(c => !c.isAtendido).length;
 
       if (tabBadge) {
         tabBadge.textContent = unreadCount;
@@ -2476,7 +2455,10 @@ const supervisorModule = {
           <div style="text-align: center; color: var(--text-secondary); padding: 2.5rem 1rem; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color);">
             <div style="font-size: 2rem; margin-bottom: 0.5rem;">✅</div>
             <strong style="color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Sin cartones liquidados hoy</strong>
-            <span style="font-size: 0.8rem;">Este cobrador no tiene registros de cierre o liquidación en la jornada actual. Puedes consultar el <strong>Archivo Histórico</strong> en la pestaña superior.</span>
+            <span style="font-size: 0.8rem; display: block; margin-bottom: 1rem;">No hay registros de liquidación pendientes hoy para este agente. Puedes consultar el <strong>Archivo Histórico</strong>.</span>
+            <button type="button" onclick="supervisorModule.switchLiquidatedTab('archive')" style="background: rgba(59, 130, 246, 0.2); border: 1px solid #3b82f6; color: #60a5fa; border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;">
+              📁 Ver Archivo Histórico de Liquidaciones
+            </button>
           </div>
         `;
         return;
@@ -3085,6 +3067,14 @@ const supervisorModule = {
       `;
     }
 
+    const clientName = c.clientName || c.nombre_cliente || c.nombre || c.name || (cedStr ? `Cliente C.C. ${cedStr}` : 'Cliente Sin Nombre');
+    const numeroCarton = c.numeroCarton || c.numero_carton || 'S/N';
+    const catBorder = c.categoryBorder || (isMora ? '#ef4444' : (isRenewal ? '#3b82f6' : '#10b981'));
+    const catColor = c.categoryColor || catBorder;
+    const catIcon = c.categoryIcon || (isMora ? '🔴' : (isRenewal ? '🔵' : '🟢'));
+    const catLabel = c.categoryLabel || (isMora ? 'En Mora / Lista Negra' : (isRenewal ? 'Renovación' : 'Exitoso'));
+    const catExpl = c.explanation || (isMora ? 'Liquidado por mora y enviado a Lista Negra' : (isRenewal ? 'Cancelado por retanqueo' : 'Cancelado al 100% (Paz y Salvo)'));
+
     const attendedStatusPill = c.isAtendido
       ? `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; padding: 0.2rem 0.6rem; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">✅ Atendida</span>`
       : `<span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 9999px; padding: 0.2rem 0.6rem; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">⚠️ Pendiente</span>
@@ -3093,20 +3083,20 @@ const supervisorModule = {
     const transIdClean = String(c.id || `trans_${c.numeroCarton}_${index}`).replace(/[^a-zA-Z0-9_-]/g, '_');
 
     return `
-      <div id="card-liq-${transIdClean}" style="padding: 1.15rem; background: #0f172a; border: 1.5px solid ${c.categoryBorder}; border-radius: 14px; display: flex; flex-direction: column; gap: 0.85rem; width: 100%; box-sizing: border-box; flex-shrink: 0 !important; min-height: fit-content !important; overflow: visible !important; position: relative; box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);">
+      <div id="card-liq-${transIdClean}" style="padding: 1.15rem; background: #0f172a; border: 1.5px solid ${catBorder}; border-radius: 14px; display: flex; flex-direction: column; gap: 0.85rem; width: 100%; box-sizing: border-box; flex-shrink: 0 !important; min-height: fit-content !important; overflow: visible !important; position: relative; box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.4);">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;">
           <div>
-            <strong style="color: #ffffff; font-size: 1.02rem; font-weight: 800; display: block; word-break: break-word;">${c.clientName}</strong>
+            <strong style="color: #ffffff; font-size: 1.02rem; font-weight: 800; display: block; word-break: break-word;">${clientName}</strong>
             <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-              <span>C.C. ${c.cedula || 'N/A'}</span>
+              <span>C.C. ${cedStr || 'N/A'}</span>
               <span>•</span>
-              <span style="color: #cbd5e1; font-weight: 700;">Cartón #${c.numeroCarton}</span>${newCartonNumberBadge}
+              <span style="color: #cbd5e1; font-weight: 700;">Cartón #${numeroCarton}</span>${newCartonNumberBadge}
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             ${attendedStatusPill}
-            <span style="padding: 0.35rem 0.85rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 800; background: ${c.categoryBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap;">
-              ${c.categoryIcon} ${c.categoryLabel}
+            <span style="padding: 0.35rem 0.85rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 800; background: ${catBorder}; color: #ffffff; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap;">
+              ${catIcon} ${catLabel}
             </span>
           </div>
         </div>
@@ -3114,14 +3104,14 @@ const supervisorModule = {
         ${financialDetailsHtml}
 
         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.55rem; gap: 0.5rem; flex-wrap: wrap;">
-          <span style="color: ${c.categoryColor}; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">ℹ️ ${c.explanation}</span>
+          <span style="color: ${catColor}; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">ℹ️ ${catExpl}</span>
           <span style="white-space: nowrap; color: #e2e8f0; font-weight: 600;">⏰ ${timeStr}</span>
         </div>
       </div>
     `;
   },
 
-  closeLiquidatedCardsModal() {
+  async closeLiquidatedCardsModal() {
     const overlay = document.getElementById('modal-liquidated-cards');
     if (overlay) {
       overlay.classList.remove('active');
@@ -3130,19 +3120,28 @@ const supervisorModule = {
       overlay.style.pointerEvents = 'none';
     }
 
-    // Al cerrar la campana/modal, auto-atender alertas pendientes visualizadas para que la campana decremente o desaparezca
+    // Al cerrar el modal después de que el supervisor revisó la información:
+    // Marcar las alertas pendientes visualizadas como atendidas para que la campana decremente o desaparezca
     const unreadCards = (this.currentActiveCards || []).filter(c => !c.isAtendido);
-    if (unreadCards.length > 0) {
+    const targetUser = this.currentLiqAgentUsername || this.selectedAuditAgentUsername;
+    const targetRoute = this.currentLiqRouteId;
+
+    if (unreadCards.length > 0 && targetUser) {
       const unreadIds = unreadCards.map(c => c.id || c.numeroCarton).filter(Boolean);
-      const targetUser = this.currentLiqAgentUsername || this.selectedAuditAgentUsername;
-      if (window.BulaPayDB && typeof window.BulaPayDB.marcarLiquidacionesAtendidas === 'function') {
-        window.BulaPayDB.marcarLiquidacionesAtendidas(unreadIds, targetUser).catch(() => {});
+      try {
+        if (window.BulaPayDB && typeof window.BulaPayDB.marcarLiquidacionesAtendidas === 'function') {
+          await window.BulaPayDB.marcarLiquidacionesAtendidas(unreadIds, targetUser);
+        }
+        unreadCards.forEach(c => { c.isAtendido = true; });
+      } catch (errAtend) {
+        console.warn("Aviso al atender liquidaciones vistas al cerrar modal:", errAtend);
       }
-      unreadCards.forEach(c => { c.isAtendido = true; });
     }
 
-    if (this.currentLiqAgentUsername) {
-      this.refreshLiquidatedModalAndBadges(this.currentLiqAgentUsername, this.currentLiqRouteId).catch(() => {});
+    if (targetUser) {
+      try {
+        await this.refreshLiquidatedModalAndBadges(targetUser, targetRoute);
+      } catch (_) {}
     }
   },
 
