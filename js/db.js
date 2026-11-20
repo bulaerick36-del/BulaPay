@@ -1405,10 +1405,14 @@ const db = {
           if (!idStr) continue;
           const updateObj = { supervisor_atendido: true, updated_at: new Date().toISOString() };
           // Actualizar en Supabase por id (sea texto o UUID) y por numero_carton si aplica
-          await supabase.from('cartones').update(updateObj).eq('id', idStr).catch(() => {});
-          if (!isNaN(Number(idStr))) {
-            await supabase.from('cartones').update(updateObj).eq('numero_carton', Number(idStr)).catch(() => {});
-          }
+          try {
+            const { error: errUpdId } = await supabase.from('cartones').update(updateObj).eq('id', idStr);
+            if (errUpdId) console.warn("Aviso update cartón atendido por id:", errUpdId.message);
+            if (!isNaN(Number(idStr))) {
+              const { error: errUpdNum } = await supabase.from('cartones').update(updateObj).eq('numero_carton', Number(idStr));
+              if (errUpdNum) console.warn("Aviso update cartón atendido por numero:", errUpdNum.message);
+            }
+          } catch (_) {}
 
           // Actualizar en localStorage para sincronización inmediata
           try {
@@ -7402,14 +7406,21 @@ return {
         cartonId: cartonId || null,
         type: isRenovacion ? 'Renovacion' : (isMora ? 'Mora' : (status?.includes('venc') ? 'Vencimiento' : 'Liquidacion_Exitosa'))
       }).catch(() => {});
-      if (cartonId) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', String(cartonId)).catch(() => {});
-      }
-      if (numeroCarton && !isNaN(Number(numeroCarton))) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton)).catch(() => {});
-      }
-      if (cedStr) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']).catch(() => {});
+      try {
+        if (cartonId) {
+          const { data: cDataId, error: errCId } = await supabase.from('cartones').update(cartonUpdatePayload).eq('id', String(cartonId));
+          if (errCId) console.warn("Aviso al actualizar cartón por id en liquidateCredit:", errCId.message);
+        }
+        if (numeroCarton && !isNaN(Number(numeroCarton))) {
+          const { data: cDataNum, error: errCNum } = await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', Number(numeroCarton));
+          if (errCNum) console.warn("Aviso al actualizar cartón por numero_carton en liquidateCredit:", errCNum.message);
+        }
+        if (cedStr) {
+          const { data: cDataCed, error: errCCed } = await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedStr).in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']);
+          if (errCCed) console.warn("Aviso al actualizar cartón por cliente_id en liquidateCredit:", errCCed.message);
+        }
+      } catch (errDbCarton) {
+        console.warn("Aviso en bloque update cartones en liquidateCredit:", errDbCarton);
       }
 
       // Sincronizar en localStorage 'bulapay_cartones'

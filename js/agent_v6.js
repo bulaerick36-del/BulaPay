@@ -2967,17 +2967,35 @@ const agentModule = {
       if (targetSupervisorId) cartonUpdatePayload.supervisor_id = targetSupervisorId;
       if (agentUsername) cartonUpdatePayload.agent_id = agentUsername;
 
-      if (rawTargetCartonId) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('id', String(rawTargetCartonId)).catch(() => {});
-        if (window.BulaPayDB && window.BulaPayDB.removeLiquidacionAtendidaSync) {
-          window.BulaPayDB.removeLiquidacionAtendidaSync(rawTargetCartonId);
+      // Actualizar 'cartones' con el saldo pendiente real, estado 'liquidado_perdida' y vínculos obligatorios
+      try {
+        if (rawTargetCartonId) {
+          const { data: cDataId, error: errId } = await supabase
+            .from('cartones')
+            .update(cartonUpdatePayload)
+            .eq('id', String(rawTargetCartonId));
+          if (errId) throw errId;
+
+          if (window.BulaPayDB && window.BulaPayDB.removeLiquidacionAtendidaSync) {
+            window.BulaPayDB.removeLiquidacionAtendidaSync(rawTargetCartonId);
+          }
         }
-      }
-      if (!isNaN(numCartonVal) && numCartonVal > 0) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('numero_carton', numCartonVal).catch(() => {});
-      }
-      if (cedulaStr) {
-        await supabase.from('cartones').update(cartonUpdatePayload).eq('cliente_id', cedulaStr).catch(() => {});
+        if (!isNaN(numCartonVal) && numCartonVal > 0) {
+          const { data: cDataNum, error: errNum } = await supabase
+            .from('cartones')
+            .update(cartonUpdatePayload)
+            .eq('numero_carton', numCartonVal);
+          if (errNum) throw errNum;
+        }
+        if (cedulaStr) {
+          const { data: cDataCed, error: errCed } = await supabase
+            .from('cartones')
+            .update(cartonUpdatePayload)
+            .eq('cliente_id', cedulaStr);
+          if (errCed) throw errCed;
+        }
+      } catch (errorCarton) {
+        console.warn("Aviso al actualizar cartón en Supabase para liquidación por mora:", errorCarton.message || errorCarton);
       }
 
       // Notificar al supervisor en tiempo real para generar campana de alerta
@@ -3010,7 +3028,15 @@ const agentModule = {
         if (targetSupervisorId) clientUpdatePayload.supervisor_id = targetSupervisorId;
         if (agentUsername) clientUpdatePayload.agent_id = agentUsername;
 
-        await supabase.from('clients').update(clientUpdatePayload).eq('cedula', cedulaStr).catch(() => {});
+        try {
+          const { data: clientRes, error: errClient } = await supabase
+            .from('clients')
+            .update(clientUpdatePayload)
+            .eq('cedula', cedulaStr);
+          if (errClient) throw errClient;
+        } catch (errorClient) {
+          console.warn("Aviso al actualizar cliente en Supabase para liquidación por mora:", errorClient.message || errorClient);
+        }
       }
 
       // Insertar en la tabla 'lista_negra' asegurando registrar los datos de la ruta y supervisor
