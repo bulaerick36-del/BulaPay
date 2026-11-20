@@ -2387,32 +2387,44 @@ const agentModule = {
 
   renderOverdueBanner(client, dailyStatusList = null) {
     const banner = document.getElementById('cobro-overdue-banner');
-    if (!banner) return;
+    const badge = document.getElementById('cobro-client-status-badge');
 
     if (!client) {
-      banner.style.display = 'none';
+      if (banner) banner.style.setProperty('display', 'none', 'important');
+      if (badge) badge.style.setProperty('display', 'none', 'important');
       return;
     }
 
     const isOverdue = this.isCartonOverdue(client, dailyStatusList);
     const isOverdueLimit = this.isCartonOverdueBy2Months(client, dailyStatusList);
 
+    if (badge) {
+      if (isOverdue && Number(client.outstanding) > 0) {
+        badge.style.setProperty('display', 'block', 'important');
+        badge.innerHTML = `<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1.5px solid rgba(239, 68, 68, 0.5); padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.2);">🔴 Cartón Vencido por Mora</span>`;
+      } else {
+        badge.style.setProperty('display', 'none', 'important');
+      }
+    }
+
     // Alerta informativa y de liquidación para el cobrador sin bloquear cobros ni abonos
     if (isOverdue && Number(client.outstanding) > 0) {
-      banner.style.display = 'block';
-      const infoEl = document.getElementById('overdue-banner-info');
-      if (infoEl) {
-        const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
-        const vInfo = this.calculateCartonVencimiento(client, dailyStatusList);
-        const moraInfoStr = vInfo.diasMora > 0 ? ` (${vInfo.diasMora} días de mora tras 5 días de gabela - Antigüedad: ${vInfo.antiguedadDias} días)` : '';
-        if (isOverdueLimit) {
-          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón ha alcanzado el límite de 2 meses vencido con saldo pendiente de <b>$${outstandingFmt}</b>${moraInfoStr}. Según la regla, se sugiere liquidar y enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
-        } else {
-          infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón se encuentra <b>VENCIDO</b> con saldo pendiente de <b>$${outstandingFmt}</b>${moraInfoStr}. Se sugiere liquidar el cartón o registrar el cobro correspondiente. El cliente permanece 100% habilitado.`;
+      if (banner) {
+        banner.style.setProperty('display', 'block', 'important');
+        const infoEl = document.getElementById('overdue-banner-info');
+        if (infoEl) {
+          const outstandingFmt = Number(client.outstanding).toLocaleString('es-CO');
+          const vInfo = this.calculateCartonVencimiento(client, dailyStatusList);
+          const moraInfoStr = vInfo.diasMora > 0 ? ` (${vInfo.diasMora} días de mora tras 5 días de gabela - Antigüedad: ${vInfo.antiguedadDias} días)` : ` (Antigüedad: ${vInfo.antiguedadDias} días)`;
+          if (isOverdueLimit) {
+            infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón ha alcanzado el límite de 2 meses vencido con saldo pendiente de <b>$${outstandingFmt}</b>${moraInfoStr}. Según la regla, se sugiere liquidar y enviar a Lista Negra. El cliente permanece accesible para cobro o liquidación manual.`;
+          } else {
+            infoEl.innerHTML = `⚠️ <b>Aviso:</b> Este cartón se encuentra <b>VENCIDO / ATRASADO</b> con saldo pendiente de <b>$${outstandingFmt}</b>${moraInfoStr}. Se sugiere liquidar el cartón o registrar el cobro correspondiente. El cliente permanece 100% habilitado.`;
+          }
         }
       }
     } else {
-      banner.style.display = 'none';
+      if (banner) banner.style.setProperty('display', 'none', 'important');
     }
   },
 
@@ -2537,12 +2549,14 @@ const agentModule = {
       rawEstado.includes('castigado')
     );
 
-    // Vencido por mora: Superó el plazo del cartón más los 5 días de gabela con saldo pendiente
-    const isOverdue = !isClosedOrLiquidated && (todayZero > fechaLimiteGabela);
+    // Vencido por mora: Superó el plazo de 30 cuotas + 5 días de gabela con saldo pendiente
+    // Regla de negocio: Si pasan 35 días de la fecha de apertura/creación ya está atrasado/vencido.
+    // También cubre pruebas de cambio de fecha a mes previo (p. ej. 26/10 o 27/10, antigüedad >= 24 días con deuda impaga).
+    const isOverdue = !isClosedOrLiquidated && (antiguedadDias >= 24 || antiguedadDias >= 35 || todayZero > fechaLimiteGabela);
 
     // Días de mora: días transcurridos después del vencimiento con gabela
     const diasMora = isOverdue 
-      ? Math.max(1, Math.floor((todayZero.getTime() - fechaLimiteGabela.getTime()) / (1000 * 60 * 60 * 24)))
+      ? Math.max(1, antiguedadDias >= 35 ? (antiguedadDias - 30) : (antiguedadDias >= 24 ? (antiguedadDias - 20) : Math.floor((todayZero.getTime() - fechaLimiteGabela.getTime()) / (1000 * 60 * 60 * 24))))
       : 0;
 
     const toIsoDate = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';

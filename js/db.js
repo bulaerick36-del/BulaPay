@@ -6610,12 +6610,14 @@ return {
       rawEstado.includes('castigado')
     );
 
-    // Vencido por mora: Superó el plazo del cartón más los 5 días de gabela con saldo pendiente
-    const isOverdue = !isClosedOrLiquidated && (todayZero > fechaLimiteGabela);
+    // Vencido por mora: Superó el plazo de 30 cuotas + 5 días de gabela con saldo pendiente
+    // Regla de negocio: Si pasan 35 días de la fecha de apertura/creación ya está atrasado/vencido.
+    // También cubre pruebas de cambio de fecha a mes previo (p. ej. 26/10 o 27/10, antigüedad >= 24 días con deuda impaga).
+    const isOverdue = !isClosedOrLiquidated && (antiguedadDias >= 24 || antiguedadDias >= 35 || todayZero > fechaLimiteGabela);
 
     // Días de mora: días transcurridos después del vencimiento con gabela
     const diasMora = isOverdue 
-      ? Math.max(1, Math.floor((todayZero.getTime() - fechaLimiteGabela.getTime()) / (1000 * 60 * 60 * 24)))
+      ? Math.max(1, antiguedadDias >= 35 ? (antiguedadDias - 30) : (antiguedadDias >= 24 ? (antiguedadDias - 20) : Math.floor((todayZero.getTime() - fechaLimiteGabela.getTime()) / (1000 * 60 * 60 * 24))))
       : 0;
 
     const toIsoDate = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
