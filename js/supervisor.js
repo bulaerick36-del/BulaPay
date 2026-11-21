@@ -1046,15 +1046,6 @@ const supervisorModule = {
       };
     }
 
-    // Botón directo para Archivo de Liquidación de este agente si existe
-    const btnArchivoLiqAg = document.getElementById('btn-agent-detail-archivo-liq');
-    if (btnArchivoLiqAg) {
-      btnArchivoLiqAg.onclick = (e) => {
-        e.stopPropagation();
-        this.openArchivoLiquidacionModal(agent.username, effectiveRouteId);
-      };
-    }
-
     // Calcular proporciones de la cartera (Riesgo)
     let totalRisk = clients.length || 1;
     let greenCount = clients.filter(c => c.risk === 'Verde').length;
