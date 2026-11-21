@@ -7345,12 +7345,13 @@ return {
     const supabase = await initSupabase();
     const currentUser = this.getCurrentUser();
     
-    const isRenovacion = (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
-    const isPaidRealCash = (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO' || status === 'liquidado' || status === 'LIQUIDADO');
-    const isPaid = isPaidRealCash || isRenovacion || (outstanding !== undefined && Number(outstanding) <= 0);
+    const isLossStatus = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado' || String(status || '').toLowerCase().includes('perdida') || String(status || '').toLowerCase().includes('mora'));
+    const isRenovacion = !isLossStatus && (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
+    const isPaidRealCash = !isLossStatus && (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO' || status === 'liquidado' || status === 'LIQUIDADO');
+    const isPaid = !isLossStatus && (isPaidRealCash || isRenovacion || (outstanding !== undefined && Number(outstanding) <= 0));
     
-    // REGLA ABSOLUTA: Si el saldo pendiente es <= 0 o es pago/liquidación exitosa, NUNCA es mora ni lista negra.
-    const isMora = !isPaid && (outstanding !== undefined && Number(outstanding) > 0) && (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado');
+    // REGLA ABSOLUTA: Si es liquidación por pérdida o mora, SIEMPRE es mora/lista negra y NUNCA se marca como pagado
+    const isMora = isLossStatus || (!isPaid && !isRenovacion);
     
     // 1. Obtener datos del cliente ANTES de resetear sus saldos numéricos
     let clientData = null;
@@ -7407,7 +7408,7 @@ return {
     }
 
     // Si el crédito fue liquidado/cancelado con PAGO REAL EN EFECTIVO o saldo final 0, asegurar que TODAS sus cuotas queden en 'Pagado' en la tabla payments.
-    if ((isPaidRealCash || isPaid) && !isRenovacion && clientData) {
+    if ((isPaidRealCash || isPaid) && !isRenovacion && !isMora && clientData) {
       try {
         const totalDebt = Math.round(Number(clientData?.totalDebt || clientData?.monto_total || 0));
         originalAmount = Math.round(Number(clientData?.amount || clientData?.capital_prestado || 0));

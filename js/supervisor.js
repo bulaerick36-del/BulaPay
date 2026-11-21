@@ -3060,18 +3060,39 @@ const supervisorModule = {
       `;
     } else if (isMora) {
       // Requisito 2: Detalle Exacto de Pérdida por Mora / Lista Negra al hacer clic en la campana
+      const cFechaInicio = c.fecha_apertura || c.fecha_inicio || c.created_at;
+      const cTime = cFechaInicio ? new Date(cFechaInicio).getTime() : 0;
+      const cNumeroStr = String(numeroCarton || '').trim();
+
       const clientPayments = (allPayments || []).filter(p => {
         if (!p) return false;
-        const pCartonId = String(p.carton_id || '').trim().toLowerCase();
-        const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
-        const belongsCarton = pCartonId && pCartonId === cIdLower;
-        const belongsClient = pCed && pCed === cedStr;
-        if (!belongsCarton && !belongsClient) return false;
         const pStatus = String(p.status || '').trim().toUpperCase();
         if (pStatus === 'NO PAGO' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return false;
         const pId = String(p.id || '');
         if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999) return false;
-        return Number(p.amount) > 0;
+        if (Number(p.amount) <= 0) return false;
+
+        const pCartonId = String(p.carton_id || p.cartonId || '').trim().toLowerCase();
+        const pNum = String(p.numero_carton || p.numeroCarton || '').trim();
+        const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+
+        // 1. Si el pago tiene carton_id, verificar coincidencia estricta con este cartón
+        if (pCartonId && cIdLower) {
+          return pCartonId === cIdLower;
+        }
+        // 2. Si el pago tiene numero_carton, verificar coincidencia con el cartón actual
+        if (pNum && cNumeroStr && cNumeroStr !== 'S/N') {
+          return pNum === cNumeroStr;
+        }
+        // 3. Si no tiene ID ni número de cartón, filtrar por cédula descartando pagos anteriores a la apertura de este cartón
+        if (pCed && pCed === cedStr) {
+          if (cTime > 0) {
+            const pTime = new Date(p.created_at || p.fecha_pago || p.date || 0).getTime();
+            if (pTime > 0 && pTime < (cTime - 3600000)) return false;
+          }
+          return true;
+        }
+        return false;
       });
 
       let totalAbonado = clientPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
@@ -3080,11 +3101,12 @@ const supervisorModule = {
       const totalDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (Number(c.montoPrestado || c.amount || 0) * 1.2)));
       const capitalPrestado = Math.round(Number(c.montoPrestado || c.amount || 0));
       const totalCuotasEsperadas = Number(c.installmentsCount || c.cuotas || c.total_cuotas || 0) || 30;
-      const valorCuota = Number(c.installmentAmount || c.cuota || 0) || (totalCuotasEsperadas > 0 ? Math.round(totalDeuda / totalCuotasEsperadas) : (cuotasAbonadasCount > 0 ? Math.round(totalAbonado / cuotasAbonadasCount) : 0));
+      const valorCuota = Number(c.installmentAmount || c.cuota || 0) || (totalCuotasEsperadas > 0 ? Math.round(totalDeuda / totalCuotasEsperadas) : 0);
 
+      // Si no se encontraron abonos en payments pero el cartón registra un saldo pendiente parcial real (0 < saldo < totalDeuda)
       if (totalAbonado <= 0 && c.saldoPendiente !== undefined && c.saldoPendiente !== null) {
         const outstanding = Math.round(Number(c.saldoPendiente || 0));
-        if (totalDeuda > outstanding && outstanding >= 0) {
+        if (outstanding > 0 && outstanding < totalDeuda) {
           totalAbonado = totalDeuda - outstanding;
           if (valorCuota > 0) {
             cuotasAbonadasCount = Math.round(totalAbonado / valorCuota);
@@ -3092,8 +3114,10 @@ const supervisorModule = {
         }
       }
 
-      const saldoRestante = (c.saldoPendiente !== undefined && c.saldoPendiente !== null) ? Math.round(Number(c.saldoPendiente)) : Math.max(0, totalDeuda - totalAbonado);
-      const cuotasColgadas = valorCuota > 0 ? Math.round(saldoRestante / valorCuota) : Math.max(0, totalCuotasEsperadas - cuotasAbonadasCount);
+      // En liquidación por pérdida/mora:
+      // Si no pagó cuotas (0 abonadas), el monto perdido es el 100% de la deuda y las 30 cuotas están en mora
+      const saldoRestante = Math.max(0, totalDeuda - totalAbonado);
+      const cuotasColgadas = Math.max(0, totalCuotasEsperadas - cuotasAbonadasCount);
       const perdidaCapital = Math.max(0, capitalPrestado - totalAbonado);
 
       financialDetailsHtml = `
@@ -3113,10 +3137,10 @@ const supervisorModule = {
               <strong style="color: #fbbf24; font-size: 0.9rem; display: block;">${fechaVencStr}</strong>
               <span style="color: #94a3b8; font-size: 0.72rem;">Fecha límite / plazo</span>
             </div>
-            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 0.5rem 0.65rem;">
+            <div style="background: ${cuotasAbonadasCount > 0 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.04)'}; border: 1px solid ${cuotasAbonadasCount > 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.1)'}; border-radius: 8px; padding: 0.5rem 0.65rem;">
               <span style="color: #94a3b8; display: block; font-size: 0.68rem; font-weight: 600;">💳 Cuotas Alcanzadas a Pagar</span>
-              <strong style="color: #34d399; font-size: 0.95rem; display: block; font-weight: 800;">${cuotasAbonadasCount} cuotas pagadas</strong>
-              <span style="color: #6ee7b7; font-size: 0.72rem;">$${totalAbonado.toLocaleString('es-CO')} abonados de $${totalDeuda.toLocaleString('es-CO')}</span>
+              <strong style="${cuotasAbonadasCount > 0 ? 'color: #34d399;' : 'color: #cbd5e1;'} font-size: 0.95rem; display: block; font-weight: 800;">${cuotasAbonadasCount} cuotas pagadas</strong>
+              <span style="${cuotasAbonadasCount > 0 ? 'color: #6ee7b7;' : 'color: #94a3b8;'} font-size: 0.72rem;">$${totalAbonado.toLocaleString('es-CO')} abonados de $${totalDeuda.toLocaleString('es-CO')}</span>
             </div>
             <div style="background: rgba(220, 38, 38, 0.15); border: 1.5px solid rgba(239, 68, 68, 0.5); border-radius: 8px; padding: 0.5rem 0.65rem;">
               <span style="color: #fca5a5; display: block; font-size: 0.68rem; font-weight: 700;">💸 Monto / Valor Perdido</span>
