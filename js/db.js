@@ -2258,13 +2258,14 @@ const db = {
         }
       }
       const cleanUser = agentUsername ? String(agentUsername).trim().toLowerCase() : '';
-      const agentUser = (allUsers || []).find(u => 
-        String(u.username || '').toLowerCase() === cleanUser ||
-        String(u.id || '').toLowerCase() === cleanUser
-      );
+      const agentUser = cleanUser ? (allUsers || []).find(u => 
+        (u.username && String(u.username).trim().toLowerCase() === cleanUser) ||
+        (u.id && String(u.id).trim().toLowerCase() === cleanUser) ||
+        (u.name && String(u.name).trim().toLowerCase() === cleanUser)
+      ) : null;
 
-      let targetRouteId = routeId || agentUser?.routeId || agentUser?.route_id || null;
-      if (!targetRouteId) {
+      let targetRouteId = (routeId && routeId !== 'undefined' && routeId !== 'null') ? String(routeId).trim() : (agentUser?.routeId || agentUser?.route_id || null);
+      if (!targetRouteId && cleanUser) {
         try {
           const routes = (self && typeof self.getRoutes === 'function') ? await self.getRoutes() : [];
           const matchingRoute = routes.find(r => 
@@ -2276,10 +2277,10 @@ const db = {
         } catch (_) {}
       }
 
-      const targetAgentId = agentUser?.id || agentUsername;
-      const targetAgentUsername = agentUser?.username || agentUsername;
-      const targetAgentUserLower = String(targetAgentUsername || '').trim().toLowerCase();
-      const targetAgentIdLower = String(targetAgentId || '').trim().toLowerCase();
+      const targetAgentId = agentUser?.id || (cleanUser ? agentUsername : null);
+      const targetAgentUsername = agentUser?.username || (cleanUser ? agentUsername : null);
+      const targetAgentUserLower = targetAgentUsername ? String(targetAgentUsername).trim().toLowerCase() : '';
+      const targetAgentIdLower = targetAgentId ? String(targetAgentId).trim().toLowerCase() : '';
       const targetAgentNameLower = agentUser?.name ? String(agentUser.name).trim().toLowerCase() : '';
       const targetRouteIdStr = targetRouteId ? String(targetRouteId).trim() : '';
 

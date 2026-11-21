@@ -2548,7 +2548,11 @@ const supervisorModule = {
 
     try {
       const allUsers = await this.getCachedUsers();
-      const agent = (allUsers || []).find(u => u.username === username || u.id === username);
+      const agent = username ? (allUsers || []).find(u => 
+        (u.username && String(u.username).trim().toLowerCase() === String(username).trim().toLowerCase()) ||
+        (u.id && String(u.id).trim().toLowerCase() === String(username).trim().toLowerCase()) ||
+        (u.name && String(u.name).trim().toLowerCase() === String(username).trim().toLowerCase())
+      ) : null;
       const agentName = agent ? agent.name : (username || 'Todas las Rutas');
       let effectiveRouteId = routeId || agent?.routeId || agent?.route_id || null;
       if (!effectiveRouteId && username) {
@@ -2711,7 +2715,10 @@ const supervisorModule = {
         <div style="text-align: center; color: var(--text-secondary); padding: 2.5rem 1rem; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color);">
           <div style="font-size: 2rem; margin-bottom: 0.5rem;">📁</div>
           <strong style="color: var(--text-primary); display: block; margin-bottom: 0.25rem;">Sin registros en el archivo</strong>
-          <span style="font-size: 0.8rem;">No se encontraron liquidaciones históricas con los filtros seleccionados (Fecha, Cédula o Cartón).</span>
+          <span style="font-size: 0.8rem; display: block; margin-bottom: 0.75rem;">No se encontraron liquidaciones históricas con los filtros seleccionados.</span>
+          <button type="button" onclick="supervisorModule.clearLiquidatedArchiveFilters()" style="background: rgba(59, 130, 246, 0.2); border: 1px solid #3b82f6; color: #60a5fa; border-radius: 6px; padding: 0.4rem 0.9rem; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+            🔄 Restablecer Filtros
+          </button>
         </div>
       `;
       return;
