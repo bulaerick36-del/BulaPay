@@ -650,17 +650,22 @@ const supervisorModule = {
     
     if (detailSection) detailSection.style.display = 'none';
 
-    // Limpiar filtro
+    // Limpiar filtro al abrir para cargar y mostrar todos los agentes activos
     routeFilterInput.value = '';
 
-    // Llenar datalist dinámicamente con los nombres de todas las rutas activas
+    // Llenar datalist dinámicamente con opción 'Todas las rutas' y los nombres de todas las rutas activas
     if (datalist) {
       datalist.innerHTML = '';
+      const optAll = document.createElement('option');
+      optAll.value = 'Todas las rutas';
+      datalist.appendChild(optAll);
       const routes = await window.BulaPayDB.getRoutes();
-      routes.forEach(r => {
-        const option = document.createElement('option');
-        option.value = r.name;
-        datalist.appendChild(option);
+      (routes || []).forEach(r => {
+        if (r && (r.name || r.nombre)) {
+          const option = document.createElement('option');
+          option.value = r.name || r.nombre;
+          datalist.appendChild(option);
+        }
       });
     }
 
@@ -673,14 +678,120 @@ const supervisorModule = {
     if (!routeFilterInput || !listContainer) return;
 
     const filterText = routeFilterInput.value.trim().toLowerCase();
-    const allUsers = await this.getCachedUsers();
-    let agents = allUsers.filter(u => u.role === 'Agente de Ruta');
-    const routes = await window.BulaPayDB.getRoutes();
+    const isFilterAll = !filterText || 
+                        filterText === 'todas' || 
+                        filterText === 'todos' || 
+                        filterText === 'todas las rutas' || 
+                        filterText === 'todas las rutas asignadas' || 
+                        filterText === 'all';
 
-    if (filterText !== '') {
+    const routes = (await window.BulaPayDB.getRoutes()) || [];
+    let allUsers = (await this.getCachedUsers()) || [];
+    if (!allUsers || allUsers.length === 0) {
+      try {
+        allUsers = (await window.BulaPayDB.getUsers()) || [];
+      } catch (_) {}
+    }
+
+    // Mapeo consolidado de agentes activos (idéntico a la tarjeta principal de KPIs)
+    const agentMap = new Map();
+
+    // 1. Agentes en users con rol de campo
+    (allUsers || []).forEach(u => {
+      if (!u) return;
+      const roleLower = String(u.role || u.rol || '').trim().toLowerCase();
+      const isAgentRole = roleLower === 'agente de ruta' || roleLower === 'agent' || roleLower === 'agente' || roleLower === 'cobrador';
+      if (!isAgentRole) return;
+
+      const rawStatus = String(u.estado || u.status || '').trim().toLowerCase();
+      if (rawStatus === 'inactivo' || rawStatus === 'suspendido' || rawStatus === 'eliminado') return;
+
+      const userKey = String(u.username || u.id || u.name).trim().toLowerCase();
+      agentMap.set(userKey, {
+        ...u,
+        username: u.username || u.id || u.name,
+        name: u.name || u.nombre || u.username,
+        role: 'Agente de Ruta',
+        routeId: u.routeId || u.route_id || u.ruta_id || null
+      });
+    });
+
+    // 2. Agentes asignados en las rutas
+    (routes || []).forEach(r => {
+      if (!r) return;
+      const rRouteId = r.id || r.routeId || r.route_id;
+      const rRouteName = r.name || r.nombre || 'Ruta sin nombre';
+      const uName = r.agentUsername ? String(r.agentUsername).trim() : null;
+      const aName = r.agentName ? String(r.agentName).trim() : null;
+      const aId = r.agent_id ? String(r.agent_id).trim() : null;
+
+      const key = (uName || aId || aName || '').toLowerCase();
+      if (!key) return;
+
+      if (agentMap.has(key)) {
+        const ag = agentMap.get(key);
+        ag.routeId = ag.routeId || rRouteId;
+        ag.routeName = rRouteName;
+      } else {
+        const matchedUser = (allUsers || []).find(u => 
+          (uName && String(u.username || '').toLowerCase() === uName.toLowerCase()) ||
+          (aName && String(u.name || '').toLowerCase() === aName.toLowerCase()) ||
+          (aId && String(u.id || '').toLowerCase() === aId.toLowerCase())
+        );
+
+        if (matchedUser) {
+          const mKey = String(matchedUser.username || matchedUser.id || matchedUser.name).toLowerCase();
+          const ag = {
+            ...matchedUser,
+            username: matchedUser.username || uName || matchedUser.id,
+            name: matchedUser.name || aName || matchedUser.username,
+            role: 'Agente de Ruta',
+            routeId: matchedUser.routeId || matchedUser.route_id || rRouteId,
+            routeName: rRouteName
+          };
+          agentMap.set(mKey, ag);
+        } else {
+          agentMap.set(key, {
+            username: uName || aId || aName,
+            name: aName || uName || 'Agente de Ruta',
+            role: 'Agente de Ruta',
+            routeId: rRouteId,
+            route_id: rRouteId,
+            routeName: rRouteName
+          });
+        }
+      }
+    });
+
+    let agents = Array.from(agentMap.values());
+
+    // Garantizar que cada agente tenga el nombre de su ruta resuelto
+    agents.forEach(agent => {
+      if (!agent.routeName) {
+        const r = routes.find(rt => 
+          (agent.routeId && String(rt.id).toLowerCase() === String(agent.routeId).toLowerCase()) ||
+          (agent.route_id && String(rt.id).toLowerCase() === String(agent.route_id).toLowerCase()) ||
+          (agent.username && rt.agentUsername && String(rt.agentUsername).toLowerCase() === String(agent.username).toLowerCase()) ||
+          (agent.name && rt.agentName && String(rt.agentName).toLowerCase() === String(agent.name).toLowerCase())
+        );
+        if (r) {
+          agent.routeId = agent.routeId || r.id;
+          agent.routeName = r.name || r.nombre || 'Ruta sin nombre';
+        } else {
+          agent.routeName = 'Sin ruta asignada';
+        }
+      }
+    });
+
+    // Filtrar si el usuario ingresó un criterio de búsqueda de ruta o agente
+    if (!isFilterAll) {
       agents = agents.filter(a => {
-        const r = routes.find(rt => rt.id === a.routeId);
-        return r && r.name.toLowerCase().includes(filterText);
+        const rName = String(a.routeName || '').toLowerCase();
+        const rId = String(a.routeId || a.route_id || '').toLowerCase();
+        const aName = String(a.name || '').toLowerCase();
+        const aUser = String(a.username || '').toLowerCase();
+
+        return rName.includes(filterText) || rId.includes(filterText) || aName.includes(filterText) || aUser.includes(filterText);
       });
     }
 
@@ -695,7 +806,7 @@ const supervisorModule = {
         (agent.routeId && rt.id === agent.routeId) || 
         (agent.username && rt.agentUsername && String(rt.agentUsername).toLowerCase() === String(agent.username).toLowerCase()) ||
         (agent.name && rt.agentName && String(rt.agentName).toLowerCase() === String(agent.name).toLowerCase())
-      ) || { name: 'Sin ruta asignada' };
+      ) || { name: agent.routeName || 'Sin ruta asignada' };
       const effectiveRouteId = agent.routeId || r.id || null;
       let unreadCount = 0;
       try {
@@ -734,7 +845,7 @@ const supervisorModule = {
             '<strong style="color: var(--text-primary); font-size: 0.9rem;">' + agent.name + '</strong>' +
             bellBadgeHtml +
           '</div>' +
-          '<div style="font-size: 0.75rem; color: var(--text-secondary);">Ruta: ' + r.name + '</div>' +
+          '<div style="font-size: 0.75rem; color: var(--text-secondary);">Ruta: ' + (agent.routeName || r.name) + '</div>' +
         '</div>' +
       '</div>' +
       '<span style="font-size: 0.75rem; color: var(--accent); font-weight: bold;">Ver detalles ➔</span>';
@@ -2175,14 +2286,14 @@ const supervisorModule = {
   async updateBlacklistKpi(routeId = null) {
     try {
       const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
-      const targetRoute = (routeId && routeId !== 'ALL') ? routeId : (this.activeBlacklistRouteFilter || null);
+      const targetRoute = (routeId && routeId !== 'ALL' && routeId !== 'Todas') ? routeId : null;
       const morosos = await window.BulaPayDB.getBlacklistedClients(targetRoute);
       if (kpiBlacklistEl) {
         kpiBlacklistEl.textContent = (morosos || []).length;
       }
       const modal = document.getElementById('modal-kpi-blacklist');
       if (modal && modal.classList.contains('active')) {
-        await this.populateKpiBlacklistModal(targetRoute);
+        await this.populateKpiBlacklistModal(this.activeBlacklistRouteFilter || null);
       }
     } catch (e) {
       console.warn("Aviso al actualizar KPI de Lista Negra:", e);
@@ -2194,13 +2305,13 @@ const supervisorModule = {
     if (!container) return;
 
     container.innerHTML = '';
-    const targetRoute = (routeId && routeId !== 'ALL') ? routeId : (this.activeBlacklistRouteFilter || null);
+    const targetRoute = (routeId && routeId !== 'ALL' && routeId !== 'Todas') ? routeId : (this.activeBlacklistRouteFilter || null);
     const morosos = await window.BulaPayDB.getBlacklistedClients(targetRoute);
     const routes = await window.BulaPayDB.getRoutes();
 
     const kpiBlacklistEl = document.getElementById('kpi-blacklist-count');
     if (kpiBlacklistEl && !targetRoute) {
-      kpiBlacklistEl.textContent = morosos.length;
+      kpiBlacklistEl.textContent = (morosos || []).length;
     }
 
     // Configurar y poblar el selector de ruta dentro del modal de Lista Negra
@@ -2216,7 +2327,7 @@ const supervisorModule = {
           routeSelect.appendChild(opt);
         });
         routeSelect.onchange = async () => {
-          this.activeBlacklistRouteFilter = (routeSelect.value === 'ALL') ? null : routeSelect.value;
+          this.activeBlacklistRouteFilter = (routeSelect.value === 'ALL' || routeSelect.value === 'Todas') ? null : routeSelect.value;
           await this.populateKpiBlacklistModal(this.activeBlacklistRouteFilter);
         };
       }
