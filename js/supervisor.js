@@ -2312,8 +2312,8 @@ const supervisorModule = {
   currentHistoricalCards: [],
 
   openArchivoLiquidacionModal(username = null, routeId = null) {
-    const targetUser = username || this.selectedAuditAgentUsername || this.currentLiqAgentUsername || null;
-    const targetRoute = routeId || this.currentLiqRouteId || null;
+    const targetUser = (username && username !== 'undefined' && username !== 'null') ? username : null;
+    const targetRoute = (routeId && routeId !== 'undefined' && routeId !== 'null') ? routeId : null;
     this.openLiquidatedCardsModal(targetUser, targetRoute, 'archive');
   },
 
@@ -2330,11 +2330,11 @@ const supervisorModule = {
 
     // Normalizar targetUsername y targetRouteId (evitar string "undefined" o "null")
     let targetUsername = (username && username !== 'undefined' && username !== 'null') ? username : null;
-    if (!targetUsername) {
+    if (!targetUsername && initialTab !== 'archive') {
       targetUsername = this.selectedAuditAgentUsername || this.currentLiqAgentUsername || null;
     }
     let targetRouteId = (routeId && routeId !== 'undefined' && routeId !== 'null') ? routeId : null;
-    if (!targetRouteId) {
+    if (!targetRouteId && initialTab !== 'archive') {
       targetRouteId = this.currentLiqRouteId || null;
     }
 
@@ -2564,7 +2564,11 @@ const supervisorModule = {
       }
 
       if (subtitle) {
-        subtitle.textContent = username ? `Archivo Histórico de Liquidaciones: ${agentName}` : 'Archivo Histórico de Liquidaciones (Todas las Rutas)';
+        if (username) {
+          subtitle.innerHTML = `Archivo Histórico de Liquidaciones: <strong>${agentName}</strong> &nbsp;•&nbsp; <a href="javascript:void(0)" onclick="supervisorModule.currentLiqAgentUsername=null; supervisorModule.currentLiqRouteId=null; supervisorModule.loadLiquidatedArchiveView();" style="color: #60a5fa; text-decoration: underline; font-weight: 600; cursor: pointer;">🌐 Ver todas las rutas y agentes</a>`;
+        } else {
+          subtitle.textContent = 'Archivo Histórico de Liquidaciones (Todas las Rutas y Agentes)';
+        }
       }
 
       const historicalCards = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(username, effectiveRouteId);
@@ -2609,22 +2613,40 @@ const supervisorModule = {
     // 2. Filtro estricto por Cédula del Cliente
     if (cedulaVal) {
       const cleanInputDigits = cedulaVal.replace(/\D/g, '');
-      filtered = filtered.filter(c => {
-        const ced = String(c.cedula || c.cliente_id || '').toLowerCase();
-        const cleanCedDigits = ced.replace(/\D/g, '');
-        const name = String(c.clientName || '').toLowerCase();
-        return ced.includes(cedulaVal) || 
+      let matches = filtered.filter(c => {
+        const cCed = String(c.cedula || c.cliente_id || c.client_id || '').toLowerCase().trim();
+        const cleanCedDigits = cCed.replace(/\D/g, '');
+        const name = String(c.clientName || c.nombre || c.name || '').toLowerCase();
+        return cCed.includes(cedulaVal) || 
                name.includes(cedulaVal) ||
-               (cleanInputDigits.length >= 3 && cleanCedDigits.includes(cleanInputDigits));
+               (cleanInputDigits && cleanCedDigits.includes(cleanInputDigits));
       });
+
+      // Si no se encontró en la lista filtrada por el agente actual, buscar en todo el historial global
+      if (matches.length === 0 && (window.BulaPayDB && typeof window.BulaPayDB.getAgentLiquidatedCartonesHistorical === 'function')) {
+        try {
+          const globalCards = await window.BulaPayDB.getAgentLiquidatedCartonesHistorical(null, null);
+          matches = (globalCards || []).filter(c => {
+            const cCed = String(c.cedula || c.cliente_id || c.client_id || '').toLowerCase().trim();
+            const cleanCedDigits = cCed.replace(/\D/g, '');
+            const name = String(c.clientName || c.nombre || c.name || '').toLowerCase();
+            return cCed.includes(cedulaVal) || 
+                   name.includes(cedulaVal) ||
+                   (cleanInputDigits && cleanCedDigits.includes(cleanInputDigits));
+          });
+        } catch (_) {}
+      }
+      filtered = matches;
     }
 
     // 3. Filtro estricto por Número de Cartón o ID de Cartón
     if (cartonVal) {
+      const cleanCartonDigits = cartonVal.replace(/\D/g, '');
       filtered = filtered.filter(c => {
         const num = String(c.numeroCarton || c.numero_carton || '').toLowerCase();
         const id = String(c.id || '').toLowerCase();
-        return num.includes(cartonVal) || id.includes(cartonVal);
+        const cleanNumDigits = num.replace(/\D/g, '');
+        return num.includes(cartonVal) || id.includes(cartonVal) || (cleanCartonDigits && cleanNumDigits.includes(cleanCartonDigits));
       });
     }
 
@@ -2726,6 +2748,13 @@ const supervisorModule = {
     if (sortSelect) sortSelect.value = 'date-desc';
 
     this.applyLiquidatedArchiveFilters();
+  },
+
+  scrollLiquidatedCards(delta) {
+    const container = document.getElementById('liquidated-cards-container');
+    if (container) {
+      container.scrollBy({ top: delta, behavior: 'smooth' });
+    }
   },
 
   async archivarLiquidacionIndividual(cartonId, username = null) {

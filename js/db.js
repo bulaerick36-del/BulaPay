@@ -2278,24 +2278,19 @@ const db = {
 
       const targetAgentId = agentUser?.id || agentUsername;
       const targetAgentUsername = agentUser?.username || agentUsername;
+      const targetAgentUserLower = String(targetAgentUsername || '').trim().toLowerCase();
+      const targetAgentIdLower = String(targetAgentId || '').trim().toLowerCase();
+      const targetAgentNameLower = agentUser?.name ? String(agentUser.name).trim().toLowerCase() : '';
       const targetRouteIdStr = targetRouteId ? String(targetRouteId).trim() : '';
 
-      // 1. Consultar cartones
+      // 1. Consultar TODOS los cartones (Supabase + localStorage fusionados para máxima disponibilidad en todo momento)
       let cartones = [];
       try {
-        let q = supabase.from('cartones').select('*');
-        if (targetRouteIdStr && targetAgentUsername) {
-          q = q.or('route_id.eq.' + targetRouteIdStr + ',agent_id.eq.' + targetAgentUsername + ',agent_id.eq.' + targetAgentId);
-        } else if (targetRouteIdStr) {
-          q = q.eq('route_id', targetRouteIdStr);
-        } else if (targetAgentUsername) {
-          q = q.or('agent_id.eq.' + targetAgentUsername + ',agent_id.eq.' + targetAgentId);
-        }
-        const { data, error } = await q;
-        if (!error && data) cartones = data;
-        else {
-          const { data: allData } = await supabase.from('cartones').select('*');
-          if (allData) cartones = allData;
+        const { data: allData, error } = await supabase.from('cartones').select('*');
+        if (!error && Array.isArray(allData) && allData.length > 0) {
+          cartones = allData;
+        } else {
+          cartones = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
         }
       } catch (eQ) {
         try {
@@ -2303,7 +2298,22 @@ const db = {
         } catch (_) {}
       }
 
-      // 2. Clientes para nombres
+      // Fusionar cualquier cartón registrado en caché local para que jamás queden ocultos
+      try {
+        const localList = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
+        if (Array.isArray(localList) && localList.length > 0) {
+          const mapId = new Set(cartones.map(ct => String(ct.id || ct.numero_carton || '').toLowerCase()));
+          localList.forEach(loc => {
+            const locKey = String(loc.id || loc.numero_carton || '').toLowerCase();
+            if (locKey && !mapId.has(locKey)) {
+              cartones.push(loc);
+              mapId.add(locKey);
+            }
+          });
+        }
+      } catch (_) {}
+
+      // 2. Clientes para nombres y asociación de agente/ruta
       let clients = [];
       try {
         const { data: cData } = await supabase.from('clients').select('*');
@@ -2328,6 +2338,31 @@ const db = {
         // Excluir activos
         if (!rawEstado || rawEstado === 'activo' || rawEstado === 'activo_por_renovacion' || rawEstado.startsWith('activo')) {
           return;
+        }
+
+        // Filtro estricto de pertenencia al agente o ruta (incluyendo coincidencia por cliente)
+        if (targetAgentUserLower || targetRouteIdStr) {
+          const cRoute = String(c.route_id || c.ruta_id || c.routeId || '').trim();
+          const cAgent = String(c.agent_id || c.agent_username || c.agentId || '').trim().toLowerCase();
+          const cCed = String(c.cliente_id || c.client_id || c.cedula || '').trim();
+          const clientObj = clientMap.get(cCed);
+          const clRoute = String(clientObj?.routeId || clientObj?.route_id || '').trim();
+          const clAgent = String(clientObj?.agent_id || clientObj?.agentUsername || clientObj?.agentId || '').trim().toLowerCase();
+
+          const matchesAgent = targetAgentUserLower && (
+            cAgent === targetAgentUserLower ||
+            (targetAgentIdLower && cAgent === targetAgentIdLower) ||
+            (targetAgentNameLower && cAgent === targetAgentNameLower) ||
+            clAgent === targetAgentUserLower ||
+            (targetAgentIdLower && clAgent === targetAgentIdLower)
+          );
+          const matchesRoute = targetRouteIdStr && (
+            cRoute === targetRouteIdStr || clRoute === targetRouteIdStr
+          );
+
+          if (!matchesAgent && !matchesRoute) {
+            return;
+          }
         }
 
         const isMora = rawEstado === 'liquidado_perdida' ||
