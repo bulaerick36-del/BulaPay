@@ -2608,10 +2608,14 @@ const supervisorModule = {
 
     // 2. Filtro estricto por Cédula del Cliente
     if (cedulaVal) {
+      const cleanInputDigits = cedulaVal.replace(/\D/g, '');
       filtered = filtered.filter(c => {
         const ced = String(c.cedula || c.cliente_id || '').toLowerCase();
+        const cleanCedDigits = ced.replace(/\D/g, '');
         const name = String(c.clientName || '').toLowerCase();
-        return ced.includes(cedulaVal) || name.includes(cedulaVal);
+        return ced.includes(cedulaVal) || 
+               name.includes(cedulaVal) ||
+               (cleanInputDigits.length >= 3 && cleanCedDigits.includes(cleanInputDigits));
       });
     }
 

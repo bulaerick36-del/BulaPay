@@ -2667,9 +2667,9 @@
 
   <!-- MODAL: CARTONES LIQUIDADOS HOY (LiquidatedCardsModal) -->
   <div class="supervisor-modal-overlay" id="modal-liquidated-cards" style="z-index: 99999 !important;">
-    <div class="supervisor-modal-card" style="max-width: 740px; width: 100%; max-height: 90vh; display: flex; flex-direction: column;">
+    <div class="supervisor-modal-card" style="max-width: 980px; width: 95vw; height: 92vh; max-height: 92vh; display: flex; flex-direction: column; padding: 1.25rem 1.6rem; box-sizing: border-box; overflow: hidden;">
       <button class="supervisor-modal-close" onclick="supervisorModule.closeLiquidatedCardsModal()">&times;</button>
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.2rem; flex-shrink: 0;">
         <h3 class="title-gradient" style="margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem;">
           <span>🔔</span> Alertas y Liquidaciones del Agente
         </h3>
@@ -2677,12 +2677,12 @@
           📁 Cerrar y archivar todo
         </button>
       </div>
-      <p id="liquidated-cards-modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.85rem;">
+      <p id="liquidated-cards-modal-subtitle" style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.6rem; flex-shrink: 0;">
         Auditoría de cartones liquidados por el agente durante el día actual.
       </p>
 
       <!-- Barra de Navegación: Alertas Activas vs Archivo Histórico -->
-      <div style="display: flex; gap: 0.5rem; margin-bottom: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.65rem;">
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 0.65rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; flex-shrink: 0;">
         <button id="tab-btn-active-liq" type="button" onclick="supervisorModule.switchLiquidatedTab('active')" style="padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; border: none; background: var(--accent); color: #ffffff; display: flex; align-items: center; gap: 0.4rem;">
           <span>🔔 Alertas de Hoy</span>
           <span id="tab-unread-badge" style="background: #ef4444; color: #fff; border-radius: 9999px; padding: 1px 6px; font-size: 0.7rem; font-weight: 800; display: inline-flex;">0</span>
@@ -2693,25 +2693,35 @@
       </div>
 
       <!-- Barra de Filtros Avanzados para el Archivo Histórico (inicialmente oculta) -->
-      <div id="liquidated-archive-filters-bar" style="display: none; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 0.75rem 0.85rem; margin-bottom: 0.85rem; flex-direction: column; gap: 0.55rem;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+      <div id="liquidated-archive-filters-bar" style="display: none; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 0.65rem 0.85rem; margin-bottom: 0.65rem; flex-direction: column; gap: 0.5rem; flex-shrink: 0;">
+        <div style="display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 0.5rem;">
           <div>
             <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">📅 Fecha de Liquidación:</label>
-            <input type="date" id="liq-filter-date" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+            <input type="date" id="liq-filter-date" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none; height: 34px;">
           </div>
           <div>
             <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">🆔 Cédula del Cliente:</label>
-            <input type="text" id="liq-filter-cedula" oninput="supervisorModule.applyLiquidatedArchiveFilters()" placeholder="Buscar por cédula..." style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <input type="text" id="liq-filter-cedula" oninput="supervisorModule.applyLiquidatedArchiveFilters()" onkeyup="if(event.key==='Enter') supervisorModule.applyLiquidatedArchiveFilters()" placeholder="Buscar por cédula..." style="flex: 1; min-width: 0; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.82rem; outline: none; height: 34px;">
+              <button type="button" onclick="supervisorModule.applyLiquidatedArchiveFilters()" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: none; color: #ffffff; border-radius: 6px; padding: 0 0.85rem; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; height: 34px; box-shadow: 0 2px 6px rgba(37,99,235,0.35); transition: all 0.2s; white-space: nowrap;" title="Buscar por cédula">
+                🔍 Buscar
+              </button>
+            </div>
           </div>
           <div>
             <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">📋 Nº de Cartón:</label>
-            <input type="text" id="liq-filter-carton" oninput="supervisorModule.applyLiquidatedArchiveFilters()" placeholder="Buscar Nº cartón..." style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <input type="text" id="liq-filter-carton" oninput="supervisorModule.applyLiquidatedArchiveFilters()" onkeyup="if(event.key==='Enter') supervisorModule.applyLiquidatedArchiveFilters()" placeholder="Buscar Nº cartón..." style="flex: 1; min-width: 0; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.82rem; outline: none; height: 34px;">
+              <button type="button" onclick="supervisorModule.applyLiquidatedArchiveFilters()" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; border-radius: 6px; padding: 0 0.65rem; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; height: 34px;" title="Buscar por número de cartón">
+                🔍
+              </button>
+            </div>
           </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: flex-end;">
           <div>
             <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">Tipo de Liquidación:</label>
-            <select id="liq-filter-type" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+            <select id="liq-filter-type" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none; height: 34px;">
               <option value="all">Todos los tipos de liquidación</option>
               <option value="blue">🔵 Liquidado por Renovación (Retanqueo)</option>
               <option value="red">🔴 Liquidado por Mora / Lista Negra</option>
@@ -2720,7 +2730,7 @@
           </div>
           <div>
             <label style="display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.2rem;">Ordenar por:</label>
-            <select id="liq-filter-sort" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none;">
+            <select id="liq-filter-sort" onchange="supervisorModule.applyLiquidatedArchiveFilters()" style="width: 100%; box-sizing: border-box; padding: 0.4rem 0.65rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none; height: 34px;">
               <option value="date-desc">Fecha: Más recientes primero</option>
               <option value="date-asc">Fecha: Más antiguos primero</option>
               <option value="cedula-asc">Cédula: Ascendente (A-Z)</option>
@@ -2730,25 +2740,25 @@
             </select>
           </div>
           <div>
-            <button id="btn-liq-clear-filters" type="button" onclick="supervisorModule.clearLiquidatedArchiveFilters()" style="padding: 0.4rem 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; font-size: 0.78rem; cursor: pointer; white-space: nowrap; height: 32px;">
-              Limpiar Filtros
+            <button id="btn-liq-clear-filters" type="button" onclick="supervisorModule.clearLiquidatedArchiveFilters()" style="padding: 0.4rem 0.85rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; white-space: nowrap; height: 34px; display: inline-flex; align-items: center; gap: 0.3rem;">
+              🔄 Limpiar Filtros
             </button>
           </div>
         </div>
       </div>
 
       <!-- Resumen de Totales por Categoría -->
-      <div id="liquidated-cards-summary-pills" style="display: flex; gap: 0.5rem; margin-bottom: 0.85rem; flex-wrap: wrap;">
+      <div id="liquidated-cards-summary-pills" style="display: flex; gap: 0.5rem; margin-bottom: 0.65rem; flex-wrap: wrap; flex-shrink: 0;">
         <!-- Inyectado dinámicamente con píldoras de colores -->
       </div>
 
       <!-- Contenedor del listado con código de colores -->
-      <div id="liquidated-cards-container" style="max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.15rem; padding: 0.5rem; box-sizing: border-box; width: 100%;">
+      <div id="liquidated-cards-container" style="flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding: 0.35rem 0.5rem 0.5rem 0.2rem; box-sizing: border-box; width: 100%;">
         <!-- Se inyecta dinámicamente -->
       </div>
 
       <!-- Footer de Acciones: Confirmar, Archivar y Enviar al Historial -->
-      <div id="liquidated-cards-modal-footer" style="margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+      <div id="liquidated-cards-modal-footer" style="flex-shrink: 0; margin-top: auto; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
         <button type="button" onclick="supervisorModule.closeLiquidatedCardsModal()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; border-radius: 8px; padding: 0.55rem 1.1rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: background 0.2s;">
           Cerrar sin archivar
         </button>
