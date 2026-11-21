@@ -7720,8 +7720,21 @@ return {
     try {
       const supabase = await initSupabase();
       const currentUser = this.getCurrentUser();
-      const isSupervisor = currentUser && (currentUser.role === 'Supervisor' || currentUser.role === 'supervisor' || currentUser.role === 'Usuario Supervisor' || currentUser.role === 'Administrador' || currentUser.role === 'Administrador de Rutas');
-      const isMasterUser = currentUser && (currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin');
+      const isMasterUser = currentUser && (
+        currentUser.username === 'admin' || 
+        String(currentUser.username || '').toLowerCase() === 'administrador' ||
+        currentUser.role === 'Superadministrador' || 
+        currentUser.role === 'Superadmin' ||
+        currentUser.role === 'Administrador' ||
+        currentUser.name === 'Administrador'
+      );
+      const isSupervisor = currentUser && (
+        currentUser.role === 'Supervisor' || 
+        currentUser.role === 'supervisor' || 
+        currentUser.role === 'Usuario Supervisor' || 
+        currentUser.role === 'Administrador' || 
+        currentUser.role === 'Administrador de Rutas'
+      );
       const isIndependent = currentUser && currentUser.role === 'Agente Independiente';
       const isAgent = currentUser && (currentUser.role === 'Agente de Ruta' || currentUser.role === 'agent' || currentUser.role === 'Cobrador');
 
@@ -7735,54 +7748,26 @@ return {
       const supUser = String(currentUser?.username || '').trim().toLowerCase();
       const supId = String(currentUser?.id || '').trim().toLowerCase();
 
-      if (isSupervisor && !isMasterUser) {
-        if (supUser) allowedSupervisorIds.add(supUser);
-        if (supId) allowedSupervisorIds.add(supId);
+      if (supUser) allowedSupervisorIds.add(supUser);
+      if (supId) allowedSupervisorIds.add(supId);
 
-        const routes = await this.getRoutes();
-        (routes || []).forEach(r => {
-          if (!r || !r.id) return;
-          const rId = String(r.id).trim().toLowerCase();
-          allowedRouteIds.add(rId);
-          if (r.route_id) allowedRouteIds.add(String(r.route_id).trim().toLowerCase());
-          if (r.routeId) allowedRouteIds.add(String(r.routeId).trim().toLowerCase());
-          if (r.agentUsername) allowedAgentUsernames.add(String(r.agentUsername).trim().toLowerCase());
-          if (r.agent_id) allowedAgentUsernames.add(String(r.agent_id).trim().toLowerCase());
-          if (r.agentName) {
-            String(r.agentName).split(',').forEach(n => {
-              if (n.trim()) allowedAgentUsernames.add(n.trim().toLowerCase());
-            });
-          }
-          if (r.supervisor_id) allowedSupervisorIds.add(String(r.supervisor_id).trim().toLowerCase());
-          if (r.supervisor) allowedSupervisorIds.add(String(r.supervisor).trim().toLowerCase());
-        });
-      } else if (isIndependent && !isMasterUser) {
-        if (supUser) {
-          allowedSupervisorIds.add(supUser);
-          allowedAgentUsernames.add(supUser);
+      const routes = await this.getRoutes();
+      (routes || []).forEach(r => {
+        if (!r || !r.id) return;
+        const rId = String(r.id).trim().toLowerCase();
+        allowedRouteIds.add(rId);
+        if (r.route_id) allowedRouteIds.add(String(r.route_id).trim().toLowerCase());
+        if (r.routeId) allowedRouteIds.add(String(r.routeId).trim().toLowerCase());
+        if (r.agentUsername) allowedAgentUsernames.add(String(r.agentUsername).trim().toLowerCase());
+        if (r.agent_id) allowedAgentUsernames.add(String(r.agent_id).trim().toLowerCase());
+        if (r.agentName) {
+          String(r.agentName).split(',').forEach(n => {
+            if (n.trim()) allowedAgentUsernames.add(n.trim().toLowerCase());
+          });
         }
-        if (supId) {
-          allowedSupervisorIds.add(supId);
-          allowedAgentUsernames.add(supId);
-        }
-        const routes = await this.getRoutes();
-        (routes || []).forEach(r => {
-          if (!r || !r.id) return;
-          const rSup = String(r.supervisor_id || r.supervisor || '').trim().toLowerCase();
-          const rAgent = String(r.agentUsername || r.agent_id || '').trim().toLowerCase();
-          if ((rSup && (rSup === supUser || rSup === supId)) || (rAgent && (rAgent === supUser || rAgent === supId))) {
-            allowedRouteIds.add(String(r.id).trim().toLowerCase());
-          }
-        });
-        const myRouteId = currentUser.routeId || currentUser.route_id;
-        if (myRouteId) allowedRouteIds.add(String(myRouteId).trim().toLowerCase());
-      } else if (isAgent && !isMasterUser) {
-        const myRouteId = currentUser.routeId || currentUser.route_id;
-        if (myRouteId) allowedRouteIds.add(String(myRouteId).trim().toLowerCase());
-        if (currentUser.username) allowedAgentUsernames.add(String(currentUser.username).trim().toLowerCase());
-        const agentSup = String(currentUser.supervisor_id || currentUser.supervisor || '').trim().toLowerCase();
-        if (agentSup) allowedSupervisorIds.add(agentSup);
-      }
+        if (r.supervisor_id) allowedSupervisorIds.add(String(r.supervisor_id).trim().toLowerCase());
+        if (r.supervisor) allowedSupervisorIds.add(String(r.supervisor).trim().toLowerCase());
+      });
 
       if (targetRouteId) {
         const cleanTargetRoute = targetRouteId.toLowerCase();
@@ -7793,65 +7778,70 @@ return {
         allowedRouteIds.add(cleanTargetRoute);
       }
 
-      // 2. Consultar clientes en la tabla 'clients'
-      // NOTA CRÍTICA: La tabla 'clients' utiliza la columna 'routeId' (no 'route_id') y 'supervisor_id'.
-      let clientsData = [];
+      // 2. Cargar TODOS los cartones fusionando Supabase y localStorage (idéntico a Archivo Histórico)
+      let cartones = [];
       try {
-        let qClients = supabase.from('clients').select('*');
-        if (targetRouteId) {
-          qClients = qClients.eq('routeId', targetRouteId);
-        } else if (!isMasterUser) {
-          const routeArray = Array.from(allowedRouteIds);
-          const supArray = Array.from(allowedSupervisorIds);
-          if (routeArray.length > 0 && supArray.length > 0) {
-            qClients = qClients.or(`supervisor_id.in.(${supArray.join(',')}),routeId.in.(${routeArray.join(',')})`);
-          } else if (routeArray.length > 0) {
-            qClients = qClients.in('routeId', routeArray);
-          } else if (supArray.length > 0) {
-            qClients = qClients.in('supervisor_id', supArray);
-          }
-        }
-        const { data: cRes, error: cErr } = await qClients;
-        if (!cErr && cRes) {
-          clientsData = cRes;
+        const { data: allCartonesData, error: cErr } = await supabase.from('cartones').select('*');
+        if (!cErr && Array.isArray(allCartonesData) && allCartonesData.length > 0) {
+          cartones = allCartonesData;
         } else {
-          const { data: allC } = await supabase.from('clients').select('*');
-          if (allC) clientsData = allC;
+          cartones = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
         }
-      } catch (eC) {
-        console.warn("Aviso consultando clients para lista negra:", eC);
+      } catch (_) {
+        try {
+          cartones = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
+        } catch (_) {}
       }
 
-      // 3. Consultar cartones liquidados por mora/pérdida
-      // NOTA CRÍTICA: En 'cartones', la columna de ruta es 'route_id'.
-      let cartonesData = [];
       try {
-        let qCartones = supabase.from('cartones').select('*');
-        if (targetRouteId) {
-          qCartones = qCartones.eq('route_id', targetRouteId);
-        } else if (!isMasterUser) {
-          const routeArray = Array.from(allowedRouteIds);
-          const supArray = Array.from(allowedSupervisorIds);
-          if (routeArray.length > 0 && supArray.length > 0) {
-            qCartones = qCartones.or(`supervisor_id.in.(${supArray.join(',')}),route_id.in.(${routeArray.join(',')})`);
-          } else if (routeArray.length > 0) {
-            qCartones = qCartones.in('route_id', routeArray);
-          } else if (supArray.length > 0) {
-            qCartones = qCartones.in('supervisor_id', supArray);
-          }
+        const localList = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
+        if (Array.isArray(localList) && localList.length > 0) {
+          const mapId = new Set(cartones.map(ct => String(ct.id || ct.numero_carton || '').toLowerCase()));
+          localList.forEach(loc => {
+            const locKey = String(loc.id || loc.numero_carton || '').toLowerCase();
+            if (locKey && !mapId.has(locKey)) {
+              cartones.push(loc);
+              mapId.add(locKey);
+            }
+          });
         }
-        const { data: cartRes, error: cartErr } = await qCartones;
-        if (!cartErr && cartRes) {
-          cartonesData = cartRes;
+      } catch (_) {}
+
+      // 3. Cargar clientes fusionando Supabase y localStorage
+      let clients = [];
+      try {
+        const { data: allClientsData, error: clErr } = await supabase.from('clients').select('*');
+        if (!clErr && Array.isArray(allClientsData) && allClientsData.length > 0) {
+          clients = allClientsData;
         } else {
-          const { data: allCart } = await supabase.from('cartones').select('*');
-          if (allCart) cartonesData = allCart;
+          clients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
         }
-      } catch (eCart) {
-        console.warn("Aviso consultando cartones para lista negra:", eCart);
+      } catch (_) {
+        try {
+          clients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
+        } catch (_) {}
       }
 
-      // 4. Consultar tabla 'lista_negra' (si existe en el esquema de base de datos)
+      try {
+        const localClients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
+        if (Array.isArray(localClients) && localClients.length > 0) {
+          const mapCed = new Set(clients.map(cl => String(cl.cedula || '').trim()));
+          localClients.forEach(loc => {
+            const locCed = String(loc.cedula || '').trim();
+            if (locCed && !mapCed.has(locCed)) {
+              clients.push(loc);
+              mapCed.add(locCed);
+            }
+          });
+        }
+      } catch (_) {}
+
+      const allClientsByCedula = new Map();
+      clients.forEach(c => {
+        if (c && c.cedula) allClientsByCedula.set(String(c.cedula).trim(), c);
+      });
+
+      // 4. Consultar tabla 'lista_negra' (si existe en base de datos)
       let lnData = [];
       try {
         let qListaNegra = supabase.from('lista_negra').select('*');
@@ -7862,15 +7852,7 @@ return {
         if (!lnErr && lnRes) lnData = lnRes;
       } catch (eLn) {}
 
-      // Mapa indexado de todos los clientes por cédula
-      const allClientsByCedula = new Map();
-      if (clientsData && clientsData.length > 0) {
-        clientsData.forEach(c => {
-          if (c && c.cedula) allClientsByCedula.set(String(c.cedula).trim(), c);
-        });
-      }
-
-      // FILTRADO ESTRICTO E INVIOLABLE DE PERTENENCIA:
+      // Función de verificación de alcance
       const belongsToScope = (rec) => {
         if (!rec) return false;
         if (isMasterUser && !targetRouteId) return true;
@@ -7882,6 +7864,8 @@ return {
         if (targetRouteId) {
           return recRoute === targetRouteId.toLowerCase();
         }
+
+        if (isMasterUser) return true;
 
         if (isSupervisor) {
           if (recSup && allowedSupervisorIds.has(recSup)) return true;
@@ -7897,6 +7881,8 @@ return {
             if (pSup && allowedSupervisorIds.has(pSup)) return true;
             if (pAgent && allowedAgentUsernames.has(pAgent)) return true;
           }
+          if (!recRoute && !recSup) return true;
+          if (allowedRouteIds.size === 0) return true;
           return false;
         }
 
@@ -7913,22 +7899,87 @@ return {
           return false;
         }
 
-        return false;
+        return true;
       };
 
       const blacklistedMap = new Map();
 
-      // Procesar clientes en clients marcados con riesgo Rojo o estados morosos
-      if (clientsData && clientsData.length > 0) {
-        clientsData.forEach(c => {
-          const rawStatus = String(c.status || c.estado || '').toUpperCase();
-          const isRed = c.risk === 'Rojo' || 
-                        String(c.risk || '').toLowerCase() === 'rojo' || 
-                        rawStatus.includes('MORA') || 
-                        rawStatus.includes('NEGRA') || 
-                        rawStatus.includes('PERDIDA');
-          if (isRed && belongsToScope(c)) {
-            const ced = String(c.cedula).trim();
+      // Procesar cartones liquidados por mora / perdida (definición idéntica a Archivo Histórico)
+      cartones.forEach(carton => {
+        if (!carton) return;
+        const rawEstado = String(carton.estado || carton.status || '').trim().toLowerCase();
+        const rawReason = String(carton.liquidation_reason || carton.motivo || carton.motivo_liquidacion || '').trim().toLowerCase();
+
+        const isMora = rawEstado === 'liquidado_perdida' || 
+                       rawEstado === 'liquidado_mora' || 
+                       rawEstado === 'castigado' || 
+                       rawEstado === 'lista negra' ||
+                       rawEstado.includes('perdida') || 
+                       rawEstado.includes('mora') || 
+                       rawEstado.includes('castig') ||
+                       rawEstado.includes('negra') ||
+                       rawReason.includes('mora') ||
+                       rawReason.includes('perdida') ||
+                       rawReason.includes('castigo') ||
+                       rawReason.includes('incobrable') ||
+                       rawReason.includes('negra');
+
+        if (isMora && belongsToScope(carton)) {
+          const ced = String(carton.cliente_id || carton.client_cedula || carton.cedula || '').trim();
+          if (ced) {
+            const clientFromDb = allClientsByCedula.get(ced) || {};
+            const joinedClient = carton.clients || {};
+            const existing = blacklistedMap.get(ced);
+            const realSaldo = Math.round(Number(
+              carton.outstanding ?? 
+              clientFromDb.outstanding ?? 
+              joinedClient.outstanding ?? 
+              carton.saldo_pendiente ??
+              carton.saldo_restante ??
+              carton.total_debt ?? 
+              carton.totalDebt ?? 
+              carton.monto_prestado ??
+              0
+            ));
+            const foundName = clientFromDb.name || 
+                              clientFromDb.nombre || 
+                              joinedClient.name || 
+                              carton.nombre_cliente || 
+                              carton.clientName ||
+                              carton.client_name ||
+                              (existing ? existing.name : null) || 
+                              `Cliente ${ced}`;
+            blacklistedMap.set(ced, {
+              ...clientFromDb,
+              ...joinedClient,
+              ...carton,
+              cedula: ced,
+              name: foundName,
+              phone: clientFromDb.phone || joinedClient.phone || (existing ? existing.phone : ''),
+              city: clientFromDb.city || joinedClient.city || (existing ? existing.city : ''),
+              zone: clientFromDb.zone || joinedClient.zone || (existing ? existing.zone : ''),
+              address: clientFromDb.address || (existing ? existing.address : ''),
+              routeId: carton.route_id || carton.routeId || clientFromDb.routeId,
+              risk: 'Rojo',
+              status: 'Liquidado_Mora',
+              outstanding: realSaldo > 0 ? realSaldo : Number(existing ? existing.outstanding : 0)
+            });
+          }
+        }
+      });
+
+      // Procesar clientes marcados con riesgo Rojo en clients
+      clients.forEach(c => {
+        if (!c) return;
+        const rawStatus = String(c.status || c.estado || '').toUpperCase();
+        const isRed = c.risk === 'Rojo' || 
+                      String(c.risk || '').toLowerCase() === 'rojo' || 
+                      rawStatus.includes('MORA') || 
+                      rawStatus.includes('NEGRA') || 
+                      rawStatus.includes('PERDIDA');
+        if (isRed && belongsToScope(c)) {
+          const ced = String(c.cedula).trim();
+          if (ced && !blacklistedMap.has(ced)) {
             const realSaldo = Math.round(Number(c.outstanding ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
             blacklistedMap.set(ced, {
               ...c,
@@ -7937,60 +7988,13 @@ return {
               phone: c.phone || c.telefono || '',
               address: c.address || c.direccion || '',
               routeId: c.routeId || c.route_id || null,
+              risk: 'Rojo',
               status: 'Liquidado_Mora',
               outstanding: realSaldo > 0 ? realSaldo : Number(c.amount || c.totalDebt || 0)
             });
           }
-        });
-      }
-
-      // Procesar cartones liquidados por mora / perdida
-      if (cartonesData && cartonesData.length > 0) {
-        cartonesData.forEach(carton => {
-          const rawEstado = String(carton.estado || carton.status || '').toLowerCase();
-          const isLoss = rawEstado === 'liquidado_perdida' || 
-                         rawEstado === 'liquidado_mora' || 
-                         rawEstado === 'castigado' || 
-                         rawEstado.includes('perdida') || 
-                         rawEstado.includes('mora') ||
-                         rawEstado.includes('negra');
-          if (isLoss && belongsToScope(carton)) {
-            const ced = String(carton.cliente_id || carton.client_cedula || carton.cedula || '').trim();
-            if (ced) {
-              const clientFromDb = allClientsByCedula.get(ced) || {};
-              const joinedClient = carton.clients || {};
-              const existing = blacklistedMap.get(ced);
-              const realSaldo = Math.round(Number(
-                carton.outstanding ?? 
-                clientFromDb.outstanding ?? 
-                joinedClient.outstanding ?? 
-                carton.saldo_pendiente ??
-                carton.saldo_restante ??
-                carton.total_debt ?? 
-                carton.totalDebt ?? 
-                carton.monto_prestado ??
-                0
-              ));
-              const foundName = clientFromDb.name || clientFromDb.nombre || joinedClient.name || carton.nombre_cliente || (existing ? existing.name : null) || `Cliente ${ced}`;
-              blacklistedMap.set(ced, {
-                ...clientFromDb,
-                ...joinedClient,
-                ...carton,
-                cedula: ced,
-                name: foundName,
-                phone: clientFromDb.phone || joinedClient.phone || (existing ? existing.phone : ''),
-                city: clientFromDb.city || joinedClient.city || (existing ? existing.city : ''),
-                zone: clientFromDb.zone || joinedClient.zone || (existing ? existing.zone : ''),
-                address: clientFromDb.address || (existing ? existing.address : ''),
-                routeId: carton.route_id || carton.routeId || clientFromDb.routeId,
-                risk: 'Rojo',
-                status: 'Liquidado_Mora',
-                outstanding: realSaldo > 0 ? realSaldo : Number(existing ? existing.outstanding : 0)
-              });
-            }
-          }
-        });
-      }
+        }
+      });
 
       // Procesar tabla lista_negra
       if (lnData && lnData.length > 0) {
@@ -8010,57 +8014,13 @@ return {
                 phone: clientFromDb.phone || (existing ? existing.phone : ''),
                 address: clientFromDb.address || (existing ? existing.address : ''),
                 routeId: item.route_id || item.routeId || (existing ? existing.routeId : clientFromDb.routeId),
+                risk: 'Rojo',
                 status: 'Liquidado_Mora',
                 outstanding: realSaldo
               });
             }
           }
         });
-      }
-
-      // Fallback local por si se corre offline o sin datos en Supabase
-      if (blacklistedMap.size === 0 && typeof localStorage !== 'undefined') {
-        try {
-          const localClients = JSON.parse(localStorage.getItem('bulapay_clients') || '[]');
-          localClients.forEach(c => {
-            const rawStatus = String(c.status || c.estado || '').toUpperCase();
-            const isRed = c.risk === 'Rojo' || String(c.risk || '').toLowerCase() === 'rojo' || rawStatus.includes('MORA') || rawStatus.includes('NEGRA') || rawStatus.includes('PERDIDA');
-            if (isRed && belongsToScope(c)) {
-              const ced = String(c.cedula).trim();
-              if (ced) {
-                blacklistedMap.set(ced, {
-                  ...c,
-                  cedula: ced,
-                  name: c.name || c.nombre || `Cliente ${ced}`,
-                  status: 'Liquidado_Mora',
-                  outstanding: Math.round(Number(c.outstanding || c.totalDebt || 0))
-                });
-              }
-            }
-          });
-        } catch (_) {}
-
-        try {
-          const localCartones = JSON.parse(localStorage.getItem('bulapay_cartones') || '[]');
-          localCartones.forEach(carton => {
-            const rawEstado = String(carton.estado || carton.status || '').toLowerCase();
-            const isLoss = rawEstado === 'liquidado_perdida' || rawEstado === 'liquidado_mora' || rawEstado === 'castigado' || rawEstado.includes('perdida') || rawEstado.includes('mora');
-            if (isLoss && belongsToScope(carton)) {
-              const ced = String(carton.cliente_id || carton.client_cedula || carton.cedula || '').trim();
-              if (ced) {
-                const existing = blacklistedMap.get(ced);
-                blacklistedMap.set(ced, {
-                  ...carton,
-                  cedula: ced,
-                  name: carton.nombre_cliente || (existing ? existing.name : `Cliente ${ced}`),
-                  risk: 'Rojo',
-                  status: 'Liquidado_Mora',
-                  outstanding: Math.round(Number(carton.outstanding || carton.total_debt || (existing ? existing.outstanding : 0)))
-                });
-              }
-            }
-          });
-        } catch (_) {}
       }
 
       return Array.from(blacklistedMap.values());
