@@ -616,6 +616,7 @@ const supervisorModule = {
     if (!overlay) return;
 
     overlay.classList.add('active');
+    overlay.style.display = 'flex';
     
     // Poblar datos correspondientes
     if (kpi === 'agents') {
@@ -635,6 +636,7 @@ const supervisorModule = {
     const overlay = document.getElementById(`modal-kpi-${kpi}`);
     if (overlay) {
       overlay.classList.remove('active');
+      overlay.style.display = 'none';
     }
     this.activeKpiModal = null;
   },
@@ -1081,11 +1083,24 @@ const supervisorModule = {
     }
 
     detailSection.style.display = 'block';
+
+    // Vincular explícitamente el botón "Ver Cartera de Clientes" para el agente seleccionado
+    const btnViewClients = document.getElementById('btn-view-agent-clients');
+    if (btnViewClients) {
+      btnViewClients.onclick = (e) => {
+        if (e) e.preventDefault();
+        this.openAgentAuditView();
+      };
+    }
   },
 
   async openAgentAuditView(preserveLedger = false) {
-    const username = this.selectedAuditAgentUsername || this.currentAuditAgentId;
-    if (!username) return;
+    const targetKey = this.selectedAuditAgentUsername || this.currentAuditAgentId || this.currentLiqAgentUsername;
+    if (!targetKey) {
+      console.warn("⚠️ No se ha seleccionado ningún agente para auditar cartera.");
+      alert('ℹ️ Por favor selecciona un agente de la lista primero.');
+      return;
+    }
 
     const overlay = document.getElementById('modal-agent-audit-portfolio');
     const subtitle = document.getElementById('agent-audit-modal-subtitle');
@@ -1100,29 +1115,67 @@ const supervisorModule = {
     }
 
     overlay.classList.add('active');
+    overlay.style.zIndex = '2100'; // Asegurar máxima visibilidad por encima del modal de agentes activos
+    overlay.style.display = 'flex';
 
     try {
-      const allUsers = await this.getCachedUsers();
-      const agent = allUsers.find(u => u.username === username);
-      if (!agent) {
-        alert('❌ No se encontró la información del agente.');
-        this.closeAgentAuditModal();
-        return;
+      const cleanKey = String(targetKey).trim().toLowerCase();
+      let allUsers = (await this.getCachedUsers()) || [];
+      let agent = allUsers.find(u => 
+        String(u.username || '').toLowerCase() === cleanKey ||
+        String(u.id || '').toLowerCase() === cleanKey ||
+        (u.name && String(u.name).toLowerCase() === cleanKey)
+      );
+
+      if (!agent && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+        agent = await window.BulaPayDB.getUserByUsername(targetKey);
       }
 
-      this.currentAuditAgentId = username;
-
       const routes = await window.BulaPayDB.getRoutes();
-      const route = routes.find(r => r.id === agent.routeId);
-      const routeName = route ? route.name : 'Sin ruta asignada';
+      let route = null;
+      const agentRouteId = agent?.routeId || agent?.route_id || agent?.ruta_id;
+      if (agentRouteId) {
+        route = routes.find(r => r.id === agentRouteId);
+      }
+      if (!route) {
+        route = routes.find(r => 
+          (r.agentUsername && String(r.agentUsername).toLowerCase().includes(cleanKey)) ||
+          (r.agentName && String(r.agentName).toLowerCase().includes(cleanKey)) ||
+          (agent && agent.name && r.agentName && String(r.agentName).toLowerCase().includes(String(agent.name).toLowerCase()))
+        );
+      }
+
+      const effectiveRouteId = route ? route.id : (agentRouteId || null);
+
+      if (!agent) {
+        agent = {
+          username: route?.agentUsername || targetKey,
+          name: route?.agentName || targetKey,
+          role: 'Agente de Ruta',
+          routeId: effectiveRouteId,
+          route_id: effectiveRouteId
+        };
+      } else {
+        agent.routeId = agent.routeId || effectiveRouteId;
+        agent.route_id = agent.route_id || effectiveRouteId;
+      }
+
+      this.currentAuditAgentId = agent.username || targetKey;
+      const routeName = route ? route.name : (agent.routeName || 'Sin ruta asignada');
 
       if (subtitle) {
         subtitle.textContent = `Auditoría de Cartera: ${agent.name} | Ruta: ${routeName}`;
       }
 
-      // Obtener todos los clientes de la ruta
+      // Obtener todos los clientes asignados al agente o a la ruta
       const allClients = await window.BulaPayDB.getClients();
-      const clients = allClients.filter(c => c.routeId === agent.routeId);
+      const clients = (allClients || []).filter(c => {
+        const cRoute = c.routeId || c.route_id || c.ruta_id;
+        const cAgent = c.agent_id || c.agentId || c.agentUsername;
+        return (effectiveRouteId && cRoute === effectiveRouteId) ||
+               (cAgent && String(cAgent).toLowerCase() === cleanKey) ||
+               (cAgent && agent.username && String(cAgent).toLowerCase() === String(agent.username).toLowerCase());
+      });
 
       // Obtener todos los pagos frescos
       const allPayments = await window.BulaPayDB.getPayments();
@@ -1665,6 +1718,7 @@ const supervisorModule = {
     const overlay = document.getElementById('modal-agent-audit-portfolio');
     if (overlay) {
       overlay.classList.remove('active');
+      overlay.style.display = 'none';
     }
   },
 
