@@ -134,7 +134,10 @@ const authModule = {
           return;
         }
 
-        if (user && String(user.password).trim() === String(passwordInput).trim()) {
+        const storedLoginPwd = user ? String(user.password || user.clave || user.pin || user.contrasena || '').trim() : '';
+        const inputLoginPwd = String(passwordInput).trim();
+
+        if (user && storedLoginPwd !== '' && inputLoginPwd !== '' && storedLoginPwd === inputLoginPwd) {
           await this.loginUser(user);
         } else {
           alert('❌ Credenciales inválidas. Por favor intente nuevamente.');
@@ -151,33 +154,65 @@ const authModule = {
         e.preventDefault();
         this.clearLoginErrors();
 
-        const usernameInput = document.getElementById('agent-login-username').value.trim();
-        const passwordInput = document.getElementById('agent-login-password').value;
+        const userInputEl = document.getElementById('agent-login-username');
+        const passInputEl = document.getElementById('agent-login-password');
+        const usernameInput = userInputEl ? String(userInputEl.value || '').trim() : '';
+        const passwordInput = passInputEl ? String(passInputEl.value || '').trim() : '';
+
+        // Bloqueo inmediato si los campos están vacíos
+        if (!usernameInput || !passwordInput) {
+          if (passInputEl) passInputEl.value = '';
+          alert('❌ Por favor ingrese su usuario y contraseña.');
+          return;
+        }
 
         try {
           const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-          const isSuspended = await this.isUserAccountSuspended(user);
+          // Si el usuario no existe, bloquear de inmediato
+          if (!user) {
+            if (passInputEl) passInputEl.value = '';
+            alert('❌ Usuario o contraseña incorrectos. Por favor verifique sus credenciales.');
+            return;
+          }
 
+          // Validación estricta de rol para portal de agentes
+          const roleStr = String(user.role || '').toLowerCase();
+          const isAgentRole = roleStr === 'agente de ruta' || roleStr === 'agent' || roleStr === 'agente' || roleStr === 'cobrador' || !user.role;
+          if (!isAgentRole) {
+            if (passInputEl) passInputEl.value = '';
+            alert('❌ Este portal es exclusivo para Agentes de Ruta. Por favor utilice el acceso correspondiente.');
+            return;
+          }
+
+          // Validación de vigencia y bloqueo
+          const isSuspended = await this.isUserAccountSuspended(user);
           if (isSuspended) {
+            if (passInputEl) passInputEl.value = '';
             await this.showSuspensionError(this.formAgentLogin, user);
             return;
           }
 
-          const storedPwd = user ? String(user.password || user.clave || user.pin || '').trim() : '';
+          // VALIDACIÓN ESTRICTA DE CONTRASEÑA:
+          // La contraseña ingresada DEBE coincidir exactamente con la registrada en la base de datos
+          const storedPwd = String(user.password || user.clave || user.pin || user.contrasena || '').trim();
           const inputPwd = String(passwordInput).trim();
 
-          // Validación flexible: clave exacta, clave estándar de prueba (123 / 123456) o agente identificado
-          const isPwdValid = (storedPwd && storedPwd === inputPwd) || inputPwd === '123' || inputPwd === '123456' || (user && user.role === 'Agente de Ruta');
-          if (user && isPwdValid) {
-            if (!user.role) user.role = 'Agente de Ruta';
-            await this.loginUser(user);
-          } else {
-            alert('❌ Credenciales inválidas. Por favor verifique el usuario y contraseña del agente.');
+          const isPwdValid = storedPwd !== '' && inputPwd !== '' && storedPwd === inputPwd;
+
+          if (!isPwdValid) {
+            if (passInputEl) passInputEl.value = '';
+            alert('❌ Usuario o contraseña incorrectos. Por favor verifique sus credenciales.');
+            return;
           }
+
+          // Credenciales estrictamente válidas: proceder con el inicio de sesión
+          if (!user.role) user.role = 'Agente de Ruta';
+          await this.loginUser(user);
         } catch (err) {
           console.error("Error de inicio de sesión agente:", err);
-          alert('❌ Error al iniciar sesión del agente.');
+          if (passInputEl) passInputEl.value = '';
+          alert('❌ Error al iniciar sesión del agente. Por favor intente nuevamente.');
         }
       });
     }
