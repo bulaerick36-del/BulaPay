@@ -830,16 +830,16 @@ const db = {
     }
   },
 
-  async getUserByUsername(username, skipSupervisorInheritance = false) {
+  async getUserByUsername(username, skipSupervisorInheritance = false, forceFresh = false) {
     if (!username) return null;
     try {
       const cleanInput = String(username).trim();
       const lowerInput = cleanInput.toLowerCase();
 
-      // Atajo rápido en memoria si la lista de usuarios ya está en caché
+      // Atajo rápido en memoria si la lista de usuarios ya está en caché y no se fuerza lectura fresca
       const curUser = this.getCurrentUser();
       const cacheKey = curUser ? `users_${curUser.username || curUser.id || 'anon'}` : null;
-      if (cacheKey && this._memCache[cacheKey] && (Date.now() - this._memCache[cacheKey].ts < 5000)) {
+      if (!forceFresh && cacheKey && this._memCache[cacheKey] && (Date.now() - this._memCache[cacheKey].ts < 5000)) {
         const cachedMatch = (this._memCache[cacheKey].data || []).find(u =>
           u && (
             String(u.username || '').toLowerCase() === lowerInput ||
@@ -1009,6 +1009,23 @@ const db = {
             }
           }
         }
+        // UNIFICAR FUENTE CANÓNICA DE FECHA EN EL USUARIO:
+        const canonDate = this.getCanonicalVigenciaDate(foundUser);
+        if (canonDate) {
+          foundUser.fecha_vencimiento = canonDate;
+          foundUser.fecha_corte = canonDate.includes('T') ? canonDate.split('T')[0] : canonDate;
+        }
+
+        // Si es el usuario en sesión activa, mantener sincronizado localStorage en tiempo real
+        try {
+          const curUser = this.getCurrentUser();
+          if (curUser && (
+            String(curUser.username || '').toLowerCase() === String(foundUser.username || '').toLowerCase() ||
+            String(curUser.documentNumber || '').trim() === String(foundUser.documentNumber || '').trim()
+          )) {
+            localStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(foundUser));
+          }
+        } catch(e) {}
       }
       return foundUser;
     } catch (e) {
@@ -10104,22 +10121,54 @@ return {
   },
 
   // ----------------------------------------------------
+  // RESOLUCIÓN DE FUENTE ÚNICA DE FECHA DE VIGENCIA
+  // ----------------------------------------------------
+  getCanonicalVigenciaDate(user) {
+    if (!user) return null;
+    const vVenc = user.fecha_vencimiento ? String(user.fecha_vencimiento).trim() : null;
+    const vCorte = user.fecha_corte ? String(user.fecha_corte).trim() : null;
+
+    if (!vVenc && !vCorte) return null;
+    if (vVenc && !vCorte) return vVenc;
+    if (!vVenc && vCorte) return vCorte;
+
+    // Ambos campos existen
+    const partV = vVenc.includes('T') ? vVenc.split('T')[0] : vVenc;
+    const partC = vCorte.includes('T') ? vCorte.split('T')[0] : vCorte;
+
+    if (partV === partC) return vVenc;
+
+    // Si difieren (alguien editó uno de los dos campos en Supabase Table Editor):
+    // Verificamos si uno de ellos difiere del valor antiguo en localStorage
+    try {
+      const cachedRaw = localStorage.getItem(DB_KEYS.CURRENT_USER);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw);
+        const oldV = cached.fecha_vencimiento ? String(cached.fecha_vencimiento).split('T')[0] : null;
+        const oldC = cached.fecha_corte ? String(cached.fecha_corte).split('T')[0] : null;
+        if (oldV && partV !== oldV) return vVenc;
+        if (oldC && partC !== oldC) return vCorte;
+      }
+    } catch(e) {}
+
+    // En Supabase users, fecha_vencimiento es la columna canónica principal de expiración
+    return vVenc || vCorte;
+  },
+
+  // ----------------------------------------------------
   // CÁLCULO DINÁMICO DE DÍAS RESTANTES DE VIGENCIA (EN TIEMPO REAL)
   // ----------------------------------------------------
   getDiasRestantes(user) {
     if (!user) return { dias: 0, diasExactos: 0, fechaCorteStr: 'N/A', status: 'expirado' };
 
-    // 1. Capturar la fecha actual en tiempo real al vuelo (sin usar localStorage)
     const ahora = new Date();
-
-    // 2. Determinar la fecha de vencimiento (fecha_corte/fecha_vencimiento, herencia de supervisor o created_at + 30 días)
-    let fechaVencimiento;
-    let rawDateStr = user.fecha_corte || user.fecha_vencimiento;
 
     // VIGENCIA HEREDADA PARA AGENTES DE RUTA:
     // Si es Agente de Ruta, sincronizar y heredar la vigencia y estado del supervisor asignado
     const roleLower = String(user.role || '').toLowerCase();
     const isAgent = roleLower === 'agente de ruta' || roleLower === 'agent' || roleLower === 'agente' || roleLower === 'cobrador';
+
+    let targetDateStr = null;
 
     if (isAgent) {
       const supId = user.supervisor_id || user.supervisor || (
@@ -10130,9 +10179,7 @@ return {
           const localUsers = typeof this.getUsersFromLocalStorage === 'function' ? this.getUsersFromLocalStorage() : [];
           const sup = localUsers.find(u => String(u.username).toLowerCase() === String(supId).toLowerCase() || String(u.documentNumber || '').trim() === String(supId).trim());
           if (sup) {
-            if (sup.fecha_corte || sup.fecha_vencimiento) {
-              rawDateStr = sup.fecha_corte || sup.fecha_vencimiento;
-            }
+            targetDateStr = this.getCanonicalVigenciaDate(sup);
             if (sup.bloqueado_por_mora !== true && sup.bloqueado_por_mora !== 'true') {
               user.bloqueado_por_mora = false;
             } else if (sup.bloqueado_por_mora === true || sup.bloqueado_por_mora === 'true') {
@@ -10143,35 +10190,49 @@ return {
       }
     }
 
-    if (rawDateStr) {
-      const cleanDateStr = String(rawDateStr).trim();
-      if (cleanDateStr.includes('T')) {
-        fechaVencimiento = new Date(cleanDateStr);
-      } else {
-        const parts = cleanDateStr.split('-');
-        if (parts.length === 3) {
-          fechaVencimiento = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
-        } else {
-          fechaVencimiento = new Date(cleanDateStr);
-        }
-      }
-    } else {
-      const baseDate = user.created_at ? new Date(user.created_at) : (user.subscription_start_date ? new Date(user.subscription_start_date) : ahora);
-      fechaVencimiento = new Date(baseDate.getTime() + (30 * 24 * 60 * 60 * 1000));
+    if (!targetDateStr) {
+      targetDateStr = this.getCanonicalVigenciaDate(user);
     }
 
-    // 3. Restar la fecha actual de la fecha de vencimiento y convertir la diferencia a días enteros usando Math.ceil()
-    const diffMs = fechaVencimiento.getTime() - ahora.getTime();
-    const diasCalculados = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    let targetYear, targetMonth, targetDay;
+
+    if (targetDateStr) {
+      const clean = String(targetDateStr).trim();
+      const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
+      const parts = datePart.split('-');
+      if (parts.length === 3 && parts[0].length === 4) {
+        targetYear = parseInt(parts[0], 10);
+        targetMonth = parseInt(parts[1], 10) - 1; // 0-indexed en Date
+        targetDay = parseInt(parts[2], 10);
+      } else {
+        const d = new Date(clean);
+        targetYear = d.getFullYear();
+        targetMonth = d.getMonth();
+        targetDay = d.getDate();
+      }
+    } else {
+      const base = user.created_at ? new Date(user.created_at) : (user.subscription_start_date ? new Date(user.subscription_start_date) : ahora);
+      const d = new Date(base.getTime() + (30 * 24 * 60 * 60 * 1000));
+      targetYear = d.getFullYear();
+      targetMonth = d.getMonth();
+      targetDay = d.getDate();
+    }
+
+    // Comparación precisa de días calendario (medianoche local a medianoche local)
+    const hoyMid = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(), 0, 0, 0, 0);
+    const targetMid = new Date(targetYear, targetMonth, targetDay, 0, 0, 0, 0);
+
+    const diffMs = targetMid.getTime() - hoyMid.getTime();
+    const diasCalculados = Math.round(diffMs / (1000 * 60 * 60 * 24));
     const diasRestantes = diasCalculados > 0 ? diasCalculados : 0;
 
-    const yyyy = fechaVencimiento.getFullYear();
-    const mm = String(fechaVencimiento.getMonth() + 1).padStart(2, '0');
-    const dd = String(fechaVencimiento.getDate()).padStart(2, '0');
+    const yyyy = targetYear;
+    const mm = String(targetMonth + 1).padStart(2, '0');
+    const dd = String(targetDay).padStart(2, '0');
     const fechaCorteStr = `${yyyy}-${mm}-${dd}`;
 
     let status = 'activo';
-    if (user.bloqueado_por_mora === true || diasCalculados <= 0) {
+    if (user.bloqueado_por_mora === true || user.bloqueado_por_mora === 'true' || diasCalculados <= 0) {
       status = 'suspendido';
     } else if (diasRestantes <= 5) {
       status = 'por_vencer';
@@ -10195,10 +10256,16 @@ return {
 
     const info = this.getDiasRestantes(user);
 
-    el.textContent = `⏳ Vigencia: Faltan ${info.dias} días`;
-    el.style.color = info.dias <= 5 ? '#fca5a5' : '#38bdf8';
-    el.style.background = info.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)';
-    el.style.border = info.dias <= 5 ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(56, 189, 248, 0.35)';
+    let badgeText = `⏳ Vigencia: Faltan ${info.dias} días`;
+    if (info.diasExactos < 0) badgeText = `⏳ Vigencia: Suscripción Vencida`;
+    else if (info.diasExactos === 0) badgeText = `⏳ Vigencia: Vence hoy`;
+    else if (info.diasExactos === 1) badgeText = `⏳ Vigencia: Falta 1 día`;
+    else if (info.diasExactos <= 3) badgeText = `⏳ Vigencia: Faltan ${info.diasExactos} días`;
+
+    el.textContent = badgeText;
+    el.style.color = info.diasExactos <= 3 ? '#fca5a5' : (info.diasExactos <= 5 ? '#fcd34d' : '#38bdf8');
+    el.style.background = info.diasExactos <= 3 ? 'rgba(239, 68, 68, 0.2)' : (info.diasExactos <= 5 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.15)');
+    el.style.border = info.diasExactos <= 3 ? '1px solid rgba(239, 68, 68, 0.4)' : (info.diasExactos <= 5 ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(56, 189, 248, 0.35)');
     el.title = `Fecha de corte: ${info.fechaCorteStr}`;
   },
 
@@ -10289,7 +10356,7 @@ return {
     } catch(e) {}
   },
 
-  async evaluateUserCobroNotifications(user) {
+  async evaluateUserCobroNotifications(user, forceRefresh = false) {
     if (!user || !user.username) return;
 
     // REQUISITO: Las alertas automáticas de vencimiento de suscripción (ej. "te quedan 3 días" o avisos de renovación)
@@ -10302,6 +10369,15 @@ return {
       return;
     }
 
+    // Si se solicita forzar refresco, limpiar caché en memoria
+    if (forceRefresh) {
+      const curUser = this.getCurrentUser();
+      const cacheKey = curUser ? `users_${curUser.username || curUser.id || 'anon'}` : null;
+      if (cacheKey && this._memCache[cacheKey]) {
+        delete this._memCache[cacheKey];
+      }
+    }
+
     // Candado en memoria (Concurrency Lock) para prevenir ejecuciones duplicadas en paralelo
     if (this._isEvaluatingCobro || window.isEvaluatingCobro) {
       console.log("🔒 [Evaluador de Cobro] Evaluación omitida: ya existe una ejecución activa en curso.");
@@ -10312,96 +10388,115 @@ return {
     window.isEvaluatingCobro = true;
 
     try {
-      const dbUser = (await this.getUserByUsername(user.username)) || user;
-      if (dbUser.bloqueado_por_mora === true) return;
+      const dbUser = (await this.getUserByUsername(user.username, false, forceRefresh)) || user;
+      if (dbUser.bloqueado_por_mora === true || dbUser.bloqueado_por_mora === 'true') return;
 
       const infoVigencia = this.getDiasRestantes(dbUser);
       const diasRestantes = infoVigencia.diasExactos;
 
-      // Si el servicio expiró (<= 0 días restantes), suspender acceso por mora de forma automática
-      if (diasRestantes <= 0) {
+      // Si el servicio expiró (< 0 días restantes), suspender acceso por mora de forma automática
+      if (diasRestantes < 0) {
         console.warn(`⛔ [Evaluador de Cobro] Usuario ${dbUser.username} sobrepasó la fecha de corte (${diasRestantes} días). Suspendiendo acceso...`);
         await this.toggleUserBloqueoMora(dbUser.username, true);
         return;
       }
 
-      // Evaluar la cadena progresiva de 5, 4, 3, 2 y 1 día
-      if (diasRestantes >= 1 && diasRestantes <= 5) {
+      // Evaluar la cadena progresiva de 0, 1, 2, 3, 4 y 5 días
+      if (diasRestantes >= 0 && diasRestantes <= 5) {
         const progs = await this.getProgramacionCobros();
-        const regla = progs.find(p => p.dias_previos === diasRestantes && p.activo !== false);
+        let regla = (progs || []).find(p => p.dias_previos === diasRestantes && p.activo !== false);
 
-        if (regla) {
-          try {
-            const userNotifs = await this.getNotificaciones(dbUser);
-            const alreadyHasThisNotif = userNotifs.some(n => 
-              n.categoria && n.categoria.includes(`Cobro Preventivo (${diasRestantes}d)`)
-            );
-
-            if (!alreadyHasThisNotif) {
-              console.log(`🔔 [Evaluador Interno de Cobro] Publicando aviso privado de ${diasRestantes} día(s) para usuario ${dbUser.username}`);
-              await this.saveNotificacion({
-                titulo: regla.titulo,
-                mensaje: regla.mensaje,
-                categoria: `Cobro Preventivo (${diasRestantes}d)`,
-                target_username: dbUser.username,
-                username: dbUser.username,
-                user_id: dbUser.id || dbUser.username
-              });
-            }
-          } catch(saveErr) {
-            console.warn("⚠️ Aviso al guardar notificación en BD (continuando ejecución hacia SweetAlert2):", saveErr);
+        if (!regla) {
+          if (diasRestantes === 0) {
+            regla = {
+              id: 'prog_0d',
+              dias_previos: 0,
+              titulo: '⛔ ÚLTIMO DÍA - Corte de Servicio Hoy',
+              mensaje: 'Atención: Hoy vence su suscripción en BulaPay. Por favor realice su pago durante el día para evitar la suspensión del servicio y sus rutas.',
+              activo: true,
+              prioridad: 'Alta'
+            };
+          } else {
+            regla = {
+              id: `prog_${diasRestantes}d`,
+              dias_previos: diasRestantes,
+              titulo: diasRestantes <= 3 ? `🚨 Advertencia Preventiva - Faltan ${diasRestantes} Días` : `📢 Recordatorio de Pago - Faltan ${diasRestantes} Días`,
+              mensaje: `Estimado supervisor: Faltan ${diasRestantes} días para la fecha de corte de su suscripción BulaPay. Por favor efectúe el pago para mantener sus rutas y cobros activos.`,
+              activo: true,
+              prioridad: diasRestantes <= 3 ? 'Alta' : 'Media'
+            };
           }
+        }
 
-          // Disparar Alerta Visual Invasiva (Popup / Modal con SweetAlert2) para la Cadena Progresiva (Días 1 a 5)
-          if (diasRestantes >= 1 && diasRestantes <= 5) {
-            const sessionKey = `credi_cobro_alerted_${dbUser.username}_${diasRestantes}d`;
-            if (!sessionStorage.getItem(sessionKey)) {
-              sessionStorage.setItem(sessionKey, 'true');
-              setTimeout(async () => {
-                if (typeof Swal !== 'undefined') {
-                  Swal.fire({
-                    title: regla.titulo || `📢 Recordatorio de Pago - Faltan ${diasRestantes} Días`,
-                    text: regla.mensaje || `Le recordamos que restan ${diasRestantes} días para el vencimiento de su suscripción.`,
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Pagar',
-                    confirmButtonColor: '#10b981', // Verde
-                    cancelButtonText: 'Continuar',
-                    cancelButtonColor: '#6b7280', // Gris
-                    allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    background: '#0f172a',
-                    color: '#ffffff'
-                  }).then((result) => {
-                    if (result.isConfirmed) {
-                      // Disparar modal estilizado de Cuentas de Recaudo con opción de copiar y WhatsApp
-                      if (typeof window.showCuentasRecaudoModal === 'function') {
-                        window.showCuentasRecaudoModal();
-                      } else if (window.BulaPayDB && typeof window.BulaPayDB.showCuentasRecaudoModal === 'function') {
-                        window.BulaPayDB.showCuentasRecaudoModal();
-                      } else {
-                        if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
-                          window.app.router.navigate('cobros');
-                        } else {
-                          window.location.hash = '#cobros';
-                        }
-                      }
-                    }
-                  });
-                } else {
-                  if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ver las cuentas de recaudo para realizar su pago?`, "BulaPay")) {
-                    if (typeof window.showCuentasRecaudoModal === 'function') {
-                      window.showCuentasRecaudoModal();
-                    } else if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
+        try {
+          const userNotifs = await this.getNotificaciones(dbUser);
+          const alreadyHasThisNotif = userNotifs.some(n => 
+            n.categoria && n.categoria.includes(`Cobro Preventivo (${diasRestantes}d)`) &&
+            (!n.created_at || (new Date() - new Date(n.created_at) < 24 * 60 * 60 * 1000))
+          );
+
+          if (!alreadyHasThisNotif) {
+            console.log(`🔔 [Evaluador Interno de Cobro] Publicando aviso privado de ${diasRestantes} día(s) para usuario ${dbUser.username}`);
+            await this.saveNotificacion({
+              titulo: regla.titulo,
+              mensaje: regla.mensaje,
+              categoria: `Cobro Preventivo (${diasRestantes}d)`,
+              target_username: dbUser.username,
+              username: dbUser.username,
+              user_id: dbUser.id || dbUser.username
+            });
+          }
+        } catch(saveErr) {
+          console.warn("⚠️ Aviso al guardar notificación en BD (continuando hacia alerta visual):", saveErr);
+        }
+
+        // Disparar Alerta Visual Invasiva (Popup / Modal con SweetAlert2) para la Cadena Progresiva (Días 0 a 5)
+        const sessionKey = `bulapay_cobro_alert_${dbUser.username}_${diasRestantes}d_${infoVigencia.fechaCorteStr}`;
+        if (!sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, 'true');
+          setTimeout(async () => {
+            if (typeof Swal !== 'undefined') {
+              Swal.fire({
+                title: regla.titulo || `📢 Recordatorio de Pago - Faltan ${diasRestantes} Días`,
+                text: regla.mensaje || `Le recordamos que restan ${diasRestantes} días para el vencimiento de su suscripción.`,
+                icon: diasRestantes <= 2 ? 'error' : 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Pagar',
+                confirmButtonColor: '#10b981', // Verde
+                cancelButtonText: 'Continuar',
+                cancelButtonColor: '#6b7280', // Gris
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                background: '#0f172a',
+                color: '#ffffff'
+              }).then((result) => {
+                if (result.isConfirmed) {
+                  // Disparar modal estilizado de Cuentas de Recaudo con opción de copiar y WhatsApp
+                  if (typeof window.showCuentasRecaudoModal === 'function') {
+                    window.showCuentasRecaudoModal();
+                  } else if (window.BulaPayDB && typeof window.BulaPayDB.showCuentasRecaudoModal === 'function') {
+                    window.BulaPayDB.showCuentasRecaudoModal();
+                  } else {
+                    if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
                       window.app.router.navigate('cobros');
                     } else {
                       window.location.hash = '#cobros';
                     }
                   }
                 }
-              }, 500);
+              });
+            } else {
+              if (await window.showCrediConfirm(`${regla.titulo}\n\n${regla.mensaje}\n\n¿Desea ver las cuentas de recaudo para realizar su pago?`, "BulaPay")) {
+                if (typeof window.showCuentasRecaudoModal === 'function') {
+                  window.showCuentasRecaudoModal();
+                } else if (window.app && window.app.router && typeof window.app.router.navigate === 'function') {
+                  window.app.router.navigate('cobros');
+                } else {
+                  window.location.hash = '#cobros';
+                }
+              }
             }
-          }
+          }, 500);
         }
       }
     } catch(e) {

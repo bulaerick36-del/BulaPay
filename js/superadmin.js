@@ -942,7 +942,10 @@ const superadminModule = {
     document.getElementById('edit-sa-name').value = user.name || user.nombre_firmante || '';
     document.getElementById('edit-sa-role').value = user.role || 'Usuario Supervisor';
     document.getElementById('edit-sa-phone').value = user.phone || '';
-    const initialCorteVal = user.fecha_corte || (user.fecha_vencimiento ? String(user.fecha_vencimiento).split('T')[0] : '');
+    const canonVig = window.BulaPayDB && typeof window.BulaPayDB.getCanonicalVigenciaDate === 'function'
+      ? window.BulaPayDB.getCanonicalVigenciaDate(user)
+      : (user.fecha_vencimiento || user.fecha_corte);
+    const initialCorteVal = canonVig ? (String(canonVig).includes('T') ? String(canonVig).split('T')[0] : String(canonVig)) : '';
     document.getElementById('edit-sa-corte').value = initialCorteVal;
 
     modal.style.display = 'flex';

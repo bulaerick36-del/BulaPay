@@ -4096,14 +4096,68 @@ const supervisorModule = {
 
   // RENDERIZAR DASHBOARD KPIs Y TABLA
   async renderDashboard() {
-    const currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
+    let currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
     
+    // Obtener los datos frescos directamente de Supabase para reflejar cambios inmediatos de vigencia / suscripción
+    try {
+      if (currentUser && currentUser.username && typeof window.BulaPayDB.getUserByUsername === 'function') {
+        const freshUser = await window.BulaPayDB.getUserByUsername(currentUser.username, false, true);
+        if (freshUser) {
+          currentUser = { ...currentUser, ...freshUser };
+          if (typeof window.BulaPayDB.setCurrentUser === 'function') {
+            window.BulaPayDB.setCurrentUser(currentUser);
+          }
+        }
+      }
+    } catch(e) {
+      console.warn("Aviso al refrescar datos frescos de vigencia del supervisor:", e);
+    }
+
     const infoVigencia = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' 
       ? window.BulaPayDB.getDiasRestantes(currentUser) 
       : null;
-    const badgeVigencia = infoVigencia 
-      ? `<span style="margin-left: 0.75rem; background: ${infoVigencia.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; color: ${infoVigencia.dias <= 5 ? '#fca5a5' : '#38bdf8'}; border: 1px solid ${infoVigencia.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.35)'}; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.3rem;" title="Fecha de corte: ${infoVigencia.fechaCorteStr}">⏳ Vigencia: Faltan ${infoVigencia.dias} días</span>` 
-      : '';
+
+    let badgeVigencia = '';
+    if (infoVigencia) {
+      let badgeBg = 'rgba(56, 189, 248, 0.15)';
+      let badgeColor = '#38bdf8';
+      let badgeBorder = 'rgba(56, 189, 248, 0.35)';
+      let badgeText = `⏳ Vigencia: Faltan ${infoVigencia.dias} días`;
+
+      if (infoVigencia.diasExactos < 0) {
+        badgeBg = 'rgba(239, 68, 68, 0.25)';
+        badgeColor = '#ef4444';
+        badgeBorder = 'rgba(239, 68, 68, 0.5)';
+        badgeText = `⏳ Vigencia: Suscripción Vencida`;
+      } else if (infoVigencia.diasExactos === 0) {
+        badgeBg = 'rgba(239, 68, 68, 0.25)';
+        badgeColor = '#ef4444';
+        badgeBorder = 'rgba(239, 68, 68, 0.5)';
+        badgeText = `⏳ Vigencia: Vence hoy`;
+      } else if (infoVigencia.diasExactos === 1) {
+        badgeBg = 'rgba(239, 68, 68, 0.2)';
+        badgeColor = '#f87171';
+        badgeBorder = 'rgba(239, 68, 68, 0.4)';
+        badgeText = `⏳ Vigencia: Falta 1 día`;
+      } else if (infoVigencia.diasExactos <= 3) {
+        badgeBg = 'rgba(239, 68, 68, 0.2)';
+        badgeColor = '#fca5a5';
+        badgeBorder = 'rgba(239, 68, 68, 0.4)';
+        badgeText = `⏳ Vigencia: Faltan ${infoVigencia.diasExactos} días`;
+      } else if (infoVigencia.diasExactos <= 5) {
+        badgeBg = 'rgba(245, 158, 11, 0.2)';
+        badgeColor = '#fcd34d';
+        badgeBorder = 'rgba(245, 158, 11, 0.4)';
+        badgeText = `⏳ Vigencia: Faltan ${infoVigencia.diasExactos} días`;
+      }
+
+      badgeVigencia = `<span style="margin-left: 0.75rem; background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeBorder}; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 800; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.3rem;" title="Fecha de corte: ${infoVigencia.fechaCorteStr}">${badgeText}</span>`;
+    }
+
+    // Evaluar y disparar alertas preventivas de cobro / vencimiento en tiempo real para el supervisor
+    if (window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
+      window.BulaPayDB.evaluateUserCobroNotifications(currentUser, true).catch(err => console.warn("Aviso evaluando cobros:", err));
+    }
 
     // Check if the user is a commerce role
     if (currentUser.role === 'Otros (Comercios, Compraventas, Mercados)' || currentUser.role === 'Comercio Independiente') {
