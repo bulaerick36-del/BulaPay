@@ -127,11 +127,7 @@ const authModule = {
       try {
         const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-        const isSuspended = user && (
-          user.bloqueado_por_mora === true ||
-          user.bloqueado_por_mora === 'true' ||
-          (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
-        );
+        const isSuspended = await this.isUserAccountSuspended(user);
 
         if (isSuspended) {
           await this.showSuspensionError(this.formLogin, user);
@@ -161,11 +157,7 @@ const authModule = {
         try {
           const user = await window.BulaPayDB.getUserByUsername(usernameInput);
 
-          const isSuspended = user && (
-            user.bloqueado_por_mora === true ||
-            user.bloqueado_por_mora === 'true' ||
-            (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
-          );
+          const isSuspended = await this.isUserAccountSuspended(user);
 
           if (isSuspended) {
             await this.showSuspensionError(this.formAgentLogin, user);
@@ -493,14 +485,69 @@ const authModule = {
     }
   },
 
-  checkCurrentSession() {
+  async isUserAccountSuspended(user) {
+    if (!user) return false;
+    const roleLower = String(user.role || '').toLowerCase();
+    const isAgent = roleLower === 'agente de ruta' || roleLower === 'agent' || roleLower === 'agente' || roleLower === 'cobrador';
+
+    if (isAgent) {
+      const supId = user.supervisor_id || user.supervisor || (
+        (user.username === 'carlos26' || user.username === 'cesar26' || user.username === 'jesus26') ? 'erick26' : null
+      );
+      let supervisorUser = null;
+      if (supId && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+        try {
+          supervisorUser = await window.BulaPayDB.getUserByUsername(supId, true);
+        } catch(e) {}
+      }
+      if (!supervisorUser && window.BulaPayDB && typeof window.BulaPayDB.getUsersFromLocalStorage === 'function') {
+        try {
+          const localUsers = window.BulaPayDB.getUsersFromLocalStorage() || [];
+          supervisorUser = localUsers.find(u => supId && (String(u.username).toLowerCase() === String(supId).toLowerCase() || String(u.documentNumber || '').trim() === String(supId).trim()));
+        } catch(e) {}
+      }
+
+      if (supervisorUser) {
+        const supDias = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function'
+          ? window.BulaPayDB.getDiasRestantes(supervisorUser)
+          : { status: 'activo', dias: 30 };
+        const supervisorActivo = (supervisorUser.bloqueado_por_mora !== true && supervisorUser.bloqueado_por_mora !== 'true') &&
+                                 supDias.status !== 'suspendido' &&
+                                 supDias.dias > 0;
+
+        if (supervisorActivo) {
+          // El supervisor está renovado y al día: el agente hereda automáticamente la vigencia y queda habilitado
+          user.bloqueado_por_mora = false;
+          user.fecha_vencimiento = supervisorUser.fecha_vencimiento || supervisorUser.fecha_corte;
+          user.fecha_corte = supervisorUser.fecha_corte || supervisorUser.fecha_vencimiento;
+          user.estado_suscripcion = supervisorUser.estado_suscripcion || 'activa';
+          user.ciclo_actual = supervisorUser.ciclo_actual;
+
+          // Sincronizar en Supabase si el agente estaba marcado en mora previamente
+          if (user.username && window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+            try {
+              window.BulaPayDB.toggleUserBloqueoMora(user.username, false);
+            } catch(e) {}
+          }
+          return false;
+        } else {
+          // El supervisor está suspendido o en mora: el agente no puede operar
+          return true;
+        }
+      }
+    }
+
+    return (
+      user.bloqueado_por_mora === true ||
+      user.bloqueado_por_mora === 'true' ||
+      (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
+    );
+  },
+
+  async checkCurrentSession() {
     const user = window.BulaPayDB.getCurrentUser();
     if (user) {
-      const isSuspended = (
-        user.bloqueado_por_mora === true ||
-        user.bloqueado_por_mora === 'true' ||
-        (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' && window.BulaPayDB.getDiasRestantes(user).status === 'suspendido')
-      );
+      const isSuspended = await this.isUserAccountSuspended(user);
       if (isSuspended) {
         console.warn("🔒 Sesión finalizada silenciosamente: cuenta suspendida por mora.");
         window.BulaPayDB.logout();
@@ -510,7 +557,9 @@ const authModule = {
     }
     if (user) {
       this.updateNavBar(user);
-      if (window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
+      const isAgentRole = user && (String(user.role || '').toLowerCase() === 'agente de ruta' || String(user.role || '').toLowerCase() === 'agent');
+      // Alertas de suscripción exclusivas para supervisores / administradores
+      if (!isAgentRole && window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
         window.BulaPayDB.evaluateUserCobroNotifications(user).then(() => {
           if (window.adsModule && typeof window.adsModule.updateComunicadosBadge === 'function') {
             window.adsModule.updateComunicadosBadge();

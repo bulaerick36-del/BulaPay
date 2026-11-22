@@ -649,6 +649,10 @@ const adsModule = {
           return;
         }
 
+        const curUser = (window.BulaPayDB && typeof window.BulaPayDB.getCurrentUser === 'function') ? window.BulaPayDB.getCurrentUser() : null;
+        const curRoleLower = curUser ? String(curUser.role || '').toLowerCase() : '';
+        const isAgentViewer = curRoleLower === 'agente de ruta' || curRoleLower === 'agent' || curRoleLower === 'agente' || curRoleLower === 'cobrador';
+
         let html = '<div style="display: flex; flex-direction: column; gap: 0.85rem;">';
         notifs.forEach(n => {
           const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
@@ -658,7 +662,12 @@ const adsModule = {
           const catUpper = String(cat).toUpperCase();
           const titleUpper = String(title).toUpperCase();
 
-          const isCobroOrRecordatorio = catUpper.includes('COBRO PREVENTIVO') || catUpper.includes('COBRO') || titleUpper.includes('RECORDATORIO DE PAGO') || titleUpper.includes('RECORDATORIO');
+          const isCobroOrRecordatorio = catUpper.includes('COBRO PREVENTIVO') || catUpper.includes('COBRO') || catUpper.includes('SUSCRIPCI') || titleUpper.includes('RECORDATORIO DE PAGO') || titleUpper.includes('RECORDATORIO') || titleUpper.includes('ADVERTENCIA PREVENTIVA');
+
+          // Omitir alertas de suscripción en la vista del agente de ruta
+          if (isAgentViewer && isCobroOrRecordatorio) {
+            return;
+          }
 
           let badgeColor = 'rgba(59, 130, 246, 0.2)';
           let textColor = '#60a5fa';

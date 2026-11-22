@@ -830,7 +830,7 @@ const db = {
     }
   },
 
-  async getUserByUsername(username) {
+  async getUserByUsername(username, skipSupervisorInheritance = false) {
     if (!username) return null;
     try {
       const cleanInput = String(username).trim();
@@ -969,6 +969,45 @@ const db = {
           foundUser.role = 'Usuario Supervisor';
         } else if (!foundUser.role) {
           foundUser.role = 'Agente de Ruta';
+        }
+
+        // VIGENCIA HEREDADA DEL SUPERVISOR PARA AGENTES DE RUTA AL RENOVAR:
+        const rLower = String(foundUser.role || '').toLowerCase();
+        const isAgent = rLower === 'agente de ruta' || rLower === 'agent' || rLower === 'agente' || rLower === 'cobrador';
+        if (isAgent && !skipSupervisorInheritance) {
+          const supId = foundUser.supervisor_id || foundUser.supervisor || (
+            (uName === 'carlos26' || uName === 'cesar26' || uName === 'jesus26') ? 'erick26' : null
+          );
+          if (supId) {
+            try {
+              const supervisorUser = await this.getUserByUsername(supId, true);
+              if (supervisorUser) {
+                foundUser.supervisor_id = foundUser.supervisor_id || supervisorUser.username;
+                foundUser.supervisor = foundUser.supervisor || supervisorUser.username;
+
+                const supDias = this.getDiasRestantes(supervisorUser);
+                const isSupActive = (supervisorUser.bloqueado_por_mora !== true && supervisorUser.bloqueado_por_mora !== 'true') &&
+                                    supDias.status !== 'suspendido' &&
+                                    supDias.dias > 0;
+
+                if (isSupActive) {
+                  // El supervisor renovó / está al día: el agente queda habilitado automáticamente
+                  foundUser.bloqueado_por_mora = false;
+                  foundUser.fecha_vencimiento = supervisorUser.fecha_vencimiento || supervisorUser.fecha_corte;
+                  foundUser.fecha_corte = supervisorUser.fecha_corte || supervisorUser.fecha_vencimiento;
+                  foundUser.estado_suscripcion = supervisorUser.estado_suscripcion || 'activa';
+                  foundUser.ciclo_actual = supervisorUser.ciclo_actual;
+                  foundUser.fecha_inicio_ciclo = supervisorUser.fecha_inicio_ciclo;
+                } else {
+                  // Supervisor efectivamente suspendido por mora
+                  foundUser.bloqueado_por_mora = true;
+                  foundUser.estado_suscripcion = supervisorUser.estado_suscripcion || 'suspendida';
+                }
+              }
+            } catch (supErr) {
+              console.warn("⚠️ [getUserByUsername] Aviso sincronizando vigencia heredada del supervisor:", supErr);
+            }
+          }
         }
       }
       return foundUser;
@@ -9359,20 +9398,38 @@ return {
 
       if (supabase) {
         try {
-          // Consultar agentes y actualizar en Supabase
+          // Consultar agentes y rutas asignadas en Supabase
+          let routeAgentNames = [];
+          try {
+            const orRoutes = idFilters.map(val => `supervisor_id.eq."${val}"`).join(',');
+            const { data: routesData } = await supabase.from('routes').select('agentUsername, agent_id').or(orRoutes);
+            if (Array.isArray(routesData)) {
+              routesData.forEach(r => {
+                if (r.agentUsername) routeAgentNames.push(String(r.agentUsername).toLowerCase());
+                if (r.agent_id) routeAgentNames.push(String(r.agent_id).toLowerCase());
+              });
+            }
+          } catch(eR) {}
+
           const { data: routeAgents, error: selectErr } = await supabase
             .from('users')
             .select('*')
-            .in('role', ['Agente de Ruta', 'agent']);
+            .in('role', ['Agente de Ruta', 'agent', 'agente', 'cobrador']);
+
+          const isErickSup = idFilters.some(v => ['erick26', '1121338578', 'admin'].includes(String(v).toLowerCase()));
 
           if (!selectErr && Array.isArray(routeAgents)) {
             const matchedAgents = routeAgents.filter(a => {
+              const aUser = String(a.username || '').toLowerCase();
               const aSupId = String(a.supervisor_id || '').toLowerCase();
               const aSup = String(a.supervisor || '').toLowerCase();
-              return idFilters.some(val => {
+              const directMatch = idFilters.some(val => {
                 const vLow = String(val).toLowerCase();
                 return aSupId === vLow || aSup === vLow;
               });
+              const routeMatch = routeAgentNames.includes(aUser);
+              const systemMatch = isErickSup && ['carlos26', 'cesar26', 'jesus26'].includes(aUser);
+              return directMatch || routeMatch || systemMatch;
             });
 
             for (const ag of matchedAgents) {
@@ -9394,7 +9451,7 @@ return {
             const { data: updatedBatch, error: batchErr } = await supabase
               .from('users')
               .update(agentUpdates)
-              .in('role', ['Agente de Ruta', 'agent'])
+              .in('role', ['Agente de Ruta', 'agent', 'agente', 'cobrador'])
               .or(orClauses)
               .select();
 
@@ -9412,14 +9469,17 @@ return {
         const localUsers = this.getUsersFromLocalStorage();
         if (Array.isArray(localUsers)) {
           let localModified = false;
+          const isErickSup = idFilters.some(v => ['erick26', '1121338578', 'admin'].includes(String(v).toLowerCase()));
           localUsers.forEach(u => {
-            const isAgent = (u.role === 'Agente de Ruta' || u.role === 'agent');
+            const roleLow = String(u.role || '').toLowerCase();
+            const isAgent = (roleLow === 'agente de ruta' || roleLow === 'agent' || roleLow === 'agente' || roleLow === 'cobrador');
+            const aUser = String(u.username || '').toLowerCase();
             const aSupId = String(u.supervisor_id || '').toLowerCase();
             const aSup = String(u.supervisor || '').toLowerCase();
             const matches = idFilters.some(val => {
               const vLow = String(val).toLowerCase();
               return aSupId === vLow || aSup === vLow;
-            });
+            }) || (isErickSup && ['carlos26', 'cesar26', 'jesus26'].includes(aUser));
             if (isAgent && matches) {
               Object.assign(u, agentUpdates);
               localModified = true;
@@ -9667,6 +9727,12 @@ return {
           }
 
           if (!error && Array.isArray(data)) {
+            const isAgentUser = currentUser && (
+              String(currentUser.role || '').toLowerCase() === 'agente de ruta' ||
+              String(currentUser.role || '').toLowerCase() === 'agent' ||
+              String(currentUser.role || '').toLowerCase() === 'agente' ||
+              String(currentUser.role || '').toLowerCase() === 'cobrador'
+            );
             const seenIds = new Set();
             const supabaseList = data
               .map(normalize)
@@ -9677,6 +9743,26 @@ return {
                 const createdAtMs = new Date(n.created_at || 0).getTime();
                 if (createdAtMs && (nowMs - createdAtMs > FortyEightHoursMs)) {
                   return false;
+                }
+
+                // REQUISITO: Alertas de cobro y vencimiento de suscripción son EXCLUSIVAS del supervisor.
+                // Nunca mostrar alertas de días restantes de suscripción ni avisos de cobro preventivo en la vista del agente de ruta.
+                if (isAgentUser) {
+                  const catUpper = String(n.categoria || '').toUpperCase();
+                  const titleUpper = String(n.titulo || '').toUpperCase();
+                  const msgUpper = String(n.mensaje || '').toUpperCase();
+                  const isSubCobroAlert = catUpper.includes('COBRO') ||
+                                          catUpper.includes('SUSCRIPCI') ||
+                                          titleUpper.includes('COBRO PREVENTIVO') ||
+                                          titleUpper.includes('RECORDATORIO DE PAGO') ||
+                                          titleUpper.includes('ADVERTENCIA PREVENTIVA') ||
+                                          titleUpper.includes('SUSPENSI') ||
+                                          titleUpper.includes('CORTE') ||
+                                          msgUpper.includes('VENCIMIENTO DE SU SERVICIO') ||
+                                          msgUpper.includes('CORTE DE SU SUSCRIPCI');
+                  if (isSubCobroAlert) {
+                    return false;
+                  }
                 }
 
                 const targetUser = (n.target_username || n.username) ? String(n.target_username || n.username).toLowerCase().trim() : null;
@@ -9981,6 +10067,31 @@ return {
             localStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(cur));
           }
         } catch(e) {}
+
+        // VIGENCIA HEREDADA: Si se desbloquea / renueva a un Supervisor, desbloquear automáticamente a sus agentes
+        if (targetBool === false) {
+          try {
+            const updatedUser = updatedData[0];
+            const isSup = updatedUser && (
+              updatedUser.role === 'Usuario Supervisor' ||
+              updatedUser.role === 'Supervisor' ||
+              updatedUser.role === 'Administrador' ||
+              updatedUser.role === 'Administrador de Rutas' ||
+              String(updatedUser.username).toLowerCase() === 'erick26' ||
+              String(updatedUser.documentNumber).trim() === '1121338578' ||
+              String(updatedUser.username).toLowerCase() === 'admin'
+            );
+            if (isSup) {
+              this.cascadeSupervisorVigencia(updatedUser, updatedUser.fecha_vencimiento, updatedUser.fecha_corte, {
+                bloqueado_por_mora: false,
+                estado_suscripcion: 'activa'
+              });
+            }
+          } catch(cascErr) {
+            console.warn("⚠️ Error propagando desbloqueo a agentes del supervisor:", cascErr);
+          }
+        }
+
         return true;
       } else {
         console.error(`❌ No se encontró o no se pudo actualizar ningún usuario en Supabase con el identificador "${cleanId}". Error:`, updateError);
@@ -10005,15 +10116,28 @@ return {
     let fechaVencimiento;
     let rawDateStr = user.fecha_corte || user.fecha_vencimiento;
 
-    // Si es Agente de Ruta y no tiene fecha explícita, consultar vigencia de su supervisor en memoria/caché
-    if (!rawDateStr && (user.role === 'Agente de Ruta' || user.role === 'agent')) {
-      const supId = user.supervisor_id || user.supervisor;
+    // VIGENCIA HEREDADA PARA AGENTES DE RUTA:
+    // Si es Agente de Ruta, sincronizar y heredar la vigencia y estado del supervisor asignado
+    const roleLower = String(user.role || '').toLowerCase();
+    const isAgent = roleLower === 'agente de ruta' || roleLower === 'agent' || roleLower === 'agente' || roleLower === 'cobrador';
+
+    if (isAgent) {
+      const supId = user.supervisor_id || user.supervisor || (
+        (user.username === 'carlos26' || user.username === 'cesar26' || user.username === 'jesus26') ? 'erick26' : null
+      );
       if (supId) {
         try {
           const localUsers = typeof this.getUsersFromLocalStorage === 'function' ? this.getUsersFromLocalStorage() : [];
-          const sup = localUsers.find(u => String(u.username).toLowerCase() === String(supId).toLowerCase());
-          if (sup && (sup.fecha_corte || sup.fecha_vencimiento)) {
-            rawDateStr = sup.fecha_corte || sup.fecha_vencimiento;
+          const sup = localUsers.find(u => String(u.username).toLowerCase() === String(supId).toLowerCase() || String(u.documentNumber || '').trim() === String(supId).trim());
+          if (sup) {
+            if (sup.fecha_corte || sup.fecha_vencimiento) {
+              rawDateStr = sup.fecha_corte || sup.fecha_vencimiento;
+            }
+            if (sup.bloqueado_por_mora !== true && sup.bloqueado_por_mora !== 'true') {
+              user.bloqueado_por_mora = false;
+            } else if (sup.bloqueado_por_mora === true || sup.bloqueado_por_mora === 'true') {
+              user.bloqueado_por_mora = true;
+            }
           }
         } catch(e) {}
       }
@@ -10167,6 +10291,16 @@ return {
 
   async evaluateUserCobroNotifications(user) {
     if (!user || !user.username) return;
+
+    // REQUISITO: Las alertas automáticas de vencimiento de suscripción (ej. "te quedan 3 días" o avisos de renovación)
+    // deben mostrarse ÚNICAMENTE en el rol de supervisor / administrador.
+    // NUNCA evaluar ni mostrar alertas de días restantes de suscripción en la vista del agente de ruta.
+    const roleLower = String(user.role || '').toLowerCase();
+    const isAgent = roleLower === 'agente de ruta' || roleLower === 'agent' || roleLower === 'agente' || roleLower === 'cobrador';
+    if (isAgent) {
+      console.log(`ℹ️ [evaluateUserCobroNotifications] Omitido: el usuario "${user.username}" es agente de ruta. Alertas de suscripción exclusivas para supervisores.`);
+      return;
+    }
 
     // Candado en memoria (Concurrency Lock) para prevenir ejecuciones duplicadas en paralelo
     if (this._isEvaluatingCobro || window.isEvaluatingCobro) {
