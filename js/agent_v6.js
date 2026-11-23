@@ -621,8 +621,22 @@ const agentModule = {
         try {
           const client = this.currentClient;
           const totalEsperado = Number(client.totalToPay || client.monto_total || client.totalDebt || client.total_debt || (client.amount ? Math.round(client.amount * 1.2) : 0));
-          const saldoRestante = Number(client.outstanding || client.saldo_restante || 0);
+          let saldoRestante = Number(client.outstanding || client.saldo_restante || 0);
           const capitalPrestado = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
+
+          // Si saldoRestante está en 0 pero el cliente tiene cuotas pendientes, verificar con abonos reales
+          if (client.cedula && (saldoRestante <= 0 || isNaN(saldoRestante))) {
+            try {
+              const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula, client.carton_id || client.id);
+              const totalPagado = (payments || []).filter(p => {
+                const st = String(p.status || '').toUpperCase();
+                return (st === 'PAGADO' || st === 'ABONADO') && Number(p.amount) > 0;
+              }).reduce((sum, p) => sum + Number(p.amount), 0);
+              if (totalEsperado > totalPagado) {
+                saldoRestante = Math.max(0, totalEsperado - totalPagado);
+              }
+            } catch (_) {}
+          }
           
           // Recaudo Real es la diferencia entre el total esperado y el saldo pendiente actual
           const recaudoReal = Math.max(0, totalEsperado - saldoRestante);
@@ -667,6 +681,25 @@ const agentModule = {
               p_cliente_id: cedulaStr 
             });
             if (error) console.error("Error al liquidar:", error);
+
+            // Preservar saldo y estado en cartones, clients y lista_negra tras ejecución de RPC
+            if (saldoRestante > 0) {
+              try {
+                await supabase.from('cartones').update({
+                  outstanding: saldoRestante,
+                  saldo_pendiente: saldoRestante,
+                  estado: 'liquidado_perdida',
+                  status: 'liquidado_perdida',
+                  supervisor_atendido: false,
+                  updated_at: new Date().toISOString(),
+                  fecha_cierre: new Date().toISOString()
+                }).eq('cliente_id', cedulaStr);
+                await supabase.from('clients').update({
+                  outstanding: saldoRestante,
+                  risk: 'Rojo'
+                }).eq('cedula', cedulaStr);
+              } catch (_) {}
+            }
           } else {
             await window.BulaPayDB.liquidateCredit({
               cedula: client.cedula,
@@ -3108,6 +3141,37 @@ const agentModule = {
           p_cliente_id: cedulaStr 
         });
         if (rpcErr) console.warn("Aviso RPC liquidar_carton_por_morosidad:", rpcErr.message);
+
+        // Preservar estrictamente el saldo real perdido en cartones, clients y lista_negra
+        if (saldoPendienteReal > 0) {
+          await supabase.from('cartones').update({
+            outstanding: saldoPendienteReal,
+            saldo_pendiente: saldoPendienteReal,
+            estado: 'liquidado_perdida',
+            status: 'liquidado_perdida',
+            supervisor_atendido: false,
+            updated_at: new Date().toISOString(),
+            fecha_cierre: new Date().toISOString()
+          }).eq('cliente_id', cedulaStr);
+          await supabase.from('clients').update({
+            outstanding: saldoPendienteReal,
+            risk: 'Rojo'
+          }).eq('cedula', cedulaStr);
+          await supabase.from('lista_negra').upsert([{
+            cliente_id: cedulaStr,
+            cedula: cedulaStr,
+            nombre: name,
+            monto: saldoPendienteReal,
+            outstanding: saldoPendienteReal,
+            total_debt: totalDebt,
+            carton_id: rawTargetCartonId ? String(rawTargetCartonId) : null,
+            route_id: routeId,
+            supervisor_id: targetSupervisorId,
+            agent_id: agentUsername,
+            motivo: 'Liquidado por Mora (Superó límite 2 meses y 10 días)',
+            created_at: new Date().toISOString()
+          }], { onConflict: 'cedula' }).catch(() => {});
+        }
       } catch (eRpc) {
         console.warn("Excepción RPC:", eRpc.message);
       }

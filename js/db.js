@@ -2081,8 +2081,21 @@ const db = {
         }
 
         // Clasificar estado real de cierre
-        // 1. ROJO: En Mora / Lista Negra
-        const isMora = rawEstado === 'liquidado_perdida' ||
+        // 1. ROJO: En Mora / Lista Negra (Cualquier cartón cerrado/liquidado con saldo sin cobrar o por pérdida/mora)
+        const currentOutstanding = Number(c.outstanding ?? c.saldo_pendiente ?? c.saldo_restante ?? 0);
+        const hasUnpaidLoss = currentOutstanding > 0 && (
+          rawEstado.includes('liquid') || 
+          rawEstado.includes('cerr') || 
+          rawEstado.includes('venc') || 
+          rawEstado.includes('mora') || 
+          rawEstado.includes('perd') ||
+          rawReason.includes('mora') ||
+          rawReason.includes('perd') ||
+          rawReason.includes('venc')
+        );
+
+        const isMora = hasUnpaidLoss ||
+                       rawEstado === 'liquidado_perdida' ||
                        rawEstado === 'liquidado_mora' ||
                        rawEstado === 'castigado' ||
                        rawEstado === 'lista negra' ||
@@ -2123,7 +2136,6 @@ const db = {
         if (!isMora && !isRenovacion && !isExitoso) return;
 
         // REGLA CRÍTICA 2: Si no es liquidación por mora, el cartón DEBE tener saldo pendiente <= 0 para estar realmente cerrado
-        const currentOutstanding = Number(c.outstanding || 0);
         if (!isMora && currentOutstanding > 0) return;
 
         // REGLA CRÍTICA 3: Verificación estricta de fecha dentro de la jornada operativa actual
@@ -2429,7 +2441,20 @@ const db = {
           }
         }
 
-        const isMora = rawEstado === 'liquidado_perdida' ||
+        const currentOutstanding = Number(c.outstanding ?? c.saldo_pendiente ?? c.saldo_restante ?? 0);
+        const hasUnpaidLoss = currentOutstanding > 0 && (
+          rawEstado.includes('liquid') || 
+          rawEstado.includes('cerr') || 
+          rawEstado.includes('venc') || 
+          rawEstado.includes('mora') || 
+          rawEstado.includes('perd') ||
+          rawReason.includes('mora') ||
+          rawReason.includes('perd') ||
+          rawReason.includes('venc')
+        );
+
+        const isMora = hasUnpaidLoss ||
+                       rawEstado === 'liquidado_perdida' ||
                        rawEstado === 'liquidado_mora' ||
                        rawEstado === 'castigado' ||
                        rawEstado === 'lista negra' ||
@@ -2465,7 +2490,6 @@ const db = {
 
         if (!isMora && !isRenovacion && !isExitoso) return;
 
-        const currentOutstanding = Number(c.outstanding || 0);
         if (!isMora && currentOutstanding > 0) return;
 
         let category = 'green';
@@ -7444,13 +7468,14 @@ return {
     const supabase = await initSupabase();
     const currentUser = this.getCurrentUser();
     
-    const isLossStatus = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado' || String(status || '').toLowerCase().includes('perdida') || String(status || '').toLowerCase().includes('mora'));
+    const hasRemainingDebt = Number(outstanding || 0) > 0;
+    const isLossStatus = (status === 'liquidado_perdida' || status === 'Liquidado_Mora' || status === 'MOROSO' || status === 'Lista Negra' || status === 'castigado' || String(status || '').toLowerCase().includes('perdida') || String(status || '').toLowerCase().includes('mora') || String(status || '').toLowerCase().includes('venc'));
     const isRenovacion = !isLossStatus && (status === 'liquidado_por_renovacion' || status === 'Liquidado_Renovacion' || status === 'renovacion' || status === 'RENOVACION');
-    const isPaidRealCash = !isLossStatus && (status === 'Liquidado_Pagado' || status === 'Liquidado' || status === 'Cancelado' || status === 'CANCELADO' || status === 'liquidado' || status === 'LIQUIDADO');
-    const isPaid = !isLossStatus && (isPaidRealCash || isRenovacion || (outstanding !== undefined && Number(outstanding) <= 0));
     
-    // REGLA ABSOLUTA: Si es liquidación por pérdida o mora, SIEMPRE es mora/lista negra y NUNCA se marca como pagado
-    const isMora = isLossStatus || (!isPaid && !isRenovacion);
+    // REGLA CRÍTICA: Toda liquidación que deje saldo sin cobrar (> 0) y no sea renovación es estrictamente Mora / Pérdida (Lista Negra)
+    const isMora = isLossStatus || (hasRemainingDebt && !isRenovacion);
+    const isPaid = !isMora && !isRenovacion && (!hasRemainingDebt || Number(outstanding || 0) <= 0);
+    const isPaidRealCash = isPaid && !isLossStatus;
     
     // 1. Obtener datos del cliente ANTES de resetear sus saldos numéricos
     let clientData = null;
@@ -7697,6 +7722,51 @@ return {
         });
         if (rpcErr) console.error("Error al liquidar mediante RPC en liquidateCredit:", rpcErr);
         else console.log(`✅ [v134 LIQUIDATE RPC] Cartón(es) de ${cedStr} liquidados por morosidad vía RPC en Supabase.`);
+
+        // Preservar estrictamente el saldo real perdido y estado liquidado_perdida en cartones y clients tras el RPC
+        if (moraOutstanding > 0) {
+          try {
+            await supabase.from('cartones').update({
+              outstanding: moraOutstanding,
+              saldo_pendiente: moraOutstanding,
+              estado: 'liquidado_perdida',
+              status: 'liquidado_perdida',
+              supervisor_atendido: false,
+              updated_at: new Date().toISOString(),
+              fecha_cierre: new Date().toISOString()
+            }).eq('cliente_id', cedStr);
+
+            await supabase.from('clients').update({
+              outstanding: moraOutstanding,
+              risk: 'Rojo'
+            }).eq('cedula', cedStr);
+          } catch (ePreserve) {
+            console.warn("Aviso al preservar saldo real perdido en cartones/clients:", ePreserve?.message);
+          }
+        }
+
+        // Insertar / asegurar registro en la tabla 'lista_negra' con el monto exacto perdido
+        try {
+          const lnPayload = {
+            cliente_id: cedStr,
+            cedula: cedStr,
+            nombre: clientData?.name || clientData?.nombre || `Cliente ${cedStr}`,
+            monto: moraOutstanding,
+            outstanding: moraOutstanding,
+            total_debt: totalDebt || (clientData?.totalDebt || moraOutstanding),
+            carton_id: cartonId ? String(cartonId) : null,
+            route_id: clientData?.routeId || clientData?.route_id || currentUser?.routeId || null,
+            supervisor_id: clientData?.supervisor_id || currentUser?.supervisor_id || currentUser?.username || null,
+            agent_id: clientData?.agent_id || currentUser?.username || null,
+            motivo: 'Liquidado por Mora / Pérdida',
+            created_at: new Date().toISOString()
+          };
+          await supabase.from('lista_negra').upsert([lnPayload], { onConflict: 'cedula' }).catch(async () => {
+            await supabase.from('lista_negra').insert([lnPayload]).catch(() => {});
+          });
+        } catch (eLn) {
+          console.warn("Aviso al insertar en lista_negra desde liquidateCredit:", eLn?.message);
+        }
       }
     } catch (eCarton) {
       console.warn("Excepción al actualizar tabla cartones:", eCarton.message);
@@ -7908,6 +7978,17 @@ return {
         if (!lnErr && lnRes) lnData = lnRes;
       } catch (eLn) {}
 
+      // 4.1 Consultar pagos para verificar abonos reales y deducir saldo perdido exacto si outstanding estuviera en 0
+      let allPayments = [];
+      try {
+        if (typeof this.getPayments === 'function') {
+          allPayments = await this.getPayments();
+        } else {
+          const { data: pData } = await supabase.from('payments').select('*');
+          if (pData) allPayments = pData;
+        }
+      } catch (_) {}
+
       // Función de verificación de alcance
       const belongsToScope = (rec) => {
         if (!rec) return false;
@@ -7966,18 +8047,31 @@ return {
         const rawEstado = String(carton.estado || carton.status || '').trim().toLowerCase();
         const rawReason = String(carton.liquidation_reason || carton.motivo || carton.motivo_liquidacion || '').trim().toLowerCase();
 
-        const isMora = rawEstado === 'liquidado_perdida' || 
+        const cartonOutstandingVal = Number(carton.outstanding ?? carton.saldo_pendiente ?? carton.saldo_restante ?? 0);
+        const hasUnpaidLoss = cartonOutstandingVal > 0 && (
+          rawEstado.includes('liquid') || 
+          rawEstado.includes('cerr') || 
+          rawEstado.includes('venc') || 
+          rawEstado.includes('mora') || 
+          rawEstado.includes('perd') ||
+          rawReason.includes('mora') ||
+          rawReason.includes('perd') ||
+          rawReason.includes('venc')
+        );
+
+        const isMora = hasUnpaidLoss ||
+                       rawEstado === 'liquidado_perdida' || 
                        rawEstado === 'liquidado_mora' || 
                        rawEstado === 'castigado' || 
                        rawEstado === 'lista negra' ||
                        rawEstado.includes('perdida') || 
                        rawEstado.includes('mora') || 
-                       rawEstado.includes('castig') ||
+                       rawEstado.includes('castig') || 
                        rawEstado.includes('negra') ||
-                       rawReason.includes('mora') ||
-                       rawReason.includes('perdida') ||
-                       rawReason.includes('castigo') ||
-                       rawReason.includes('incobrable') ||
+                       rawReason.includes('mora') || 
+                       rawReason.includes('perdida') || 
+                       rawReason.includes('castigo') || 
+                       rawReason.includes('incobrable') || 
                        rawReason.includes('negra');
 
         if (isMora && belongsToScope(carton)) {
@@ -7986,17 +8080,50 @@ return {
             const clientFromDb = allClientsByCedula.get(ced) || {};
             const joinedClient = carton.clients || {};
             const existing = blacklistedMap.get(ced);
-            const realSaldo = Math.round(Number(
-              carton.outstanding ?? 
-              clientFromDb.outstanding ?? 
-              joinedClient.outstanding ?? 
-              carton.saldo_pendiente ??
-              carton.saldo_restante ??
-              carton.total_debt ?? 
-              carton.totalDebt ?? 
-              carton.monto_prestado ??
-              0
-            ));
+
+            // Determinar saldo real perdido: buscar valor positivo en cartón, cliente o calcular deuda - abonos
+            let realSaldo = 0;
+            const candidates = [
+              Number(carton.outstanding),
+              Number(carton.saldo_pendiente),
+              Number(carton.saldo_restante),
+              Number(clientFromDb.outstanding),
+              Number(clientFromDb.saldo_restante),
+              Number(joinedClient.outstanding)
+            ];
+            for (const v of candidates) {
+              if (!isNaN(v) && v > 0) {
+                realSaldo = Math.round(v);
+                break;
+              }
+            }
+
+            if (realSaldo <= 0) {
+              const totDebt = Math.round(Number(
+                carton.total_debt ||
+                carton.totalDebt ||
+                carton.monto_total ||
+                clientFromDb.totalDebt ||
+                clientFromDb.total_debt ||
+                (carton.monto_prestado ? carton.monto_prestado * 1.2 : 0) ||
+                (clientFromDb.amount ? clientFromDb.amount * 1.2 : 0) ||
+                0
+              ));
+              const clientPay = (allPayments || []).filter(p => {
+                if (!p) return false;
+                const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+                if (pCed !== ced) return false;
+                const pSt = String(p.status || '').toUpperCase();
+                if (pSt === 'NO PAGO' || pSt.includes('CANCEL') || pSt.includes('RECHAZ') || pSt === 'PENDIENTE') return false;
+                if (p.liquidado === true || p.liquidado === 'true') return false;
+                return Number(p.amount) > 0;
+              });
+              const abonos = clientPay.reduce((s, p) => s + Math.round(Number(p.amount || 0)), 0);
+              if (totDebt > 0) {
+                if (abonos > 0 && abonos < totDebt) realSaldo = totDebt - abonos;
+                else if (abonos === 0) realSaldo = totDebt;
+              }
+            }
             const foundName = clientFromDb.name || 
                               clientFromDb.nombre || 
                               joinedClient.name || 
@@ -8036,7 +8163,36 @@ return {
         if (isRed && belongsToScope(c)) {
           const ced = String(c.cedula).trim();
           if (ced && !blacklistedMap.has(ced)) {
-            const realSaldo = Math.round(Number(c.outstanding ?? c.saldo_restante ?? c.totalDebt ?? c.monto_total ?? 0));
+            let realSaldo = 0;
+            const candidates = [
+              Number(c.outstanding),
+              Number(c.saldo_restante),
+              Number(c.saldo_pendiente)
+            ];
+            for (const v of candidates) {
+              if (!isNaN(v) && v > 0) {
+                realSaldo = Math.round(v);
+                break;
+              }
+            }
+            if (realSaldo <= 0) {
+              const totDebt = Math.round(Number(c.totalDebt || c.total_debt || c.monto_total || (c.amount ? c.amount * 1.2 : 0) || 0));
+              const clientPay = (allPayments || []).filter(p => {
+                if (!p) return false;
+                const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
+                if (pCed !== ced) return false;
+                const pSt = String(p.status || '').toUpperCase();
+                if (pSt === 'NO PAGO' || pSt.includes('CANCEL') || pSt.includes('RECHAZ') || pSt === 'PENDIENTE') return false;
+                if (p.liquidado === true || p.liquidado === 'true') return false;
+                return Number(p.amount) > 0;
+              });
+              const abonos = clientPay.reduce((s, p) => s + Math.round(Number(p.amount || 0)), 0);
+              if (totDebt > 0) {
+                if (abonos > 0 && abonos < totDebt) realSaldo = totDebt - abonos;
+                else if (abonos === 0) realSaldo = totDebt;
+              }
+            }
+
             blacklistedMap.set(ced, {
               ...c,
               cedula: ced,
@@ -8060,7 +8216,24 @@ return {
             if (ced) {
               const clientFromDb = allClientsByCedula.get(ced) || {};
               const existing = blacklistedMap.get(ced);
-              const realSaldo = Math.round(Number(item.outstanding ?? item.monto ?? (existing ? existing.outstanding : 0)));
+              let realSaldo = 0;
+              const lnCandidates = [
+                Number(item.outstanding),
+                Number(item.monto),
+                Number(existing?.outstanding),
+                Number(clientFromDb.outstanding)
+              ];
+              for (const v of lnCandidates) {
+                if (!isNaN(v) && v > 0) {
+                  realSaldo = Math.round(v);
+                  break;
+                }
+              }
+              if (realSaldo <= 0) {
+                const totDebt = Math.round(Number(item.total_debt || clientFromDb.totalDebt || 0));
+                if (totDebt > 0) realSaldo = totDebt;
+              }
+
               blacklistedMap.set(ced, {
                 ...clientFromDb,
                 ...existing,
@@ -8072,7 +8245,7 @@ return {
                 routeId: item.route_id || item.routeId || (existing ? existing.routeId : clientFromDb.routeId),
                 risk: 'Rojo',
                 status: 'Liquidado_Mora',
-                outstanding: realSaldo
+                outstanding: realSaldo > 0 ? realSaldo : Number(existing?.outstanding || item.monto || 0)
               });
             }
           }

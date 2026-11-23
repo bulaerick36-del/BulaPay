@@ -2409,15 +2409,16 @@ const supervisorModule = {
       item.style.alignItems = 'center';
       item.style.gap = '0.75rem';
 
+      const displaySaldoDeuda = Math.round(Number(client.outstanding || client.monto || client.saldo_pendiente || 0));
       item.innerHTML = `
         <div style="flex: 1; min-width: 0;">
-          <strong style="color: #f87171; font-size: 0.95rem; display: block; word-break: break-word;">${client.name || 'Cliente'}</strong>
-          <div style="font-size: 0.75rem; color: var(--text-secondary);">C.C. ${client.cedula || 'N/A'} | Ruta: <strong style="color: #38bdf8;">${route.name}</strong></div>
+          <strong style="color: #b91c1c; font-size: 0.98rem; font-weight: 800; display: block; word-break: break-word;">${client.name || 'Cliente'}</strong>
+          <div style="font-size: 0.75rem; color: #374151; font-weight: 600;">C.C. ${client.cedula || 'N/A'} | Ruta: <strong style="color: #0369a1;">${route.name}</strong></div>
         </div>
         <div style="display: flex; align-items: center; gap: 0.85rem; flex-shrink: 0;">
           <div style="text-align: right;">
-            <span style="font-size: 0.7rem; color: #f87171; font-weight: bold; display: block;">Saldo Deuda</span>
-            <strong style="color: #ffffff; font-size: 1rem;">$${Number(client.outstanding || 0).toLocaleString('es-CO')}</strong>
+            <span style="font-size: 0.72rem; color: #b91c1c; font-weight: 800; display: block; text-transform: uppercase;">Saldo Deuda</span>
+            <strong style="color: #111827; font-size: 1.05rem; font-weight: 900; letter-spacing: -0.3px;">$${displaySaldoDeuda.toLocaleString('es-CO')}</strong>
           </div>
           <button class="btn-indultar-action" data-cedula="${client.cedula}" style="padding: 0.45rem 0.85rem; background-color: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; transition: background 0.2s;">
             <span>🕊️</span> Indultar
