@@ -1050,6 +1050,33 @@ const db = {
       console.error('Error de Supabase al cargar usuarios:', error);
       return [];
     }
+
+    if (data && Array.isArray(data)) {
+      data.forEach(u => {
+        if (!u) return;
+        const rLower = String(u.role || '').toLowerCase();
+        const isAgent = rLower === 'agente de ruta' || rLower === 'agent' || rLower === 'agente' || rLower === 'cobrador';
+        if (isAgent) {
+          let supId = u.supervisor_id || u.supervisor || (
+            (['carlos26', 'cesar26', 'jesus26'].includes(String(u.username || '').toLowerCase())) ? 'erick26' : null
+          );
+          if (supId) {
+            const sLow = String(supId).toLowerCase().trim();
+            const sup = data.find(s => s && (
+              String(s.username || '').toLowerCase().trim() === sLow ||
+              String(s.documentNumber || s.documento_firmante || '').trim() === sLow ||
+              String(s.id || '').trim() === sLow
+            ));
+            if (sup) {
+              u._supervisorUser = sup;
+              u.supervisor_id = u.supervisor_id || sup.username;
+              u.supervisor = u.supervisor || sup.username;
+            }
+          }
+        }
+      });
+    }
+
     this.cachedUsers = data || [];
     return data || [];
   },
@@ -10567,30 +10594,37 @@ return {
       }
     }
 
-    let targetDateStr = this.getCanonicalVigenciaDate(user);
-
     let targetYear, targetMonth, targetDay;
 
-    if (targetDateStr) {
-      const clean = String(targetDateStr).trim();
-      const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
-      const parts = datePart.split('-');
-      if (parts.length === 3 && parts[0].length === 4) {
-        targetYear = parseInt(parts[0], 10);
-        targetMonth = parseInt(parts[1], 10) - 1; // 0-indexed en Date
-        targetDay = parseInt(parts[2], 10);
+    // Priorizar fecha_corte explícita en formato calendario YYYY-MM-DD
+    if (user.fecha_corte && /^\d{4}-\d{2}-\d{2}$/.test(String(user.fecha_corte).trim())) {
+      const parts = String(user.fecha_corte).trim().split('-');
+      targetYear = parseInt(parts[0], 10);
+      targetMonth = parseInt(parts[1], 10) - 1; // 0-indexed en Date
+      targetDay = parseInt(parts[2], 10);
+    } else {
+      let targetDateStr = this.getCanonicalVigenciaDate(user);
+      if (targetDateStr) {
+        const clean = String(targetDateStr).trim();
+        const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
+        const parts = datePart.split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+          targetYear = parseInt(parts[0], 10);
+          targetMonth = parseInt(parts[1], 10) - 1; // 0-indexed en Date
+          targetDay = parseInt(parts[2], 10);
+        } else {
+          const d = new Date(clean);
+          targetYear = d.getFullYear();
+          targetMonth = d.getMonth();
+          targetDay = d.getDate();
+        }
       } else {
-        const d = new Date(clean);
+        const base = user.created_at ? new Date(user.created_at) : (user.subscription_start_date ? new Date(user.subscription_start_date) : ahora);
+        const d = new Date(base.getTime() + (30 * 24 * 60 * 60 * 1000));
         targetYear = d.getFullYear();
         targetMonth = d.getMonth();
         targetDay = d.getDate();
       }
-    } else {
-      const base = user.created_at ? new Date(user.created_at) : (user.subscription_start_date ? new Date(user.subscription_start_date) : ahora);
-      const d = new Date(base.getTime() + (30 * 24 * 60 * 60 * 1000));
-      targetYear = d.getFullYear();
-      targetMonth = d.getMonth();
-      targetDay = d.getDate();
     }
 
     // Comparación precisa de días calendario (medianoche local a medianoche local)
@@ -10617,7 +10651,10 @@ return {
       dias: diasRestantes,
       diasExactos: diasCalculados,
       fechaCorteStr: fechaCorteStr,
-      status: status
+      status: status,
+      ciclo_actual: user.ciclo_actual || 1,
+      supervisorUsername: user.username,
+      supervisorName: user.name || user.username
     };
   },
 

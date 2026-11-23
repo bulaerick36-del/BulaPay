@@ -224,7 +224,15 @@ const superadminModule = {
             </td>
             <td class="sa-user-col-status" style="padding: 0.85rem 1rem; vertical-align: middle;">
               ${(() => {
-                const diasInfo = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function' ? window.BulaPayDB.getDiasRestantes(u, users) : { dias: 0, fechaCorteStr: 'N/A' };
+                let diasInfo = { dias: 0, fechaCorteStr: 'N/A' };
+                try {
+                  const fullList = this._allLoadedUsers || (window.BulaPayDB && window.BulaPayDB.cachedUsers) || users;
+                  if (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function') {
+                    diasInfo = window.BulaPayDB.getDiasRestantes(u, fullList);
+                  }
+                } catch(eD) {
+                  console.warn("Error calculando dias en modal de usuarios:", eD);
+                }
                 const isItemSuspended = u.bloqueado_por_mora === true || diasInfo.status === 'suspendido';
                 const btnHtml = isItemSuspended ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
                 return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
@@ -601,6 +609,7 @@ const superadminModule = {
       }
       if (!allUsers || !Array.isArray(allUsers)) allUsers = [];
 
+      this._allLoadedUsers = allUsers;
       this.renderUsersListTable(allUsers);
 
       const quickCedulaInput = document.getElementById('sa-quick-cedula-input');
@@ -766,10 +775,13 @@ const superadminModule = {
               ${(() => {
                 let diasInfo = { dias: 0, fechaCorteStr: 'N/A' };
                 try {
+                  const fullList = this._allLoadedUsers || (window.BulaPayDB && window.BulaPayDB.cachedUsers) || users;
                   if (window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function') {
-                    diasInfo = window.BulaPayDB.getDiasRestantes(u, filteredUsers);
+                    diasInfo = window.BulaPayDB.getDiasRestantes(u, fullList);
                   }
-                } catch(eD) {}
+                } catch(eD) {
+                  console.warn("Error calculando dias en tabla superadmin:", eD);
+                }
                 const isItemSuspended = u.bloqueado_por_mora === true || diasInfo.status === 'suspendido';
                 const btnHtml = isItemSuspended ? `<button class="btn" style="background: rgba(239, 68, 68, 0.25); color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', true)">🔴 SUSPENDIDO (Impago)</button>` : `<button class="btn" style="background: rgba(16, 185, 129, 0.2); color: #34d399 !important; border: 1px solid rgba(16, 185, 129, 0.4); padding: 0.35rem 0.65rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;" onclick="superadminModule.toggleUserBloqueo('${u.username}', false)">🟢 Activo (Bloquear)</button>`;
                 return `<div style="display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;">
@@ -3222,16 +3234,16 @@ const superadminModule = {
       }
     } catch(e) {}
     if (!allUsers || allUsers.length === 0) {
-      allUsers = this.getFallbackUsers();
+      allUsers = this._allLoadedUsers || (window.BulaPayDB && window.BulaPayDB.cachedUsers) || this.getFallbackUsers();
     }
 
-    const matchedUser = allUsers.find(u => 
+    const matchingUsers = allUsers.filter(u => 
       (u.documentNumber && String(u.documentNumber).toLowerCase().trim() === query) ||
       (u.username && String(u.username).toLowerCase().trim() === query) ||
       (u.name && String(u.name).toLowerCase().includes(query))
     );
 
-    if (!matchedUser) {
+    if (!matchingUsers || matchingUsers.length === 0) {
       container.style.display = 'block';
       container.innerHTML = `
         <div style="background: #0b132b; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 10px; padding: 1.25rem; text-align: center; color: #fca5a5;">
@@ -3241,6 +3253,23 @@ const superadminModule = {
       `;
       return;
     }
+
+    // Priorizar inteligentemente si varios usuarios comparten cédula o coinciden
+    matchingUsers.sort((a, b) => {
+      const getScore = (u) => {
+        let s = 0;
+        const uName = String(u.username || '').toLowerCase().trim();
+        const uRole = String(u.role || '').toLowerCase().trim();
+        if (uName === query) s += 100;
+        if (uRole.includes('supervis') || uRole.includes('admin')) s += 50;
+        if (u.bloqueado_por_mora !== true && u.bloqueado_por_mora !== 'true') s += 20;
+        s += Number(u.ciclo_actual || 1);
+        return s;
+      };
+      return getScore(b) - getScore(a);
+    });
+
+    const matchedUser = matchingUsers[0];
 
     // Identificar si es Agente de Ruta y sincronizar con su supervisor
     const rLower = String(matchedUser.role || '').toLowerCase().trim();
@@ -3362,7 +3391,7 @@ const superadminModule = {
           </div>
           <div>
             <span style="color: #94a3b8; display: block; font-weight: 600;">⏳ Vigencia Restante:</span>
-            <button class="btn-ciclo-gestion" onclick="superadminModule.openGestionSuscripcionModal('${supUser ? supUser.username : matchedUser.username}')" style="color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; font-weight: 800; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.2rem 0.65rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;" title="${supUser ? 'Vigencia heredada de Supervisor @' + supUser.username : 'Clic para Gestor de Ciclos'}">🔄 Faltan ${diasInfo.dias} días (Ciclo ${matchedUser.ciclo_actual || (supUser && supUser.ciclo_actual) || 1})${supUser ? ' · Supervisor' : ''}</button>
+            <button class="btn-ciclo-gestion" onclick="superadminModule.openGestionSuscripcionModal('${supUser ? supUser.username : (diasInfo.supervisorUsername || matchedUser.username)}')" style="color: ${diasInfo.dias <= 5 ? '#fca5a5' : '#38bdf8'}; font-weight: 800; background: ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)'}; border: 1px solid ${diasInfo.dias <= 5 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.3)'}; padding: 0.2rem 0.65rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;" title="${supUser ? 'Vigencia heredada de Supervisor @' + supUser.username : 'Clic para Gestor de Ciclos'}">🔄 Faltan ${diasInfo.dias} días (Ciclo ${diasInfo.ciclo_actual || matchedUser.ciclo_actual || (supUser && supUser.ciclo_actual) || 1})${supUser ? ' · Supervisor' : ''}</button>
           </div>
           <div>
             <span style="color: #94a3b8; display: block; font-weight: 600;">🕒 Último Acceso:</span>
