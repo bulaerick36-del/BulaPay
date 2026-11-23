@@ -526,11 +526,26 @@ const authModule = {
     const isAgent = roleLower === 'agente de ruta' || roleLower === 'agent' || roleLower === 'agente' || roleLower === 'cobrador';
 
     if (isAgent) {
-      const supId = user.supervisor_id || user.supervisor || (
+      let supId = user.supervisor_id || user.supervisor || (
         (user.username === 'carlos26' || user.username === 'cesar26' || user.username === 'jesus26') ? 'erick26' : null
       );
-      let supervisorUser = null;
-      if (supId && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
+
+      // Si no tiene supervisor_id directo, intentar resolver desde su ruta asignada
+      if (!supId && (user.routeId || user.route_id || user.username)) {
+        try {
+          if (window.BulaPayDB && typeof window.BulaPayDB.getRouteByAgent === 'function') {
+            const rMatch = await window.BulaPayDB.getRouteByAgent(user.username);
+            if (rMatch && rMatch.supervisor_id) {
+              supId = rMatch.supervisor_id;
+              user.supervisor_id = rMatch.supervisor_id;
+              user.supervisor = rMatch.supervisor_id;
+            }
+          }
+        } catch(eR) {}
+      }
+
+      let supervisorUser = user._supervisorUser || null;
+      if (!supervisorUser && supId && window.BulaPayDB && typeof window.BulaPayDB.getUserByUsername === 'function') {
         try {
           supervisorUser = await window.BulaPayDB.getUserByUsername(supId, true);
         } catch(e) {}
@@ -543,6 +558,7 @@ const authModule = {
       }
 
       if (supervisorUser) {
+        user._supervisorUser = supervisorUser;
         const supDias = window.BulaPayDB && typeof window.BulaPayDB.getDiasRestantes === 'function'
           ? window.BulaPayDB.getDiasRestantes(supervisorUser)
           : { status: 'activo', dias: 30 };
@@ -556,19 +572,31 @@ const authModule = {
           user.fecha_vencimiento = supervisorUser.fecha_vencimiento || supervisorUser.fecha_corte;
           user.fecha_corte = supervisorUser.fecha_corte || supervisorUser.fecha_vencimiento;
           user.estado_suscripcion = supervisorUser.estado_suscripcion || 'activa';
-          user.ciclo_actual = supervisorUser.ciclo_actual;
+          user.ciclo_actual = supervisorUser.ciclo_actual || 1;
+          user.supervisor_id = user.supervisor_id || supervisorUser.username;
+          user.supervisor = user.supervisor || supervisorUser.username;
 
-          // Sincronizar en Supabase si el agente estaba marcado en mora previamente
-          if (user.username && window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+          // Sincronizar en Supabase si el agente estaba desfasado o en mora
+          if (user.username && window.BulaPayDB && typeof window.BulaPayDB.syncAgentVigenciaWithSupervisor === 'function') {
             try {
-              window.BulaPayDB.toggleUserBloqueoMora(user.username, false);
+              window.BulaPayDB.syncAgentVigenciaWithSupervisor(user.username, supervisorUser).catch(e => console.warn(e));
+            } catch(e) {}
+          } else if (user.username && window.BulaPayDB && typeof window.BulaPayDB.toggleUserBloqueoMora === 'function') {
+            try {
+              window.BulaPayDB.toggleUserBloqueoMora(user.username, false).catch(e => console.warn(e));
             } catch(e) {}
           }
           return false;
         } else {
           // El supervisor está suspendido o en mora: el agente no puede operar
+          user.bloqueado_por_mora = true;
+          user.estado_suscripcion = 'suspendida';
           return true;
         }
+      } else {
+        // Si no se pudo contactar al supervisor en tiempo real, el agente no debe bloquearse por su propia fecha desfasada
+        // Únicamente se bloquea si tiene bloqueado_por_mora explícitamente en true
+        return (user.bloqueado_por_mora === true || user.bloqueado_por_mora === 'true');
       }
     }
 
@@ -592,7 +620,7 @@ const authModule = {
     }
     if (user) {
       this.updateNavBar(user);
-      const isAgentRole = user && (String(user.role || '').toLowerCase() === 'agente de ruta' || String(user.role || '').toLowerCase() === 'agent');
+      const isAgentRole = user && (['agente de ruta', 'agent', 'agente', 'cobrador'].includes(String(user.role || '').toLowerCase()));
       // Alertas de suscripción exclusivas para supervisores / administradores
       if (!isAgentRole && window.BulaPayDB && typeof window.BulaPayDB.evaluateUserCobroNotifications === 'function') {
         window.BulaPayDB.evaluateUserCobroNotifications(user).then(() => {

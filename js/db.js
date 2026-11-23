@@ -984,6 +984,7 @@ const db = {
               if (supervisorUser) {
                 foundUser.supervisor_id = foundUser.supervisor_id || supervisorUser.username;
                 foundUser.supervisor = foundUser.supervisor || supervisorUser.username;
+                foundUser._supervisorUser = supervisorUser;
 
                 const supDias = this.getDiasRestantes(supervisorUser);
                 const isSupActive = (supervisorUser.bloqueado_por_mora !== true && supervisorUser.bloqueado_por_mora !== 'true') &&
@@ -996,8 +997,13 @@ const db = {
                   foundUser.fecha_vencimiento = supervisorUser.fecha_vencimiento || supervisorUser.fecha_corte;
                   foundUser.fecha_corte = supervisorUser.fecha_corte || supervisorUser.fecha_vencimiento;
                   foundUser.estado_suscripcion = supervisorUser.estado_suscripcion || 'activa';
-                  foundUser.ciclo_actual = supervisorUser.ciclo_actual;
+                  foundUser.ciclo_actual = supervisorUser.ciclo_actual || 1;
                   foundUser.fecha_inicio_ciclo = supervisorUser.fecha_inicio_ciclo;
+
+                  // Sincronizar en segundo plano si los datos del agente en Supabase estaban desfasados
+                  if (typeof this.syncAgentVigenciaWithSupervisor === 'function') {
+                    this.syncAgentVigenciaWithSupervisor(foundUser.username, supervisorUser).catch(e => console.warn(e));
+                  }
                 } else {
                   // Supervisor efectivamente suspendido por mora
                   foundUser.bloqueado_por_mora = true;
@@ -1044,6 +1050,7 @@ const db = {
       console.error('Error de Supabase al cargar usuarios:', error);
       return [];
     }
+    this.cachedUsers = data || [];
     return data || [];
   },
 
@@ -9499,7 +9506,20 @@ return {
       // Sincronizar automáticamente la misma vigencia a todos los agentes de ruta de este supervisor
       let updatedAgentsCount = 0;
       try {
-        const isSupervisor = (userObj.role === 'Usuario Supervisor' || userObj.role === 'Supervisor' || userObj.role === 'Administrador' || userObj.role === 'Administrador de Rutas');
+        const isSupervisor = Boolean(
+          userObj && (
+            userObj.role === 'Usuario Supervisor' ||
+            userObj.role === 'Supervisor' ||
+            userObj.role === 'Administrador' ||
+            userObj.role === 'Administrador de Rutas' ||
+            userObj.role === 'Comercio Independiente' ||
+            userObj.role === 'Otros (Comercios, Compraventas, Mercados)' ||
+            String(userObj.username).toLowerCase() === 'erick26' ||
+            String(userObj.documentNumber || '').trim() === '1121338578' ||
+            String(userObj.username).toLowerCase() === 'admin' ||
+            (userObj.role && String(userObj.role).toLowerCase().includes('supervisor'))
+          )
+        );
         if (isSupervisor) {
           console.log(`🔗 [renovarCicloManual] Propagando vigencia a agentes del supervisor "${userObj.username}"...`);
           const cascRes = await this.cascadeSupervisorVigencia(userObj, nuevaFechaCorteIso, nuevaFechaCorteStr, {
@@ -9571,14 +9591,14 @@ return {
         fecha_corte: targetCorteStr,
         bloqueado_por_mora: extraFields.bloqueado_por_mora !== undefined ? extraFields.bloqueado_por_mora : (supUser.bloqueado_por_mora === true),
         estado_suscripcion: extraFields.estado_suscripcion || supUser.estado_suscripcion || 'activa',
+        ciclo_actual: extraFields.ciclo_actual || supUser.ciclo_actual || 1,
+        supervisor_id: supUsername,
+        supervisor: supUsername,
         updated_at: new Date().toISOString()
       };
 
-      if (extraFields.ciclo_actual) {
-        agentUpdates.ciclo_actual = extraFields.ciclo_actual;
-      }
-      if (extraFields.fecha_inicio_ciclo) {
-        agentUpdates.fecha_inicio_ciclo = extraFields.fecha_inicio_ciclo;
+      if (extraFields.fecha_inicio_ciclo || supUser.fecha_inicio_ciclo) {
+        agentUpdates.fecha_inicio_ciclo = extraFields.fecha_inicio_ciclo || supUser.fecha_inicio_ciclo;
       }
 
       console.log(`🔗 [cascadeSupervisorVigencia] Ejecutando UPDATE automático a agentes de ruta del supervisor "${supUsername}":`, agentUpdates);
@@ -9603,16 +9623,19 @@ return {
             }
           } catch(eR) {}
 
-          const { data: routeAgents, error: selectErr } = await supabase
+          const { data: allDbUsers, error: selectErr } = await supabase
             .from('users')
-            .select('*')
-            .in('role', ['Agente de Ruta', 'agent', 'agente', 'cobrador']);
+            .select('*');
 
           const isErickSup = idFilters.some(v => ['erick26', '1121338578', 'admin'].includes(String(v).toLowerCase()));
 
-          if (!selectErr && Array.isArray(routeAgents)) {
-            const matchedAgents = routeAgents.filter(a => {
-              const aUser = String(a.username || '').toLowerCase();
+          if (!selectErr && Array.isArray(allDbUsers)) {
+            const matchedAgents = allDbUsers.filter(a => {
+              if (!a || !a.username) return false;
+              const aUser = String(a.username).toLowerCase();
+              if (idFilters.some(val => String(val).toLowerCase() === aUser)) return false;
+
+              const aRole = String(a.role || '').toLowerCase();
               const aSupId = String(a.supervisor_id || '').toLowerCase();
               const aSup = String(a.supervisor || '').toLowerCase();
               const directMatch = idFilters.some(val => {
@@ -9621,7 +9644,9 @@ return {
               });
               const routeMatch = routeAgentNames.includes(aUser);
               const systemMatch = isErickSup && ['carlos26', 'cesar26', 'jesus26'].includes(aUser);
-              return directMatch || routeMatch || systemMatch;
+              const isAgentRole = !aRole || aRole === 'agente de ruta' || aRole === 'agent' || aRole === 'agente' || aRole === 'cobrador';
+
+              return (directMatch || routeMatch || systemMatch) && (isAgentRole || directMatch || routeMatch);
             });
 
             for (const ag of matchedAgents) {
@@ -9643,7 +9668,6 @@ return {
             const { data: updatedBatch, error: batchErr } = await supabase
               .from('users')
               .update(agentUpdates)
-              .in('role', ['Agente de Ruta', 'agent', 'agente', 'cobrador'])
               .or(orClauses)
               .select();
 
@@ -9716,6 +9740,78 @@ return {
     } catch (err) {
       console.error("❌ Error en cascadeSupervisorVigencia:", err);
       return { success: false, count: 0, error: err.message || String(err) };
+    }
+  },
+
+  /**
+   * Sincroniza la vigencia y estado de suscripción de un Agente de Ruta con su Supervisor.
+   * Persiste la fecha de corte, vencimiento, ciclo y estado en Supabase y localmente.
+   */
+  async syncAgentVigenciaWithSupervisor(agentUsername, supervisorObjOrId) {
+    if (!agentUsername) return { success: false, error: 'agentUsername requerido' };
+    try {
+      const cleanAgent = String(agentUsername).trim();
+      let supUser = (typeof supervisorObjOrId === 'object' && supervisorObjOrId !== null)
+        ? supervisorObjOrId
+        : await this.getUserByUsername(supervisorObjOrId);
+
+      if (!supUser) {
+        console.warn('⚠️ [syncAgentVigenciaWithSupervisor] Supervisor no encontrado:', supervisorObjOrId);
+        return { success: false, error: 'Supervisor no encontrado' };
+      }
+
+      const supDias = this.getDiasRestantes(supUser);
+      const isSupActive = (supUser.bloqueado_por_mora !== true && supUser.bloqueado_por_mora !== 'true') &&
+                          supDias.status !== 'suspendido' &&
+                          supDias.dias > 0;
+
+      const targetVencimientoIso = supUser.fecha_vencimiento || (supUser.fecha_corte ? (supUser.fecha_corte.includes('T') ? supUser.fecha_corte : `${supUser.fecha_corte}T23:59:59.999Z`) : new Date(Date.now() + 30 * 86400000).toISOString());
+      const targetCorteStr = supUser.fecha_corte || (targetVencimientoIso.includes('T') ? targetVencimientoIso.split('T')[0] : targetVencimientoIso);
+
+      const agentUpdates = {
+        fecha_vencimiento: targetVencimientoIso,
+        fecha_corte: targetCorteStr,
+        bloqueado_por_mora: !isSupActive,
+        estado_suscripcion: isSupActive ? (supUser.estado_suscripcion || 'activa') : 'suspendida',
+        ciclo_actual: supUser.ciclo_actual || 1,
+        fecha_inicio_ciclo: supUser.fecha_inicio_ciclo || new Date().toISOString(),
+        supervisor_id: supUser.username,
+        supervisor: supUser.username,
+        updated_at: new Date().toISOString()
+      };
+
+      const supabase = await initSupabase();
+      if (supabase) {
+        await supabase
+          .from('users')
+          .update(agentUpdates)
+          .eq('username', cleanAgent);
+      }
+
+      // Actualizar localStorage si existe
+      try {
+        const localUsers = this.getUsersFromLocalStorage();
+        if (Array.isArray(localUsers)) {
+          const idx = localUsers.findIndex(u => String(u.username).toLowerCase() === cleanAgent.toLowerCase());
+          if (idx >= 0) {
+            Object.assign(localUsers[idx], agentUpdates);
+            this.saveUsersToLocalStorage(localUsers);
+          }
+        }
+      } catch(e) {}
+
+      // Actualizar sesión activa si es el agente
+      const cur = this.getCurrentUser();
+      if (cur && String(cur.username).toLowerCase() === cleanAgent.toLowerCase()) {
+        Object.assign(cur, agentUpdates);
+        this.setCurrentUser(cur);
+      }
+
+      this.cachedUsers = null;
+      return { success: true, updates: agentUpdates };
+    } catch(err) {
+      console.error('❌ Error en syncAgentVigenciaWithSupervisor:', err);
+      return { success: false, error: err.message || String(err) };
     }
   },
 
@@ -10260,27 +10356,51 @@ return {
           }
         } catch(e) {}
 
-        // VIGENCIA HEREDADA: Si se desbloquea / renueva a un Supervisor, desbloquear automáticamente a sus agentes
-        if (targetBool === false) {
+        // VIGENCIA HEREDADA: Si se desbloquea / suspende a un Supervisor, propagar a sus agentes
+        const updatedUser = updatedData[0];
+        const isSup = updatedUser && (
+          updatedUser.role === 'Usuario Supervisor' ||
+          updatedUser.role === 'Supervisor' ||
+          updatedUser.role === 'Administrador' ||
+          updatedUser.role === 'Administrador de Rutas' ||
+          updatedUser.role === 'Comercio Independiente' ||
+          updatedUser.role === 'Otros (Comercios, Compraventas, Mercados)' ||
+          String(updatedUser.username).toLowerCase() === 'erick26' ||
+          String(updatedUser.documentNumber).trim() === '1121338578' ||
+          String(updatedUser.username).toLowerCase() === 'admin' ||
+          (updatedUser.role && String(updatedUser.role).toLowerCase().includes('supervisor'))
+        );
+        if (isSup) {
           try {
-            const updatedUser = updatedData[0];
-            const isSup = updatedUser && (
-              updatedUser.role === 'Usuario Supervisor' ||
-              updatedUser.role === 'Supervisor' ||
-              updatedUser.role === 'Administrador' ||
-              updatedUser.role === 'Administrador de Rutas' ||
-              String(updatedUser.username).toLowerCase() === 'erick26' ||
-              String(updatedUser.documentNumber).trim() === '1121338578' ||
-              String(updatedUser.username).toLowerCase() === 'admin'
-            );
-            if (isSup) {
-              this.cascadeSupervisorVigencia(updatedUser, updatedUser.fecha_vencimiento, updatedUser.fecha_corte, {
-                bloqueado_por_mora: false,
-                estado_suscripcion: 'activa'
-              });
-            }
+            await this.cascadeSupervisorVigencia(updatedUser, updatedUser.fecha_vencimiento, updatedUser.fecha_corte, {
+              bloqueado_por_mora: targetBool,
+              estado_suscripcion: targetBool ? 'suspendida' : (updatedUser.estado_suscripcion || 'activa'),
+              ciclo_actual: updatedUser.ciclo_actual
+            });
           } catch(cascErr) {
-            console.warn("⚠️ Error propagando desbloqueo a agentes del supervisor:", cascErr);
+            console.warn("⚠️ Error propagando estado a agentes del supervisor:", cascErr);
+          }
+        }
+
+        // Si el usuario actualizado es un Agente de Ruta y fue liberado (targetBool === false),
+        // sincronizar su vigencia y ciclo en Supabase con su Supervisor si éste se encuentra activo
+        const isAgent = updatedUser && (
+          ['agente de ruta', 'agent', 'agente', 'cobrador'].includes(String(updatedUser.role || '').toLowerCase()) ||
+          (!updatedUser.role && (updatedUser.supervisor_id || updatedUser.supervisor))
+        );
+        if (isAgent && targetBool === false) {
+          try {
+            const supId = updatedUser.supervisor_id || updatedUser.supervisor || (
+              (['carlos26', 'cesar26', 'jesus26'].includes(String(updatedUser.username).toLowerCase())) ? 'erick26' : null
+            );
+            if (supId) {
+              const sup = await this.getUserByUsername(supId, true);
+              if (sup) {
+                await this.syncAgentVigenciaWithSupervisor(updatedUser.username, sup);
+              }
+            }
+          } catch(eAg) {
+            console.warn("⚠️ Aviso sincronizando vigencia de agente al liberar:", eAg);
           }
         }
 
@@ -10333,7 +10453,7 @@ return {
   // ----------------------------------------------------
   // CÁLCULO DINÁMICO DE DÍAS RESTANTES DE VIGENCIA (EN TIEMPO REAL)
   // ----------------------------------------------------
-  getDiasRestantes(user) {
+  getDiasRestantes(user, allUsersList = null) {
     if (!user) return { dias: 0, diasExactos: 0, fechaCorteStr: 'N/A', status: 'expirado' };
 
     const ahora = new Date();
@@ -10343,31 +10463,111 @@ return {
     const roleLower = String(user.role || '').toLowerCase();
     const isAgent = roleLower === 'agente de ruta' || roleLower === 'agent' || roleLower === 'agente' || roleLower === 'cobrador';
 
-    let targetDateStr = null;
-
     if (isAgent) {
-      const supId = user.supervisor_id || user.supervisor || (
-        (user.username === 'carlos26' || user.username === 'cesar26' || user.username === 'jesus26') ? 'erick26' : null
+      let sup = user._supervisorUser || null;
+      let supId = user.supervisor_id || user.supervisor || (
+        (['carlos26', 'cesar26', 'jesus26'].includes(String(user.username || '').toLowerCase())) ? 'erick26' : null
       );
-      if (supId) {
+
+      // Si no tenemos supId pero tiene ruta asignada, intentar resolver el supervisor desde la ruta
+      if (!supId && (user.routeId || user.route_id)) {
         try {
-          const localUsers = typeof this.getUsersFromLocalStorage === 'function' ? this.getUsersFromLocalStorage() : [];
-          const sup = localUsers.find(u => String(u.username).toLowerCase() === String(supId).toLowerCase() || String(u.documentNumber || '').trim() === String(supId).trim());
-          if (sup) {
-            targetDateStr = this.getCanonicalVigenciaDate(sup);
-            if (sup.bloqueado_por_mora !== true && sup.bloqueado_por_mora !== 'true') {
-              user.bloqueado_por_mora = false;
-            } else if (sup.bloqueado_por_mora === true || sup.bloqueado_por_mora === 'true') {
-              user.bloqueado_por_mora = true;
+          const targetRutaId = String(user.routeId || user.route_id);
+          const cachedRoutes = (typeof this.getCachedRoutes === 'function') ? this.getCachedRoutes() : null;
+          const localRoutes = cachedRoutes || JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
+          const rMatch = Array.isArray(localRoutes) ? localRoutes.find(r => String(r.id) === targetRutaId) : null;
+          if (rMatch && rMatch.supervisor_id) supId = rMatch.supervisor_id;
+        } catch(eR) {}
+      }
+
+      if (!sup && supId) {
+        const sLow = String(supId).toLowerCase().trim();
+        // 1. Buscar en lista pasada por argumento
+        if (Array.isArray(allUsersList)) {
+          sup = allUsersList.find(u => u && (
+            String(u.username || '').toLowerCase().trim() === sLow ||
+            String(u.documentNumber || u.documento_firmante || '').trim() === sLow ||
+            String(u.id || '').trim() === sLow
+          ));
+        }
+        // 2. Buscar en caché global de usuarios
+        if (!sup && Array.isArray(this.cachedUsers)) {
+          sup = this.cachedUsers.find(u => u && (
+            String(u.username || '').toLowerCase().trim() === sLow ||
+            String(u.documentNumber || u.documento_firmante || '').trim() === sLow ||
+            String(u.id || '').trim() === sLow
+          ));
+        }
+        // 3. Buscar en localStorage
+        if (!sup && typeof this.getUsersFromLocalStorage === 'function') {
+          try {
+            const localUsers = this.getUsersFromLocalStorage() || [];
+            sup = localUsers.find(u => u && (
+              String(u.username || '').toLowerCase().trim() === sLow ||
+              String(u.documentNumber || u.documento_firmante || '').trim() === sLow ||
+              String(u.id || '').trim() === sLow
+            ));
+          } catch(eL) {}
+        }
+        // 4. Verificar si el usuario actualmente logueado es el supervisor
+        if (!sup) {
+          try {
+            const cur = this.getCurrentUser();
+            if (cur && (
+              String(cur.username || '').toLowerCase().trim() === sLow ||
+              String(cur.documentNumber || '').trim() === sLow
+            )) {
+              sup = cur;
             }
-          }
-        } catch(e) {}
+          } catch(eC) {}
+        }
+      }
+
+      if (sup) {
+        user._supervisorUser = sup;
+        // Calcular vigencia del supervisor (evitando ciclo infinito porque el supervisor no es agente)
+        const supDias = this.getDiasRestantes(sup, allUsersList);
+        const isSupActive = (sup.bloqueado_por_mora !== true && sup.bloqueado_por_mora !== 'true') &&
+                            supDias.status !== 'suspendido' &&
+                            supDias.dias > 0;
+
+        if (isSupActive) {
+          user.bloqueado_por_mora = false;
+          user.fecha_vencimiento = sup.fecha_vencimiento || sup.fecha_corte;
+          user.fecha_corte = sup.fecha_corte || sup.fecha_vencimiento;
+          user.estado_suscripcion = sup.estado_suscripcion || 'activa';
+          user.ciclo_actual = sup.ciclo_actual || 1;
+          user.fecha_inicio_ciclo = sup.fecha_inicio_ciclo;
+
+          return {
+            dias: supDias.dias,
+            diasExactos: supDias.diasExactos,
+            fechaCorteStr: supDias.fechaCorteStr,
+            status: supDias.status,
+            ciclo_actual: sup.ciclo_actual || 1,
+            supervisorUsername: sup.username,
+            supervisorName: sup.name,
+            heredadoDe: sup.username || sup.name
+          };
+        } else {
+          user.bloqueado_por_mora = true;
+          user.estado_suscripcion = sup.estado_suscripcion || 'suspendida';
+
+          return {
+            dias: 0,
+            diasExactos: supDias.diasExactos <= 0 ? supDias.diasExactos : 0,
+            fechaCorteStr: supDias.fechaCorteStr,
+            status: 'suspendido',
+            ciclo_actual: sup.ciclo_actual || 1,
+            supervisorUsername: sup.username,
+            supervisorName: sup.name,
+            heredadoDe: sup.username || sup.name
+          };
+        }
       }
     }
 
-    if (!targetDateStr) {
-      targetDateStr = this.getCanonicalVigenciaDate(user);
-    }
+    let targetDateStr = this.getCanonicalVigenciaDate(user);
 
     let targetYear, targetMonth, targetDay;
 
