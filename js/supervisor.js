@@ -1109,14 +1109,22 @@ const supervisorModule = {
 
     if (!overlay || !listContainer) return;
 
+    // Asegurar que el overlay esté al final del body para máxima prioridad en la pila de renderizado
+    if (overlay.parentElement !== document.body) {
+      document.body.appendChild(overlay);
+    }
+
     if (!preserveLedger && ledgerContainer) ledgerContainer.style.display = 'none';
     if (!preserveLedger) {
       listContainer.innerHTML = '<div style="color: var(--text-secondary); text-align: center; font-size: 0.85rem; padding: 1rem;">Cargando cartera...</div>';
     }
 
-    overlay.classList.add('active');
-    overlay.style.zIndex = '2100'; // Asegurar máxima visibilidad por encima del modal de agentes activos
+    // Forzar visibilidad con estilos inline para superar cualquier conflicto de z-index
     overlay.style.display = 'flex';
+    overlay.style.opacity = '1';
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.zIndex = '99999';
+    overlay.classList.add('active');
 
     try {
       const cleanKey = String(targetKey).trim().toLowerCase();
