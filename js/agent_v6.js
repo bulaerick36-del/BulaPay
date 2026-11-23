@@ -624,15 +624,16 @@ const agentModule = {
           let saldoRestante = Number(client.outstanding || client.saldo_restante || 0);
           const capitalPrestado = Number(client.amount || client.monto_prestado || client.capital_prestado || 0);
 
-          // Si saldoRestante está en 0 pero el cliente tiene cuotas pendientes, verificar con abonos reales
-          if (client.cedula && (saldoRestante <= 0 || isNaN(saldoRestante))) {
+          // Verificar abonos reales para calcular con total precisión saldoRestante y cuotas pagadas
+          if (client.cedula) {
             try {
               const payments = await window.BulaPayDB.getPaymentsByClient(client.cedula, client.carton_id || client.id);
               const totalPagado = (payments || []).filter(p => {
                 const st = String(p.status || '').toUpperCase();
-                return (st === 'PAGADO' || st === 'ABONADO') && Number(p.amount) > 0;
-              }).reduce((sum, p) => sum + Number(p.amount), 0);
-              if (totalEsperado > totalPagado) {
+                const isCanceled = st.includes('CANCEL') || st.includes('RECHAZ') || st === 'NO PAGO' || st === 'PENDIENTE';
+                return !isCanceled && Number(p.amount) > 0;
+              }).reduce((sum, p) => sum + Math.round(Number(p.amount)), 0);
+              if (totalPagado > 0 && totalEsperado > totalPagado) {
                 saldoRestante = Math.max(0, totalEsperado - totalPagado);
               }
             } catch (_) {}

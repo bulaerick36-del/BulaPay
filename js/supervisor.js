@@ -3266,13 +3266,12 @@ const supervisorModule = {
     } else if (isMora) {
       // Requisito 2: Detalle Exacto de Pérdida por Mora / Lista Negra al hacer clic en la campana
       const cFechaInicio = c.fecha_apertura || c.fecha_inicio || c.created_at;
-      const cTime = cFechaInicio ? new Date(cFechaInicio).getTime() : 0;
       const cNumeroStr = String(numeroCarton || '').trim();
 
       const clientPayments = (allPayments || []).filter(p => {
         if (!p) return false;
         const pStatus = String(p.status || '').trim().toUpperCase();
-        if (pStatus === 'NO PAGO' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ')) return false;
+        if (pStatus === 'NO PAGO' || pStatus.includes('CANCEL') || pStatus.includes('RECHAZ') || pStatus === 'PENDIENTE') return false;
         const pId = String(p.id || '');
         if (pId.startsWith('pay_renov_') || pId.startsWith('pay_liq_') || Number(p.installmentNumber) === 999) return false;
         if (Number(p.amount) <= 0) return false;
@@ -3281,20 +3280,13 @@ const supervisorModule = {
         const pNum = String(p.numero_carton || p.numeroCarton || '').trim();
         const pCed = String(p.clientCedula || p.client_cedula || p.cedula || '').trim();
 
-        // 1. Si el pago tiene carton_id, verificar coincidencia estricta con este cartón
-        if (pCartonId && cIdLower) {
-          return pCartonId === cIdLower;
-        }
-        // 2. Si el pago tiene numero_carton, verificar coincidencia con el cartón actual
-        if (pNum && cNumeroStr && cNumeroStr !== 'S/N') {
-          return pNum === cNumeroStr;
-        }
-        // 3. Si no tiene ID ni número de cartón, filtrar por cédula descartando pagos anteriores a la apertura de este cartón
-        if (pCed && pCed === cedStr) {
-          if (cTime > 0) {
-            const pTime = new Date(p.created_at || p.fecha_pago || p.date || 0).getTime();
-            if (pTime > 0 && pTime < (cTime - 3600000)) return false;
-          }
+        // 1. Si el pago tiene carton_id coincidente con este cartón
+        if (pCartonId && cIdLower && pCartonId === cIdLower) return true;
+        // 2. Si el pago tiene numero_carton coincidente con este cartón
+        if (pNum && cNumeroStr && cNumeroStr !== 'S/N' && pNum === cNumeroStr) return true;
+        // 3. Si coincide por cédula y no está asignado a otro cartón diferente
+        if (pCed && cedStr && pCed === cedStr) {
+          if (pCartonId && cIdLower && pCartonId !== cIdLower) return false;
           return true;
         }
         return false;
@@ -3303,25 +3295,51 @@ const supervisorModule = {
       let totalAbonado = clientPayments.reduce((sum, p) => sum + Math.round(Number(p.amount || 0)), 0);
       let cuotasAbonadasCount = clientPayments.length;
 
-      const totalDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (Number(c.montoPrestado || c.amount || 0) * 1.2)));
-      const capitalPrestado = Math.round(Number(c.montoPrestado || c.amount || 0));
-      const totalCuotasEsperadas = Number(c.installmentsCount || c.cuotas || c.total_cuotas || 0) || 30;
-      const valorCuota = Number(c.installmentAmount || c.cuota || 0) || (totalCuotasEsperadas > 0 ? Math.round(totalDeuda / totalCuotasEsperadas) : 0);
+      const totalDeuda = Math.round(Number(c.totalDeuda || c.total_debt || (Number(c.montoPrestado || c.amount || c.monto_prestado || 0) * 1.2)));
+      const capitalPrestado = Math.round(Number(c.montoPrestado || c.amount || c.monto_prestado || 0));
+      const totalCuotasEsperadas = Number(c.installmentsCount || c.cuotas || c.total_cuotas || c.installments_count || 0) || 30;
+      const valorCuota = Number(c.installmentAmount || c.installment_amount || c.cuota || 0) || (totalCuotasEsperadas > 0 ? Math.round(totalDeuda / totalCuotasEsperadas) : 0);
 
-      // Si no se encontraron abonos en payments pero el cartón registra un saldo pendiente parcial real (0 < saldo < totalDeuda)
-      if (totalAbonado <= 0 && c.saldoPendiente !== undefined && c.saldoPendiente !== null) {
-        const outstanding = Math.round(Number(c.saldoPendiente || 0));
-        if (outstanding > 0 && outstanding < totalDeuda) {
-          totalAbonado = totalDeuda - outstanding;
-          if (valorCuota > 0) {
-            cuotasAbonadasCount = Math.round(totalAbonado / valorCuota);
+      // Fallback 1: Si no se encontraron pagos en la lista de payments, revisar array de cuotas del cartón
+      if (totalAbonado <= 0) {
+        let cuotasArr = c.cuotas || c.cuotas_json || c.installments;
+        if (typeof cuotasArr === 'string') {
+          try { cuotasArr = JSON.parse(cuotasArr); } catch (_) { cuotasArr = null; }
+        }
+        if (Array.isArray(cuotasArr) && cuotasArr.length > 0) {
+          const paidCuotas = cuotasArr.filter(q => {
+            if (!q) return false;
+            const qSt = String(q.estado || q.status || '').toLowerCase();
+            return q.pagado === true || qSt === 'pagado' || qSt.includes('pagad') || Number(q.monto_pagado || q.valor_pagado || 0) > 0;
+          });
+          if (paidCuotas.length > 0) {
+            cuotasAbonadasCount = paidCuotas.length;
+            totalAbonado = paidCuotas.reduce((sum, q) => sum + Math.round(Number(q.monto_pagado || q.valor_pagado || q.valor || q.amount || valorCuota || 0)), 0);
           }
         }
       }
 
+      // Fallback 2: Si no hay pagos en lista pero el cartón o el cliente registran un saldo pendiente parcial real
+      const recordedOutstanding = Math.round(Number(
+        c.saldoPendiente ?? c.outstanding ?? c.saldo_pendiente ?? c.saldo_restante ?? c.moraLossAmount ?? 0
+      ));
+
+      if (totalAbonado <= 0 && recordedOutstanding > 0 && recordedOutstanding < totalDeuda) {
+        totalAbonado = totalDeuda - recordedOutstanding;
+        if (valorCuota > 0) {
+          cuotasAbonadasCount = Math.round(totalAbonado / valorCuota);
+        }
+      }
+
       // En liquidación por pérdida/mora:
-      // Si no pagó cuotas (0 abonadas), el monto perdido es el 100% de la deuda y las 30 cuotas están en mora
-      const saldoRestante = Math.max(0, totalDeuda - totalAbonado);
+      // Si el cliente pagó cuotas parciales (ej. 15 cuotas = $60.000 o 10 cuotas = $40.000):
+      // - Cuotas alcanzadas a pagar: cuotasAbonadasCount
+      // - Monto / Valor perdido: saldo restante que quedó sin cobrar (saldoRestante)
+      // Si no pagó cuotas (0 abonadas), el monto perdido es el 100% de la deuda y todas las cuotas están en mora
+      const saldoRestante = (totalAbonado > 0) ? Math.max(0, totalDeuda - totalAbonado) : (recordedOutstanding > 0 ? recordedOutstanding : totalDeuda);
+      if (cuotasAbonadasCount <= 0 && totalAbonado > 0 && valorCuota > 0) {
+        cuotasAbonadasCount = Math.round(totalAbonado / valorCuota);
+      }
       const cuotasColgadas = Math.max(0, totalCuotasEsperadas - cuotasAbonadasCount);
       const perdidaCapital = Math.max(0, capitalPrestado - totalAbonado);
 
