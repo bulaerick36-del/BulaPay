@@ -3424,10 +3424,10 @@ const agentModule = {
         if (!c) return false;
         const st = String(c.estado || c.status || '').trim().toLowerCase();
         // Solo excluir si fue expresamente liquidado por pérdida o mora en lista negra
-        if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st === 'castigado') return false;
-        // Si está marcado como cancelado y no tiene deuda restante
+        if (st === 'liquidado_perdida' || st === 'liquidado_mora' || st === 'castigado' || st.includes('negra')) return false;
+        // Si está marcado como cancelado, liquidado o renovado y ya no tiene deuda restante
         const remDebt = Number(c.outstanding ?? c.saldo_restante ?? c.total_debt ?? c.totalDebt ?? 0);
-        if (st === 'cancelado' && remDebt <= 0) {
+        if ((st.includes('renovad') || st.includes('liquid') || st === 'cancelado' || st === 'cerrado' || st === 'pagado') && remDebt <= 0) {
           return false;
         }
         // Cartones con estado activo, activo_por_renovacion, vencido, en mora, mora, atrasado, demorado o saldo pendiente
@@ -3435,6 +3435,11 @@ const agentModule = {
       };
 
       let allActiveGlobalCartones = (dbCartonesGlobal || []).filter(isCartonOperable);
+      allActiveGlobalCartones.sort((a, b) => {
+        const tA = new Date(a.created_at || a.fecha_apertura || 0).getTime();
+        const tB = new Date(b.created_at || b.fecha_apertura || 0).getTime();
+        return tB - tA;
+      });
       if (allActiveGlobalCartones.length === 0 && dbCartonesGlobal && dbCartonesGlobal.length > 0) {
         // Fallback: Tomar el cartón más reciente del cliente si no está liquidado por mora
         const nonLossCartones = dbCartonesGlobal.filter(c => {
@@ -4685,8 +4690,11 @@ const agentModule = {
       const myRoute = (routes || []).find(r => (activeRouteId && String(r.id) === String(activeRouteId)) || (r.agentUsername && r.agentUsername.split(', ').map(u => u.trim()).includes(currentUser.username)));
       const effectiveRouteId = myRoute ? myRoute.id : activeRouteId;
 
-      // Monto bruto / nominal exacto del crédito a validar y desembolsar
-      const montoValidar = montoPrestamo;
+      // Monto físico neto real del crédito a desembolsar en efectivo de caja
+      const montoFisicoDesembolsar = isRenov
+        ? Math.max(0, montoPrestamo - otrVal - finalDiscount)
+        : Math.max(0, montoPrestamo - finalDiscount);
+      const montoValidar = montoFisicoDesembolsar;
 
       // Consulta directa, numérica y en tiempo real del saldo de caja (conecta 'Mi Negocio' e inyecciones)
       const fondosDetallados = await this.getSaldoCajaRealAgente(effectiveRouteId, currentUser);
@@ -4703,7 +4711,8 @@ const agentModule = {
 
       let usoCapitalAutorizado = false;
       let capitalAsignadoAUsar = 0;
-      let nuevoRemanente = Math.max(0, (capitalAsignadoRemanente > 0 ? capitalAsignadoRemanente : saldoCajaReal) - montoValidar);
+      const saldoBaseCalc = (capitalAsignadoRemanente > 0) ? capitalAsignadoRemanente : saldoCajaReal;
+      let nuevoRemanente = Math.max(0, saldoBaseCalc - montoValidar);
 
       // Si no se requiere desembolso físico de efectivo
       if (montoValidar <= 0) {
@@ -4714,16 +4723,19 @@ const agentModule = {
         console.log(`[BulaPay] Préstamo cubierto 100% con Recaudo del Día: $${montoValidar.toLocaleString('es-CO')}`);
       }
       // Caso 2 (Fondos Disponibles en Caja / Capital Inyectado en 'Mi Negocio' / Capital Asignado):
-      // Permite el registro de forma transparente siempre y cuando el capital en caja sea mayor a 0 o mayor/igual al préstamo
+      // Permite el registro de forma transparente siempre y cuando el capital en caja sea mayor a 0 o mayor/igual al desembolso físico
       else if (saldoCajaReal >= montoValidar || saldoCajaReal > 0) {
         usoCapitalAutorizado = true;
-        capitalAsignadoAUsar = montoValidar;
-        nuevoRemanente = Math.max(0, (saldoCajaReal >= capitalAsignadoRemanente ? saldoCajaReal : capitalAsignadoRemanente) - montoValidar);
+        capitalAsignadoAUsar = Math.min(saldoCajaReal, montoValidar);
+        nuevoRemanente = Math.max(0, saldoBaseCalc - capitalAsignadoAUsar);
 
-        const montoTotalFmt = montoValidar.toLocaleString('es-CO');
+        const montoTotalFmt = montoPrestamo.toLocaleString('es-CO');
+        const desembolsoFmt = montoValidar.toLocaleString('es-CO');
         const saldoRestanteFmt = nuevoRemanente.toLocaleString('es-CO');
 
-        const modalText = `Estás otorgando un nuevo crédito por $ ${montoTotalFmt} utilizando fondos disponibles en caja ($ ${saldoCajaReal.toLocaleString('es-CO')} disponible). Te quedará un saldo en caja de $ ${saldoRestanteFmt}.`;
+        const modalText = isRenov
+          ? `Estás otorgando una renovación por $ ${montoTotalFmt} (desembolso físico en caja de $ ${desembolsoFmt}) utilizando fondos disponibles en caja ($ ${saldoCajaReal.toLocaleString('es-CO')} disponible). Te quedará un saldo en caja de $ ${saldoRestanteFmt}.`
+          : `Estás otorgando un nuevo crédito por $ ${montoTotalFmt} utilizando fondos disponibles en caja ($ ${saldoCajaReal.toLocaleString('es-CO')} disponible). Te quedará un saldo en caja de $ ${saldoRestanteFmt}.`;
 
         let isAccepted = false;
         if (typeof Swal !== 'undefined') {

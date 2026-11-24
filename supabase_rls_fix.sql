@@ -507,7 +507,7 @@ BEGIN
         SELECT * INTO v_old_carton 
         FROM cartones 
         WHERE cliente_id = p_cliente_id
-          AND estado IN ('activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO')
+          AND estado IN ('activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'liquidado_renovacion', 'ACTIVO', 'Activo', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente')
         ORDER BY created_at DESC 
         LIMIT 1;
     END IF;
@@ -628,7 +628,6 @@ BEGIN
             estado = 'RENOVADO',
             status = 'RENOVADO',
             outstanding = 0,
-            saldo_pendiente = 0,
             fecha_cierre = v_now,
             updated_at = v_now,
             liquidation_reason = 'Renovación'
@@ -641,12 +640,11 @@ BEGIN
         estado = 'RENOVADO',
         status = 'RENOVADO',
         outstanding = 0,
-        saldo_pendiente = 0,
         fecha_cierre = v_now,
         updated_at = v_now,
         liquidation_reason = 'Renovación'
     WHERE cliente_id = p_cliente_id
-      AND estado IN ('activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'ACTIVO')
+      AND estado IN ('activo', 'activo_por_renovacion', 'liquidado_por_renovacion', 'ACTIVO', 'Activo', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente')
       AND (v_target_old_id IS NULL OR id != v_target_old_id);
 
     -- ========================================================

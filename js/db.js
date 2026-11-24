@@ -1505,7 +1505,7 @@ const db = {
         for (const id of cartonIds) {
           const idStr = String(id || '').trim();
           if (!idStr) continue;
-          const updateObj = { supervisor_atendido: true, updated_at: new Date().toISOString() };
+          const updateObj = { updated_at: new Date().toISOString() };
           // Actualizar en Supabase por id (sea texto o UUID) y por numero_carton si aplica
           try {
             const { error: errUpdId } = await supabase.from('cartones').update(updateObj).eq('id', idStr);
@@ -1549,14 +1549,19 @@ const db = {
 
   async getAgentPendingLiquidations(agentUsername, routeId = null) {
     try {
-      const todayCards = await this.getAgentLiquidatedCartonesToday(agentUsername, routeId);
-      if (Array.isArray(todayCards) && todayCards.length > 0) {
-        return todayCards;
-      }
-      // Respaldo de seguridad: si por corte de turno/horario no cayó en todayCards pero hay liquidaciones no atendidas
-      const historical = await this.getAgentLiquidatedCartonesHistorical(agentUsername, routeId);
-      const pendingHistorical = (historical || []).filter(c => !c.isAtendido && !c.supervisor_atendido && !this.isLiquidacionAtendida(c.id, c.numeroCarton));
-      return pendingHistorical;
+      const todayCards = (await this.getAgentLiquidatedCartonesToday(agentUsername, routeId)) || [];
+      const historical = (await this.getAgentLiquidatedCartonesHistorical(agentUsername, routeId)) || [];
+      const pendingHistorical = historical.filter(c => !c.isAtendido && !c.supervisor_atendido && !this.isLiquidacionAtendida(c.id, c.numeroCarton));
+
+      const mergedMap = new Map();
+      [...todayCards, ...pendingHistorical].forEach(c => {
+        const key = String(c.id || c.numeroCarton || '').toLowerCase();
+        if (key && !mergedMap.has(key)) {
+          mergedMap.set(key, c);
+        }
+      });
+
+      return Array.from(mergedMap.values()).filter(c => !c.isAtendido && !c.supervisor_atendido && !this.isLiquidacionAtendida(c.id, c.numeroCarton));
     } catch (e) {
       console.error("Error al obtener liquidaciones pendientes:", e);
       return [];
@@ -1794,6 +1799,26 @@ const db = {
       // 3. Evento reactivo en la ventana actual
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('bulapay:alerta_supervisor', {
+          detail: {
+            titulo,
+            mensaje,
+            agentId,
+            agentName: agentName || agentId,
+            routeId,
+            routeName,
+            clientName: clientName || clientId,
+            clientId,
+            amountLiquidated: Number(amountLiquidated || 0),
+            newCartonNumber: newCartonNumber || null,
+            cartonId: cartonId || null,
+            liquidationType: type,
+            isRenov,
+            isMora,
+            isVencido
+          }
+        }));
+
+        window.dispatchEvent(new CustomEvent('bulapay:carton_liquidated', {
           detail: {
             titulo,
             mensaje,
@@ -2193,7 +2218,7 @@ const db = {
           const hasNewRenovCartonToday = cedStr && newRenewalCartonsTodayByCedula.has(cedStr);
           const hasClientRenovPayToday = cedStr && renewalPayCedulasToday.has(cedStr);
 
-          if (!hasDirectRenovPayToday && !hasNewRenovCartonToday) {
+          if (!hasDirectRenovPayToday && !hasNewRenovCartonToday && !hasClientRenovPayToday) {
             return;
           }
 
@@ -3050,10 +3075,12 @@ const db = {
         const activeStates = new Set(['activo', 'activo_por_renovacion', 'vencido', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente']);
         const cartonesData = (allCartones || []).filter(c => {
           if (!c) return false;
-          const st = String(c.estado || '').trim().toLowerCase();
-          if (activeStates.has(st)) return true;
-          const isClosed = st.includes('liquidado') || st.includes('cancelad') || st.includes('perdida');
-          return !isClosed && Number(c.outstanding || c.saldo_restante || 0) > 0;
+          const st = String(c.estado || c.status || '').trim().toLowerCase();
+          const isClosed = st.includes('liquidado') || st.includes('cancelad') || st.includes('perdida') || st.includes('renovad') || st === 'cerrado';
+          if (isClosed) return false;
+          const out = Number(c.outstanding != null ? c.outstanding : (c.saldo_restante != null ? c.saldo_restante : 1));
+          if (activeStates.has(st)) return out > 0;
+          return Number(c.outstanding || c.saldo_restante || 0) > 0;
         });
 
         // Pre-cargar mapa de la tabla clients para asociar nombres e información de contacto
@@ -3068,7 +3095,11 @@ const db = {
         );
 
         const activeCreditsList = [];
-        const cartones = cartonesData || [];
+        const cartones = (cartonesData || []).slice().sort((a, b) => {
+          const tA = new Date(a.created_at || a.fecha_apertura || 0).getTime();
+          const tB = new Date(b.created_at || b.fecha_apertura || 0).getTime();
+          return tB - tA;
+        });
         const isMasterUser = currentUser.username === 'admin' || currentUser.role === 'Superadministrador' || currentUser.role === 'Superadmin';
         const uNameLower = String(currentUser.username || '').trim().toLowerCase();
         const uIdLower = String(currentUser.id || '').trim().toLowerCase();
@@ -3121,7 +3152,7 @@ const db = {
 
         cartones.forEach(carton => {
           const cedula = String(carton.cliente_id || '').trim();
-          if (!cedula || blacklistedCedulas.has(cedula)) return;
+          if (!cedula || blacklistedCedulas.has(cedula) || addedCedulasForScope.has(cedula)) return;
 
           const joinedClient = (carton.clients && typeof carton.clients === 'object' && carton.clients.name)
             ? carton.clients
@@ -4044,18 +4075,15 @@ const db = {
 
     let totalPrestado = 0;
     let desembolsosRenovacion = 0;
+    let desembolsosNetosFisicosRenovacion = 0;
+    let desembolsosNetosFisicosNuevos = 0;
     let entradasRenovacion = 0;
     let descuentosRetenidos = 0;
 
     todayCredits.forEach(c => {
       const amt = Math.round(Number(c.amount || c.monto_prestado || (c.totalDebt ? Number(c.totalDebt) / 1.2 : 0)));
       const isRenov = !!(c.isRenewal || c.is_renewal || String(c.status || c.estado || '').toLowerCase().includes('renov') || Number(c.rollover_amount || c.saldo_anterior || 0) > 0);
-
-      if (isRenov) {
-        desembolsosRenovacion += amt;
-      } else {
-        totalPrestado += amt;
-      }
+      const rol = Number(c.rollover_amount || c.saldo_anterior || 0);
 
       const seg = Number(c.segVal || c.seg_val || c.seguro || 0);
       const pap = Number(c.papVal || c.pap_val || c.papeleria || c.software || 0);
@@ -4065,6 +4093,20 @@ const db = {
       // Descuento exacto por papelería/software/seguro de cada transacción (ej. si hubo dos, acumula fielmente $32.000)
       let ret = Math.max(retFees, seg + pap, discAmt);
       descuentosRetenidos += Math.round(ret);
+
+      if (isRenov) {
+        desembolsosRenovacion += amt;
+        const netFisico = (c.net_cash !== undefined && c.net_cash !== null && !isNaN(Number(c.net_cash)))
+          ? Math.max(0, Math.round(Number(c.net_cash)))
+          : Math.max(0, amt - rol - ret);
+        desembolsosNetosFisicosRenovacion += netFisico;
+      } else {
+        totalPrestado += amt;
+        const netFisico = (c.net_cash !== undefined && c.net_cash !== null && !isNaN(Number(c.net_cash)))
+          ? Math.max(0, Math.round(Number(c.net_cash)))
+          : Math.max(0, amt - ret);
+        desembolsosNetosFisicosNuevos += netFisico;
+      }
     });
 
     // Entradas por renovación deben reflejar única y exclusivamente el valor real de las transacciones de renovación ejecutadas en payments
@@ -4209,10 +4251,10 @@ const db = {
     const lastAuditLog = todayAuditLogs.length > 0 ? todayAuditLogs[todayAuditLogs.length - 1] : null;
     let capitalAsignadoRemanenteFinal = 0;
 
-    if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
-      capitalAsignadoRemanenteFinal = Math.round(Number(lastAuditLog.capitalRemanenteNuevo));
-    } else if (route && route.capital !== undefined && route.capital !== null && Number(route.capital) > 0) {
+    if (route && route.capital !== undefined && route.capital !== null && !isNaN(Number(route.capital))) {
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(route.capital)));
+    } else if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
+      capitalAsignadoRemanenteFinal = Math.round(Number(lastAuditLog.capitalRemanenteNuevo));
     } else if (capitalBase > 0) {
       capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
     } else {
@@ -4225,7 +4267,7 @@ const db = {
       capitalAsignadoInicialFinal = Math.round(capitalBase);
     }
 
-    efectivoInicial = capitalAsignadoRemanenteFinal;
+    efectivoInicial = capitalAsignadoInicialFinal;
 
     // =========================================================================
     // 3. AISLAMIENTO DEL RECAUDO DIARIO Y EFECTIVO NETO A ENTREGAR
@@ -4234,7 +4276,10 @@ const db = {
     // Fórmula: (Recaudo Neto Cobranza - Préstamos con Recaudo) + Descuentos Retenidos
     // =========================================================================
     const prestadoConRecaudo = Math.max(0, prestamosNuevosRecaudoFinal + desembolsosNetosRenovacionFinal);
-    const recaudoNetoOperativo = Math.max(0, recaudoCobranza - prestadoConRecaudo);
+    const recaudoCobranzaFisica = (cuotasNormales + pagosMasivos + liquidacionesMora);
+    const renovFisicaConRecaudo = Math.max(0, desembolsosNetosFisicosRenovacion - salidaCapitalRenovacionFinal);
+    const prestadoFisicoConRecaudo = Math.max(0, prestamosNuevosRecaudoFinal + renovFisicaConRecaudo);
+    const recaudoNetoOperativo = Math.max(0, recaudoCobranzaFisica - prestadoFisicoConRecaudo);
     const totalEntregar = Math.round(recaudoNetoOperativo + descuentosRetenidos);
     recaudoDisponible = recaudoNetoOperativo;
     const dineroEnCalleNuevos = totalDesembolsado;
@@ -5360,11 +5405,19 @@ return {
         }
       };
 
+      const targetOldIds = new Set();
+      if (payload.old_carton_id) {
+        targetOldIds.add(String(payload.old_carton_id).trim());
+      }
+      if (payload.old_numero_carton) {
+        targetOldIds.add(String(payload.old_numero_carton).trim());
+      }
+
       if (rpcSucceeded && payload.old_carton_id) {
         try {
           await supabase
             .from('cartones')
-            .update({ fecha_cierre: nowIso, liquidation_reason: 'Renovación', updated_at: nowIso })
+            .update({ estado: 'RENOVADO', status: 'RENOVADO', outstanding: 0, fecha_cierre: nowIso, liquidation_reason: 'Renovación', updated_at: nowIso })
             .eq('id', String(payload.old_carton_id).trim());
         } catch (_) {}
       }
@@ -5405,47 +5458,66 @@ return {
         // PASO 2: UPDATE únicamente al cartón ACTIVO que se está renovando (NUNCA tocar cartones históricos ya cerrados/renovados)
         try {
           const cedStr = String(clientId).trim();
-          const targetOldIds = new Set();
-          if (payload.old_carton_id) {
-            targetOldIds.add(String(payload.old_carton_id).trim());
-          }
           try {
-            let findActiveQuery = supabase
+            const { data: activeOldRows } = await supabase
               .from('cartones')
-              .select('id')
-              .eq('cliente_id', cedStr)
-              .in('estado', ['activo', 'activo_por_renovacion', 'ACTIVO', 'ACTIVO_POR_RENOVACION', 'Activo', 'Activo_Por_Renovacion', 'vencido', 'VENCIDO', 'en mora', 'mora', 'atrasado', 'demorado', 'pendiente', 'liquidado']);
-            if (agentId) {
-              findActiveQuery = findActiveQuery.eq('agent_id', agentId);
-            }
-            const { data: activeOldRows } = await findActiveQuery;
+              .select('id, numero_carton, estado, outstanding')
+              .eq('cliente_id', cedStr);
             (activeOldRows || []).forEach(r => {
-              if (r && r.id) targetOldIds.add(String(r.id).trim());
+              if (r && r.id && String(r.id) !== String(newCartonUuid)) {
+                targetOldIds.add(String(r.id).trim());
+              }
             });
           } catch (_) {}
 
-          const idsArray = Array.from(targetOldIds);
+          const idsArray = Array.from(targetOldIds).filter(Boolean);
           if (idsArray.length > 0) {
+            const updateClosePayload = {
+              estado: 'RENOVADO',
+              status: 'RENOVADO',
+              outstanding: 0,
+              fecha_cierre: nowIso,
+              updated_at: nowIso,
+              liquidation_reason: 'Renovación'
+            };
+
             const { error: errClose } = await supabase
               .from('cartones')
-              .update({
-                estado: 'RENOVADO',
-                status: 'RENOVADO',
-                outstanding: 0,
-                saldo_pendiente: 0,
-                fecha_cierre: nowIso,
-                updated_at: nowIso,
-                liquidation_reason: 'Renovación',
-                supervisor_atendido: false
-              })
+              .update(updateClosePayload)
               .in('id', idsArray);
 
             if (errClose) {
+              console.warn("Aviso update cartón viejo por in(id):", errClose.message);
               await supabase
                 .from('cartones')
-                .update({ estado: 'RENOVADO', outstanding: 0, supervisor_atendido: false })
-                .in('id', idsArray);
+                .update(updateClosePayload)
+                .eq('cliente_id', cedStr)
+                .neq('id', newCartonUuid);
             }
+
+            // Sincronizar en localStorage.bulapay_cartones
+            try {
+              const rawLocal = localStorage.getItem('bulapay_cartones');
+              if (rawLocal) {
+                const localCartones = JSON.parse(rawLocal);
+                if (Array.isArray(localCartones)) {
+                  let changed = false;
+                  localCartones.forEach(lc => {
+                    const matchCed = String(lc.cliente_id || '').trim() === cedStr;
+                    const matchId = idsArray.includes(String(lc.id || ''));
+                    if ((matchCed && String(lc.id) !== String(newCartonUuid)) || matchId) {
+                      lc.estado = 'RENOVADO';
+                      lc.status = 'RENOVADO';
+                      lc.outstanding = 0;
+                      lc.fecha_cierre = nowIso;
+                      lc.liquidation_reason = 'Renovación';
+                      changed = true;
+                    }
+                  });
+                  if (changed) localStorage.setItem('bulapay_cartones', JSON.stringify(localCartones));
+                }
+              }
+            } catch (_) {}
 
             // Desmarcar de atendidas para que active la campana al supervisor
             idsArray.forEach(oldId => {
@@ -5453,6 +5525,9 @@ return {
                 this.removeLiquidacionAtendidaSync(oldId);
               }
             });
+            if (payload.old_numero_carton && this && typeof this.removeLiquidacionAtendidaSync === 'function') {
+              this.removeLiquidacionAtendidaSync(payload.old_numero_carton);
+            }
           }
         } catch (eOld) {
           console.warn("Aviso al actualizar cartón viejo a RENOVADO:", eOld?.message);
@@ -5697,6 +5772,7 @@ return {
     // Notificar al supervisor de renovación / retanqueo exitoso
     if (isRenov) {
       try {
+        const oldIdToNotify = payload.old_carton_id || (typeof targetOldIds !== 'undefined' && targetOldIds && targetOldIds.size > 0 ? Array.from(targetOldIds)[0] : null) || null;
         await this.notificarLiquidacionSupervisor({
           agentId: agentId,
           agentName: currentUser ? (currentUser.name || currentUser.username) : (agentId || 'Agente'),
@@ -5705,9 +5781,14 @@ return {
           clientId: clientId,
           amountLiquidated: rolloverVal,
           newCartonNumber: newNumeroCarton,
-          cartonId: payload.old_carton_id || (typeof targetOldIds !== 'undefined' ? Array.from(targetOldIds)[0] : null) || null,
+          cartonId: oldIdToNotify,
           type: 'Renovacion'
         });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('bulapay:carton_liquidated', {
+            detail: { clientId, cartonId: oldIdToNotify, type: 'Renovacion', amount: rolloverVal }
+          }));
+        }
       } catch (eNotifSup) {
         console.warn("Aviso al notificar renovación al supervisor:", eNotifSup);
       }
