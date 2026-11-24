@@ -4640,11 +4640,11 @@ const agentModule = {
 
         let reasons = ['Saldo Cartón Anterior (Renovación)'];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
-          segVal = 8000;
+          segVal = 4000;
           reasons.push('Seguro');
         }
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
-          papVal = 8000;
+          papVal = 4000;
           reasons.push('Papelería / Software');
         }
         if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
@@ -4657,11 +4657,11 @@ const agentModule = {
 
         let reasons = [];
         if (document.getElementById('new-client-discount-reason-seguro')?.checked) {
-          segVal = 8000;
+          segVal = 4000;
           reasons.push('Seguro');
         }
         if (document.getElementById('new-client-discount-reason-papeleria')?.checked) {
-          papVal = 8000;
+          papVal = 4000;
           reasons.push('Papelería / Software');
         }
         if (document.getElementById('new-client-discount-reason-otro-concepto')?.checked) {
@@ -4676,7 +4676,7 @@ const agentModule = {
         discountReason = reasons.length > 0 ? reasons.join(', ') : null;
       }
 
-      // Descuento final consolidado por transacción ($16.000 por defecto si ambos checkboxes están marcados)
+      // Descuento final consolidado por transacción ($8.000 por defecto si ambos checkboxes están marcados: 4.000 + 4.000)
       const finalDiscount = discountAmount > 0 ? discountAmount : Math.round(segVal + papVal);
 
       // =========================================================================
@@ -4812,6 +4812,7 @@ const agentModule = {
         retained_fees: finalDiscount, // AISLADO: Cobros por Seguro y Papelería acumulados fielmente
         rollover_amount: Math.round(otrVal || this.currentRenewalOutstanding || 0), // AISLADO: Saldo refinanciado / cartón anterior
         saldo_anterior: Math.round(otrVal || this.currentRenewalOutstanding || 0),
+        net_cash: montoFisicoDesembolsar, // VALOR NETO REAL calculado y guardado ($44.000)
         old_carton_id: this.currentRenewalCartonId || null,
         old_numero_carton: this.currentRenewalNumeroCarton || null,
         old_outstanding: Math.round(this.currentRenewalOutstanding || otrVal || 0),
@@ -5339,18 +5340,27 @@ const agentModule = {
       debtInput.value = totalDebt ? formatNumber(totalDebt) : "";
       installmentValInput.value = installmentVal ? formatNumber(installmentVal) : "";
 
-      // Descuento general inicial (Seguro, Papelería, etc.) sólo si el checkbox principal está activado
+      // Descuento general inicial (Seguro $4.000 + Papelería $4.000 = $8.000)
       let generalDiscount = 0;
-      if (discountCheckbox && discountCheckbox.checked) {
-        let segDeduction = (cbSeguro && cbSeguro.checked) ? 8000 : 0;
-        let papDeduction = (cbPapeleria && cbPapeleria.checked) ? 8000 : 0;
+      const isSegChecked = !!(cbSeguro && cbSeguro.checked);
+      const isPapChecked = !!(cbPapeleria && cbPapeleria.checked);
+      const isOtroChecked = !!(cbOtroConcepto && cbOtroConcepto.checked);
+      const isApplyChecked = !!(discountCheckbox && discountCheckbox.checked);
+
+      if (isApplyChecked || isSegChecked || isPapChecked || isOtroChecked) {
+        let segDeduction = isSegChecked ? 4000 : 0;
+        let papDeduction = isPapChecked ? 4000 : 0;
         let checkboxDiscount = segDeduction + papDeduction;
 
         let manualDiscount = discountAmountInput ? (parseFloat(discountAmountInput.value.replace(/\./g, '')) || 0) : 0;
 
-        // Si se especificó un monto manual digitado, prevalece ese total. De lo contrario, la suma de los checkboxes.
-        // Previene la doble resta ($16.000).
+        // Si se especificó un monto manual digitado, prevalece ese total. De lo contrario, la suma de los checkboxes ($8.000 si ambos están marcados).
         generalDiscount = manualDiscount > 0 ? manualDiscount : checkboxDiscount;
+
+        // Sincronizar el checkbox general si se marcaron checkboxes individuales
+        if (discountCheckbox && (isSegChecked || isPapChecked || isOtroChecked) && !discountCheckbox.checked) {
+          discountCheckbox.checked = true;
+        }
       }
 
       // v171: Saldo del cartón anterior (Renovación) inyectado de forma estricta y exclusiva desde el rollover
@@ -5368,10 +5378,20 @@ const agentModule = {
     };
 
     if (cbSeguro) {
-      cbSeguro.addEventListener('change', calculate);
+      cbSeguro.addEventListener('change', () => {
+        if (cbSeguro.checked && discountCheckbox && !discountCheckbox.checked) {
+          discountCheckbox.checked = true;
+        }
+        calculate();
+      });
     }
     if (cbPapeleria) {
-      cbPapeleria.addEventListener('change', calculate);
+      cbPapeleria.addEventListener('change', () => {
+        if (cbPapeleria.checked && discountCheckbox && !discountCheckbox.checked) {
+          discountCheckbox.checked = true;
+        }
+        calculate();
+      });
     }
 
     if (discountCheckbox && discountPanel) {

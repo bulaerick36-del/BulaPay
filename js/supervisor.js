@@ -3206,12 +3206,22 @@ const supervisorModule = {
       const pagoRenovacion = renovPayAmount > 0 ? renovPayAmount : saldoRealRefinanciado;
 
       let totalEntregado = 0;
-      if (newCarton && newCarton.net_cash != null && !isNaN(Number(newCarton.net_cash)) && Number(newCarton.net_cash) >= 0) {
-        totalEntregado = Math.round(Number(newCarton.net_cash));
-      } else if (newCarton) {
+      if (newCarton) {
         const nMonto = Number(newCarton.monto_prestado || newCarton.amount || 0);
-        const nDesc = Number(newCarton.discount_amount || newCarton.descuento || 0);
-        totalEntregado = Math.max(0, Math.round(nMonto - nDesc - pagoRenovacion));
+        let nDesc = Number(newCarton.discount_amount || newCarton.descuento || newCarton.retained_fees || newCarton.retained_amount || 0);
+        // Evitar dobles restas si el cartón traía $16.000 por la duplicación previa de $8.000 + $8.000
+        if (nDesc === 16000 && (Number(newCarton.segVal) === 8000 || Number(newCarton.papVal) === 8000 || String(newCarton.discount_reason || '').includes('Seguro') || String(newCarton.discount_reason || '').includes('Papelería'))) {
+          nDesc = 8000;
+        }
+        if (newCarton.net_cash != null && !isNaN(Number(newCarton.net_cash)) && Number(newCarton.net_cash) >= 0) {
+          totalEntregado = Math.round(Number(newCarton.net_cash));
+          // Corregir si el net_cash guardado en DB traía la doble resta histórica ($36.000 en vez de $44.000 para 100k - 48k - 8k)
+          if (nMonto > 0 && pagoRenovacion > 0 && totalEntregado === (nMonto - pagoRenovacion - 16000)) {
+            totalEntregado = Math.max(0, Math.round(nMonto - pagoRenovacion - 8000));
+          }
+        } else {
+          totalEntregado = Math.max(0, Math.round(nMonto - nDesc - pagoRenovacion));
+        }
       } else if (c.net_cash != null && !isNaN(Number(c.net_cash)) && Number(c.net_cash) >= 0) {
         totalEntregado = Math.round(Number(c.net_cash));
       } else {

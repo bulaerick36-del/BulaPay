@@ -4248,26 +4248,20 @@ const db = {
     }
 
     // Sincronización del Capital Asignado Remanente (Efectivo en Bolsillo Real del Agente)
-    const lastAuditLog = todayAuditLogs.length > 0 ? todayAuditLogs[todayAuditLogs.length - 1] : null;
-    let capitalAsignadoRemanenteFinal = 0;
+    // El Capital Asignado Inicial es el fondo base con el que arrancó la ruta (ej. $308.000).
+    const capitalAsignadoInicialFinal = Math.round(capitalBase > 0 ? capitalBase : Number(route?.capital || 0));
 
-    if (route && route.capital !== undefined && route.capital !== null && !isNaN(Number(route.capital))) {
-      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(route.capital)));
+    // El Capital Asignado Remanente (Bolsillo Actual) descuenta estrictamente el capital utilizado (ej. $308.000 - $100.000 = $208.000)
+    let capitalAsignadoRemanenteFinal = 0;
+    if (capitalAsignadoInicialFinal > 0) {
+      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalAsignadoInicialFinal - capitalAsignadoUtilizadoFinal));
     } else if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
-      capitalAsignadoRemanenteFinal = Math.round(Number(lastAuditLog.capitalRemanenteNuevo));
-    } else if (capitalBase > 0) {
-      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalBase - capitalAsignadoUtilizadoFinal));
+      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(lastAuditLog.capitalRemanenteNuevo)));
     } else {
       capitalAsignadoRemanenteFinal = 0;
     }
 
-    // Capital Asignado Inicial (fondo base asignado con el que arrancó el agente la jornada)
-    let capitalAsignadoInicialFinal = Math.round(capitalAsignadoRemanenteFinal + capitalAsignadoUtilizadoFinal);
-    if (capitalAsignadoInicialFinal <= 0 && capitalBase > 0) {
-      capitalAsignadoInicialFinal = Math.round(capitalBase);
-    }
-
-    efectivoInicial = capitalAsignadoInicialFinal;
+    efectivoInicial = capitalAsignadoRemanenteFinal;
 
     // =========================================================================
     // 3. AISLAMIENTO DEL RECAUDO DIARIO Y EFECTIVO NETO A ENTREGAR
@@ -5065,7 +5059,9 @@ return {
     const newOutstanding = Math.round(Number(client.outstanding || newTotalDebt));
     const installmentsCount = Number(client.installmentsCount || client.installments_count || 30);
     const installmentAmount = Math.round(Number(client.installmentAmount || (installmentsCount > 0 ? newTotalDebt / installmentsCount : 0)));
-    const netCashVal = Math.max(0, montoPrestado - discountVal - rolloverVal);
+    const netCashVal = (client.net_cash !== undefined && client.net_cash !== null && !isNaN(Number(client.net_cash)))
+      ? Math.round(Number(client.net_cash))
+      : Math.max(0, montoPrestado - discountVal - rolloverVal);
 
     const cartonPayload = {
       cliente_id: cedulaStr,
@@ -5270,7 +5266,9 @@ return {
     const newState = isRenov ? 'activo_por_renovacion' : 'activo';
     const newTotalDebt = Math.round(Number(payload.totalDebt || 0));
     const newMontoPrestado = Math.round(Number(payload.amount || payload.monto_prestado || 0));
-    const netCashVal = Math.max(0, newMontoPrestado - discountVal - rolloverVal);
+    const netCashVal = (payload.net_cash !== undefined && payload.net_cash !== null && !isNaN(Number(payload.net_cash)))
+      ? Math.round(Number(payload.net_cash))
+      : Math.max(0, newMontoPrestado - discountVal - rolloverVal);
 
     let insertedCartonRecord = null;
     let cartonError = null;
