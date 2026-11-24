@@ -4623,6 +4623,7 @@ const agentModule = {
         supervisorId = await window.BulaPayDB.getSupervisorIdForUser(currentUser);
       }
 
+      const isRenov = !!this.isRenewalMode;
       const applyDiscount = document.getElementById('new-client-apply-discount')?.checked;
       const discountAmountInput = document.getElementById('new-client-discount-amount');
       let discountAmount = 0;
@@ -4831,7 +4832,6 @@ const agentModule = {
 
       console.log('Intentando enviar a Supabase la tabla clients...', payload);
 
-      const isRenov = !!this.isRenewalMode;
       let savedResult;
       if (existing || this.isRenewalMode) {
         savedResult = await window.BulaPayDB.registerCreditToExistingClient(payload);
