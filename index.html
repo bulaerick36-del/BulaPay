@@ -2290,10 +2290,10 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="js/checkout.js?v=11025"></script>
-  <script src="js/db.js?v=11037"></script>
+  <script src="js/db.js?v=11039"></script>
   <script src="js/ads.js?v=11025"></script>
   <script src="js/auth.js?v=11025"></script>
-  <script src="js/supervisor.js?v=11038"></script>
+  <script src="js/supervisor.js?v=11040"></script>
   <script src="js/agent_v6.js?v=11035"></script>
   <script src="js/agent_ruta.js?v=11025"></script>
   <script src="js/customer.js?v=11025"></script>
@@ -2644,7 +2644,7 @@
 
   <!-- MODAL: HISTORIAL DE JORNADAS ARCHIVADAS (BUSCADOR POR RUTA, FECHA O AGENTE) -->
   <div class="supervisor-modal-overlay" id="modal-jornadas-archivadas" style="z-index: 99999 !important; padding: 0.5rem;">
-    <div class="supervisor-modal-card" style="max-width: 950px; width: 96vw; max-height: 92vh; display: flex; flex-direction: column; padding: 1.1rem 1.4rem; box-sizing: border-box; overflow: hidden; position: relative;">
+    <div class="supervisor-modal-card" style="max-width: 680px; width: 96vw; max-height: 92vh; display: flex; flex-direction: column; padding: 1.1rem 1.3rem; box-sizing: border-box; overflow: hidden; position: relative;">
       
       <!-- Botón de Cerrar Modal -->
       <button class="supervisor-modal-close" onclick="supervisorModule.closeJornadasArchivadasModal()">&times;</button>
@@ -2665,33 +2665,34 @@
       </div>
 
       <!-- Barra de Filtros: Ruta, Mes, Fecha, Agente y Búsqueda -->
-      <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.85rem; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.65rem; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem;">
-          
+      <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.85rem; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.65rem; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem;">
           <!-- Filtro 1: Ruta -->
           <div>
-            <label for="filter-jornadas-ruta" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.3rem;">
-              📍 Filtrar por Ruta:
+            <label for="filter-jornadas-ruta" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
+              📍 Seleccionar Ruta:
             </label>
-            <select id="filter-jornadas-ruta" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.84rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
-              <option value="ALL">Todas las rutas</option>
+            <select id="filter-jornadas-ruta" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.85rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
+              <option value="ALL">Consolidado General (Todas las rutas)</option>
             </select>
           </div>
 
           <!-- Filtro 2: Mes / Periodo -->
           <div>
-            <label for="filter-jornadas-mes" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.3rem;">
-              🗓️ Filtrar por Mes:
+            <label for="filter-jornadas-mes" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
+              🗓️ Seleccionar Mes:
             </label>
-            <select id="filter-jornadas-mes" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.84rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
+            <select id="filter-jornadas-mes" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.85rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
               <option value="ALL">Todos los meses</option>
             </select>
           </div>
+        </div>
 
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem;">
           <!-- Filtro 3: Fecha Exacta -->
           <div>
-            <label for="filter-jornadas-fecha" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.3rem;">
-              📅 Fecha Específica:
+            <label for="filter-jornadas-fecha" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
+              📅 Fecha Específica (Día):
             </label>
             <div style="display: flex; gap: 0.35rem;">
               <input type="date" id="filter-jornadas-fecha" onchange="supervisorModule.applyJornadasFilters()" style="flex: 1; padding: 0.45rem 0.6rem; font-size: 0.82rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 700;">
@@ -2703,46 +2704,28 @@
 
           <!-- Filtro 4: Agente / Cobrador -->
           <div>
-            <label for="filter-jornadas-agente" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.3rem;">
-              👤 Filtrar por Agente:
+            <label for="filter-jornadas-agente" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
+              👤 Seleccionar Agente:
             </label>
-            <select id="filter-jornadas-agente" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.84rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
+            <select id="filter-jornadas-agente" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.85rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
               <option value="ALL">Todos los agentes</option>
             </select>
           </div>
+        </div>
 
-          <!-- Filtro 5: Búsqueda Libre / Reset -->
-          <div>
-            <label for="filter-jornadas-search" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.3rem;">
-              🔍 Búsqueda Rápida:
-            </label>
-            <div style="display: flex; gap: 0.35rem;">
-              <input type="text" id="filter-jornadas-search" oninput="supervisorModule.applyJornadasFilters()" placeholder="Ej: Varas Blanca..." style="flex: 1; padding: 0.45rem 0.65rem; font-size: 0.82rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 600;">
-              <button type="button" onclick="supervisorModule.resetJornadasFilters()" style="background: #fee2e2; color: #b91c1c; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 0.35rem 0.65rem; font-size: 0.75rem; font-weight: 800; cursor: pointer;" title="Limpiar todos los filtros">Limpiar</button>
-            </div>
-          </div>
-
+        <!-- Filtro 5: Búsqueda Libre / Reset -->
+        <div style="display: flex; gap: 0.5rem;">
+          <input type="text" id="filter-jornadas-search" oninput="supervisorModule.applyJornadasFilters()" placeholder="🔍 Buscar por nombre de ruta (ej: Varas Blanca) o cobrador..." style="flex: 1; padding: 0.45rem 0.65rem; font-size: 0.82rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 600;">
+          <button type="button" onclick="supervisorModule.resetJornadasFilters()" style="background: #fee2e2; color: #b91c1c; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 800; cursor: pointer; white-space: nowrap;" title="Limpiar todos los filtros">🔄 Limpiar</button>
         </div>
       </div>
 
-      <!-- Métricas Resumen de Filtro (Alto Contraste) -->
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-bottom: 0.85rem; flex-shrink: 0;">
-        <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 0.55rem 0.75rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <span style="font-size: 0.74rem; font-weight: 800; color: #334155; display: block; text-transform: uppercase;">Jornadas</span>
-          <strong id="jornadas-kpi-count" style="font-size: 1.3rem; font-weight: 900; color: #0284c7;">0</strong>
-        </div>
-        <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 0.55rem 0.75rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <span style="font-size: 0.74rem; font-weight: 800; color: #166534; display: block; text-transform: uppercase;">Recaudo Total</span>
-          <strong id="jornadas-kpi-recaudo" style="font-size: 1.3rem; font-weight: 900; color: #15803d;">+$0</strong>
-        </div>
-        <div style="background: #fef2f2; border: 1.5px solid #fca5a5; border-radius: 10px; padding: 0.55rem 0.75rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <span style="font-size: 0.74rem; font-weight: 800; color: #991b1b; display: block; text-transform: uppercase;">Total Prestado</span>
-          <strong id="jornadas-kpi-prestado" style="font-size: 1.3rem; font-weight: 900; color: #b91c1c;">-$0</strong>
-        </div>
-        <div style="background: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 10px; padding: 0.55rem 0.75rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <span style="font-size: 0.74rem; font-weight: 800; color: #065f46; display: block; text-transform: uppercase;">Total a Entregar</span>
-          <strong id="jornadas-kpi-entrega" style="font-size: 1.3rem; font-weight: 900; color: #047857;">$0</strong>
-        </div>
+      <!-- Métricas Resumen de Filtro (Compacto y Elegante) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.5rem 0.85rem; margin-bottom: 0.85rem; font-size: 0.8rem; font-weight: 700; color: #334155; flex-shrink: 0; flex-wrap: wrap; gap: 0.4rem;">
+        <span>📋 Jornadas: <strong id="jornadas-kpi-count" style="color: #0284c7; font-size: 0.95rem;">0</strong></span>
+        <span>💰 Recaudo: <strong id="jornadas-kpi-recaudo" style="color: #15803d; font-size: 0.95rem;">+$0</strong></span>
+        <span>📤 Prestado: <strong id="jornadas-kpi-prestado" style="color: #b91c1c; font-size: 0.95rem;">-$0</strong></span>
+        <span>🏛️ A Entregar: <strong id="jornadas-kpi-entrega" style="color: #047857; font-size: 1rem; font-weight: 900;">$0</strong></span>
       </div>
 
       <!-- Listado Scrollable de Jornadas Archivadas -->
