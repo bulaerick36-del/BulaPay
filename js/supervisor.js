@@ -2445,8 +2445,10 @@ const supervisorModule = {
 
   async populateJornadasArchivadasFilters() {
     const routeSelect = document.getElementById('filter-jornadas-ruta');
+    const mesSelect = document.getElementById('filter-jornadas-mes');
     const agentSelect = document.getElementById('filter-jornadas-agente');
 
+    // 1. Selector de Rutas
     if (routeSelect) {
       const routes = await window.BulaPayDB.getRoutes();
       const currentVal = routeSelect.value || 'ALL';
@@ -2463,6 +2465,48 @@ const supervisorModule = {
       }
     }
 
+    // 2. Selector de Meses (ej: Marzo 2026, Noviembre 2026, etc.)
+    if (mesSelect) {
+      const currentVal = mesSelect.value || 'ALL';
+      mesSelect.innerHTML = '<option value="ALL">🗓️ Todos los meses</option>';
+
+      const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      const mesesSet = new Set();
+
+      // Recoger meses de las jornadas en historial
+      (this._allArchivedJornadas || []).forEach(c => {
+        if (!c.fecha_jornada) return;
+        const ym = String(c.fecha_jornada).substring(0, 7);
+        if (/^\d{4}-\d{2}$/.test(ym)) mesesSet.add(ym);
+      });
+
+      // Asegurar que los 12 meses del año actual y año pasado estén disponibles
+      const currentYear = new Date().getFullYear();
+      [currentYear, currentYear - 1].forEach(yr => {
+        for (let m = 1; m <= 12; m++) {
+          const mm = String(m).padStart(2, '0');
+          mesesSet.add(`${yr}-${mm}`);
+        }
+      });
+
+      // Ordenar meses de más reciente a más antiguo
+      const sortedMeses = Array.from(mesesSet).sort().reverse();
+      sortedMeses.forEach(ym => {
+        const [y, mStr] = ym.split('-');
+        const mIdx = parseInt(mStr, 10) - 1;
+        const nom = (mIdx >= 0 && mIdx < 12) ? mesesNombres[mIdx] : mStr;
+        const opt = document.createElement('option');
+        opt.value = ym;
+        opt.textContent = `🗓️ ${nom} de ${y}`;
+        mesSelect.appendChild(opt);
+      });
+
+      if (mesesSet.has(currentVal)) {
+        mesSelect.value = currentVal;
+      }
+    }
+
+    // 3. Selector de Agentes
     if (agentSelect) {
       const agents = await window.BulaPayDB.getAgents();
       const currentVal = agentSelect.value || 'ALL';
@@ -2486,15 +2530,18 @@ const supervisorModule = {
 
   setJornadasDatePreset(preset) {
     const dateInput = document.getElementById('filter-jornadas-fecha');
+    const mesSelect = document.getElementById('filter-jornadas-mes');
     if (!dateInput) return;
 
     if (preset === 'today') {
       const todayStr = window.BulaPayDB.getColombiaLocalDateStr ? window.BulaPayDB.getColombiaLocalDateStr(new Date()) : new Date().toISOString().split('T')[0];
       dateInput.value = todayStr;
+      if (mesSelect) mesSelect.value = todayStr.substring(0, 7);
     } else if (preset === 'yesterday') {
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const yesterdayStr = window.BulaPayDB.getColombiaLocalDateStr ? window.BulaPayDB.getColombiaLocalDateStr(yesterday) : yesterday.toISOString().split('T')[0];
       dateInput.value = yesterdayStr;
+      if (mesSelect) mesSelect.value = yesterdayStr.substring(0, 7);
     } else {
       dateInput.value = '';
     }
@@ -2503,11 +2550,13 @@ const supervisorModule = {
 
   resetJornadasFilters() {
     const routeSelect = document.getElementById('filter-jornadas-ruta');
+    const mesSelect = document.getElementById('filter-jornadas-mes');
     const agentSelect = document.getElementById('filter-jornadas-agente');
     const dateInput = document.getElementById('filter-jornadas-fecha');
     const searchInput = document.getElementById('filter-jornadas-search');
 
     if (routeSelect) routeSelect.value = 'ALL';
+    if (mesSelect) mesSelect.value = 'ALL';
     if (agentSelect) agentSelect.value = 'ALL';
     if (dateInput) dateInput.value = '';
     if (searchInput) searchInput.value = '';
@@ -2515,18 +2564,34 @@ const supervisorModule = {
     this.applyJornadasFilters();
   },
 
+  formatFechaJornadaEspanol(dateStr) {
+    if (!dateStr) return 'Sin fecha';
+    const parts = String(dateStr).split('-');
+    if (parts.length === 3) {
+      const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      const dia = parseInt(parts[2], 10);
+      const mesIdx = parseInt(parts[1], 10) - 1;
+      const anio = parts[0];
+      if (mesIdx >= 0 && mesIdx < 12) {
+        return `${dia} de ${meses[mesIdx]} de ${anio}`;
+      }
+    }
+    return dateStr;
+  },
+
   async renderJornadasArchivadasSupervisor(forceRefresh = false) {
     const container = document.getElementById('modal-jornadas-list-container');
     if (!container) return;
 
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.85rem; padding:1.5rem;">Cargando jornadas archivadas...</div>';
+    container.innerHTML = '<div style="text-align:center; color:#0f172a; font-weight:700; font-size:0.9rem; padding:2rem;">Cargando jornadas archivadas...</div>';
 
     try {
       this._allArchivedJornadas = await window.BulaPayDB.getHistorialCierres();
+      await this.populateJornadasArchivadasFilters();
       this.applyJornadasFilters();
     } catch (e) {
       console.error("Error al consultar jornadas archivadas:", e);
-      container.innerHTML = '<div style="text-align:center; color:#ef4444; font-size:0.85rem; padding:1.5rem;">Error al cargar las jornadas archivadas.</div>';
+      container.innerHTML = '<div style="text-align:center; color:#dc2626; font-weight:700; font-size:0.9rem; padding:2rem;">Error al cargar las jornadas archivadas.</div>';
     }
   },
 
@@ -2535,16 +2600,28 @@ const supervisorModule = {
     if (!container) return;
 
     const routeVal = document.getElementById('filter-jornadas-ruta')?.value || 'ALL';
+    const mesVal = document.getElementById('filter-jornadas-mes')?.value || 'ALL';
     const agentVal = document.getElementById('filter-jornadas-agente')?.value || 'ALL';
     const dateVal = document.getElementById('filter-jornadas-fecha')?.value || '';
     const searchVal = (document.getElementById('filter-jornadas-search')?.value || '').trim().toLowerCase();
 
     let list = this._allArchivedJornadas || [];
 
+    // 1. Filtro por Ruta
     if (routeVal !== 'ALL') {
       list = list.filter(c => String(c.route_id) === String(routeVal));
     }
 
+    // 2. Filtro por Mes (YYYY-MM, ej: 2026-03 para Marzo de 2026)
+    if (mesVal !== 'ALL') {
+      list = list.filter(c => {
+        const fj = String(c.fecha_jornada || '');
+        const fc = String(c.fecha_cierre || '');
+        return fj.startsWith(mesVal) || fc.startsWith(mesVal);
+      });
+    }
+
+    // 3. Filtro por Agente
     if (agentVal !== 'ALL') {
       list = list.filter(c => {
         const uAgent = String(c.agent_id || c.detalles?.agentUsername || '').toLowerCase();
@@ -2552,6 +2629,7 @@ const supervisorModule = {
       });
     }
 
+    // 4. Filtro por Fecha Exacta
     if (dateVal) {
       list = list.filter(c => {
         return c.fecha_jornada === dateVal ||
@@ -2560,6 +2638,7 @@ const supervisorModule = {
       });
     }
 
+    // 5. Búsqueda Libre
     if (searchVal) {
       list = list.filter(c => {
         const rName = String(c.detalles?.routeName || c.routeName || '').toLowerCase();
@@ -2570,7 +2649,7 @@ const supervisorModule = {
       });
     }
 
-    // Actualizar Resumen KPI
+    // Actualizar Resumen KPI con texto nítido de alto contraste
     const kpiCount = document.getElementById('jornadas-kpi-count');
     const kpiRecaudo = document.getElementById('jornadas-kpi-recaudo');
     const kpiPrestado = document.getElementById('jornadas-kpi-prestado');
@@ -2593,16 +2672,17 @@ const supervisorModule = {
 
     if (list.length === 0) {
       container.innerHTML = `
-        <div style="text-align: center; color: #94a3b8; padding: 2.5rem 1rem; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.08);">
-          <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem;">📂</span>
-          <p style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; color: #f1f5f9;">No se encontraron jornadas archivadas</p>
-          <span style="font-size: 0.8rem; color: #64748b;">Prueba cambiando o limpiando los filtros de ruta, fecha o agente.</span>
+        <div style="text-align: center; color: #0f172a; padding: 3rem 1.5rem; background: #f8fafc; border-radius: 12px; border: 2px dashed #cbd5e1; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+          <span style="font-size: 2.2rem; display: block; margin-bottom: 0.5rem;">📂</span>
+          <p style="font-weight: 800; font-size: 1.05rem; margin-bottom: 0.35rem; color: #0f172a;">No se encontraron jornadas archivadas</p>
+          <span style="font-size: 0.85rem; color: #475569; font-weight: 600;">Prueba seleccionando otro mes, ruta o fecha, o haz clic en "Limpiar" para ver todo el historial.</span>
         </div>
       `;
       return;
     }
 
     container.innerHTML = list.map(c => {
+      const fechaEspanol = this.formatFechaJornadaEspanol(c.fecha_jornada);
       const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : c.fecha_jornada;
       const recaudo = Number(c.total_recaudado || 0);
       const prestado = Number(c.total_prestado || 0);
@@ -2619,105 +2699,153 @@ const supervisorModule = {
       const rName = det.routeName || c.routeName || c.route_id || 'Ruta';
       const aName = c.agent_name || det.agentName || c.agent_id || 'Agente de Ruta';
 
+      // Calcular montos de desglose contable
+      const cuotasCobro = Number(det.cuotasNormales || det.cuotas_normales || (recaudo - descuentos - Number(det.entradasRenovacion || 0) - Number(det.liquidacionesMora || 0)));
+      const pagosMasivos = Number(det.pagosMasivos || det.pagos_masivos || 0);
+      const renovIn = Number(det.entradasRenovacion || det.entradas_renovacion || 0);
+      const moraIn = Number(det.liquidacionesMora || det.liquidaciones_mora || 0);
+      const renovOut = Number(det.desembolsosNetosRenovacion || det.desembolsos_netos_renovacion || 0);
+      const capRenovOut = Number(det.salidaCapitalAsignadoRenovacion || det.salida_capital_asignado_renovacion || 0);
+
       return `
-        <div style="background: rgba(255,255,255,0.03); border: 1px solid ${hasAlert ? 'rgba(239, 68, 68, 0.35)' : 'rgba(255,255,255,0.08)'}; border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.82rem; transition: transform 0.15s, border-color 0.15s;">
+        <div style="background: #ffffff; border: 1.5px solid ${hasAlert ? '#f87171' : '#cbd5e1'}; border-radius: 12px; padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
           
-          <!-- Encabezado de la Ficha: Fecha, Badges de Ruta, Cobrador y Tipo -->
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.4rem; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 0.45rem;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                <strong style="color: #fff; font-size: 0.95rem;">📅 Jornada ${c.fecha_jornada}</strong>
-                <span style="font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 700; ${isAuto ? 'background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);' : 'background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);'}">
-                  ${tipo}
-                </span>
-                <span style="font-size: 0.72rem; background: rgba(255, 255, 255, 0.06); color: #cbd5e1; padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);">
-                  📍 ${rName}
-                </span>
-                <span style="font-size: 0.72rem; background: rgba(255, 255, 255, 0.06); color: #cbd5e1; padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);">
-                  👤 ${aName}
-                </span>
-              </div>
-              ${det.motivo ? `<div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.2rem;">ℹ️ ${det.motivo}</div>` : ''}
+          <!-- Encabezado de la Ficha: Fecha en Negro, Badges de Ruta, Cobrador y Tipo -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.6rem; border-bottom: 1.5px solid #f1f5f9; padding-bottom: 0.65rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <span style="font-size: 1.3rem;">📅</span>
+              <strong style="color: #0f172a; font-size: 1.15rem; font-weight: 900; letter-spacing: -0.3px;">
+                ${fechaEspanol}
+              </strong>
+              <span style="font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 6px; font-weight: 800; ${isAuto ? 'background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;' : 'background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc;'}">
+                ${tipo}
+              </span>
+              <span style="font-size: 0.78rem; font-weight: 800; background: #f1f5f9; color: #0f172a; padding: 0.2rem 0.65rem; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; gap: 0.35rem;">
+                📍 <span>Ruta: <strong>${rName}</strong></span>
+              </span>
+              <span style="font-size: 0.78rem; font-weight: 800; background: #ede9fe; color: #5b21b6; padding: 0.2rem 0.65rem; border-radius: 6px; border: 1px solid #c4b5fd; display: inline-flex; align-items: center; gap: 0.35rem;">
+                👤 <span>Agente: <strong>${aName}</strong></span>
+              </span>
             </div>
-            <div style="font-size: 0.74rem; color: #94a3b8; text-align: right;">
-              🕒 Cierre: <strong>${fCierre}</strong>
+            <div style="font-size: 0.8rem; font-weight: 700; color: #475569; background: #f8fafc; padding: 0.25rem 0.65rem; border-radius: 6px; border: 1px solid #e2e8f0;">
+              🕒 Cierre: <strong style="color: #0f172a;">${fCierre}</strong>
             </div>
           </div>
 
           <!-- Alerta de Auditoría -->
           ${hasAlert ? `
-            <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 0.35rem 0.6rem; display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: #fca5a5; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
-                <span>🔔</span> <span>Alerta: Usó $${capitalUtilizado.toLocaleString('es-CO')} de Capital Asignado</span>
+            <div style="background: #fef2f2; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 0.5rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+              <span style="color: #991b1b; font-size: 0.82rem; font-weight: 800; display: flex; align-items: center; gap: 0.4rem;">
+                <span>🔔</span> <span>Alerta de Auditoría: El cobrador utilizó $${capitalUtilizado.toLocaleString('es-CO')} de Capital Asignado</span>
               </span>
-              <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: #ef4444; color: #fff; border: none; border-radius: 4px; padding: 0.2rem 0.55rem; font-size: 0.7rem; font-weight: bold; cursor: pointer;">
+              <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: #dc2626; color: #ffffff; border: none; border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; box-shadow: 0 1px 4px rgba(220,38,38,0.3);">
                 Ver Auditoría
               </button>
             </div>
           ` : `
-            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px; padding: 0.25rem 0.55rem; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: #6ee7b7; font-weight: 600;">
-              <span>✅</span> Arqueo Conforme / Sin Alertas de Capital
+            <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 0.4rem 0.75rem; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: #166534; font-weight: 800;">
+              <span>✅</span> Arqueo Conforme / Sin uso de capital asignado
             </div>
           `}
 
-          <!-- Grid Contable -->
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 0.55rem 0.75rem;">
-            <div>
-              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">💰 Recaudo Total:</span>
-              <strong style="color: #10b981; font-size: 0.92rem;">+$${recaudo.toLocaleString('es-CO')}</strong>
+          <!-- 4 Bloques Principales Contables (Alto Contraste y Letras Grandes) -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem;">
+            <!-- Recaudo Total -->
+            <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 0.65rem 0.85rem;">
+              <span style="font-size: 0.75rem; color: #166534; font-weight: 800; display: block; text-transform: uppercase;">💰 Recaudo Total Hoy:</span>
+              <strong style="color: #15803d; font-size: 1.3rem; font-weight: 900; display: block; margin-top: 0.15rem;">+$${recaudo.toLocaleString('es-CO')}</strong>
+              <span style="font-size: 0.7rem; color: #166534; font-weight: 600;">Ingreso total de cobranza</span>
             </div>
-            <div>
-              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">📤 Total Prestado:</span>
-              <strong style="color: #f87171; font-size: 0.92rem;">-$${prestado.toLocaleString('es-CO')}</strong>
+
+            <!-- Total Prestado -->
+            <div style="background: #fef2f2; border: 1.5px solid #fca5a5; border-radius: 10px; padding: 0.65rem 0.85rem;">
+              <span style="font-size: 0.75rem; color: #991b1b; font-weight: 800; display: block; text-transform: uppercase;">📤 Total Prestado:</span>
+              <strong style="color: #b91c1c; font-size: 1.3rem; font-weight: 900; display: block; margin-top: 0.15rem;">-$${prestado.toLocaleString('es-CO')}</strong>
+              <span style="font-size: 0.7rem; color: #991b1b; font-weight: 600;">Créditos puestos en calle</span>
             </div>
-            <div>
-              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">💼 Efectivo Inicial:</span>
-              <strong style="color: #38bdf8; font-size: 0.88rem;">$${inicial.toLocaleString('es-CO')}</strong>
+
+            <!-- Efectivo Inicial -->
+            <div style="background: #f0f9ff; border: 1.5px solid #7dd3fc; border-radius: 10px; padding: 0.65rem 0.85rem;">
+              <span style="font-size: 0.75rem; color: #0369a1; font-weight: 800; display: block; text-transform: uppercase;">💼 Efectivo Inicial:</span>
+              <strong style="color: #0284c7; font-size: 1.2rem; font-weight: 900; display: block; margin-top: 0.15rem;">$${inicial.toLocaleString('es-CO')}</strong>
+              <span style="font-size: 0.7rem; color: #0369a1; font-weight: 600;">Base inicial en bolsillo</span>
             </div>
-            <div style="text-align: right;">
-              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">🏛️ Efectivo a Entregar:</span>
-              <strong style="color: #34d399; font-size: 1rem; font-weight: 900;">$${entrega.toLocaleString('es-CO')}</strong>
+
+            <!-- Efectivo a Entregar -->
+            <div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #10b981; border-radius: 10px; padding: 0.65rem 0.85rem;">
+              <span style="font-size: 0.75rem; color: #065f46; font-weight: 900; display: block; text-transform: uppercase;">🏛️ Efectivo a Entregar:</span>
+              <strong style="color: #047857; font-size: 1.4rem; font-weight: 900; display: block; margin-top: 0.15rem;">$${entrega.toLocaleString('es-CO')}</strong>
+              <span style="font-size: 0.7rem; color: #065f46; font-weight: 700;">Físico a recibir por supervisor</span>
             </div>
           </div>
 
-          <!-- Acciones Inferiores: Desglose y Botón Auditoría Completa -->
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.15rem;">
-            <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: transparent; border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.72rem; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
-              <span>📜</span> Arqueo Completo
-            </button>
+          <!-- Desglose Visual Contable Dividido en Entradas y Salidas (Ayuda para el Supervisor) -->
+          <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.75rem 0.95rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.4rem;">
+              <span style="font-size: 0.82rem; font-weight: 900; color: #0f172a; display: flex; align-items: center; gap: 0.4rem;">
+                <span>📊</span> Desglose de Caja Operativo (Ruta: ${rName} - ${fechaEspanol})
+              </span>
+              <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: #ffffff; border: 1px solid #cbd5e1; color: #0284c7; border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+                <span>📜</span> Comprobante Completo
+              </button>
+            </div>
 
-            <button type="button" onclick="supervisorModule.toggleModalJornadaCardDetail('${c.id}')" style="background: transparent; border: none; color: #38bdf8; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">
-              <span>Desglose contable</span> <span id="modal-jornadas-card-arrow-${c.id}">▼</span>
-            </button>
-          </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <!-- Columna 1: Entradas / Recaudo -->
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.65rem 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.78rem;">
+                <strong style="color: #15803d; font-size: 0.82rem; border-bottom: 1px dashed #cbd5e1; padding-bottom: 0.25rem; margin-bottom: 0.2rem;">
+                  💰 Entradas / Desglose del Recaudo:
+                </strong>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Cuotas Normales Cobradas:</span>
+                  <strong style="color: #0f172a;">+$${cuotasCobro.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Abonos y Pagos Masivos:</span>
+                  <strong style="color: #0f172a;">+$${pagosMasivos.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Entradas por Renovación (Saldo):</span>
+                  <strong style="color: #0f172a;">+$${renovIn.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Liquidaciones de Mora:</span>
+                  <strong style="color: #0f172a;">+$${moraIn.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155; border-top: 1px dashed #e2e8f0; padding-top: 0.25rem;">
+                  <span>↳ Descuentos Retenidos (Papelería/Software):</span>
+                  <strong style="color: #0369a1;">+$${descuentos.toLocaleString('es-CO')}</strong>
+                </div>
+              </div>
 
-          <!-- Contenedor Desplegable del Desglose -->
-          <div id="modal-jornadas-card-detail-${c.id}" style="display: none; flex-direction: column; gap: 0.35rem; background: rgba(15,23,42,0.6); border: 1px solid rgba(148,163,184,0.15); border-radius: 6px; padding: 0.55rem 0.75rem; font-size: 0.75rem; margin-top: 0.2rem;">
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: #94a3b8;">↳ Capital Asignado por el Supervisor:</span>
-              <strong style="color: #fca5a5;">${prestadoCap.toLocaleString('es-CO')}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: #94a3b8;">↳ Salida de Capital Asignado por Renovación:</span>
-              <strong style="color: #fca5a5;">${Number(det.salida_capital_asignado_renovacion || det.salidaCapitalAsignadoRenovacion || 0).toLocaleString('es-CO')}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: #94a3b8;">↳ Préstamos Nuevos / Recaudo Diario:</span>
-              <strong style="color: #93c5fd;">${prestadoRec.toLocaleString('es-CO')}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: #94a3b8;">↳ Desembolsos Netos por Renovación:</span>
-              <strong style="color: #cbd5e1;">${Number(det.desembolsos_netos_renovacion || det.desembolsosNetosRenovacion || 0).toLocaleString('es-CO')}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: #94a3b8;">↳ Descuentos Retenidos (Software/Papelería):</span>
-              <strong style="color: #34d399;">+$${descuentos.toLocaleString('es-CO')}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 0.3rem;">
-              <span style="color: #94a3b8;">↳ Flujo Operativo del Día:</span>
-              <strong style="color: ${(recaudo - prestado) >= 0 ? '#10b981' : '#f87171'};">
-                ${(recaudo - prestado) >= 0 ? '+' : ''}$${(recaudo - prestado).toLocaleString('es-CO')}
-              </strong>
+              <!-- Columna 2: Salidas / Préstamos -->
+              <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.65rem 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.78rem;">
+                <strong style="color: #b91c1c; font-size: 0.82rem; border-bottom: 1px dashed #cbd5e1; padding-bottom: 0.25rem; margin-bottom: 0.2rem;">
+                  📤 Salidas / Desglose de Préstamos:
+                </strong>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Préstamos Nuevos (con Recaudo):</span>
+                  <strong style="color: #0f172a;">-$${prestadoRec.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Desembolsos Netos por Renovación:</span>
+                  <strong style="color: #0f172a;">-$${renovOut.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Capital Asignado por Supervisor usado:</span>
+                  <strong style="color: ${prestadoCap > 0 ? '#b91c1c' : '#0f172a'};">-$${prestadoCap.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155;">
+                  <span>↳ Salida Capital Asignado por Renovación:</span>
+                  <strong style="color: ${capRenovOut > 0 ? '#b91c1c' : '#0f172a'};">-$${capRenovOut.toLocaleString('es-CO')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #334155; border-top: 1px dashed #e2e8f0; padding-top: 0.25rem;">
+                  <span>↳ Flujo Operativo Neto del Día:</span>
+                  <strong style="color: ${(recaudo - prestado) >= 0 ? '#15803d' : '#b91c1c'};">
+                    ${(recaudo - prestado) >= 0 ? '+' : ''}$${(recaudo - prestado).toLocaleString('es-CO')}
+                  </strong>
+                </div>
+              </div>
             </div>
           </div>
 
