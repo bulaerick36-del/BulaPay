@@ -2290,10 +2290,10 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="js/checkout.js?v=11025"></script>
-  <script src="js/db.js?v=11039"></script>
+  <script src="js/db.js?v=11040"></script>
   <script src="js/ads.js?v=11025"></script>
   <script src="js/auth.js?v=11025"></script>
-  <script src="js/supervisor.js?v=11040"></script>
+  <script src="js/supervisor.js?v=11041"></script>
   <script src="js/agent_v6.js?v=11035"></script>
   <script src="js/agent_ruta.js?v=11025"></script>
   <script src="js/customer.js?v=11025"></script>
@@ -2649,88 +2649,91 @@
       <!-- Botón de Cerrar Modal -->
       <button class="supervisor-modal-close" onclick="supervisorModule.closeJornadasArchivadasModal()">&times;</button>
       
-      <!-- Encabezado -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.85rem; padding-right: 1.5rem; flex-shrink: 0;">
+      <!-- Encabezado con Flechitas para Deslizar y Actualizar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-right: 1.5rem; flex-shrink: 0; flex-wrap: wrap; gap: 0.5rem;">
         <div>
-          <h3 style="margin: 0; font-size: 1.4rem; display: flex; align-items: center; gap: 0.5rem; color: #0f172a; font-weight: 900;">
+          <h3 style="margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem; color: #0f172a; font-weight: 900;">
             <span>📁</span> Jornadas Archivadas
           </h3>
-          <p style="color: #475569; font-size: 0.84rem; margin: 0.25rem 0 0 0; font-weight: 600;">
-            Historial de cierres de caja y arqueos operativos archivados por ruta, mes y fecha para supervisión y auditoría.
+          <p style="color: #475569; font-size: 0.82rem; margin: 0.2rem 0 0 0; font-weight: 600;">
+            Consulta el cierre de caja de cualquier fecha por ruta y agente.
           </p>
         </div>
-        <button type="button" onclick="supervisorModule.renderJornadasArchivadasSupervisor(true)" style="background: #f1f5f9; border: 1.5px solid #cbd5e1; color: #0f172a; padding: 0.4rem 0.75rem; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06);" title="Recargar jornadas">
-          <span>🔄</span> Actualizar
-        </button>
+        
+        <!-- Flechitas para Deslizar Arriba/Abajo y Actualizar -->
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <div style="display: flex; gap: 0.25rem; background: #f1f5f9; padding: 0.2rem; border-radius: 8px; border: 1.5px solid #cbd5e1;">
+            <button type="button" onclick="supervisorModule.scrollJornadasList('up')" style="background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; width: 32px; height: 30px; border-radius: 6px; font-size: 0.95rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,0.06);" title="Deslizar arriba">
+              ⬆️
+            </button>
+            <button type="button" onclick="supervisorModule.scrollJornadasList('down')" style="background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; width: 32px; height: 30px; border-radius: 6px; font-size: 0.95rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,0.06);" title="Deslizar abajo">
+              ⬇️
+            </button>
+          </div>
+          <button type="button" onclick="supervisorModule.renderJornadasArchivadasSupervisor(true)" style="background: #f1f5f9; border: 1.5px solid #cbd5e1; color: #0f172a; padding: 0.45rem 0.75rem; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06);" title="Recargar jornadas">
+            <span>🔄</span> Actualizar
+          </button>
+        </div>
       </div>
 
-      <!-- Barra de Filtros: Ruta, Mes, Fecha, Agente y Búsqueda -->
-      <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.85rem; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.65rem; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem;">
-          <!-- Filtro 1: Ruta -->
-          <div>
+      <!-- Barra Limpia de Solo 3 Opciones: Ruta, Fecha (Día/Mes/Año) y Agente + Botones Buscar y Ver / Limpiar -->
+      <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.85rem; flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+        <div style="display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: flex-end;">
+          
+          <!-- 1. Ruta -->
+          <div style="flex: 1 1 180px;">
             <label for="filter-jornadas-ruta" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
-              📍 Seleccionar Ruta:
+              📍 Ruta:
             </label>
-            <select id="filter-jornadas-ruta" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.85rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
-              <option value="ALL">Consolidado General (Todas las rutas)</option>
+            <select id="filter-jornadas-ruta" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.65rem; font-size: 0.84rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
+              <option value="ALL">Todas las rutas</option>
             </select>
           </div>
 
-          <!-- Filtro 2: Mes / Periodo -->
-          <div>
-            <label for="filter-jornadas-mes" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
-              🗓️ Seleccionar Mes:
-            </label>
-            <select id="filter-jornadas-mes" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.85rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
-              <option value="ALL">Todos los meses</option>
-            </select>
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem;">
-          <!-- Filtro 3: Fecha Exacta -->
-          <div>
+          <!-- 2. Fecha (Día, Mes y Año incluida) -->
+          <div style="flex: 1 1 140px;">
             <label for="filter-jornadas-fecha" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
-              📅 Fecha Específica (Día):
+              📅 Fecha (Día/Mes/Año):
             </label>
-            <div style="display: flex; gap: 0.35rem;">
-              <input type="date" id="filter-jornadas-fecha" onchange="supervisorModule.applyJornadasFilters()" style="flex: 1; padding: 0.45rem 0.6rem; font-size: 0.82rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 700;">
-              <button type="button" onclick="supervisorModule.setJornadasDatePreset('today')" style="background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.74rem; font-weight: 800; cursor: pointer;" title="Filtrar por jornada de hoy">Hoy</button>
-              <button type="button" onclick="supervisorModule.setJornadasDatePreset('yesterday')" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.74rem; font-weight: 800; cursor: pointer;" title="Filtrar por jornada de ayer">Ayer</button>
-              <button type="button" onclick="supervisorModule.setJornadasDatePreset('all')" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.74rem; font-weight: 800; cursor: pointer;" title="Mostrar todas las fechas">Todas</button>
-            </div>
+            <input type="date" id="filter-jornadas-fecha" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; box-sizing: border-box; padding: 0.48rem 0.6rem; font-size: 0.84rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 700;">
           </div>
 
-          <!-- Filtro 4: Agente / Cobrador -->
-          <div>
+          <!-- 3. Agente -->
+          <div style="flex: 1 1 160px;">
             <label for="filter-jornadas-agente" style="font-size: 0.78rem; font-weight: 800; color: #0f172a; display: block; margin-bottom: 0.25rem;">
-              👤 Seleccionar Agente:
+              👤 Agente:
             </label>
-            <select id="filter-jornadas-agente" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.7rem; font-size: 0.85rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
+            <select id="filter-jornadas-agente" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.5rem 0.65rem; font-size: 0.84rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700;">
               <option value="ALL">Todos los agentes</option>
             </select>
           </div>
-        </div>
 
-        <!-- Filtro 5: Búsqueda Libre / Reset -->
-        <div style="display: flex; gap: 0.5rem;">
-          <input type="text" id="filter-jornadas-search" oninput="supervisorModule.applyJornadasFilters()" placeholder="🔍 Buscar por nombre de ruta (ej: Varas Blanca) o cobrador..." style="flex: 1; padding: 0.45rem 0.65rem; font-size: 0.82rem; background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 600;">
-          <button type="button" onclick="supervisorModule.resetJornadasFilters()" style="background: #fee2e2; color: #b91c1c; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 0.45rem 0.85rem; font-size: 0.78rem; font-weight: 800; cursor: pointer; white-space: nowrap;" title="Limpiar todos los filtros">🔄 Limpiar</button>
+          <!-- Botones de Acción: Buscar y Ver / Limpiar -->
+          <div style="display: flex; gap: 0.4rem;">
+            <button type="button" onclick="supervisorModule.applyJornadasFilters()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 8px; padding: 0.52rem 0.85rem; font-size: 0.82rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 6px rgba(16,185,129,0.25); white-space: nowrap;" title="Buscar y ver cierre de caja archivado">
+              🔍 Buscar y Ver
+            </button>
+            <button type="button" onclick="supervisorModule.resetJornadasFilters()" style="background: #f1f5f9; color: #475569; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 0.52rem 0.65rem; font-size: 0.82rem; font-weight: 800; cursor: pointer; white-space: nowrap;" title="Limpiar filtros">
+              🔄 Limpiar
+            </button>
+          </div>
+
         </div>
       </div>
 
-      <!-- Métricas Resumen de Filtro (Compacto y Elegante) -->
-      <div style="display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.5rem 0.85rem; margin-bottom: 0.85rem; font-size: 0.8rem; font-weight: 700; color: #334155; flex-shrink: 0; flex-wrap: wrap; gap: 0.4rem;">
-        <span>📋 Jornadas: <strong id="jornadas-kpi-count" style="color: #0284c7; font-size: 0.95rem;">0</strong></span>
-        <span>💰 Recaudo: <strong id="jornadas-kpi-recaudo" style="color: #15803d; font-size: 0.95rem;">+$0</strong></span>
-        <span>📤 Prestado: <strong id="jornadas-kpi-prestado" style="color: #b91c1c; font-size: 0.95rem;">-$0</strong></span>
-        <span>🏛️ A Entregar: <strong id="jornadas-kpi-entrega" style="color: #047857; font-size: 1rem; font-weight: 900;">$0</strong></span>
-      </div>
-
-      <!-- Listado Scrollable de Jornadas Archivadas -->
-      <div id="modal-jornadas-list-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.85rem; padding-right: 0.25rem;">
+      <!-- Listado Scrollable de Cierres de Caja Archivados -->
+      <div id="modal-jornadas-list-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.85rem; padding-right: 0.25rem; scroll-behavior: smooth;">
         <!-- Se inyecta dinámicamente -->
+      </div>
+
+      <!-- Flechas Flotantes para Deslizar Arriba y Abajo -->
+      <div style="position: absolute; bottom: 1.25rem; right: 1.5rem; display: flex; flex-direction: column; gap: 0.4rem; z-index: 10;">
+        <button type="button" onclick="supervisorModule.scrollJornadasList('up')" style="width: 36px; height: 36px; border-radius: 50%; background: #ffffff; border: 2px solid #0284c7; color: #0284c7; font-size: 1.05rem; font-weight: 900; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.18); display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='#ffffff'" title="Deslizar hacia arriba">
+          ▲
+        </button>
+        <button type="button" onclick="supervisorModule.scrollJornadasList('down')" style="width: 36px; height: 36px; border-radius: 50%; background: #ffffff; border: 2px solid #0284c7; color: #0284c7; font-size: 1.05rem; font-weight: 900; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.18); display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='#ffffff'" title="Deslizar hacia abajo">
+          ▼
+        </button>
       </div>
 
     </div>

@@ -2445,7 +2445,6 @@ const supervisorModule = {
 
   async populateJornadasArchivadasFilters() {
     const routeSelect = document.getElementById('filter-jornadas-ruta');
-    const mesSelect = document.getElementById('filter-jornadas-mes');
     const agentSelect = document.getElementById('filter-jornadas-agente');
 
     // 1. Selector de Rutas
@@ -2465,48 +2464,7 @@ const supervisorModule = {
       }
     }
 
-    // 2. Selector de Meses (ej: Marzo 2026, Noviembre 2026, etc.)
-    if (mesSelect) {
-      const currentVal = mesSelect.value || 'ALL';
-      mesSelect.innerHTML = '<option value="ALL">🗓️ Todos los meses</option>';
-
-      const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-      const mesesSet = new Set();
-
-      // Recoger meses de las jornadas en historial
-      (this._allArchivedJornadas || []).forEach(c => {
-        if (!c.fecha_jornada) return;
-        const ym = String(c.fecha_jornada).substring(0, 7);
-        if (/^\d{4}-\d{2}$/.test(ym)) mesesSet.add(ym);
-      });
-
-      // Asegurar que los 12 meses del año actual y año pasado estén disponibles
-      const currentYear = new Date().getFullYear();
-      [currentYear, currentYear - 1].forEach(yr => {
-        for (let m = 1; m <= 12; m++) {
-          const mm = String(m).padStart(2, '0');
-          mesesSet.add(`${yr}-${mm}`);
-        }
-      });
-
-      // Ordenar meses de más reciente a más antiguo
-      const sortedMeses = Array.from(mesesSet).sort().reverse();
-      sortedMeses.forEach(ym => {
-        const [y, mStr] = ym.split('-');
-        const mIdx = parseInt(mStr, 10) - 1;
-        const nom = (mIdx >= 0 && mIdx < 12) ? mesesNombres[mIdx] : mStr;
-        const opt = document.createElement('option');
-        opt.value = ym;
-        opt.textContent = `🗓️ ${nom} de ${y}`;
-        mesSelect.appendChild(opt);
-      });
-
-      if (mesesSet.has(currentVal)) {
-        mesSelect.value = currentVal;
-      }
-    }
-
-    // 3. Selector de Agentes
+    // 2. Selector de Agentes
     if (agentSelect) {
       const agents = await window.BulaPayDB.getAgents();
       const currentVal = agentSelect.value || 'ALL';
@@ -2528,38 +2486,21 @@ const supervisorModule = {
     }
   },
 
-  setJornadasDatePreset(preset) {
-    const dateInput = document.getElementById('filter-jornadas-fecha');
-    const mesSelect = document.getElementById('filter-jornadas-mes');
-    if (!dateInput) return;
-
-    if (preset === 'today') {
-      const todayStr = window.BulaPayDB.getColombiaLocalDateStr ? window.BulaPayDB.getColombiaLocalDateStr(new Date()) : new Date().toISOString().split('T')[0];
-      dateInput.value = todayStr;
-      if (mesSelect) mesSelect.value = todayStr.substring(0, 7);
-    } else if (preset === 'yesterday') {
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const yesterdayStr = window.BulaPayDB.getColombiaLocalDateStr ? window.BulaPayDB.getColombiaLocalDateStr(yesterday) : yesterday.toISOString().split('T')[0];
-      dateInput.value = yesterdayStr;
-      if (mesSelect) mesSelect.value = yesterdayStr.substring(0, 7);
-    } else {
-      dateInput.value = '';
-    }
-    this.applyJornadasFilters();
+  scrollJornadasList(direction) {
+    const container = document.getElementById('modal-jornadas-list-container');
+    if (!container) return;
+    const scrollAmount = direction === 'up' ? -380 : 380;
+    container.scrollBy({ top: scrollAmount, behavior: 'smooth' });
   },
 
   resetJornadasFilters() {
     const routeSelect = document.getElementById('filter-jornadas-ruta');
-    const mesSelect = document.getElementById('filter-jornadas-mes');
     const agentSelect = document.getElementById('filter-jornadas-agente');
     const dateInput = document.getElementById('filter-jornadas-fecha');
-    const searchInput = document.getElementById('filter-jornadas-search');
 
     if (routeSelect) routeSelect.value = 'ALL';
-    if (mesSelect) mesSelect.value = 'ALL';
     if (agentSelect) agentSelect.value = 'ALL';
     if (dateInput) dateInput.value = '';
-    if (searchInput) searchInput.value = '';
 
     this.applyJornadasFilters();
   },
@@ -2583,7 +2524,7 @@ const supervisorModule = {
     const container = document.getElementById('modal-jornadas-list-container');
     if (!container) return;
 
-    container.innerHTML = '<div style="text-align:center; color:#0f172a; font-weight:700; font-size:0.9rem; padding:2rem;">Cargando jornadas archivadas...</div>';
+    container.innerHTML = '<div style="text-align:center; color:#0f172a; font-weight:700; font-size:0.9rem; padding:2rem;">Cargando cierres de caja archivados...</div>';
 
     try {
       this._allArchivedJornadas = await window.BulaPayDB.getHistorialCierres();
@@ -2600,10 +2541,8 @@ const supervisorModule = {
     if (!container) return;
 
     const routeVal = document.getElementById('filter-jornadas-ruta')?.value || 'ALL';
-    const mesVal = document.getElementById('filter-jornadas-mes')?.value || 'ALL';
     const agentVal = document.getElementById('filter-jornadas-agente')?.value || 'ALL';
     const dateVal = document.getElementById('filter-jornadas-fecha')?.value || '';
-    const searchVal = (document.getElementById('filter-jornadas-search')?.value || '').trim().toLowerCase();
 
     let list = this._allArchivedJornadas || [];
 
@@ -2612,12 +2551,12 @@ const supervisorModule = {
       list = list.filter(c => String(c.route_id) === String(routeVal));
     }
 
-    // 2. Filtro por Mes (YYYY-MM, ej: 2026-03 para Marzo de 2026)
-    if (mesVal !== 'ALL') {
+    // 2. Filtro por Fecha (Día, Mes y Año incluido)
+    if (dateVal) {
       list = list.filter(c => {
-        const fj = String(c.fecha_jornada || '');
-        const fc = String(c.fecha_cierre || '');
-        return fj.startsWith(mesVal) || fc.startsWith(mesVal);
+        return c.fecha_jornada === dateVal ||
+               (c.fecha_cierre && String(c.fecha_cierre).startsWith(dateVal)) ||
+               (c.created_at && String(c.created_at).startsWith(dateVal));
       });
     }
 
@@ -2629,53 +2568,12 @@ const supervisorModule = {
       });
     }
 
-    // 4. Filtro por Fecha Exacta
-    if (dateVal) {
-      list = list.filter(c => {
-        return c.fecha_jornada === dateVal ||
-               (c.fecha_cierre && String(c.fecha_cierre).startsWith(dateVal)) ||
-               (c.created_at && String(c.created_at).startsWith(dateVal));
-      });
-    }
-
-    // 5. Búsqueda Libre
-    if (searchVal) {
-      list = list.filter(c => {
-        const rName = String(c.detalles?.routeName || c.routeName || '').toLowerCase();
-        const aName = String(c.agent_name || c.detalles?.agentName || '').toLowerCase();
-        const aId = String(c.agent_id || c.detalles?.agentUsername || '').toLowerCase();
-        const fJor = String(c.fecha_jornada || '').toLowerCase();
-        return rName.includes(searchVal) || aName.includes(searchVal) || aId.includes(searchVal) || fJor.includes(searchVal);
-      });
-    }
-
-    // Actualizar Resumen KPI con texto nítido de alto contraste
-    const kpiCount = document.getElementById('jornadas-kpi-count');
-    const kpiRecaudo = document.getElementById('jornadas-kpi-recaudo');
-    const kpiPrestado = document.getElementById('jornadas-kpi-prestado');
-    const kpiEntrega = document.getElementById('jornadas-kpi-entrega');
-
-    let totalRec = 0;
-    let totalPrest = 0;
-    let totalEnt = 0;
-
-    list.forEach(c => {
-      totalRec += Number(c.total_recaudado || 0);
-      totalPrest += Number(c.total_prestado || 0);
-      totalEnt += Number(c.efectivo_entregar || 0);
-    });
-
-    if (kpiCount) kpiCount.textContent = list.length;
-    if (kpiRecaudo) kpiRecaudo.textContent = `+$${totalRec.toLocaleString('es-CO')}`;
-    if (kpiPrestado) kpiPrestado.textContent = `-$${totalPrest.toLocaleString('es-CO')}`;
-    if (kpiEntrega) kpiEntrega.textContent = `$${totalEnt.toLocaleString('es-CO')}`;
-
     if (list.length === 0) {
       container.innerHTML = `
         <div style="text-align: center; color: #0f172a; padding: 3rem 1.5rem; background: #f8fafc; border-radius: 12px; border: 2px dashed #cbd5e1; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
           <span style="font-size: 2.2rem; display: block; margin-bottom: 0.5rem;">📂</span>
-          <p style="font-weight: 800; font-size: 1.05rem; margin-bottom: 0.35rem; color: #0f172a;">No se encontraron jornadas archivadas</p>
-          <span style="font-size: 0.85rem; color: #475569; font-weight: 600;">Prueba seleccionando otro mes, ruta o fecha, o haz clic en "Limpiar" para ver todo el historial.</span>
+          <p style="font-weight: 800; font-size: 1.05rem; margin-bottom: 0.35rem; color: #0f172a;">No se encontraron cierres de caja archivados</p>
+          <span style="font-size: 0.85rem; color: #475569; font-weight: 600;">Selecciona una ruta o fecha para consultar el arqueo correspondiente.</span>
         </div>
       `;
       return;
@@ -2710,30 +2608,37 @@ const supervisorModule = {
       return `
         <div style="background: #ffffff; border: 1.5px solid ${hasAlert ? '#f87171' : '#cbd5e1'}; border-radius: 12px; padding: 1.15rem 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; font-size: 0.85rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
           
-          <!-- Encabezado de la Ficha: Fecha en Negro, Badges de Ruta, Cobrador y Tipo -->
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.6rem; border-bottom: 1.5px solid #e2e8f0; padding-bottom: 0.65rem;">
-            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-              <span style="font-size: 1.25rem;">📅</span>
-              <strong style="color: #0f172a; font-size: 1.15rem; font-weight: 900; letter-spacing: -0.3px;">
-                ${fechaEspanol}
-              </strong>
-              <span style="font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 6px; font-weight: 800; ${isAuto ? 'background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;' : 'background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc;'}">
-                ${tipo}
-              </span>
-              <span style="font-size: 0.78rem; font-weight: 800; background: #f1f5f9; color: #0f172a; padding: 0.2rem 0.65rem; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; gap: 0.35rem;">
-                📍 <span>Ruta: <strong>${rName}</strong></span>
-              </span>
-              <span style="font-size: 0.78rem; font-weight: 800; background: #ede9fe; color: #5b21b6; padding: 0.2rem 0.65rem; border-radius: 6px; border: 1px solid #c4b5fd; display: inline-flex; align-items: center; gap: 0.35rem;">
-                👤 <span>Agente: <strong>${aName}</strong></span>
-              </span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <div style="font-size: 0.8rem; font-weight: 700; color: #475569; background: #f8fafc; padding: 0.25rem 0.65rem; border-radius: 6px; border: 1px solid #e2e8f0;">
-                🕒 Cierre: <strong style="color: #0f172a;">${fCierre}</strong>
+          <!-- Encabezado Fiel de Arqueo y Cierre de Caja Diario -->
+          <div style="border-bottom: 1.5px solid #e2e8f0; padding-bottom: 0.65rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.4rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.25rem;">💼</span>
+                <strong style="color: #0f172a; font-size: 1.12rem; font-weight: 900; letter-spacing: -0.3px;">
+                  Arqueo y Cierre de Caja Diario
+                </strong>
+                <span style="font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 6px; font-weight: 800; ${isAuto ? 'background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;' : 'background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc;'}">
+                  ${tipo}
+                </span>
               </div>
-              <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: #ffffff; border: 1.5px solid #cbd5e1; color: #0284c7; border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;" title="Ver comprobante y auditoría completa">
-                <span>📜</span> Auditoría
-              </button>
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #475569; background: #f8fafc; padding: 0.2rem 0.6rem; border-radius: 6px; border: 1px solid #e2e8f0;">
+                  🕒 Cierre: <strong style="color: #0f172a;">${fCierre}</strong>
+                </span>
+                <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: #ffffff; border: 1.5px solid #cbd5e1; color: #0284c7; border-radius: 6px; padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;" title="Ver auditoría">
+                  <span>📜</span> Auditoría
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span style="font-size: 0.78rem; font-weight: 800; background: #f1f5f9; color: #0f172a; padding: 0.2rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; gap: 0.35rem;">
+                📅 <strong>${fechaEspanol}</strong>
+              </span>
+              <span style="font-size: 0.78rem; font-weight: 800; background: #f1f5f9; color: #0f172a; padding: 0.2rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; gap: 0.35rem;">
+                📍 Ruta: <strong>${rName}</strong>
+              </span>
+              <span style="font-size: 0.78rem; font-weight: 800; background: #ede9fe; color: #5b21b6; padding: 0.2rem 0.6rem; border-radius: 6px; border: 1px solid #c4b5fd; display: inline-flex; align-items: center; gap: 0.35rem;">
+                👤 Agente: <strong>${aName}</strong>
+              </span>
             </div>
           </div>
 
