@@ -3808,7 +3808,7 @@ const db = {
     };
   },
 
-  async getCierreCajaDataForRoute(routeId = null, agentUserObj = null) {
+  async getCierreCajaDataForRoute(routeId = null, agentUserObj = null, targetDate = null) {
     // Ejecutar consultas principales en paralelo desde caché en memoria para respuesta instantánea
     const [allRoutes, allClients, allPayments, allCartones] = await Promise.all([
       this.getRoutes(),
@@ -3839,7 +3839,7 @@ const db = {
     }
 
     // Obtener ventana estricta de la jornada operativa según Regla de las 6:00 AM (06:00:00 AM hoy a 05:59:59.999 AM mañana)
-    const shiftWindow = await this.getRouteOperationalShiftWindow(route || targetRouteId, null, agentUserObj?.username);
+    const shiftWindow = await this.getRouteOperationalShiftWindow(route || targetRouteId, targetDate, agentUserObj?.username);
     const todayStr = shiftWindow.shiftDateStr;
 
     // 1. Capital Base (Inversión consolidada de rutas activas o ruta individual)
@@ -4426,7 +4426,8 @@ return {
     const effectiveSupId = supervisorId || (currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId());
 
     // 1. Capturar el estado contable completo y riguroso de la jornada operativa actual
-    const data = await this.getCierreCajaDataForRoute(routeId, agentId ? { username: agentId } : currentUser);
+    const targetDate = detalles.fecha_operativa || null;
+    const data = await this.getCierreCajaDataForRoute(routeId, agentId ? { username: agentId } : currentUser, targetDate);
     const now = new Date();
     const cleanRouteId = (data.routeId && data.routeId !== 'ALL') ? data.routeId : (routeId && routeId !== 'ALL' ? routeId : null);
     const cierreId = `cierre_${cleanRouteId || 'gral'}_${data.dateStr}_${now.getTime()}`;
@@ -4560,7 +4561,7 @@ return {
       try {
         await this.notificarCierreJornadaSupervisor({
           routeId: cleanRouteId,
-          routeName: (route && route.name) || cleanRouteId,
+          routeName: (data.routeName || cleanRouteId),
           agentId: data.agentId,
           agentName: data.agentName || 'Agente de Ruta',
           totalRecaudado: recaudoTotal,
@@ -4574,7 +4575,7 @@ return {
     return payload;
   },
 
-  async getHistorialCierres(routeId = null, agentId = null) {
+  async getHistorialCierres(routeId = null, agentId = null, dateFilter = null) {
     let records = [];
     let dbSuccess = false;
 
@@ -4589,8 +4590,11 @@ return {
       if (routeId && routeId !== 'ALL') {
         query = query.eq('route_id', routeId);
       }
-      if (agentId) {
+      if (agentId && agentId !== 'ALL') {
         query = query.or(`agent_id.eq.${agentId},detalles->>agentUsername.eq.${agentId}`);
+      }
+      if (dateFilter) {
+        query = query.or(`fecha_jornada.eq.${dateFilter},created_at.gte.${dateFilter}T00:00:00-05:00`);
       }
 
       const { data, error } = await query;
@@ -4612,7 +4616,8 @@ return {
           .order('fecha_cierre', { ascending: false });
 
         if (routeId && routeId !== 'ALL') query2 = query2.eq('route_id', routeId);
-        if (agentId) query2 = query2.or(`agent_id.eq.${agentId},detalles->>agentUsername.eq.${agentId}`);
+        if (agentId && agentId !== 'ALL') query2 = query2.or(`agent_id.eq.${agentId},detalles->>agentUsername.eq.${agentId}`);
+        if (dateFilter) query2 = query2.or(`fecha_jornada.eq.${dateFilter},created_at.gte.${dateFilter}T00:00:00-05:00`);
 
         const { data: data2, error: err2 } = await query2;
         if (!err2 && Array.isArray(data2) && data2.length > 0) {
@@ -4633,8 +4638,11 @@ return {
       localHist.forEach(r => {
         if (!r) return;
         const matchesRoute = !routeId || routeId === 'ALL' || r.route_id === routeId;
-        const matchesAgent = !agentId || r.agent_id === agentId || r.detalles?.agentUsername === agentId;
-        if (matchesRoute && matchesAgent) {
+        const matchesAgent = !agentId || agentId === 'ALL' || r.agent_id === agentId || r.detalles?.agentUsername === agentId;
+        const matchesDate = !dateFilter || r.fecha_jornada === dateFilter || 
+                            (r.fecha_cierre && String(r.fecha_cierre).startsWith(dateFilter)) || 
+                            (r.created_at && String(r.created_at).startsWith(dateFilter));
+        if (matchesRoute && matchesAgent && matchesDate) {
           if (!map.has(r.id)) {
             map.set(r.id, r);
           }
@@ -4655,38 +4663,54 @@ return {
 
   async verificarYAutoCerrarJornadaPrevia(routeId = null, agentId = null) {
     try {
-      // 1. Obtener la ventana de la jornada actual (iniciada a las 6:00 AM)
-      const currentShift = await this.getRouteOperationalShiftWindow(routeId, null, agentId);
-      const prevShiftStartMs = currentShift.shiftStart.getTime() - (24 * 60 * 60 * 1000);
-      const prevShiftDateStr = this.getColombiaLocalDateStr(new Date(prevShiftStartMs));
+      const targetRouteId = routeId;
+      if (!targetRouteId || targetRouteId === 'ALL') return false;
 
-      const targetRouteId = currentShift.routeId;
-      if (!targetRouteId || targetRouteId === 'ALL') return;
+      const currentShift = await this.getRouteOperationalShiftWindow(targetRouteId, null, agentId);
+      const cleanRouteId = currentShift.routeId || targetRouteId;
 
-      // Verificar si ya existe cierre registrado para la jornada previa
-      const cierres = await this.getHistorialCierres(targetRouteId, agentId);
-      const yaCerrado = (cierres || []).some(c => c.fecha_jornada === prevShiftDateStr);
-      if (yaCerrado) return;
-
-      const recaudoPrevio = await this.getAgentRecaudoHoyDirect(agentId, prevShiftDateStr, targetRouteId);
-      if (recaudoPrevio <= 0) return; // Si no hubo recaudo previo en esa jornada, no requiere auto-cierre
+      // Consultar cierres existentes de esta ruta
+      const cierres = await this.getHistorialCierres(cleanRouteId, agentId);
+      const fechasCerradas = new Set((cierres || []).map(c => c.fecha_jornada));
 
       const currentUser = this.getCurrentUser();
       const effectiveSupId = currentUser?.role?.toLowerCase().includes('sup') ? currentUser.username : this.getSupervisorId();
 
-      await this.realizarCierreJornada({
-        routeId: targetRouteId,
-        agentId: agentId || currentUser?.username || '',
-        supervisorId: effectiveSupId,
-        tipoCierre: 'automatico_reinicio',
-        detalles: {
-          motivo: 'Auto-archivo al cruzar las 6:00 AM',
-          recaudo_archivado: recaudoPrevio,
-          fecha_operativa: prevShiftDateStr
+      let anyArchived = false;
+
+      // Verificar los últimos 5 días anteriores a la jornada actual
+      for (let i = 1; i <= 5; i++) {
+        const pastShiftMs = currentShift.shiftStart.getTime() - (i * 24 * 60 * 60 * 1000);
+        const pastDateStr = this.getColombiaLocalDateStr(new Date(pastShiftMs));
+
+        if (fechasCerradas.has(pastDateStr)) continue;
+
+        // Verificar si hubo recaudo o actividad en esa jornada
+        const recaudoPrevio = await this.getAgentRecaudoHoyDirect(agentId, pastDateStr, cleanRouteId);
+        const dataJornada = await this.getCierreCajaDataForRoute(cleanRouteId, agentId ? { username: agentId } : null, pastDateStr);
+        const prestadoPrevio = Number(dataJornada.totalDesembolsado || dataJornada.totalPrestado || 0);
+
+        if (recaudoPrevio > 0 || prestadoPrevio > 0) {
+          await this.realizarCierreJornada({
+            routeId: cleanRouteId,
+            agentId: agentId || dataJornada.agentUsername || '',
+            supervisorId: effectiveSupId,
+            tipoCierre: 'automatico_reinicio',
+            detalles: {
+              motivo: 'Auto-archivo por expiración de tiempo estipulado (Reinicio a $0)',
+              recaudo_archivado: recaudoPrevio,
+              prestado_archivado: prestadoPrevio,
+              fecha_operativa: pastDateStr
+            }
+          });
+          fechasCerradas.add(pastDateStr);
+          anyArchived = true;
         }
-      });
+      }
+      return anyArchived;
     } catch (e) {
       console.warn("Aviso en verificarYAutoCerrarJornadaPrevia:", e);
+      return false;
     }
   },
 

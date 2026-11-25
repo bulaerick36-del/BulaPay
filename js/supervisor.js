@@ -1873,6 +1873,7 @@ const supervisorModule = {
     }
 
     modal.classList.add('active');
+    this.checkAndAutoArchiveExpiredJornadas().catch(() => {});
     await this.calculateCierreCaja();
     await this.renderHistorialCierresSupervisor();
   },
@@ -2272,6 +2273,77 @@ const supervisorModule = {
     if (!routeSelect) return;
     const routeId = routeSelect.value;
 
+    // Caso A: Cierre Consolidado Masivo de Todas las Rutas Asignadas
+    if (routeId === 'ALL') {
+      const routes = await window.BulaPayDB.getRoutes();
+      const validRoutes = (routes || []).filter(r => r && r.id);
+      if (validRoutes.length === 0) {
+        alert("No hay rutas registradas para cerrar.");
+        return;
+      }
+
+      let confirmRes = false;
+      if (typeof Swal !== 'undefined') {
+        const res = await Swal.fire({
+          title: '¿Confirmar Cierre General Consolidado?',
+          html: `Has seleccionado <strong>Consolidado General (Todas las rutas)</strong>.<br><br>
+                 Se cerrará y archivará individualmente la jornada de <strong>todas las rutas asignadas (${validRoutes.length})</strong> y todos los contadores de recaudo reiniciarán inmediatamente a $0.<br><br>
+                 <span style="color:#f59e0b; font-size:0.8rem;">⚠️ Cada jornada quedará resguardada en el archivo de jornadas para su posterior consulta y auditoría.</span>`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Sí, Cerrar Todas las Rutas',
+          cancelButtonText: 'Cancelar / Elegir Ruta',
+          confirmButtonColor: '#10b981',
+          cancelButtonColor: '#64748b',
+          background: '#0f172a',
+          color: '#fff'
+        });
+        confirmRes = res.isConfirmed;
+      } else {
+        confirmRes = confirm(`¿Confirmar cierre consolidado de todas las rutas (${validRoutes.length}) y reiniciar recaudos a $0?`);
+      }
+
+      if (!confirmRes) return;
+
+      try {
+        let totalCerradas = 0;
+        for (const r of validRoutes) {
+          await window.BulaPayDB.realizarCierreJornada({
+            routeId: r.id,
+            agentId: r.agentUsername || r.agent_id || null,
+            tipoCierre: 'manual',
+            detalles: { cerrado_por: 'Supervisor (Cierre Consolidado)' }
+          });
+          totalCerradas++;
+        }
+
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: '¡Cierre Consolidado Exitoso!',
+            text: `Se cerraron y archivaron correctamente las jornadas de ${totalCerradas} rutas. Todos los recaudos se reiniciaron a $0.`,
+            icon: 'success',
+            confirmButtonColor: '#10b981',
+            background: '#0f172a',
+            color: '#fff'
+          });
+        } else {
+          alert(`✅ Cierre consolidado realizado con éxito para ${totalCerradas} rutas.`);
+        }
+
+        await this.calculateCierreCaja();
+        await this.renderHistorialCierresSupervisor(true);
+        await this.renderDashboard();
+        if (this._isJornadasModalOpen) {
+          await this.renderJornadasArchivadasSupervisor(true);
+        }
+      } catch (err) {
+        console.error("Error en cierre consolidado:", err);
+        alert('❌ Error al realizar el cierre consolidado: ' + err.message);
+      }
+      return;
+    }
+
+    // Caso B: Cierre de Ruta Individual Específica
     const data = await window.BulaPayDB.getCierreCajaDataForRoute(routeId);
     const recaudo = Number(data.totalRecaudado !== undefined ? data.totalRecaudado : ((data.totalCobrado || 0) + (data.entradasRenovacion || 0) + (data.descuentosRetenidos || 0) + (data.liquidacionesMora || 0)));
     const prestado = Number(data.totalDesembolsado !== undefined ? data.totalDesembolsado : (data.totalPrestado + (data.desembolsosRenovacion || 0)));
@@ -2309,6 +2381,7 @@ const supervisorModule = {
     try {
       await window.BulaPayDB.realizarCierreJornada({
         routeId: data.routeId,
+        agentId: data.agentUsername || null,
         tipoCierre: 'manual',
         detalles: { cerrado_por: 'Supervisor', fecha_operativa: data.dateStr }
       });
@@ -2329,9 +2402,363 @@ const supervisorModule = {
       await this.calculateCierreCaja();
       await this.renderHistorialCierresSupervisor(true);
       await this.renderDashboard();
+      if (this._isJornadasModalOpen) {
+        await this.renderJornadasArchivadasSupervisor(true);
+      }
     } catch (e) {
       console.error("Error al confirmar cierre de jornada:", e);
       alert('❌ Error al realizar el cierre de jornada: ' + e.message);
+    }
+  },
+
+  // =========================================================================
+  // GESTIÓN Y VISOR DE JORNADAS ARCHIVADAS (BUSCADOR POR RUTA, FECHA O AGENTE)
+  // =========================================================================
+  _allArchivedJornadas: [],
+  _isJornadasModalOpen: false,
+
+  async openJornadasArchivadasModal(event) {
+    if (event) {
+      try {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        if (typeof event.stopPropagation === 'function') event.stopPropagation();
+      } catch (eEvt) {}
+    }
+    const modal = document.getElementById('modal-jornadas-archivadas');
+    if (!modal) return;
+
+    modal.classList.add('active');
+    this._isJornadasModalOpen = true;
+
+    // Ejecutar verificación de auto-cierre de jornadas pendientes
+    this.checkAndAutoArchiveExpiredJornadas().catch(() => {});
+
+    await this.populateJornadasArchivadasFilters();
+    await this.renderJornadasArchivadasSupervisor();
+  },
+
+  closeJornadasArchivadasModal() {
+    const modal = document.getElementById('modal-jornadas-archivadas');
+    if (modal) modal.classList.remove('active');
+    this._isJornadasModalOpen = false;
+  },
+
+  async populateJornadasArchivadasFilters() {
+    const routeSelect = document.getElementById('filter-jornadas-ruta');
+    const agentSelect = document.getElementById('filter-jornadas-agente');
+
+    if (routeSelect) {
+      const routes = await window.BulaPayDB.getRoutes();
+      const currentVal = routeSelect.value || 'ALL';
+      routeSelect.innerHTML = '<option value="ALL">📍 Todas las rutas</option>';
+      (routes || []).forEach(r => {
+        if (!r || !r.id) return;
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = `📍 Ruta: ${r.name || r.id} (${r.agentName || r.agentUsername || 'Sin cobrador'})`;
+        routeSelect.appendChild(opt);
+      });
+      if ((routes || []).some(r => String(r.id) === String(currentVal))) {
+        routeSelect.value = currentVal;
+      }
+    }
+
+    if (agentSelect) {
+      const agents = await window.BulaPayDB.getAgents();
+      const currentVal = agentSelect.value || 'ALL';
+      agentSelect.innerHTML = '<option value="ALL">👤 Todos los agentes</option>';
+      const seen = new Set();
+      (agents || []).forEach(a => {
+        if (!a) return;
+        const uName = a.username || a.id;
+        if (!uName || seen.has(uName)) return;
+        seen.add(uName);
+        const opt = document.createElement('option');
+        opt.value = uName;
+        opt.textContent = `👤 ${a.name || uName} (${uName})`;
+        agentSelect.appendChild(opt);
+      });
+      if (seen.has(currentVal)) {
+        agentSelect.value = currentVal;
+      }
+    }
+  },
+
+  setJornadasDatePreset(preset) {
+    const dateInput = document.getElementById('filter-jornadas-fecha');
+    if (!dateInput) return;
+
+    if (preset === 'today') {
+      const todayStr = window.BulaPayDB.getColombiaLocalDateStr ? window.BulaPayDB.getColombiaLocalDateStr(new Date()) : new Date().toISOString().split('T')[0];
+      dateInput.value = todayStr;
+    } else if (preset === 'yesterday') {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const yesterdayStr = window.BulaPayDB.getColombiaLocalDateStr ? window.BulaPayDB.getColombiaLocalDateStr(yesterday) : yesterday.toISOString().split('T')[0];
+      dateInput.value = yesterdayStr;
+    } else {
+      dateInput.value = '';
+    }
+    this.applyJornadasFilters();
+  },
+
+  resetJornadasFilters() {
+    const routeSelect = document.getElementById('filter-jornadas-ruta');
+    const agentSelect = document.getElementById('filter-jornadas-agente');
+    const dateInput = document.getElementById('filter-jornadas-fecha');
+    const searchInput = document.getElementById('filter-jornadas-search');
+
+    if (routeSelect) routeSelect.value = 'ALL';
+    if (agentSelect) agentSelect.value = 'ALL';
+    if (dateInput) dateInput.value = '';
+    if (searchInput) searchInput.value = '';
+
+    this.applyJornadasFilters();
+  },
+
+  async renderJornadasArchivadasSupervisor(forceRefresh = false) {
+    const container = document.getElementById('modal-jornadas-list-container');
+    if (!container) return;
+
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.85rem; padding:1.5rem;">Cargando jornadas archivadas...</div>';
+
+    try {
+      this._allArchivedJornadas = await window.BulaPayDB.getHistorialCierres();
+      this.applyJornadasFilters();
+    } catch (e) {
+      console.error("Error al consultar jornadas archivadas:", e);
+      container.innerHTML = '<div style="text-align:center; color:#ef4444; font-size:0.85rem; padding:1.5rem;">Error al cargar las jornadas archivadas.</div>';
+    }
+  },
+
+  applyJornadasFilters() {
+    const container = document.getElementById('modal-jornadas-list-container');
+    if (!container) return;
+
+    const routeVal = document.getElementById('filter-jornadas-ruta')?.value || 'ALL';
+    const agentVal = document.getElementById('filter-jornadas-agente')?.value || 'ALL';
+    const dateVal = document.getElementById('filter-jornadas-fecha')?.value || '';
+    const searchVal = (document.getElementById('filter-jornadas-search')?.value || '').trim().toLowerCase();
+
+    let list = this._allArchivedJornadas || [];
+
+    if (routeVal !== 'ALL') {
+      list = list.filter(c => String(c.route_id) === String(routeVal));
+    }
+
+    if (agentVal !== 'ALL') {
+      list = list.filter(c => {
+        const uAgent = String(c.agent_id || c.detalles?.agentUsername || '').toLowerCase();
+        return uAgent === agentVal.toLowerCase();
+      });
+    }
+
+    if (dateVal) {
+      list = list.filter(c => {
+        return c.fecha_jornada === dateVal ||
+               (c.fecha_cierre && String(c.fecha_cierre).startsWith(dateVal)) ||
+               (c.created_at && String(c.created_at).startsWith(dateVal));
+      });
+    }
+
+    if (searchVal) {
+      list = list.filter(c => {
+        const rName = String(c.detalles?.routeName || c.routeName || '').toLowerCase();
+        const aName = String(c.agent_name || c.detalles?.agentName || '').toLowerCase();
+        const aId = String(c.agent_id || c.detalles?.agentUsername || '').toLowerCase();
+        const fJor = String(c.fecha_jornada || '').toLowerCase();
+        return rName.includes(searchVal) || aName.includes(searchVal) || aId.includes(searchVal) || fJor.includes(searchVal);
+      });
+    }
+
+    // Actualizar Resumen KPI
+    const kpiCount = document.getElementById('jornadas-kpi-count');
+    const kpiRecaudo = document.getElementById('jornadas-kpi-recaudo');
+    const kpiPrestado = document.getElementById('jornadas-kpi-prestado');
+    const kpiEntrega = document.getElementById('jornadas-kpi-entrega');
+
+    let totalRec = 0;
+    let totalPrest = 0;
+    let totalEnt = 0;
+
+    list.forEach(c => {
+      totalRec += Number(c.total_recaudado || 0);
+      totalPrest += Number(c.total_prestado || 0);
+      totalEnt += Number(c.efectivo_entregar || 0);
+    });
+
+    if (kpiCount) kpiCount.textContent = list.length;
+    if (kpiRecaudo) kpiRecaudo.textContent = `+$${totalRec.toLocaleString('es-CO')}`;
+    if (kpiPrestado) kpiPrestado.textContent = `-$${totalPrest.toLocaleString('es-CO')}`;
+    if (kpiEntrega) kpiEntrega.textContent = `$${totalEnt.toLocaleString('es-CO')}`;
+
+    if (list.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: #94a3b8; padding: 2.5rem 1rem; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.08);">
+          <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem;">📂</span>
+          <p style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; color: #f1f5f9;">No se encontraron jornadas archivadas</p>
+          <span style="font-size: 0.8rem; color: #64748b;">Prueba cambiando o limpiando los filtros de ruta, fecha o agente.</span>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = list.map(c => {
+      const fCierre = c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : c.fecha_jornada;
+      const recaudo = Number(c.total_recaudado || 0);
+      const prestado = Number(c.total_prestado || 0);
+      const inicial = Number(c.efectivo_inicial || c.detalles?.efectivo_inicial || 0);
+      const entrega = Number(c.efectivo_entregar || 0);
+      const descuentos = Number(c.detalles?.descuentos_retenidos || c.detalles?.descuentosRetenidos || 0);
+      const isAuto = c.tipo_cierre === 'automatico_reinicio';
+      const tipo = isAuto ? '⚡ Auto-reinicio' : '🔒 Manual';
+      const det = c.detalles || {};
+      const capitalUtilizado = Number(det.capital_asignado_utilizado || det.capitalAsignadoUtilizado || 0);
+      const prestadoCap = Number(det.prestado_capital_asignado || det.prestadoCapitalAsignado || 0);
+      const prestadoRec = Number(det.prestamos_nuevos_recaudo || det.prestamosNuevosRecaudo || 0);
+      const hasAlert = det.auditoria_alerta || capitalUtilizado > 0;
+      const rName = det.routeName || c.routeName || c.route_id || 'Ruta';
+      const aName = c.agent_name || det.agentName || c.agent_id || 'Agente de Ruta';
+
+      return `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid ${hasAlert ? 'rgba(239, 68, 68, 0.35)' : 'rgba(255,255,255,0.08)'}; border-radius: 10px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.82rem; transition: transform 0.15s, border-color 0.15s;">
+          
+          <!-- Encabezado de la Ficha: Fecha, Badges de Ruta, Cobrador y Tipo -->
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.4rem; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 0.45rem;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <strong style="color: #fff; font-size: 0.95rem;">📅 Jornada ${c.fecha_jornada}</strong>
+                <span style="font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 700; ${isAuto ? 'background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);' : 'background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);'}">
+                  ${tipo}
+                </span>
+                <span style="font-size: 0.72rem; background: rgba(255, 255, 255, 0.06); color: #cbd5e1; padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                  📍 ${rName}
+                </span>
+                <span style="font-size: 0.72rem; background: rgba(255, 255, 255, 0.06); color: #cbd5e1; padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                  👤 ${aName}
+                </span>
+              </div>
+              ${det.motivo ? `<div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.2rem;">ℹ️ ${det.motivo}</div>` : ''}
+            </div>
+            <div style="font-size: 0.74rem; color: #94a3b8; text-align: right;">
+              🕒 Cierre: <strong>${fCierre}</strong>
+            </div>
+          </div>
+
+          <!-- Alerta de Auditoría -->
+          ${hasAlert ? `
+            <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 0.35rem 0.6rem; display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #fca5a5; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
+                <span>🔔</span> <span>Alerta: Usó $${capitalUtilizado.toLocaleString('es-CO')} de Capital Asignado</span>
+              </span>
+              <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: #ef4444; color: #fff; border: none; border-radius: 4px; padding: 0.2rem 0.55rem; font-size: 0.7rem; font-weight: bold; cursor: pointer;">
+                Ver Auditoría
+              </button>
+            </div>
+          ` : `
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px; padding: 0.25rem 0.55rem; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: #6ee7b7; font-weight: 600;">
+              <span>✅</span> Arqueo Conforme / Sin Alertas de Capital
+            </div>
+          `}
+
+          <!-- Grid Contable -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 0.55rem 0.75rem;">
+            <div>
+              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">💰 Recaudo Total:</span>
+              <strong style="color: #10b981; font-size: 0.92rem;">+$${recaudo.toLocaleString('es-CO')}</strong>
+            </div>
+            <div>
+              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">📤 Total Prestado:</span>
+              <strong style="color: #f87171; font-size: 0.92rem;">-$${prestado.toLocaleString('es-CO')}</strong>
+            </div>
+            <div>
+              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">💼 Efectivo Inicial:</span>
+              <strong style="color: #38bdf8; font-size: 0.88rem;">$${inicial.toLocaleString('es-CO')}</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 0.7rem; color: #94a3b8; display: block;">🏛️ Efectivo a Entregar:</span>
+              <strong style="color: #34d399; font-size: 1rem; font-weight: 900;">$${entrega.toLocaleString('es-CO')}</strong>
+            </div>
+          </div>
+
+          <!-- Acciones Inferiores: Desglose y Botón Auditoría Completa -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.15rem;">
+            <button type="button" onclick="supervisorModule.mostrarDetalleAuditoriaCierre('${c.id}')" style="background: transparent; border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.72rem; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+              <span>📜</span> Arqueo Completo
+            </button>
+
+            <button type="button" onclick="supervisorModule.toggleModalJornadaCardDetail('${c.id}')" style="background: transparent; border: none; color: #38bdf8; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">
+              <span>Desglose contable</span> <span id="modal-jornadas-card-arrow-${c.id}">▼</span>
+            </button>
+          </div>
+
+          <!-- Contenedor Desplegable del Desglose -->
+          <div id="modal-jornadas-card-detail-${c.id}" style="display: none; flex-direction: column; gap: 0.35rem; background: rgba(15,23,42,0.6); border: 1px solid rgba(148,163,184,0.15); border-radius: 6px; padding: 0.55rem 0.75rem; font-size: 0.75rem; margin-top: 0.2rem;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #94a3b8;">↳ Capital Asignado por el Supervisor:</span>
+              <strong style="color: #fca5a5;">${prestadoCap.toLocaleString('es-CO')}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #94a3b8;">↳ Salida de Capital Asignado por Renovación:</span>
+              <strong style="color: #fca5a5;">${Number(det.salida_capital_asignado_renovacion || det.salidaCapitalAsignadoRenovacion || 0).toLocaleString('es-CO')}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #94a3b8;">↳ Préstamos Nuevos / Recaudo Diario:</span>
+              <strong style="color: #93c5fd;">${prestadoRec.toLocaleString('es-CO')}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #94a3b8;">↳ Desembolsos Netos por Renovación:</span>
+              <strong style="color: #cbd5e1;">${Number(det.desembolsos_netos_renovacion || det.desembolsosNetosRenovacion || 0).toLocaleString('es-CO')}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #94a3b8;">↳ Descuentos Retenidos (Software/Papelería):</span>
+              <strong style="color: #34d399;">+$${descuentos.toLocaleString('es-CO')}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 0.3rem;">
+              <span style="color: #94a3b8;">↳ Flujo Operativo del Día:</span>
+              <strong style="color: ${(recaudo - prestado) >= 0 ? '#10b981' : '#f87171'};">
+                ${(recaudo - prestado) >= 0 ? '+' : ''}$${(recaudo - prestado).toLocaleString('es-CO')}
+              </strong>
+            </div>
+          </div>
+
+        </div>
+      `;
+    }).join('');
+  },
+
+  toggleModalJornadaCardDetail(cierreId) {
+    const detailEl = document.getElementById('modal-jornadas-card-detail-' + cierreId);
+    const arrowEl = document.getElementById('modal-jornadas-card-arrow-' + cierreId);
+    if (!detailEl) return;
+    const isHidden = detailEl.style.display === 'none' || getComputedStyle(detailEl).display === 'none';
+    if (isHidden) {
+      detailEl.style.display = 'flex';
+      if (arrowEl) arrowEl.textContent = '▲';
+    } else {
+      detailEl.style.display = 'none';
+      if (arrowEl) arrowEl.textContent = '▼';
+    }
+  },
+
+  async checkAndAutoArchiveExpiredJornadas() {
+    try {
+      const routes = await window.BulaPayDB.getRoutes();
+      if (!routes || routes.length === 0) return;
+
+      let anyClosed = false;
+      for (const r of routes) {
+        if (!r || !r.id) continue;
+        const res = await window.BulaPayDB.verificarYAutoCerrarJornadaPrevia(r.id, r.agentUsername || r.agent_id);
+        if (res) anyClosed = true;
+      }
+      if (anyClosed) {
+        this.renderHistorialCierresSupervisor(true).catch(() => {});
+        if (this._isJornadasModalOpen) {
+          this.renderJornadasArchivadasSupervisor(true).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn("Aviso en checkAndAutoArchiveExpiredJornadas:", e);
     }
   },
 
@@ -4187,6 +4614,7 @@ const supervisorModule = {
 
   // RENDERIZAR DASHBOARD KPIs Y TABLA
   async renderDashboard() {
+    this.checkAndAutoArchiveExpiredJornadas().catch(() => {});
     let currentUser = window.BulaPayDB.getCurrentUser() || { name: 'Administrador', username: 'admin' };
     
     // Obtener los datos frescos directamente de Supabase para reflejar cambios inmediatos de vigencia / suscripción

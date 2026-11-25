@@ -2290,10 +2290,10 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="js/checkout.js?v=11025"></script>
-  <script src="js/db.js?v=11035"></script>
+  <script src="js/db.js?v=11036"></script>
   <script src="js/ads.js?v=11025"></script>
   <script src="js/auth.js?v=11025"></script>
-  <script src="js/supervisor.js?v=11036"></script>
+  <script src="js/supervisor.js?v=11037"></script>
   <script src="js/agent_v6.js?v=11035"></script>
   <script src="js/agent_ruta.js?v=11025"></script>
   <script src="js/customer.js?v=11025"></script>
@@ -2507,8 +2507,11 @@
         </select>
       </div>
 
-      <!-- Botón Agregar Fondo a la Ruta (Cierre de Caja) -->
-      <div style="display: flex; justify-content: flex-end; margin-top: -0.5rem; margin-bottom: 1rem;">
+      <!-- Botones Superiores de Acción (Cierre de Caja) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -0.5rem; margin-bottom: 1rem; gap: 0.5rem; flex-wrap: wrap;">
+        <button type="button" onclick="supervisorModule.openJornadasArchivadasModal(event)" class="btn" style="padding: 0.45rem 0.85rem; font-size: 0.82rem; font-weight: 700; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; transition: background 0.2s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.25)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.15)'">
+          <span>📁</span> Ver Jornadas Archivadas
+        </button>
         <button type="button" id="btn-add-fund-cierre" onclick="supervisorModule.openInjectFromModal('cierre')" class="btn" style="padding: 0.45rem 0.85rem; font-size: 0.82rem; font-weight: 700; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
           <span>➕</span> Agregar Fondo a la Ruta
         </button>
@@ -2625,9 +2628,9 @@
             <span id="cierre-historial-count-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.72rem; font-weight: 800; padding: 0.15rem 0.5rem; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.4); display: none;">0</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.6rem;">
-            <span id="badge-jornadas-archivadas" style="font-size: 0.75rem; color: #38bdf8; font-weight: 700; background: rgba(56, 189, 248, 0.15); padding: 0.25rem 0.65rem; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.35); display: flex; align-items: center; gap: 0.35rem;">
+            <button type="button" id="badge-jornadas-archivadas" onclick="event.stopPropagation(); supervisorModule.openJornadasArchivadasModal(event)" style="font-size: 0.75rem; color: #38bdf8; font-weight: 700; background: rgba(56, 189, 248, 0.15); padding: 0.25rem 0.65rem; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.35); display: flex; align-items: center; gap: 0.35rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.3)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.15)'">
               <span>📁</span> Jornadas Archivadas
-            </span>
+            </button>
             <span id="cierre-historial-arrow" style="font-size: 0.85rem; color: var(--text-secondary); transition: transform 0.2s ease;">▼</span>
           </div>
         </div>
@@ -2638,6 +2641,107 @@
     </div>
   </div>
 </div>
+
+  <!-- MODAL: HISTORIAL DE JORNADAS ARCHIVADAS (BUSCADOR POR RUTA, FECHA O AGENTE) -->
+  <div class="supervisor-modal-overlay" id="modal-jornadas-archivadas" style="z-index: 99999 !important; padding: 0.5rem;">
+    <div class="supervisor-modal-card" style="max-width: 950px; width: 96vw; max-height: 92vh; display: flex; flex-direction: column; padding: 1.1rem 1.4rem; box-sizing: border-box; overflow: hidden; position: relative;">
+      
+      <!-- Botón de Cerrar Modal -->
+      <button class="supervisor-modal-close" onclick="supervisorModule.closeJornadasArchivadasModal()">&times;</button>
+      
+      <!-- Encabezado -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.85rem; padding-right: 1.5rem; flex-shrink: 0;">
+        <div>
+          <h3 class="title-gradient" style="margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem; color: #38bdf8;">
+            <span>📁</span> Jornadas Archivadas
+          </h3>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 0.25rem 0 0 0;">
+            Historial de cierres de caja y arqueos operativos archivados manual y automáticamente al expirar la jornada.
+          </p>
+        </div>
+        <button type="button" onclick="supervisorModule.renderJornadasArchivadasSupervisor(true)" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.35rem 0.65rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;" title="Recargar jornadas">
+          <span>🔄</span> Actualizar
+        </button>
+      </div>
+
+      <!-- Barra de Filtros: Ruta, Fecha, Agente y Búsqueda -->
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.75rem 0.9rem; margin-bottom: 0.85rem; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.6rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.6rem;">
+          
+          <!-- Filtro 1: Ruta -->
+          <div>
+            <label for="filter-jornadas-ruta" style="font-size: 0.74rem; font-weight: 700; color: #94a3b8; display: block; margin-bottom: 0.25rem;">
+              📍 Filtrar por Ruta:
+            </label>
+            <select id="filter-jornadas-ruta" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.45rem 0.65rem; font-size: 0.82rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;">
+              <option value="ALL">Todas las rutas</option>
+            </select>
+          </div>
+
+          <!-- Filtro 2: Agente / Cobrador -->
+          <div>
+            <label for="filter-jornadas-agente" style="font-size: 0.74rem; font-weight: 700; color: #94a3b8; display: block; margin-bottom: 0.25rem;">
+              👤 Filtrar por Agente:
+            </label>
+            <select id="filter-jornadas-agente" onchange="supervisorModule.applyJornadasFilters()" style="width: 100%; padding: 0.45rem 0.65rem; font-size: 0.82rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;">
+              <option value="ALL">Todos los agentes</option>
+            </select>
+          </div>
+
+          <!-- Filtro 3: Fecha Operativa -->
+          <div>
+            <label for="filter-jornadas-fecha" style="font-size: 0.74rem; font-weight: 700; color: #94a3b8; display: block; margin-bottom: 0.25rem;">
+              📅 Filtrar Fecha:
+            </label>
+            <div style="display: flex; gap: 0.35rem;">
+              <input type="date" id="filter-jornadas-fecha" onchange="supervisorModule.applyJornadasFilters()" style="flex: 1; padding: 0.4rem 0.55rem; font-size: 0.8rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px;">
+              <button type="button" onclick="supervisorModule.setJornadasDatePreset('today')" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 0.25rem 0.45rem; font-size: 0.72rem; font-weight: 700; cursor: pointer;" title="Filtrar por jornada de hoy">Hoy</button>
+              <button type="button" onclick="supervisorModule.setJornadasDatePreset('yesterday')" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.25rem 0.45rem; font-size: 0.72rem; cursor: pointer;" title="Filtrar por jornada de ayer">Ayer</button>
+              <button type="button" onclick="supervisorModule.setJornadasDatePreset('all')" style="background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.25rem 0.45rem; font-size: 0.72rem; cursor: pointer;" title="Mostrar todas las fechas">Todas</button>
+            </div>
+          </div>
+
+          <!-- Filtro 4: Búsqueda Libre / Reset -->
+          <div>
+            <label for="filter-jornadas-search" style="font-size: 0.74rem; font-weight: 700; color: #94a3b8; display: block; margin-bottom: 0.25rem;">
+              🔍 Búsqueda Rápida:
+            </label>
+            <div style="display: flex; gap: 0.35rem;">
+              <input type="text" id="filter-jornadas-search" oninput="supervisorModule.applyJornadasFilters()" placeholder="Buscar por ruta o cobrador..." style="flex: 1; padding: 0.4rem 0.6rem; font-size: 0.8rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px;">
+              <button type="button" onclick="supervisorModule.resetJornadasFilters()" style="background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 0.25rem 0.55rem; font-size: 0.72rem; font-weight: 700; cursor: pointer;" title="Limpiar todos los filtros">Limpiar</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Métricas Resumen de Filtro -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; flex-shrink: 0;">
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.45rem 0.65rem; text-align: center;">
+          <span style="font-size: 0.68rem; color: #94a3b8; display: block;">Jornadas</span>
+          <strong id="jornadas-kpi-count" style="font-size: 1rem; color: #38bdf8;">0</strong>
+        </div>
+        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 0.45rem 0.65rem; text-align: center;">
+          <span style="font-size: 0.68rem; color: #94a3b8; display: block;">Recaudo Total</span>
+          <strong id="jornadas-kpi-recaudo" style="font-size: 1rem; color: #10b981;">+$0</strong>
+        </div>
+        <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 0.45rem 0.65rem; text-align: center;">
+          <span style="font-size: 0.68rem; color: #94a3b8; display: block;">Total Prestado</span>
+          <strong id="jornadas-kpi-prestado" style="font-size: 1rem; color: #f87171;">-$0</strong>
+        </div>
+        <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 0.45rem 0.65rem; text-align: center;">
+          <span style="font-size: 0.68rem; color: #94a3b8; display: block;">Total a Entregar</span>
+          <strong id="jornadas-kpi-entrega" style="font-size: 1rem; color: #34d399;">$0</strong>
+        </div>
+      </div>
+
+      <!-- Listado Scrollable de Jornadas Archivadas -->
+      <div id="modal-jornadas-list-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+
+    </div>
+  </div>
 
   <!-- MODAL KPIs: LISTA NEGRA (MOROSOS) -->
   <div class="supervisor-modal-overlay" id="modal-kpi-blacklist">
