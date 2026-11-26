@@ -2018,19 +2018,7 @@ const supervisorModule = {
   },
 
   toggleHistorialCierres() {
-    const container = document.getElementById('cierre-historial-container');
-    const arrow = document.getElementById('cierre-historial-arrow');
-    if (!container) return;
-
-    const isHidden = container.style.display === 'none' || getComputedStyle(container).display === 'none';
-    if (isHidden) {
-      container.style.display = 'flex';
-      if (arrow) arrow.textContent = '▲';
-      this.renderHistorialCierresSupervisor(true);
-    } else {
-      container.style.display = 'none';
-      if (arrow) arrow.textContent = '▼';
-    }
+    this.openJornadasArchivadasModal();
   },
 
   toggleCierreCardDetail(cierreId) {
@@ -2142,22 +2130,22 @@ const supervisorModule = {
   },
 
   async renderHistorialCierresSupervisor(forceRefresh = false) {
-    const container = document.getElementById('cierre-historial-container');
     const badgeCount = document.getElementById('cierre-historial-count-badge');
-    if (!container) return;
-
-    const routeSelect = document.getElementById('modal-cierre-route-select');
-    const routeId = routeSelect ? routeSelect.value : null;
-
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.6rem;">Cargando jornadas archivadas...</div>';
+    const container = document.getElementById('cierre-historial-container');
 
     try {
+      const routeSelect = document.getElementById('modal-cierre-route-select');
+      const routeId = routeSelect ? routeSelect.value : null;
       const cierres = await window.BulaPayDB.getHistorialCierres(routeId);
 
       if (badgeCount) {
         badgeCount.textContent = cierres ? cierres.length : 0;
         badgeCount.style.display = (cierres && cierres.length > 0) ? 'inline-block' : 'none';
       }
+
+      if (!container) return;
+
+      container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.6rem;">Cargando jornadas archivadas...</div>';
 
       if (!cierres || cierres.length === 0) {
         container.innerHTML = '<div style="text-align:center; color:#94a3b8; font-size:0.8rem; padding:0.75rem; background: rgba(255,255,255,0.02); border-radius:8px; border:1px dashed rgba(255,255,255,0.08);">No hay cierres previos registrados para esta ruta.</div>';
