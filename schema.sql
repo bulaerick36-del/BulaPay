@@ -602,6 +602,9 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS "discount_reason" TEXT;
 ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "supervisor_id" TEXT;
 ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "notes" TEXT;
 ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "concept" TEXT;
+ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "route_id" TEXT;
+ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "capital_remanente_nuevo" NUMERIC DEFAULT 0;
+ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS "is_renewal" BOOLEAN DEFAULT FALSE;
 
 ALTER TABLE capital_injections ADD COLUMN IF NOT EXISTS "supervisor_id" TEXT;
 ALTER TABLE capital_injections ADD COLUMN IF NOT EXISTS "notes" TEXT;

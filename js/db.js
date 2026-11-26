@@ -4158,6 +4158,7 @@ const db = {
         if (!errMovs && dbMovs && dbMovs.length > 0) {
           dbMovs.forEach(m => {
             if (!todayAuditLogs.some(l => l.id === m.id)) {
+              const isRenovDB = m.is_renewal === true || m.is_renewal === 'true' || String(m.concept || '').toLowerCase().includes('renov');
               todayAuditLogs.push({
                 id: m.id,
                 routeId: m.route_id,
@@ -4165,10 +4166,20 @@ const db = {
                 shiftDateStr: m.date,
                 capitalAsignadoUtilizado: Number(m.amount || 0),
                 montoPrestamo: Number(m.amount || 0),
-                isRenewal: String(m.concept || '').toLowerCase().includes('renov'),
-                is_renewal: String(m.concept || '').toLowerCase().includes('renov')
+                // capital_remanente_nuevo guardado en Supabase por registrarUsoCapitalAsignado
+                capitalRemanenteNuevo: m.capital_remanente_nuevo !== undefined && m.capital_remanente_nuevo !== null
+                  ? Number(m.capital_remanente_nuevo)
+                  : undefined,
+                isRenewal: isRenovDB,
+                is_renewal: isRenovDB
               });
             }
+          });
+          // Ordenar por fecha de creación para que el último log sea el más reciente
+          todayAuditLogs.sort((a, b) => {
+            const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return ta - tb;
           });
         }
       }
@@ -4248,15 +4259,28 @@ const db = {
     }
 
     // Sincronización del Capital Asignado Remanente (Efectivo en Bolsillo Real del Agente)
-    // El Capital Asignado Inicial es el fondo base con el que arrancó la ruta (ej. $308.000).
+    // Fuente de verdad prioritaria: el último registro de auditoría ya contiene el remanente
+    // correcto después de cada préstamo autorizado, evitando el doble descuento.
     const capitalAsignadoInicialFinal = Math.round(capitalBase > 0 ? capitalBase : Number(route?.capital || 0));
 
-    // El Capital Asignado Remanente (Bolsillo Actual) descuenta estrictamente el capital utilizado (ej. $308.000 - $100.000 = $208.000)
+    // El Capital Asignado Remanente (Bolsillo Actual):
+    // PRIORIDAD 1: Si hay logs de auditoría del día → el último log tiene el remanente exacto
+    //              (registrarUsoCapitalAsignado ya lo calculó y guardó en capitalRemanenteNuevo)
+    // PRIORIDAD 2: Sin logs de auditoría y hay capital base → capitalBase - capitalUtilizadoHoy
+    // PRIORIDAD 3: Sin ninguna fuente → 0
     let capitalAsignadoRemanenteFinal = 0;
-    if (capitalAsignadoInicialFinal > 0) {
-      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalAsignadoInicialFinal - capitalAsignadoUtilizadoFinal));
-    } else if (lastAuditLog && lastAuditLog.capitalRemanenteNuevo !== undefined && lastAuditLog.capitalRemanenteNuevo !== null) {
-      capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(lastAuditLog.capitalRemanenteNuevo)));
+    if (todayAuditLogs.length > 0) {
+      // Usar el remanente del último log auditado como fuente de verdad (evita doble descuento)
+      const lastLog = todayAuditLogs[todayAuditLogs.length - 1];
+      if (lastLog && lastLog.capitalRemanenteNuevo !== undefined && lastLog.capitalRemanenteNuevo !== null) {
+        capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(lastLog.capitalRemanenteNuevo)));
+      } else {
+        // Fallback: calcular desde el capital base menos lo utilizado hoy según logs
+        capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalAsignadoInicialFinal - capitalAsignadoUtilizadoFinal));
+      }
+    } else if (capitalAsignadoInicialFinal > 0) {
+      // Sin auditoría: el capital base en BD ya refleja el remanente real (no restar nada más)
+      capitalAsignadoRemanenteFinal = Math.max(0, capitalAsignadoInicialFinal);
     } else {
       capitalAsignadoRemanenteFinal = 0;
     }
@@ -4406,7 +4430,9 @@ return {
             route_id: record.routeId,
             concept: `Uso de Capital Asignado Autorizado por Agente ($${record.capitalAsignadoUtilizado})`,
             date: record.shiftDateStr,
-            created_at: record.timestamp
+            created_at: record.timestamp,
+            capital_remanente_nuevo: Math.round(Number(record.capitalRemanenteNuevo || 0)),
+            is_renewal: record.isRenewal ? true : false
           }]);
         }
       } catch (eDb) {

@@ -987,11 +987,43 @@ const supervisorModule = {
     }
     if (clientsCountEl) clientsCountEl.textContent = `${clients.length} cliente(s)`;
 
-    // Obtener capital y recaudo real sumado de las transacciones reales de hoy
-    const capital = r ? (Number(r.capital) || 0) : 0;
+    // Obtener capital remanente real (asignado por supervisor - prestado hoy) y recaudo
     const collectedReal = await this.getAgentRecaudoHoyReal(agent.username, effectiveRouteId);
 
-    if (routeCapitalEl) routeCapitalEl.textContent = `$${capital.toLocaleString('es-CO')}`;
+    // Capital: forzar refetch fresco de Supabase (invalidar cache) para ver el remanente actualizado
+    // route.capital en Supabase ya ES el remanente (lo actualiza registrarUsoCapitalAsignado)
+    let capitalRemanente = r ? (Number(r.capital) || 0) : 0;
+    try {
+      if (effectiveRouteId && window.BulaPayDB) {
+        // 1. Invalidar cache de rutas para forzar lectura fresca desde Supabase
+        if (typeof window.BulaPayDB.invalidateCache === 'function') {
+          window.BulaPayDB.invalidateCache('routes_');
+        }
+        // 2. Leer directamente el capital remanente actualizado desde Supabase
+        const supabase = typeof window.BulaPayDB.initSupabase === 'function' ? await window.BulaPayDB.initSupabase() : null;
+        if (supabase && effectiveRouteId) {
+          const { data: freshRoute, error: errRoute } = await supabase
+            .from('routes')
+            .select('capital')
+            .eq('id', effectiveRouteId)
+            .maybeSingle();
+          if (!errRoute && freshRoute && freshRoute.capital !== undefined && freshRoute.capital !== null) {
+            capitalRemanente = Number(freshRoute.capital) || 0;
+          }
+        }
+        // 3. Fallback: usar getCierreCajaDataForRoute si la consulta directa no dio resultado
+        if (capitalRemanente === 0 && typeof window.BulaPayDB.getCierreCajaDataForRoute === 'function') {
+          const cierreData = await window.BulaPayDB.getCierreCajaDataForRoute(effectiveRouteId);
+          if (cierreData && cierreData.capitalAsignadoRemanente != null) {
+            capitalRemanente = Number(cierreData.capitalAsignadoRemanente);
+          }
+        }
+      }
+    } catch (eCap) {
+      console.warn('[BulaPay] Aviso al obtener capital remanente en modal agente:', eCap);
+    }
+
+    if (routeCapitalEl) routeCapitalEl.textContent = `$${capitalRemanente.toLocaleString('es-CO')}`;
     if (routeCollectedEl) routeCollectedEl.textContent = `$${Number(collectedReal || 0).toLocaleString('es-CO')}`;
 
     // Conteo en tiempo real de liquidaciones pendientes de revisión
