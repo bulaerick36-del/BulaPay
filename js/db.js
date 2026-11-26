@@ -4259,27 +4259,32 @@ const db = {
     }
 
     // Sincronización del Capital Asignado Remanente (Efectivo en Bolsillo Real del Agente)
-    // Fuente de verdad prioritaria: el último registro de auditoría ya contiene el remanente
-    // correcto después de cada préstamo autorizado, evitando el doble descuento.
     const capitalAsignadoInicialFinal = Math.round(capitalBase > 0 ? capitalBase : Number(route?.capital || 0));
 
     // El Capital Asignado Remanente (Bolsillo Actual):
-    // PRIORIDAD 1: Si hay logs de auditoría del día → el último log tiene el remanente exacto
-    //              (registrarUsoCapitalAsignado ya lo calculó y guardó en capitalRemanenteNuevo)
-    // PRIORIDAD 2: Sin logs de auditoría y hay capital base → capitalBase - capitalUtilizadoHoy
-    // PRIORIDAD 3: Sin ninguna fuente → 0
+    // PRIORIDAD 1: Si hay logs del día con capitalRemanenteNuevo > 0 → remanente explícito y exacto
+    //              (registros nuevos post-migración donde registrarUsoCapitalAsignado lo guardó)
+    // PRIORIDAD 2: Logs del día con capitalRemanenteNuevo = 0 (registros viejos antes de la
+    //              migración: el 0 es el DEFAULT de la columna, no el remanente real)
+    //              → siempre calcular: capitalBase - sum(capitalAsignadoUtilizado)
+    //              Ej: $308.000 - $100.000 = $208.000 ✅
+    // PRIORIDAD 3: Sin logs → capitalBase tal como está en BD
     let capitalAsignadoRemanenteFinal = 0;
     if (todayAuditLogs.length > 0) {
-      // Usar el remanente del último log auditado como fuente de verdad (evita doble descuento)
       const lastLog = todayAuditLogs[todayAuditLogs.length - 1];
-      if (lastLog && lastLog.capitalRemanenteNuevo !== undefined && lastLog.capitalRemanenteNuevo !== null) {
-        capitalAsignadoRemanenteFinal = Math.max(0, Math.round(Number(lastLog.capitalRemanenteNuevo)));
+      const remLog = (lastLog && lastLog.capitalRemanenteNuevo !== undefined && lastLog.capitalRemanenteNuevo !== null)
+        ? Number(lastLog.capitalRemanenteNuevo)
+        : -1;
+      if (remLog > 0) {
+        // Remanente explícito del log (registro nuevo post-migración) → fuente de verdad
+        capitalAsignadoRemanenteFinal = Math.round(remLog);
       } else {
-        // Fallback: calcular desde el capital base menos lo utilizado hoy según logs
+        // Log existe pero capitalRemanenteNuevo ≤ 0 (registro viejo con DEFAULT 0, o ya prestó todo)
+        // → calcular siempre desde capitalBase - capitalUtilizado
         capitalAsignadoRemanenteFinal = Math.max(0, Math.round(capitalAsignadoInicialFinal - capitalAsignadoUtilizadoFinal));
       }
     } else if (capitalAsignadoInicialFinal > 0) {
-      // Sin auditoría: el capital base en BD ya refleja el remanente real (no restar nada más)
+      // Sin logs de auditoría: el capital base en BD refleja el remanente real
       capitalAsignadoRemanenteFinal = Math.max(0, capitalAsignadoInicialFinal);
     } else {
       capitalAsignadoRemanenteFinal = 0;

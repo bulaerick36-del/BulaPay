@@ -990,31 +990,22 @@ const supervisorModule = {
     // Obtener capital remanente real (asignado por supervisor - prestado hoy) y recaudo
     const collectedReal = await this.getAgentRecaudoHoyReal(agent.username, effectiveRouteId);
 
-    // Capital: forzar refetch fresco de Supabase (invalidar cache) para ver el remanente actualizado
-    // route.capital en Supabase ya ES el remanente (lo actualiza registrarUsoCapitalAsignado)
+    // Capital: invalidar cache y calcular el remanente real via getCierreCajaDataForRoute
+    // que descuenta los préstamos del día desde caja_movimientos en Supabase
+    // (route.capital puede no haber sido actualizado en Supabase si el agente está offline)
     let capitalRemanente = r ? (Number(r.capital) || 0) : 0;
     try {
       if (effectiveRouteId && window.BulaPayDB) {
-        // 1. Invalidar cache de rutas para forzar lectura fresca desde Supabase
+        // 1. Invalidar cache de rutas para que getCierreCajaDataForRoute lea fresco desde Supabase
         if (typeof window.BulaPayDB.invalidateCache === 'function') {
           window.BulaPayDB.invalidateCache('routes_');
         }
-        // 2. Leer directamente el capital remanente actualizado desde Supabase
-        const supabase = typeof window.BulaPayDB.initSupabase === 'function' ? await window.BulaPayDB.initSupabase() : null;
-        if (supabase && effectiveRouteId) {
-          const { data: freshRoute, error: errRoute } = await supabase
-            .from('routes')
-            .select('capital')
-            .eq('id', effectiveRouteId)
-            .maybeSingle();
-          if (!errRoute && freshRoute && freshRoute.capital !== undefined && freshRoute.capital !== null) {
-            capitalRemanente = Number(freshRoute.capital) || 0;
-          }
-        }
-        // 3. Fallback: usar getCierreCajaDataForRoute si la consulta directa no dio resultado
-        if (capitalRemanente === 0 && typeof window.BulaPayDB.getCierreCajaDataForRoute === 'function') {
+        // 2. Calcular remanente usando getCierreCajaDataForRoute:
+        //    Lee caja_movimientos de Supabase para saber cuánto prestó el agente hoy
+        //    y lo descuenta del capital base → capitalBase - capitalPrestadoHoy = remanente
+        if (typeof window.BulaPayDB.getCierreCajaDataForRoute === 'function') {
           const cierreData = await window.BulaPayDB.getCierreCajaDataForRoute(effectiveRouteId);
-          if (cierreData && cierreData.capitalAsignadoRemanente != null) {
+          if (cierreData && cierreData.capitalAsignadoRemanente !== undefined && cierreData.capitalAsignadoRemanente !== null) {
             capitalRemanente = Number(cierreData.capitalAsignadoRemanente);
           }
         }
