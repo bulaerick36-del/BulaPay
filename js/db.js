@@ -4664,13 +4664,12 @@ return {
 
       this.invalidateCache('routes_');
       this.invalidateCache(`cierre_mov_${cleanRouteId}`);
-    }
 
       try {
         const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
         const idx = localRoutes.findIndex(r => r.id === cleanRouteId);
         if (idx !== -1) {
-          localRoutes[idx] = { ...localRoutes[idx], ...routeUpdate };
+          localRoutes[idx] = { ...localRoutes[idx], ...routeBaseUpdate, fecha_ultimo_cierre: now.toISOString(), ultimo_recaudo_cierre: recaudoTotal };
           localStorage.setItem('bulapay_routes', JSON.stringify(localRoutes));
         }
       } catch (eLocR) {}
