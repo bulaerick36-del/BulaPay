@@ -225,6 +225,27 @@ const db = {
       }
     }
 
+    // Respaldo inmediato desde localStorage (por si routes.fecha_ultimo_cierre no existe en Supabase)
+    if (routeObj && routeObj.id && typeof localStorage !== 'undefined') {
+      try {
+        const localHist = JSON.parse(localStorage.getItem('bulapay_cierres_jornada') || '[]');
+        for (const item of localHist) {
+          if (!item || String(item.route_id || '') !== String(routeObj.id)) continue;
+          const rawCierre = item.fecha_cierre || item.created_at;
+          if (!rawCierre) continue;
+          const fLoc = new Date(rawCierre);
+          if (!isNaN(fLoc.getTime()) && fLoc.getTime() >= shiftStart.getTime() && fLoc.getTime() <= Date.now()) {
+            if (!fechaUltimoCierre || fLoc.getTime() > fechaUltimoCierre.getTime()) {
+              fechaUltimoCierre = fLoc;
+            }
+            if (fLoc.getTime() > effectiveStart.getTime()) {
+              effectiveStart = fLoc;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     return {
       routeId: routeObj?.id || null,
       openingTime: `${pad(openH)}:${pad(openM)}`,
@@ -302,7 +323,40 @@ const db = {
       );
     }
 
-    return this.getRouteOperationalShiftWindowSync(route, targetDate);
+    const win = this.getRouteOperationalShiftWindowSync(route, targetDate);
+
+    // Sincronizar último cierre desde caja_movimientos en Supabase (funciona entre dispositivos)
+    if (route && route.id && win.isCurrentShift) {
+      try {
+        const cierreMov = await this._getCachedOrFetch(`cierre_mov_${route.id}_${win.shiftDateStr}`, 2500, async () => {
+          const supabase = await initSupabase();
+          if (!supabase) return null;
+          const { data, error } = await supabase
+            .from('caja_movimientos')
+            .select('created_at')
+            .eq('type', 'cierre_jornada')
+            .eq('route_id', String(route.id))
+            .eq('date', win.shiftDateStr)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!error && data && data.length > 0) return data[0];
+          return null;
+        });
+        if (cierreMov && cierreMov.created_at) {
+          const fDb = new Date(cierreMov.created_at);
+          if (!isNaN(fDb.getTime()) && fDb.getTime() >= win.shiftStart.getTime() && fDb.getTime() <= Date.now()) {
+            if (!win.fechaUltimoCierre || fDb.getTime() > win.fechaUltimoCierre.getTime()) {
+              win.fechaUltimoCierre = fDb;
+            }
+            if (fDb.getTime() > win.effectiveStart.getTime()) {
+              win.effectiveStart = fDb;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return win;
   },
 
   async getCartones(forceRefresh = false) {
@@ -4574,21 +4628,43 @@ return {
 
     // 3. Reiniciar contadores diarios a $0 y actualizar el remanente de capital en bolsillo para el día siguiente
     if (cleanRouteId) {
-      const routeUpdate = {
-        collected: 0,
-        fecha_ultimo_cierre: now.toISOString(),
-        ultimo_recaudo_cierre: recaudoTotal
+      const routeBaseUpdate = {
+        collected: 0
       };
       if (data.capitalAsignadoRemanente !== undefined && data.capitalAsignadoRemanente !== null) {
-        routeUpdate.capital = Math.max(0, Math.round(Number(data.capitalAsignadoRemanente)));
+        routeBaseUpdate.capital = Math.max(0, Math.round(Number(data.capitalAsignadoRemanente)));
       }
 
       try {
-        await supabase.from('routes').update(routeUpdate).eq('id', cleanRouteId);
-        this.invalidateCache('routes_');
+        await supabase.from('routes').update(routeBaseUpdate).eq('id', cleanRouteId);
       } catch (eUp) {
         console.warn("Aviso actualizando ruta tras cierre:", eUp);
       }
+
+      // Intentar guardar columnas opcionales si existen en la tabla routes
+      try {
+        await supabase.from('routes').update({
+          fecha_ultimo_cierre: now.toISOString(),
+          ultimo_recaudo_cierre: recaudoTotal
+        }).eq('id', cleanRouteId);
+      } catch (_) {}
+
+      // Persistir marca de cierre en caja_movimientos (tabla existente en Supabase) para sincronizar entre dispositivos
+      try {
+        await supabase.from('caja_movimientos').insert([{
+          id: `cierre_mov_${cleanRouteId}_${now.getTime()}`,
+          type: 'cierre_jornada',
+          amount: recaudoTotal,
+          agent_id: payload.agent_id || '',
+          route_id: String(cleanRouteId),
+          date: data.dateStr,
+          created_at: now.toISOString()
+        }]);
+      } catch (_) {}
+
+      this.invalidateCache('routes_');
+      this.invalidateCache(`cierre_mov_${cleanRouteId}`);
+    }
 
       try {
         const localRoutes = JSON.parse(localStorage.getItem('bulapay_routes') || '[]');
