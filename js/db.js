@@ -3963,7 +3963,7 @@ const db = {
     // Cualquier transacción hecha antes de las 6:00 AM (de la jornada anterior) queda totalmente excluida.
     // Al cruzar las 6:00 AM sin cobros reales en la nueva jornada, la caja y el recaudo amanecen en $0.
     const allBelongingPayments = (allPayments || []).filter(doesPaymentBelong);
-    const shiftPayments = allBelongingPayments.filter(p => this.isRecordInOperationalShift(p, shiftWindow, !!agentUserObj));
+    const shiftPayments = allBelongingPayments.filter(p => this.isRecordInOperationalShift(p, shiftWindow, !targetDate));
 
     // Helpers de clasificación precisa de pagos
     const isRenewalPayment = (p) => {
@@ -4054,7 +4054,7 @@ const db = {
         const matchesRoute = (cRoute && activeRouteIds.has(cRoute)) || (cAgent && (activeAgentUsernames.has(cAgent) || activeAgentNames.has(cAgent)));
         if (!matchesRoute) return false;
       }
-      return this.isRecordInOperationalShift(c, shiftWindow, false);
+      return this.isRecordInOperationalShift(c, shiftWindow, !targetDate);
     });
 
     const shiftCartonIds = new Set(shiftCartones.map(c => String(c.id || '').toLowerCase()).filter(Boolean));
@@ -4068,7 +4068,7 @@ const db = {
       if (shiftCartonIds.has(cId) || (shiftCartonClientIds.has(cCed) && shiftCartones.length > 0)) {
         return false;
       }
-      return this.isRecordInOperationalShift(c, shiftWindow, false);
+      return this.isRecordInOperationalShift(c, shiftWindow, !targetDate);
     });
 
     const todayCredits = [...shiftCartones, ...shiftClients];
@@ -4132,11 +4132,17 @@ const db = {
 
     // Verificar si el agente detonó explícitamente el uso de Capital Asignado mediante el botón [Aceptar] en la jornada
     let todayAuditLogs = [];
+    const hasClosedToday = !targetDate && shiftWindow.effectiveStart.getTime() > shiftWindow.shiftStart.getTime();
+    const effectiveStartMs = shiftWindow.effectiveStart.getTime();
     try {
       const allAuditLogs = JSON.parse(localStorage.getItem('bulapay_capital_autorizado_uso') || '[]');
       todayAuditLogs = allAuditLogs.filter(log => {
         if (log.shiftDateStr && log.shiftDateStr === todayStr && (log.aceptadoPorAgente === true || Number(log.capitalAsignadoUtilizado) > 0)) {
           if (targetRouteId && targetRouteId !== 'ALL' && log.routeId && String(log.routeId) !== String(targetRouteId)) return false;
+          if (hasClosedToday) {
+            const logMs = log.timestamp ? new Date(log.timestamp).getTime() : 0;
+            if (!logMs || logMs < effectiveStartMs) return false;
+          }
           return true;
         }
         return false;
@@ -4157,6 +4163,10 @@ const db = {
         const { data: dbMovs, error: errMovs } = await q;
         if (!errMovs && dbMovs && dbMovs.length > 0) {
           dbMovs.forEach(m => {
+            if (hasClosedToday) {
+              const movMs = m.created_at ? new Date(m.created_at).getTime() : 0;
+              if (!movMs || movMs < effectiveStartMs) return;
+            }
             if (!todayAuditLogs.some(l => l.id === m.id)) {
               const isRenovDB = m.is_renewal === true || m.is_renewal === 'true' || String(m.concept || '').toLowerCase().includes('renov');
               todayAuditLogs.push({
@@ -4164,6 +4174,7 @@ const db = {
                 routeId: m.route_id,
                 agentUsername: m.agent_id,
                 shiftDateStr: m.date,
+                timestamp: m.created_at || null,
                 capitalAsignadoUtilizado: Number(m.amount || 0),
                 montoPrestamo: Number(m.amount || 0),
                 // capital_remanente_nuevo guardado en Supabase por registrarUsoCapitalAsignado
