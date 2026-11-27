@@ -4695,7 +4695,8 @@ const agentModule = {
       const montoFisicoDesembolsar = isRenov
         ? Math.max(0, montoPrestamo - otrVal - finalDiscount)
         : Math.max(0, montoPrestamo - finalDiscount);
-      const montoValidar = montoFisicoDesembolsar;
+      // En crédito nuevo se descuenta el monto completo del crédito en caja (sin restar software/seguro)
+      const montoValidar = isRenov ? montoFisicoDesembolsar : Math.max(0, montoPrestamo);
 
       // Consulta directa, numérica y en tiempo real del saldo de caja (conecta 'Mi Negocio' e inyecciones)
       const fondosDetallados = await this.getSaldoCajaRealAgente(effectiveRouteId, currentUser);
